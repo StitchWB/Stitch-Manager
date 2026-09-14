@@ -14,7 +14,11 @@ jest.mock('@/lib/backend/core', () => ({
 }));
 
 import { safeInvoke } from '@/lib/backend/core';
-import { reportObsEvent, __resetForTests } from '../../../lib/observability/client';
+import {
+  reportObsEvent,
+  setObsReportingEnabled,
+  __resetForTests,
+} from '../../../lib/observability/client';
 import type { ObsEventInput } from '../../../lib/observability/types';
 
 const safeInvokeMock = jest.mocked(safeInvoke);
@@ -47,12 +51,17 @@ function setVisible(): void {
 describe('lib/observability/client', () => {
   beforeEach(() => {
     __resetForTests();
+    // Reporting is opt-in (gated on the auth session in production); the
+    // batching behavior under test assumes it is enabled.
+    setObsReportingEnabled(true);
     jest.clearAllMocks();
     jest.useFakeTimers();
     safeInvokeMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
+    // Also clears the queue and any pending flush timer.
+    setObsReportingEnabled(false);
     jest.useRealTimers();
     setVisible();
   });

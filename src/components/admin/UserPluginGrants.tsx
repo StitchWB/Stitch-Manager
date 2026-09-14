@@ -61,6 +61,7 @@ export function UserPluginGrants({ userId, username, role }: UserPluginGrantsPro
     }
   }, [userId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount; loading flag set synchronously for immediate spinner
   useEffect(() => { void refresh(); }, [refresh]);
 
   // Plugins granted by the user's role (default, no override).

@@ -1,10 +1,12 @@
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useRef, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { Toaster } from 'sonner';
-import { CheckCircle2, AlertCircle, AlertTriangle, Info, Loader2, Terminal } from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, Loader2, Terminal, Plus } from 'lucide-react';
 import Layout from './components/layout/Layout';
 
 import { t } from '@/lib/i18n';
+import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useAppStore } from './stores/app';
 import { useAuthStore } from './stores/auth';
 import { useLogsStore } from './stores/logs';
@@ -43,6 +45,7 @@ interface RegistrationStatusResponse {
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Login from './pages/Login';
+import Landing from './pages/Landing';
 import Setup from './pages/Setup';
 import WelcomeGate from './components/auth/WelcomeGate';
 import TelegramLogin from './components/auth/TelegramLogin';
@@ -50,6 +53,7 @@ const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProviders = lazy(() => import('./pages/AiProviders'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
 const AiAnalytics = lazy(() => import('./pages/AiAnalytics'));
+const AiGroupsPage = lazy(() => import('./pages/AiGroupsPage'));
 const Antigravity = lazy(() => import('./pages/Antigravity'));
 const HoloneSecurity = lazy(() => import('./pages/HoloneSecurity'));
 const ToolsPage = lazy(() => import('./pages/ToolsPage'));
@@ -119,7 +123,7 @@ function RouteLoadingFallback() {
  */
 function AuthLoadingSplash() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0a0d]">
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-vsc-bg">
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -153,7 +157,9 @@ function RouteTracker() {
 
     // Restore the last workspace only when the app opens at the root.
     // Explicit deep links must always win over persisted navigation state.
-    if (activeRoute && activeRoute !== '/' && location.pathname === '/') {
+    // On web "/" is the public landing — a deliberate destination, never
+    // bounce from it. Desktop keeps the restore-to-last-workspace behavior.
+    if (activeRoute && activeRoute !== '/' && location.pathname === '/' && isDesktopApp()) {
       // Sanitize legacy/persisted values: older builds stored full URLs or
       // garbage here; feeding that to navigate() throws a DOMException on
       // history.replaceState ("URL 'https:'"). Keep same-origin pathnames only.
@@ -169,7 +175,9 @@ function RouteTracker() {
       // Ensure the route exists in our route list
       const validRoutes = [
         '/',
+        '/app',
         '/accounts',
+        '/groups',
         '/autoreg',
         '/ai',
         '/ai/antigravity',
@@ -203,14 +211,64 @@ function RouteTracker() {
     }
   }, [activeRoute, navigate, location.pathname]);
 
-  // Persist route on every change
+  // Persist route on every change (web "/" is the landing — don't clobber
+  // the last workspace route with it).
   useEffect(() => {
-    if (location.pathname !== activeRoute) {
+    const isWebLanding = location.pathname === '/' && !isDesktopApp();
+    if (location.pathname !== activeRoute && !isWebLanding) {
       setActiveRoute(location.pathname);
     }
   }, [location.pathname, activeRoute, setActiveRoute]);
 
   return null;
+}
+
+/**
+ * Groups page wrapper. Promotes the groups surface (previously only an
+ * AI Hub tab at /ai/groups) to a first-class top-level route at /groups.
+ *
+ * Guards: groups are only available when a session user exists. With no
+ * session user (auth disabled, or auth enabled but not logged in) the
+ * route redirects to "/" so the sidebar link and direct URL access both
+ * land the user on the dashboard/landing instead of a dead surface.
+ *
+ * The "Create Group" button lives in the PageHeader actions slot and
+ * controls <AiGroupsPage />'s createGroupOpen prop — the same pattern
+ * AiProviders.tsx uses for the legacy /ai/groups tab.
+ */
+function GroupsPage() {
+  const authUser = useAuthStore(state => state.user);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+
+  if (!authUser) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <PageHeader
+        eyebrow={t('sidebar.aiHub')}
+        title={t('ai.groups.title')}
+        description=""
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setCreateGroupOpen(true)}
+            leftIcon={<Plus size={14} />}
+          >
+            {t('ai.groups.create.cta')}
+          </Button>
+        }
+      />
+      <div className="flex-1 min-h-0">
+        <AiGroupsPage
+          createGroupOpen={createGroupOpen}
+          setCreateGroupOpen={setCreateGroupOpen}
+        />
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -466,15 +524,22 @@ function App() {
   if (authEnabled && authUser) {
     // Logged in — render the app.
   } else if (authEnabled && authRequired) {
-    // Mandatory auth: no escape. Setup when no users, else Login.
-    // TG login is reachable from Login via a tertiary link.
+    // Mandatory auth. Setup when no users; otherwise the WEB shows the public
+    // Landing (demo) as its default surface with login separate, while the
+    // desktop app goes straight to Login. TG login reachable from either.
     if (authView === 'telegram') {
       return <TelegramLogin />;
     }
     if (!authHasUsers) {
       return <Setup />;
     }
-    return <Login />;
+    if (authView === 'login') {
+      return <Login />;
+    }
+    if (isDesktopApp()) {
+      return <Login />;
+    }
+    return <Landing />;
   } else if (authEnabled && !authGuest) {
     // Optional auth, not yet a guest: show welcome gate or the optional
     // setup/login/telegram surface the user navigated to from the gate.
@@ -502,8 +567,20 @@ function App() {
         <RouteTracker />
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            {/* Web: "/" is the product landing (also for logged-in users —
+                they enter the workspace via "Open app"). Desktop has no
+                landing: "/" goes straight to the dashboard. */}
+            <Route
+              path="/"
+              element={
+                isDesktopApp() ? <Dashboard /> : <Landing authenticated={Boolean(authUser)} />
+              }
+            />
+            <Route path="/app" element={<Dashboard />} />
             <Route path="/accounts" element={<Accounts />} />
+            {/* Groups — first-class section. Guarded inside GroupsPage:
+                no session user → redirect to "/". /ai/groups redirects here. */}
+            <Route path="/groups" element={<GroupsPage />} />
             <Route path="/radar" element={<Radar />} />
             <Route path="/friends" element={<Friends />} />
             <Route path="/marketplace" element={<Marketplace />} />
@@ -512,6 +589,10 @@ function App() {
             <Route path="/autoreg" element={<AutoReg />} />
             <Route path="/ai" element={<AiOverview />} />
             <Route path="/ai/overview" element={<Navigate to="/ai" replace />} />
+            {/* Groups moved to a first-class route (/groups). Redirect the
+                legacy /ai/groups deep link so bookmarks and the old AI Hub
+                tab path keep working. */}
+            <Route path="/ai/groups" element={<Navigate to="/groups" replace />} />
             <Route path="/ai/integrations" element={<AiIntegrations />} />
             <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
             <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
@@ -529,7 +610,7 @@ function App() {
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
-            <Route path="/patcher" element={isDesktopApp() ? <Patcher /> : <Navigate to="/" replace />} />
+            <Route path="/patcher" element={isDesktopApp() ? <Patcher /> : <Navigate to="/app" replace />} />
             <Route path="/scheduler" element={<Scheduler />} />
             <Route path="/automation" element={<Automation />} />
             <Route path="/automation/:tab" element={<Automation />} />

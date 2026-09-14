@@ -28,7 +28,11 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from autoreg.plugin.install import install_package, list_installed_versions
+from autoreg.plugin.install import (
+    install_package,
+    list_installed_versions,
+    safe_extract_zip,
+)
 from autoreg.plugin.layout import plugin_cache_path, plugin_platform_tag
 from autoreg.plugin.manifest import parse_semver
 
@@ -100,6 +104,19 @@ class PluginSyncService:
         if state is not None and server_time:
             self._activation.set_last_server_time(server_time)
 
+        return body
+
+    async def fetch_public_catalog(self) -> dict:
+        """GET /catalog — public metadata listing, no token.
+
+        Used by the marketplace when the client has no activation: official
+        plugins are shown locked (browsable funnel) instead of hidden.
+        """
+        url = f"{server_url()}/catalog"
+        client = self._ensure_client()
+        resp = await client.get(url)
+        resp.raise_for_status()
+        body: dict[str, Any] = resp.json()
         return body
 
     async def sync(self) -> SyncReport:
@@ -200,7 +217,7 @@ class PluginSyncService:
         tmp_dir = Path(tempfile.mkdtemp(prefix="stitch-sync-"))
         try:
             with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
-                zf.extractall(tmp_dir)
+                safe_extract_zip(zf, tmp_dir)
             install_package(tmp_dir, public_key_b64=pubkey)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)

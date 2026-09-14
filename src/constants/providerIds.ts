@@ -1,10 +1,8 @@
 /**
  * Provider ID registry — single source of truth for the TypeScript side.
  *
- * KEEP IN SYNC WITH: python/autoreg/provider_ids.py (ProviderId enum)
+ * KEEP IN SYNC WITH: python/autoreg/providers/base.py  (ProviderId enum)
  *                    python/autoreg/providers/registry.py (ProviderMeta)
- *                    (both live in the private hub; new providers also carry
- *                    plugin.json manifests — keep this file the display list)
  *
  * Rules:
  *  - Every string literal here must match the Python ProviderId.value exactly.

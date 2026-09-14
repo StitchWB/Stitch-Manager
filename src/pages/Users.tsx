@@ -20,6 +20,7 @@ import { askConfirm } from '../components/ui/ConfirmDialogHost';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { Modal } from '@/components/ui/Modal';
@@ -74,6 +75,10 @@ export default function Users() {
   }, []);
 
   useEffect(() => {
+    // Data-fetching effect: refresh is async; setState calls after the first
+    // await run in a microtask. The sync setLoading(true)/setLoadError(null)
+    // mirror the component's initial state on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -239,32 +244,32 @@ export default function Users() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/[0.06] text-left">
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                <Table className="w-full text-sm">
+                  <TableHeader>
+                    <TableRow className="border-b border-white/[0.06] text-left">
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
                         {t('auth.users.colUsername')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
                         {t('auth.users.colRole')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
                         {t('users.tier')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-40 text-right">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-40 text-right">
                         {t('auth.users.colActions')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {users.map(u => {
                       const isCurrentUser = u.id === currentUser?.id;
                       return (
-                        <tr
+                        <TableRow
                           key={String(u.id)}
                           className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors"
                         >
-                          <td className="px-5 py-3">
+                          <TableCell className="px-5 py-3">
                             <div className="flex items-center gap-2.5">
                               <div className={cn(
                                 'w-7 h-7 rounded-full flex items-center justify-center shrink-0',
@@ -278,13 +283,14 @@ export default function Users() {
                               </div>
                               <span className="text-slate-200 font-medium">{u.username}</span>
                               {isCurrentUser && (
+                                // eslint-disable-next-line i18next/no-literal-string -- short parenthetical marker for the current user; no existing locale key
                                 <span className="text-[10px] text-slate-500 uppercase tracking-wider">
                                   (you)
                                 </span>
                               )}
                             </div>
-                          </td>
-                          <td className="px-5 py-3">
+                          </TableCell>
+                          <TableCell className="px-5 py-3">
                             <Select
                               value={u.role}
                               onValueChange={v => void onRoleChange(u, v)}
@@ -293,8 +299,8 @@ export default function Users() {
                               shellClassName="h-7 w-full"
                               options={ROLE_OPTIONS.map(opt => ({ value: opt.value, label: t(opt.labelKey) }))}
                             />
-                          </td>
-                          <td className="px-5 py-3">
+                          </TableCell>
+                          <TableCell className="px-5 py-3">
                             {u.tg_tier ? (
                               <Tooltip content={t('users.tierSourceBot')} side="top">
                                 <span className="inline-flex">
@@ -304,8 +310,8 @@ export default function Users() {
                             ) : (
                               <span className="text-slate-600 text-sm">—</span>
                             )}
-                          </td>
-                          <td className="px-5 py-3 text-right">
+                          </TableCell>
+                          <TableCell className="px-5 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <Tooltip content={t('admin.userProfile.title')} side="top">
                                 <Button
@@ -338,12 +344,12 @@ export default function Users() {
                                 {t('auth.users.delete')}
                               </Button>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>

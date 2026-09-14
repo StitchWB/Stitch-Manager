@@ -120,11 +120,11 @@ function mockCodes(): MockCode[] {
 
 // ── fetch mock helper ────────────────────────────────────────────────────────
 
-function mockFetchResponse(
+function _mockFetchResponse(
   url: string,
   method: string,
-  status: number,
-  body: unknown
+  _status: number,
+  _body: unknown
 ): void {
   const calls = (globalThis.fetch as jest.Mock).mock.calls;
   calls.push([
@@ -378,7 +378,7 @@ describe('Codes page', () => {
     // The entitlements input should NOT be present.
     expect(screen.queryByPlaceholderText(/comma-separated/)).toBeNull();
     // The entitlements label should NOT be present in the form.
-    const formLabels = screen.queryAllByText('Entitlements');
+    const _formLabels = screen.queryAllByText('Entitlements');
     // The table column header still says "Entitlements" for legacy display,
     // but the issue form should not have the input.
     // Verify the note about role grants is shown.

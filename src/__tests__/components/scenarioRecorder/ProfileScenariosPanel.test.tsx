@@ -11,7 +11,10 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProfileScenariosPanel } from '../../../components/scenarioRecorder/ProfileScenariosPanel';
-import type { ScenarioRecordItem } from '../../../lib/backend/modules/pythonJobs';
+import {
+  listRecordedScenarios,
+  type ScenarioRecordItem,
+} from '../../../lib/backend/modules/pythonJobs';
 
 // Mock the app store so language is set and t() resolves.
 jest.mock('../../../stores/app', () => ({
@@ -114,8 +117,7 @@ describe('ProfileScenariosPanel lock popover', () => {
   });
 
   it('renders TierBadge and how-to-get button for locked items', async () => {
-    const { listRecordedScenarios } = require('../../../lib/backend/modules/pythonJobs');
-    listRecordedScenarios.mockResolvedValue([makeLockedItem()]);
+    jest.mocked(listRecordedScenarios).mockResolvedValue([makeLockedItem()]);
 
     render(
       <ProfileScenariosPanel
@@ -143,8 +145,7 @@ describe('ProfileScenariosPanel lock popover', () => {
 
   it('opens modal with instructions when how-to-get button is clicked', async () => {
     const user = userEvent.setup();
-    const { listRecordedScenarios } = require('../../../lib/backend/modules/pythonJobs');
-    listRecordedScenarios.mockResolvedValue([makeLockedItem()]);
+    jest.mocked(listRecordedScenarios).mockResolvedValue([makeLockedItem()]);
 
     render(
       <ProfileScenariosPanel

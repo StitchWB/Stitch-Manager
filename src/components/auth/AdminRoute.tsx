@@ -21,14 +21,14 @@ export function AdminRoute({ children }: AdminRouteProps) {
   if (!user) {
     // No session — the gate in App.tsx should have caught this, but guard
     // against direct navigation just in case.
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   // Use the EFFECTIVE role so an admin previewing a non-admin role is
   // redirected away from admin-only pages (the backend enforces the same
   // on the API side; this is the UX mirror).
   if (effectiveRole(user) !== 'admin') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return <>{children}</>;

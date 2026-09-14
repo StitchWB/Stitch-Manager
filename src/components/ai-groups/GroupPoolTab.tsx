@@ -9,6 +9,7 @@ import { useAiGatewayStore } from '@/stores/aiGateway';
 import { groupsUnshareCredential } from '@/lib/backend/modules/groups';
 import type { PoolItem } from '@/lib/backend/modules/groups';
 import type { ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
+import { importOpencodeProviders } from '@/lib/backend/modules/aiGateway';
 import { CredentialForm } from '@/components/ai-gateway/CredentialForm';
 
 interface GroupPoolTabProps {
@@ -122,6 +123,31 @@ export function GroupPoolTab({ groupId }: GroupPoolTabProps) {
     appToast.success(t('ai.groups.pool.added'), 'ai-groups');
   }, [fetchPool, groupId]);
 
+  // ── Import-from-OpenCode flow ────────────────────────────────────────────
+  const [importing, setImporting] = useState(false);
+  const handleImportOpencode = useCallback(async () => {
+    setImporting(true);
+    try {
+      const report = await importOpencodeProviders({ groupId });
+      if (report.imported.length === 0) {
+        appToast.info(t('aiGateway.importOpencodeEmpty'), 'ai-groups');
+      } else {
+        appToast.success(
+          t('aiGateway.importOpencodeResult', {
+            providers: report.imported.length,
+            models: report.models.length,
+          }),
+          'ai-groups',
+        );
+      }
+      await fetchPool(groupId);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : t('ai.groups.detailLoadFailed'), 'ai-groups');
+    } finally {
+      setImporting(false);
+    }
+  }, [groupId, fetchPool]);
+
   return (
     <GlassCard className="p-3 md:p-4">
       {/* Header */}
@@ -134,9 +160,14 @@ export function GroupPoolTab({ groupId }: GroupPoolTabProps) {
             {pool.length}
           </Badge>
         </div>
-        <Button size="sm" variant="secondary" onClick={openAddKey} leftIcon={<Plus size={14} />}>
-          {t('ai.groups.pool.addKey')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={() => void handleImportOpencode()} isLoading={importing}>
+            {t('aiGateway.importOpencode')}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={openAddKey} leftIcon={<Plus size={14} />}>
+            {t('ai.groups.pool.addKey')}
+          </Button>
+        </div>
       </div>
 
       {/* Body */}

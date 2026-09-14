@@ -27,6 +27,9 @@ Response shapes (snake_case — the frontend agent codes against these):
   - groups_usage_list      → UsageListResponse{rows, max_per_member_daily}
   - groups_set_quota       → GroupResponse
   - groups_transfer_ownership  → GroupResponse
+  - groups_share_account   → SuccessResponse
+  - groups_unshare_account → SuccessResponse
+  - groups_list_accounts   → list[GroupAccountItemResponse]  (camelCase aliases)
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.auth.roles import role_at_least
 from stitch_backend.domains.groups.schemas import (
+    GroupAccountItemResponse,
     GroupCreateResponse,
     GroupDetailResponse,
     GroupListResponse,
@@ -46,25 +50,35 @@ from stitch_backend.domains.groups.schemas import (
     InviteCreateResponse,
     InviteResponse,
     PoolListResponse,
+    QuotaRuleResponse,
+    QuotaRulesListResponse,
     SuccessResponse,
     UsageListResponse,
 )
 from stitch_backend.domains.groups.service import (
     create_group,
     delete_group,
+    delete_quota_rule,
     get_group_detail,
+    group_role,
     invite_user,
+    is_group_owner_of_resource,
+    is_member,
     leave_group,
     list_group_usage,
     list_groups_for_user,
     list_pool,
+    list_quota_rules,
     remove_member,
     resolve_invite,
     revoke_invite,
     set_group_quota,
+    set_quota_rule,
     share_credential,
+    share_resource,
     transfer_ownership,
     unshare_credential,
+    unshare_resource,
     update_group,
 )
 
@@ -355,7 +369,12 @@ async def cmd_groups_usage_list(params: dict) -> UsageListResponse:
 
 @register_command("groups_set_quota")
 async def cmd_groups_set_quota(params: dict) -> GroupResponse:
-    """Set the per-member daily request cap (owner only; null=unlimited)."""
+    """Set the per-member daily request cap (owner only; null=unlimited).
+
+    Legacy single-cap API — kept for backward compatibility; evaluated as
+    the lowest-priority member rule.  New code should use
+    ``groups_quota_rule_set``.
+    """
     group_id = params["groupId"]
     raw = params.get("maxPerMemberDaily")
     max_per_member = int(raw) if raw is not None else None
@@ -366,6 +385,87 @@ async def cmd_groups_set_quota(params: dict) -> GroupResponse:
 
     group = await run_in_session(_op)
     return GroupResponse.model_validate(group)
+
+
+# ── Quota rules (flexible per-member / per-pool caps) ──────────────────────
+
+
+@register_command("groups_quota_rules_list", readonly=True)
+async def cmd_groups_quota_rules_list(params: dict) -> QuotaRulesListResponse:
+    """List the group's quota rules (any member) with current usage."""
+    group_id = params["groupId"]
+    uid = _caller_uid(params)
+
+    async def _op(session):
+        from stitch_backend.domains.groups.quota import RuleView, rule_usage
+
+        rules = await list_quota_rules(session, group_id, uid)
+        items = []
+        for r in rules:
+            resp = QuotaRuleResponse.model_validate(r)
+            resp.used = await rule_usage(
+                session,
+                group_id=group_id,
+                rule=RuleView(
+                    subject=r.subject,
+                    user_id=r.user_id,
+                    model=r.model,
+                    unit=r.unit,
+                    amount=r.amount,
+                    period=r.period,
+                    rule_id=r.id,
+                ),
+            )
+            items.append(resp)
+        return items
+
+    items = await run_in_read_session(_op)
+    return QuotaRulesListResponse(rules=items)
+
+
+@register_command("groups_quota_rule_set")
+async def cmd_groups_quota_rule_set(params: dict) -> QuotaRuleResponse:
+    """Create or update a quota rule (owner only, natural-key upsert).
+
+    Params: ``subject`` ('member'|'pool'), ``userId`` (member rules only;
+    null = every member), ``model`` (null = all models, 'prefix-*' glob),
+    ``unit`` ('requests'|'tokens'), ``amount`` (null = unlimited),
+    ``period`` ('daily'|'total').
+    """
+    group_id = params["groupId"]
+    uid = _caller_uid(params)
+    raw_user = params.get("userId")
+    raw_amount = params.get("amount")
+
+    async def _op(session):
+        return await set_quota_rule(
+            session,
+            group_id,
+            uid,
+            subject=str(params.get("subject") or "member"),
+            user_id=int(raw_user) if raw_user is not None else None,
+            model=params.get("model"),
+            unit=str(params.get("unit") or "requests"),
+            amount=int(raw_amount) if raw_amount is not None else None,
+            period=str(params.get("period") or "daily"),
+        )
+
+    rule = await run_in_session(_op)
+    return QuotaRuleResponse.model_validate(rule)
+
+
+@register_command("groups_quota_rule_delete")
+async def cmd_groups_quota_rule_delete(params: dict) -> SuccessResponse:
+    """Delete a quota rule (owner only)."""
+    group_id = params["groupId"]
+    rule_id = str(params["ruleId"])
+    uid = _caller_uid(params)
+
+    async def _op(session):
+        return await delete_quota_rule(session, group_id, rule_id, uid)
+
+    deleted = await run_in_session(_op)
+    return SuccessResponse(success=deleted)
 
 
 @register_command("groups_transfer_ownership")
@@ -380,3 +480,255 @@ async def cmd_groups_transfer_ownership(params: dict) -> GroupResponse:
 
     group = await run_in_session(_op)
     return GroupResponse.model_validate(group)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Account sharing (generic group_shares table, resource_type='account')
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@register_command("groups_share_account")
+async def cmd_groups_share_account(params: dict) -> SuccessResponse:
+    """Share an account into a group.
+
+    Permission: allowed iff (caller is the account owner) OR (caller role
+    is admin AND account.owner_id IS NULL); AND caller is a member of the
+    group.  Error messages are human-readable strings.
+    """
+    account_id = str(params["accountId"])
+    group_id = params["groupId"]
+    uid = _caller_uid(params)
+    caller_role = params.get("_caller_role")
+
+    async def _op(session):
+        # ── Fetch the account ──────────────────────────────────────────
+        from sqlalchemy import select as sa_select
+
+        from stitch_backend.domains.accounts.models import Account
+
+        acc_result = await session.execute(
+            sa_select(Account).where(Account.id == account_id)
+        )
+        account = acc_result.scalar_one_or_none()
+        if account is None:
+            raise StitchError(f"Account not found: {account_id}")
+
+        # ── Permission: owner OR (admin AND legacy shared) ─────────────
+        is_owner = uid is not None and account.owner_id == uid
+        is_admin = caller_role == "admin"
+        is_legacy_shared = account.owner_id is None
+
+        if not (is_owner or (is_admin and is_legacy_shared)):
+            raise StitchError(
+                "Only the account owner can share it"
+                if not is_legacy_shared
+                else "Only the account owner or an admin can share a shared account"
+            )
+
+        # ── Caller must be a member of the group ───────────────────────
+        if not await is_member(session, group_id, uid):
+            raise StitchError("Not a member of this group")
+
+        # ── Insert the share (idempotent) ──────────────────────────────
+        await share_resource(
+            session,
+            group_id=group_id,
+            resource_type="account",
+            resource_id=account_id,
+            shared_by=uid,
+        )
+        return True
+
+    await run_in_session(_op)
+    return SuccessResponse(success=True)
+
+
+@register_command("groups_unshare_account")
+async def cmd_groups_unshare_account(params: dict) -> SuccessResponse:
+    """Unshare an account from a group.
+
+    Permission: account owner OR shared_by==uid OR group role 'owner' OR
+    instance admin.
+    """
+    account_id = str(params["accountId"])
+    group_id = params["groupId"]
+    uid = _caller_uid(params)
+    caller_role = params.get("_caller_role")
+
+    async def _op(session):
+        from sqlalchemy import and_
+        from sqlalchemy import select as sa_select
+
+        from stitch_backend.domains.groups.models import GroupShare
+
+        # ── Fetch the share row ────────────────────────────────────────
+        share_result = await session.execute(
+            sa_select(GroupShare).where(
+                and_(
+                    GroupShare.group_id == group_id,
+                    GroupShare.resource_type == "account",
+                    GroupShare.resource_id == account_id,
+                )
+            )
+        )
+        share = share_result.scalar_one_or_none()
+        if share is None:
+            # Idempotent: no-op when the share doesn't exist
+            return True
+
+        # ── Fetch the account (for owner check) ───────────────────────
+        from stitch_backend.domains.accounts.models import Account
+
+        acc_result = await session.execute(
+            sa_select(Account).where(Account.id == account_id)
+        )
+        account = acc_result.scalar_one_or_none()
+
+        # ── Permission checks ─────────────────────────────────────────
+        is_account_owner = (
+            uid is not None
+            and account is not None
+            and account.owner_id == uid
+        )
+        is_shared_by = uid is not None and share.shared_by == uid
+        is_group_owner = await group_role(session, group_id, uid) == "owner"
+        is_instance_admin = caller_role == "admin"
+
+        if not (
+            is_account_owner or is_shared_by or is_group_owner or is_instance_admin
+        ):
+            raise StitchError(
+                "Only the account owner, the sharer, the group owner, or an admin can unshare"
+            )
+
+        await unshare_resource(
+            session,
+            group_id=group_id,
+            resource_type="account",
+            resource_id=account_id,
+        )
+        return True
+
+    await run_in_session(_op)
+    return SuccessResponse(success=True)
+
+
+@register_command("groups_list_accounts", readonly=True)
+async def cmd_groups_list_accounts(params: dict) -> list:
+    """List accounts shared into a group (members only).
+
+    Returns a list of GroupAccountItemResponse with camelCase wire-format
+    keys: ``id, provider, email, status, quotaUsedPercent, ownerUsername,
+    sharedByUsername, canRemoveShare, canDelete``.
+
+    ``canRemoveShare``: account owner OR shared_by==uid OR group role
+    'owner' OR instance admin.
+    ``canDelete``: account owner OR group role 'owner' of any group the
+    account is shared into OR desktop (uid None) OR shared (owner_id
+    None) OR instance admin.
+    """
+    group_id = params["groupId"]
+    uid = _caller_uid(params)
+    caller_role = params.get("_caller_role")
+
+    async def _op(session):
+        # ── Members only ───────────────────────────────────────────────
+        if not await is_member(session, group_id, uid):
+            raise StitchError("Not a member of this group")
+
+        # ── Fetch shared accounts + owner/sharer usernames in one query ─
+        from sqlalchemy import and_
+        from sqlalchemy import select as sa_select
+        from sqlalchemy.orm import aliased
+
+        from stitch_backend.domains.accounts.models import Account
+        from stitch_backend.domains.auth.models import User
+        from stitch_backend.domains.groups.models import GroupShare
+
+        owner_user = aliased(User)
+        sharer_user = aliased(User)
+
+        stmt = (
+            sa_select(
+                Account,
+                owner_user.username.label("owner_username"),
+                GroupShare.shared_by,
+                sharer_user.username.label("shared_by_username"),
+            )
+            .select_from(Account)
+            .join(
+                GroupShare,
+                and_(
+                    GroupShare.resource_type == "account",
+                    # Both columns are TEXT — like-with-like comparison.
+                    GroupShare.resource_id == Account.id,
+                    GroupShare.group_id == group_id,
+                ),
+            )
+            .outerjoin(owner_user, owner_user.id == Account.owner_id)
+            .outerjoin(sharer_user, sharer_user.id == GroupShare.shared_by)
+            .order_by(Account.created_at.desc())
+        )
+        result = await session.execute(stmt)
+        rows = result.all()
+
+        if not rows:
+            return []
+
+        # ── Caller's role in THIS group ────────────────────────────────
+        caller_role_in_group = await group_role(session, group_id, uid)
+
+        items: list[GroupAccountItemResponse] = []
+        for account, owner_username, shared_by, shared_by_username in rows:
+            # ── Quota percent ──────────────────────────────────────────
+            used = account.quota_used or 0
+            limit = account.quota_limit or 0
+            quota_percent = (used / limit * 100) if limit > 0 else 0.0
+
+            # ── Permission flags ───────────────────────────────────────
+            is_account_owner = uid is not None and account.owner_id == uid
+            is_shared_by = uid is not None and shared_by == uid
+            is_group_owner = caller_role_in_group == "owner"
+            is_instance_admin = caller_role == "admin"
+
+            can_remove_share = (
+                is_account_owner
+                or is_shared_by
+                or is_group_owner
+                or is_instance_admin
+            )
+
+            # can_delete: extended rule — also allow group owners of ANY
+            # group the account is shared into (not just this group).
+            if uid is None:
+                can_delete = True
+            elif account.owner_id is None:
+                can_delete = True
+            elif account.owner_id == uid:
+                can_delete = True
+            elif is_instance_admin:
+                can_delete = True
+            else:
+                can_delete = await is_group_owner_of_resource(
+                    session,
+                    resource_type="account",
+                    resource_id=str(account.id),
+                    uid=uid,
+                )
+
+            items.append(
+                GroupAccountItemResponse(
+                    id=str(account.id),
+                    provider=account.provider,
+                    email=account.email,
+                    status=account.status,
+                    quota_used_percent=quota_percent,
+                    owner_username=owner_username,
+                    shared_by_username=shared_by_username,
+                    can_remove_share=can_remove_share,
+                    can_delete=can_delete,
+                )
+            )
+        return items
+
+    return await run_in_read_session(_op)

@@ -110,12 +110,15 @@ class PluginLoader:
     # ── plugins-local ──────────────────────────────────────────────────────
 
     def _resolve_from_local(self, service_id: str) -> Path | None:
+        from .layout import resolve_link
+
         local_root = plugins_local_dir()
         if not local_root.is_dir():
             return None
         for entry in sorted(local_root.iterdir()):
             if not entry.is_dir():
                 continue
+            entry = resolve_link(entry)
             manifest = _try_read_manifest(entry)
             if manifest is None or service_id not in manifest.service_ids():
                 continue

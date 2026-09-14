@@ -390,14 +390,14 @@ export function MailSidebar({
                           <div className="flex items-center gap-1 shrink-0">
                             {profile.shared && !profile.mine && onClaimProfile && canClaim ? (
                               <Tooltip content={t('ownership.claim')} side="top">
-                                <button
+                                <ButtonBase
                                   type="button"
                                   onClick={() => void onClaimProfile(profile.id)}
                                   className="text-slate-500 hover:text-indigo-300 transition-colors p-1 rounded"
                                   aria-label={t('ownership.claim')}
                                 >
                                   <UserPlus size={12} />
-                                </button>
+                                </ButtonBase>
                               </Tooltip>
                             ) : null}
                             <Badge variant={tone} size="sm" withDot={tone !== 'outline'}>

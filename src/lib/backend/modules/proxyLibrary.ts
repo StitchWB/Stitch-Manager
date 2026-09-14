@@ -1,4 +1,5 @@
 import { safeInvoke } from '../core';
+import { errorMessage } from '../../errorText';
 
 export type ProxyLibraryType = 'http' | 'socks5';
 
@@ -116,7 +117,7 @@ export class ProxyLibraryError extends Error {
 }
 
 function normalizeError(error: unknown): never {
-  const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+  const message = errorMessage(error, 'Unknown error');
   const sep = message.indexOf('|');
   if (sep > 0) {
     const code = message.slice(0, sep).trim();

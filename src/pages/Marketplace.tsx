@@ -19,6 +19,8 @@ import { IconButton } from '@/components/ui/IconButton';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -306,6 +308,7 @@ function PluginDetail({ item, busy, onInstall, onUninstall }: DetailProps) {
                 {item.installed_version} → {item.version}
               </span>
             ) : item.version ? (
+              // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
               <span className="text-slate-500">v{item.version}</span>
             ) : null}
           </div>
@@ -322,7 +325,7 @@ function PluginDetail({ item, busy, onInstall, onUninstall }: DetailProps) {
 
         {/* Underline tabs */}
         <div className="flex items-center gap-1 border-b border-white/[0.06] mb-4">
-          <button
+          <ButtonBase
             type="button"
             onClick={() => setDetailTab('overview')}
             className={cn(
@@ -333,8 +336,8 @@ function PluginDetail({ item, busy, onInstall, onUninstall }: DetailProps) {
             )}
           >
             {t('marketplace.overviewTab')}
-          </button>
-          <button
+          </ButtonBase>
+          <ButtonBase
             type="button"
             onClick={() => setDetailTab('info')}
             className={cn(
@@ -345,7 +348,7 @@ function PluginDetail({ item, busy, onInstall, onUninstall }: DetailProps) {
             )}
           >
             {t('marketplace.infoTab')}
-          </button>
+          </ButtonBase>
         </div>
 
         {/* Tab content */}
@@ -470,6 +473,7 @@ export default function Marketplace() {
   // the first item (IDEA-style). Cleared when the list is empty.
   useEffect(() => {
     if (filtered.length > 0 && !filtered.some(i => i.id === selectedId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-select first item when current selection leaves filtered list
       setSelectedId(filtered[0].id);
     } else if (filtered.length === 0 && selectedId !== null) {
       setSelectedId(null);
@@ -510,7 +514,7 @@ export default function Marketplace() {
                 </div>
 
                 {/* Primary: password login */}
-                <button
+                <ButtonBase
                   type="button"
                   onClick={() => setAuthView('login')}
                   className={cn(
@@ -521,10 +525,10 @@ export default function Marketplace() {
                   )}
                 >
                   {t('auth.guest.login')}
-                </button>
+                </ButtonBase>
 
                 {/* Secondary: Telegram login */}
-                <button
+                <ButtonBase
                   type="button"
                   onClick={() => setAuthView('telegram')}
                   className={cn(
@@ -536,7 +540,7 @@ export default function Marketplace() {
                 >
                   <Send className="w-4 h-4" />
                   {t('auth.login.tgLink')}
-                </button>
+                </ButtonBase>
               </div>
             </div>
           </div>
@@ -611,17 +615,14 @@ export default function Marketplace() {
         >
           {/* Search input */}
           <div className="p-3 border-b border-white/[0.04]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder={t('marketplace.searchPlaceholder')}
-                className="w-full h-9 pl-9 pr-9 text-sm text-slate-200 bg-white/[0.03] border border-white/10 rounded-lg placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/40 focus:bg-white/[0.05] transition-colors"
-              />
-              <SlidersHorizontal className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            </div>
+            <Input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder={t('marketplace.searchPlaceholder')}
+              leftIcon={<Search className="w-4 h-4" />}
+              rightElement={<SlidersHorizontal className="w-4 h-4 text-slate-500" />}
+            />
           </div>
 
           {/* Scrollable list */}

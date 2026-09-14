@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Activity, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { Button } from '../ui/Button';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/Table';
 import {
   fetchServicePluginMetrics,
   type ServicePluginMetrics,
@@ -43,6 +44,7 @@ export function ServicePluginMetricsPanel({ pluginId }: ServicePluginMetricsPane
   }, [pluginId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial metrics fetch on mount; loading flag set synchronously for immediate spinner
     void fetchMetrics();
   }, [fetchMetrics]);
 
@@ -103,30 +105,30 @@ export function ServicePluginMetricsPanel({ pluginId }: ServicePluginMetricsPane
                 {t('admin.plugins.servicePlugin.metrics.noCommands')}
               </p>
             ) : (
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-white/[0.06] text-left text-slate-500">
-                    <th className="py-1.5 pr-3 font-medium">
+              <Table className="w-full" containerClassName="">
+                <TableHeader className="bg-transparent">
+                  <TableRow className="border-white/[0.06] text-left text-slate-500 hover:bg-transparent">
+                    <TableHead className="py-1.5 pl-0 pr-3 font-medium normal-case tracking-normal">
                       {t('admin.plugins.servicePlugin.metrics.command')}
-                    </th>
-                    <th className="py-1.5 px-3 font-medium text-right">
+                    </TableHead>
+                    <TableHead className="py-1.5 px-3 font-medium text-right normal-case tracking-normal">
                       {t('admin.plugins.servicePlugin.metrics.calls')}
-                    </th>
-                    <th className="py-1.5 pl-3 font-medium text-right">
+                    </TableHead>
+                    <TableHead className="py-1.5 pl-3 pr-0 font-medium text-right normal-case tracking-normal">
                       {t('admin.plugins.servicePlugin.metrics.errors')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {byCommand.map(([cmd, stats]) => (
-                    <tr key={cmd} className="border-b border-white/[0.03] last:border-0">
-                      <td className="py-1.5 pr-3 font-mono text-slate-300 truncate">{cmd}</td>
-                      <td className="py-1.5 px-3 text-right text-slate-400">{stats.calls}</td>
-                      <td className="py-1.5 pl-3 text-right text-slate-400">{stats.errors}</td>
-                    </tr>
+                    <TableRow key={cmd} className="border-white/[0.03] last:border-0 hover:bg-transparent">
+                      <TableCell className="py-1.5 pl-0 pr-3 font-mono text-slate-300 truncate">{cmd}</TableCell>
+                      <TableCell className="py-1.5 px-3 text-right text-slate-400">{stats.calls}</TableCell>
+                      <TableCell className="py-1.5 pl-3 pr-0 text-right text-slate-400">{stats.errors}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>

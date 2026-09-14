@@ -135,6 +135,45 @@ export async function listLocalPackages(): Promise<ListLocalPackagesResponse> {
   return safeInvoke<ListLocalPackagesResponse>('list_local_packages');
 }
 
+// ============================================
+// Manual install (ADR-006, channels B1/B2)
+// ============================================
+
+export interface InstallLocalPluginParams {
+  /** Absolute path to a package directory or a .zip file. */
+  path: string;
+}
+
+export interface InstallLocalPluginResult {
+  success: boolean;
+  error?: string;
+  id?: string;
+  version?: string;
+  /** 'official' — signed into the cache; 'local' — unsigned into plugins-local. */
+  trust?: 'official' | 'local';
+  path?: string;
+}
+
+/**
+ * Install a plugin package from a local path or zip. Signed packages verify
+ * into the versioned cache; unsigned ones require dev mode and are copied to
+ * plugins-local.
+ */
+export async function installLocalPlugin(
+  params: InstallLocalPluginParams,
+): Promise<InstallLocalPluginResult> {
+  return safeInvoke<InstallLocalPluginResult>('install_local_plugin', {
+    path: params.path,
+  });
+}
+
+/** Remove a package from plugins-local (manual/dev installs). */
+export async function uninstallLocalPlugin(params: {
+  id: string;
+}): Promise<{ success: boolean; error?: string }> {
+  return safeInvoke('uninstall_local_plugin', { id: params.id });
+}
+
 /**
  * Submit a local package for review — opens a GitHub PR.
  * The `github_token` is used only for this request and is not persisted

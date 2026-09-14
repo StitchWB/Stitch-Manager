@@ -25,6 +25,7 @@ import {
   Ticket,
   Activity,
   Puzzle,
+  Globe,
 } from
   'lucide-react';
 import { useAppStore } from '../../stores/app';
@@ -155,7 +156,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 space-y-1 no-scrollbar">
         <NavItem
-          to="/"
+          to={isDesktopApp() ? '/' : '/app'}
           icon={<LayoutDashboard size={20} />}
           label={t('sidebar.dashboard')}
           collapsed={sidebarCollapsed} />
@@ -165,6 +166,17 @@ export default function Sidebar() {
           icon={<Users size={20} />}
           label={t('sidebar.accounts')}
           collapsed={sidebarCollapsed} />
+
+        {/* Groups — first-class section on desktop + web. Visible only
+            when a session user exists (authEnabled && authUser != null);
+            with no session user groups are unavailable and the link hides. */}
+        {authUser && (
+          <NavItem
+            to="/groups"
+            icon={<Users size={20} />}
+            label={t('sidebar.groups')}
+            collapsed={sidebarCollapsed} />
+        )}
 
         {hasPermission('section.autoreg') && (
           <NavItem
@@ -247,6 +259,15 @@ export default function Sidebar() {
             </p>
           }
         </div>
+
+        {/* Web-only: back to the public landing (desktop has no landing). */}
+        {!isDesktopApp() && (
+          <NavItem
+            to="/"
+            icon={<Globe size={20} />}
+            label={t('sidebar.website')}
+            collapsed={sidebarCollapsed} />
+        )}
 
         {hasPermission('section.settings') && (
           <NavItem

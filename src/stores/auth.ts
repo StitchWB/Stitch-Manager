@@ -56,6 +56,7 @@ import {
   type AuthUser,
 } from '../lib/backend/modules/auth';
 import { setAuthExpiredHandler } from '../lib/backend/core/invoke';
+import { setObsReportingEnabled } from '../lib/observability/client';
 
 export type AuthRole = 'admin' | 'user';
 export type AuthView = 'welcome' | 'setup' | 'login' | 'telegram';
@@ -140,6 +141,71 @@ interface AuthState {
 
 let initInFlight: Promise<void> | null = null;
 
+// ── Transport-failure retry ────────────────────────────────────────────────
+// When getAuthStatus resolves with enabled:false AND reachable:false the
+// backend was unreachable (connection refused during a restart).  We fail
+// open immediately but schedule background retries so the gate closes once
+// the backend comes back.  No retry when the backend answered with
+// enabled:false — that is genuine desktop mode.
+const RETRY_DELAYS = [2000, 5000, 10000];
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryAttempt = 0;
+
+function scheduleRetry(get: () => AuthState) {
+  if (retryTimer) return; // already scheduled
+  if (retryAttempt >= RETRY_DELAYS.length) return; // exhausted all attempts
+  const delay = RETRY_DELAYS[retryAttempt++];
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    // Only retry while there is no user session — a logged-in user does
+    // not need transport-recovery polling.
+    if (get().user) return;
+    get().init();
+  }, delay);
+}
+
+function clearRetry() {
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  retryAttempt = 0;
+}
+
+// ── Session keepalive ────────────────────────────────────────────────────────
+// While a user is logged in, ping /api/auth/me periodically so the backend's
+// sliding-window refresh keeps an open (but idle) tab's session alive instead
+// of it silently expiring. The ping also surfaces a genuine expiry, which the
+// registered 401 handler turns into a clean client-side logout.
+const KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000;
+let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+
+function startSessionKeepalive(get: () => AuthState) {
+  if (keepaliveTimer) return;
+  keepaliveTimer = setInterval(async () => {
+    const { enabled, user } = get();
+    if (!enabled || !user) return;
+    try {
+      await getCurrentUser();
+    } catch {
+      // A genuine 401 fires the global handler -> clearSession; network
+      // errors are tolerated (next tick retries).
+    }
+  }, KEEPALIVE_INTERVAL_MS);
+}
+
+function stopSessionKeepalive() {
+  if (keepaliveTimer) {
+    clearInterval(keepaliveTimer);
+    keepaliveTimer = null;
+  }
+}
+
+// Stop pinging once the tab is gone so a closed tab never keeps a session warm.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', stopSessionKeepalive);
+}
+
 export const useAuthStore = create<AuthState>((set, get) => {
   // Register the global 401 handler. When a regular /api/* call returns 401
   // and auth is enabled, drop the user back to the login page client-side.
@@ -174,8 +240,16 @@ export const useAuthStore = create<AuthState>((set, get) => {
         try {
           const status = await getAuthStatus();
           if (!status.enabled) {
-            // Auth disabled — desktop mode. Grant every key so the UI is
-            // fully open and hasPermission() short-circuits to true.
+            // Auth disabled — desktop mode.  When reachable===false the
+            // backend was transiently unreachable; fail open now AND retry
+            // in the background until it comes back or we exhaust attempts.
+            if (status.reachable === false) {
+              scheduleRetry(get);
+            } else {
+              clearRetry();
+            }
+            // Grant every key so the UI is fully open and
+            // hasPermission() short-circuits to true.
             set({
               enabled: false,
               hasUsers: false,
@@ -187,6 +261,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
               permissions: [...PERMISSION_KEYS],
               permissionsLoaded: true,
             });
+            setObsReportingEnabled(true);
             return;
           }
           // Auth enabled — probe the session.
@@ -226,9 +301,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
             guest: false,
             authView: 'welcome',
           });
+          if (user) startSessionKeepalive(get);
+          setObsReportingEnabled(Boolean(user));
+          clearRetry();
         } catch {
           // Network failure: fall open to the desktop (unauthenticated) path
           // so the user can still see the app rather than a hung gate.
+          clearRetry();
           set({
             enabled: false,
             hasUsers: false,
@@ -252,6 +331,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
       try {
         const user = await loginUser(username, password);
         set({ user, busy: false, hasUsers: true, sessionExpired: false, guest: false, authView: 'welcome' });
+        startSessionKeepalive(get);
+        setObsReportingEnabled(true);
         return true;
       } catch (err) {
         const status = (err as Error & { status?: number })?.status;
@@ -311,6 +392,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
       try {
         const user = await setupUser(username, password);
         set({ user, busy: false, hasUsers: true, sessionExpired: false, guest: false, authView: 'welcome' });
+        startSessionKeepalive(get);
+        setObsReportingEnabled(true);
         return true;
       } catch (err) {
         const status = (err as Error & { status?: number })?.status;
@@ -334,12 +417,16 @@ export const useAuthStore = create<AuthState>((set, get) => {
         // — the cookie is cleared server-side on success, and on failure the
         // user still wants to leave the authenticated surface.
         set({ user: null, busy: false, sessionExpired: false, guest: false, authView: 'welcome' });
+        stopSessionKeepalive();
+        setObsReportingEnabled(!get().enabled);
       }
     },
 
     clearError: () => set({ error: null, sessionExpired: false }),
 
     clearSession: () => {
+      stopSessionKeepalive();
+      setObsReportingEnabled(!get().enabled);
       set({ user: null, sessionExpired: true, guest: false, authView: 'welcome', permissions: [], permissionsLoaded: false });
     },
 

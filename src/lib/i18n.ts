@@ -1887,6 +1887,13 @@ export interface Translations {
     filterAll: string;
     filterMine: string;
     filterShared: string;
+    filterGroup: string;
+    shareGroup: string;
+    shareGroupTitle: string;
+    bulkToGroup: string;
+    groupTooltip: string;
+    targetGroup: string;
+    targetGroupNone: string;
   };
   privileges: {
     title: string;
@@ -3752,6 +3759,16 @@ export interface Translations {
       cancel: string;
       noLocalPackages: string;
       pathLabel: string;
+      manualInstallTitle: string;
+      manualInstallDescription: string;
+      manualInstallPlaceholder: string;
+      manualInstallButton: string;
+      manualInstallPathRequired: string;
+      manualInstallSuccess: string;
+      manualInstallFailed: string;
+      manualInstallDevModeRequired: string;
+      trustOfficialBadge: string;
+      trustLocalBadge: string;
     }
     overrides: {
       title: string;
@@ -4093,6 +4110,7 @@ export interface Translations {
     chat: string;
     dashboard: string;
     friends: string;
+    groups: string;
     idePatch: string;
     localMode: string;
     logs: string;
@@ -4107,6 +4125,7 @@ export interface Translations {
     system: string;
     telegramChannel: string;
     tools: string;
+    website: string;
   }
   notebooklm: {
     title: string;
@@ -4491,6 +4510,9 @@ columnHeader: string;
     title: string;
     subtitle: string;
     migrate: string;
+    importOpencode: string;
+    importOpencodeResult: string;
+    importOpencodeEmpty: string;
     backEndpoints: string;
     backModels: string;
     discovering: string;
@@ -4650,6 +4672,10 @@ uiTexts: {
   ai: {
     groups: {
       title: string;
+      tabAccounts: string;
+      accountsEmpty: string;
+      accountsHint: string;
+      removeShare: string;
       search: {
         placeholder: string;
       };
@@ -4724,14 +4750,32 @@ uiTexts: {
         requests: string;
         tokens: string;
         empty: string;
-        quotaLabel: string;
-        quotaHint: string;
-        quotaFractional: string;
-        unlimited: string;
-        saved: string;
-        limit: string;
-        perDay: string;
         history30: string;
+      };
+      quotas: {
+        title: string;
+        empty: string;
+        addRule: string;
+        scopeMember: string;
+        scopePool: string;
+        everyone: string;
+        wholePool: string;
+        modelLabel: string;
+        modelPh: string;
+        unitLabel: string;
+        unitRequests: string;
+        unitTokens: string;
+        amountLabel: string;
+        amountPh: string;
+        periodLabel: string;
+        periodDaily: string;
+        periodTotal: string;
+        unlimited: string;
+        allModels: string;
+        deleteRule: string;
+        saved: string;
+        deleted: string;
+        invalidAmount: string;
       };
       pool: {
         title: string;

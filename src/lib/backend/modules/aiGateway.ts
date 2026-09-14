@@ -330,6 +330,30 @@ export async function migrateLegacyData(): Promise<{
   return safeInvoke('migrate_ai_gateway_legacy_data', {});
 }
 
+// ── OpenCode import (opencode.json + auth.json → gateway catalog) ────────
+// Plain-dict report → snake_case (same convention as migrateLegacyData).
+
+export interface OpencodeImportReport {
+  imported: {
+    name: string;
+    endpoint_id: string;
+    endpoint_created: boolean;
+    credential_id: string;
+    models: string[];
+  }[];
+  skipped: { name: string; reason: string }[];
+  models: string[];
+  public_models: string[];
+  shared_to_group: string | null;
+}
+
+export async function importOpencodeProviders(params?: {
+  groupId?: string;
+  providers?: string[];
+}): Promise<OpencodeImportReport> {
+  return safeInvoke('import_opencode_providers', params ?? {}, { noCache: true });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // On-demand Discovery & Probe API
 // Both return plain dicts (no Pydantic alias conversion) — snake_case keys

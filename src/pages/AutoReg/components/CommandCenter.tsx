@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ProviderSelector,
   ConfigTabs,
@@ -23,10 +23,13 @@ import { t } from '@/lib/i18n';
 import {
   type IdentityConfig,
   type NetworkConfig,
+  Select,
   StatusBadge,
   isIdentityConfigReady,
 } from '@/components/ui';
 import type { AddyIoAccountDetails } from '../../../types/generated';
+import { useAuthStore } from '@/stores/auth';
+import { useGroupsStore } from '@/stores/groups';
 
 interface CommandCenterProps {
   // Provider
@@ -121,6 +124,10 @@ interface CommandCenterProps {
   onStart: () => void;
   onStop: () => void;
   jobId?: string | null;
+
+  // Target group for auto-share after registration
+  targetGroupId: string;
+  onTargetGroupIdChange: (groupId: string) => void;
 
   // State
   saveStatus: SaveStatus;
@@ -296,12 +303,32 @@ export const CommandCenter = ({
   onStart,
   onStop,
   jobId,
+  targetGroupId,
+  onTargetGroupIdChange,
   saveStatus,
   disabled,
 }: CommandCenterProps) => {
   // When true, the scrollable content area shows the scenario step editor
   // instead of the cockpit sections.
   const [showScenarioEditor, setShowScenarioEditor] = useState(false);
+
+  // ── Target-group selector ───────────────────────────────────────────────
+  const authUser = useAuthStore(s => s.user);
+  const groups = useGroupsStore(s => s.groups);
+  const fetchGroups = useGroupsStore(s => s.fetchList);
+
+  useEffect(() => {
+    if (authUser) {
+      void fetchGroups();
+    }
+  }, [authUser, fetchGroups]);
+
+  const groupOptions: { value: string; label: string }[] = [
+    { value: '', label: t('ownership.targetGroupNone') },
+    ...groups.map(g => ({ value: g.id, label: g.name })),
+  ];
+
+  const selectedGroupName = groups.find(g => g.id === targetGroupId)?.name;
 
   const savePill =
     saveStatus === 'saving' ? (
@@ -334,7 +361,7 @@ export const CommandCenter = ({
               : 'Свой домен';
   const engineChip = browserEngine === 'shardbrowser' ? 'ShardBrowser' : 'CloakBrowser';
   const networkChip = networkConfig.enabled ? 'Прокси' : 'Прямое';
-  const launchChip = `${speedMultiplier}× · ${delayBetweenAccounts}с`;
+  const launchChip = `${speedMultiplier}× · ${delayBetweenAccounts}с${selectedGroupName ? ` · ${selectedGroupName}` : ''}`;
   const soundChip = captchaSoundEnabled ? 'звук вкл' : 'звук выкл';
 
   const showSection = (tab: ConfigTab) => activeTab === 'all' || activeTab === tab;
@@ -452,6 +479,23 @@ export const CommandCenter = ({
               defaultExpanded={false}
               forceExpanded={single}
             >
+              <div className="mb-3">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  {t('ownership.targetGroup')}
+                </label>
+                <Select
+                  value={targetGroupId}
+                  onChange={e => onTargetGroupIdChange(e.target.value)}
+                  disabled={disabled}
+                  className="h-8 py-0.5 text-xs"
+                >
+                  {groupOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
               <LaunchSection
                 provider={activeProvider}
                 useRegistrationV2={useRegistrationV2}

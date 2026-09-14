@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Plugins from '../../pages/Plugins';
 import * as pluginGrantsModule from '../../lib/backend/modules/pluginGrants';

@@ -124,6 +124,10 @@ export default function UserProfile() {
   }, [userId]);
 
   useEffect(() => {
+    // Data-fetching effect: refresh is async; setState calls after the first
+    // await run in a microtask. The sync setLoading(true)/setError(null) at
+    // the top of refresh mirror the component's initial state on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 

@@ -4,15 +4,51 @@ Chrome connects to this local proxy without auth,
 and this proxy forwards requests to upstream proxy with auth.
 """
 
+import ipaddress
 import logging
 import select
 import socket
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 logger = logging.getLogger(__name__)
+
+#: Hosts the proxy must never forward to (SSRF hardening): loopback,
+#: link-local (cloud metadata), private ranges, and common metadata names.
+_BLOCKED_HOSTNAMES = {"localhost", "metadata.google.internal", "metadata"}
+
+
+def _is_blocked_host(host: str) -> bool:
+    host = (host or "").strip().lower().rstrip(".")
+    if host in _BLOCKED_HOSTNAMES:
+        return True
+    # Strip IPv6 brackets.
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # a public hostname
+    return (
+        ip.is_loopback
+        or ip.is_link_local
+        or ip.is_private
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def _is_blocked_url(url: str) -> bool:
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return True
+    if parsed.scheme not in ("http", "https"):
+        return True
+    return _is_blocked_host(parsed.hostname or "")
 
 
 class ProxyAuthHandler(BaseHTTPRequestHandler):
@@ -32,6 +68,10 @@ class ProxyAuthHandler(BaseHTTPRequestHandler):
             # Parse target host and port
             host, port = self.path.split(":")
             port = int(port)
+
+            if _is_blocked_host(host):
+                self.send_error(403, "Blocked target")
+                return
 
             # Connect to upstream proxy
             if self.upstream_proxy:
@@ -153,6 +193,11 @@ class ProxyAuthHandler(BaseHTTPRequestHandler):
             url = self.path
             if not url.startswith("http"):
                 url = f"http://{self.headers.get('Host')}{url}"
+
+            if _is_blocked_url(url):
+                self.send_response(403)
+                self.end_headers()
+                return
 
             # Create request with proxy
             if self.upstream_proxy:

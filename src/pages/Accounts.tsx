@@ -22,6 +22,8 @@ import {
   createDefaultProfileSettings,
   openStandaloneFingerprintProfileAndRememberUrl,
   claimAccount,
+  shareAccountToGroup,
+  unshareAccountFromGroup,
 } from '@/lib/backend';
 import { t } from '../lib/i18n';
 import { useBulkRefresh } from '../hooks/useBulkRefresh';
@@ -36,14 +38,18 @@ import { SheetsConfigPanel } from '../components/accounts/SheetsConfigPanel';
 import { AccountsMainPanels } from '../components/accounts/AccountsMainPanels';
 import { AccountsErrorBanner } from '../components/accounts/AccountsErrorBanner';
 import { AccountsExpiredBanner } from '../components/accounts/AccountsExpiredBanner';
+import { ShareToGroupPicker } from '../components/ai-groups/ShareToGroupPicker';
 import { useGoogleSheetsDataset } from '../hooks/useGoogleSheetsDataset';
 import { useSheetsConfigState } from '../hooks/useSheetsConfigState';
 import { FloatingActionBar, SegmentedControl } from '@/components/ui';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore, effectiveRole } from '../stores/auth';
+import type { Account } from '@/types/generated';
 
 export default function Accounts() {
   const navigate = useNavigate();
   const hasPermission = useAuthStore(state => state.hasPermission);
+  const currentUser = useAuthStore(state => state.user);
+  const isAdmin = effectiveRole(currentUser) === 'admin';
   const {
     accounts: storeAccounts,
     loading,
@@ -132,7 +138,10 @@ export default function Accounts() {
       onPersist: setAccountsVisibleColumns,
     });
   const [profileAliases, setProfileAliases] = useState<string[]>([]);
-  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared'>('all');
+  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'shared' | 'group'>('all');
+  const [shareTargetAccount, setShareTargetAccount] = useState<Account | null>(null);
+  const [isBulkShareOpen, setIsBulkShareOpen] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [profileSettingsAlias, setProfileSettingsAlias] = useUIState(
     'accounts-profile-settings-alias',
     null as string | null,
@@ -236,6 +245,7 @@ export default function Accounts() {
   const ownershipFilteredAccounts = useMemo(() => {
     if (ownershipFilter === 'all') return filteredAccounts;
     if (ownershipFilter === 'mine') return filteredAccounts.filter(a => a.mine);
+    if (ownershipFilter === 'group') return filteredAccounts.filter(a => (a.groupIds?.length ?? 0) > 0);
     return filteredAccounts.filter(a => a.shared && !a.mine);
   }, [filteredAccounts, ownershipFilter]);
 
@@ -251,6 +261,75 @@ export default function Accounts() {
     },
     [fetchAccounts]
   );
+
+  const handleOpenShareToGroup = useCallback(
+    (accountId: number) => {
+      const acc = storeAccounts.find(a => a.id === accountId);
+      setShareTargetAccount(acc ?? null);
+    },
+    [storeAccounts]
+  );
+
+  const handleApplyShare = useCallback(
+    async (toShare: string[], toUnshare: string[]) => {
+      if (!shareTargetAccount) return;
+      setIsSharing(true);
+      try {
+        for (const groupId of toShare) {
+          await shareAccountToGroup(groupId, shareTargetAccount.id);
+        }
+        for (const groupId of toUnshare) {
+          await unshareAccountFromGroup(groupId, shareTargetAccount.id);
+        }
+        toast.success(t('common.saved'));
+        setShareTargetAccount(null);
+        await fetchAccounts();
+      } catch (error) {
+        toast.error(`${t('common.error')}: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        setIsSharing(false);
+      }
+    },
+    [shareTargetAccount, fetchAccounts]
+  );
+
+  const handleApplyBulkShare = useCallback(
+    async (toShare: string[], toUnshare: string[]) => {
+      const targets = filteredAccounts.filter(
+        a => selectedIds.has(a.id) && (a.mine || isAdmin)
+      );
+      if (targets.length === 0) return;
+      setIsSharing(true);
+      try {
+        for (const acc of targets) {
+          for (const groupId of toShare) {
+            await shareAccountToGroup(groupId, acc.id);
+          }
+          for (const groupId of toUnshare) {
+            await unshareAccountFromGroup(groupId, acc.id);
+          }
+        }
+        toast.success(t('common.saved'));
+        setIsBulkShareOpen(false);
+        clearSelection();
+        await fetchAccounts();
+      } catch (error) {
+        toast.error(`${t('common.error')}: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        setIsSharing(false);
+      }
+    },
+    [filteredAccounts, selectedIds, isAdmin, clearSelection, fetchAccounts]
+  );
+
+  const bulkAlreadySharedIds = useMemo(() => {
+    const targets = filteredAccounts.filter(
+      a => selectedIds.has(a.id) && (a.mine || isAdmin)
+    );
+    if (targets.length === 0) return [];
+    const sets = targets.map(a => new Set(a.groupIds ?? []));
+    return [...sets[0]].filter(id => sets.every(s => s.has(id)));
+  }, [filteredAccounts, selectedIds, isAdmin]);
 
   useConstrainSelectionToVisibleAccounts({
     visibleAccounts: ownershipFilteredAccounts,
@@ -550,6 +629,8 @@ export default function Accounts() {
             visibleColumns={visibleColumns}
             showArchived={showArchived}
             onShowArchivedChange={setShowArchived}
+            selectionCount={selectedIds.size}
+            onBulkShareToGroup={() => setIsBulkShareOpen(true)}
             onEntityFilterChange={handleEntityFilterChange}
             onViewModeChange={handleViewModeChange}
             onSearchQueryChange={handleSearchQueryChange}
@@ -603,11 +684,12 @@ export default function Accounts() {
               <SegmentedControl
                 size="sm"
                 value={ownershipFilter}
-                onChange={(v) => setOwnershipFilter(v as 'all' | 'mine' | 'shared')}
+                onChange={(v) => setOwnershipFilter(v as 'all' | 'mine' | 'shared' | 'group')}
                 options={[
                   { value: 'all', label: t('ownership.filterAll') },
                   { value: 'mine', label: t('ownership.filterMine') },
                   { value: 'shared', label: t('ownership.filterShared') },
+                  { value: 'group', label: t('ownership.filterGroup') },
                 ]}
               />
             </div>
@@ -667,6 +749,7 @@ export default function Accounts() {
                 onRefreshRefUrl: handleRefreshRefUrl,
                 onUpdate: handleUpdateAccount,
                 onClaim: handleClaimAccount,
+                onShareToGroup: handleOpenShareToGroup,
                 selectedProvider: providerFilter === 'all' ? null : providerFilter,
               }}
               onRelationEdgeClickInAll={handleRelationEdgeClickInAll}
@@ -711,6 +794,24 @@ export default function Accounts() {
         }
       />
 
+      <ShareToGroupPicker
+        isOpen={Boolean(shareTargetAccount)}
+        onClose={() => setShareTargetAccount(null)}
+        alreadySharedIds={shareTargetAccount?.groupIds ?? []}
+        onApply={handleApplyShare}
+        busy={isSharing}
+        title={t('ownership.shareGroupTitle')}
+      />
+
+      <ShareToGroupPicker
+        isOpen={isBulkShareOpen}
+        onClose={() => setIsBulkShareOpen(false)}
+        alreadySharedIds={bulkAlreadySharedIds}
+        onApply={handleApplyBulkShare}
+        busy={isSharing}
+        title={t('ownership.shareGroupTitle')}
+      />
+
       {selectedIds.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-50 px-6 pb-6 pointer-events-none">
           <div className="max-w-2xl mx-auto pointer-events-auto">
@@ -736,3 +837,4 @@ export default function Accounts() {
     </div>
   );
 }
+

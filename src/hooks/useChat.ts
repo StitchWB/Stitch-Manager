@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useChatStore, type ChatMessage, type ChatSession } from '../stores/chat';
 import type { ContentBlock } from '../types/generated';
+import { detailToMessage } from '../lib/errorText';
 
 interface UseChatOptions {
   apiUrl?: string;
@@ -300,7 +301,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 }
                 // Handle error
                 else if (event.type === 'error') {
-                  throw new Error(event.error?.message || event.error || 'Stream error');
+                  throw new Error(
+        detailToMessage(event.error?.message, detailToMessage(event.error, 'Stream error')),
+      );
                 }
               } catch {
                 // Ignore parse errors for non-JSON lines

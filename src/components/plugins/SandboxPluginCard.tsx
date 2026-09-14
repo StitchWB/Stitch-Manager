@@ -119,6 +119,7 @@ export function SandboxPluginCard({ plugin, onChanged }: SandboxPluginCardProps)
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-slate-200 font-medium truncate">{plugin.id}</span>
+            {/* eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable */}
             <span className="text-[10px] text-slate-500 font-mono">v{plugin.version}</span>
           </div>
         </div>

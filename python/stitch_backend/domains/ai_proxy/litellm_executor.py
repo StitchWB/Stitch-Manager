@@ -15,7 +15,12 @@ from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway import circuit_breaker
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.routing_engine import GatewayRequest as AIGatewayRequest
-from stitch_backend.domains.ai_gateway.routing_engine import PoolScope, RoutingEngine, RoutingError
+from stitch_backend.domains.ai_gateway.routing_engine import (
+    PoolScope,
+    QuotaExceededError,
+    RoutingEngine,
+    RoutingError,
+)
 from stitch_backend.domains.ai_gateway.usage_tracker import record_usage as _record_group_usage
 from stitch_backend.domains.ai_proxy.compression.service import get_compression_service
 from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
@@ -131,6 +136,20 @@ class LiteLLMExecutor:
                 first.credential.id[:8],
             )
             return cast("list[Any] | None", routing_results)
+        except QuotaExceededError as e:
+            # Group quota exhausted — 429 so clients can distinguish it
+            # from a generic "no route" 503 and back off accordingly.
+            logger.info("Group quota exceeded for %s: %s", payload.model, e)
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": {
+                        "type": "quota_exceeded",
+                        "message": str(e),
+                        "groups": e.groups,
+                    }
+                },
+            ) from e
         except RoutingError as e:
             logger.debug("AI Gateway route unavailable for %s: %s", payload.model, e)
             return None
@@ -186,18 +205,13 @@ class LiteLLMExecutor:
                     )
                     continue
                 try:
-                    result = await self._invoke_via_gateway(payload, routing_result, config)
+                    result = await self._invoke_via_gateway(payload, routing_result, config, pool=pool)
                 except Exception as e:
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                if pool is not None and pool.owner_user_id is not None:
-                    await _record_group_usage(
-                        pool.owner_user_id,
-                        routing_result.group_id_hit,
-                    )
                 return result
 
         # No route available — LiteLLM Router fallback removed (L2 final wave).
@@ -208,6 +222,7 @@ class LiteLLMExecutor:
 
     async def _invoke_via_gateway(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
+        pool: PoolScope | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result."""
         metrics_tracker = get_metrics_tracker()
@@ -285,7 +300,13 @@ class LiteLLMExecutor:
                 logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
             if payload.stream:
-                result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
+                result = await self._stream_response(
+                    self._guard_stream(response, routing_result),
+                    client_has_tools=client_has_tools,
+                    on_complete=lambda tokens: self._record_group_usage_for(
+                        pool, routing_result, payload.model, tokens,
+                    ),
+                )
             else:
                 result = cast("Any", _json_object(response))
                 if holone_service.config.enabled:
@@ -294,6 +315,9 @@ class LiteLLMExecutor:
                     )
                     if findings:
                         logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
+                await self._record_group_usage_for(
+                    pool, routing_result, payload.model, input_tokens + output_tokens,
+                )
             return result
 
         except Exception as e:
@@ -338,18 +362,13 @@ class LiteLLMExecutor:
                     )
                     continue
                 try:
-                    result = await self._invoke_via_gateway_messages(payload, routing_result, config)
+                    result = await self._invoke_via_gateway_messages(payload, routing_result, config, pool=pool)
                 except Exception as e:
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                if pool is not None and pool.owner_user_id is not None:
-                    await _record_group_usage(
-                        pool.owner_user_id,
-                        routing_result.group_id_hit,
-                    )
                 return result
 
         # No route available — LiteLLM Router fallback removed (L2 final wave).
@@ -360,6 +379,7 @@ class LiteLLMExecutor:
 
     async def _invoke_via_gateway_messages(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
+        pool: PoolScope | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result (Anthropic Messages API)."""
         metrics_tracker = get_metrics_tracker()
@@ -437,7 +457,13 @@ class LiteLLMExecutor:
                 logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
             if payload.stream:
-                result, _ = await self._stream_anthropic_response(response, client_has_tools=client_has_tools)
+                result = await self._stream_anthropic_response(
+                    self._guard_stream(response, routing_result),
+                    client_has_tools=client_has_tools,
+                    on_complete=lambda tokens: self._record_group_usage_for(
+                        pool, routing_result, payload.model, tokens,
+                    ),
+                )
             else:
                 result = cast("Any", _json_object(response))
                 if compression_service.config.enabled:
@@ -448,6 +474,9 @@ class LiteLLMExecutor:
                     )
                     if findings:
                         logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
+                await self._record_group_usage_for(
+                    pool, routing_result, payload.model, input_tokens + output_tokens,
+                )
             return result
 
         except Exception as e:
@@ -492,18 +521,13 @@ class LiteLLMExecutor:
                     )
                     continue
                 try:
-                    result = await self._invoke_via_gateway_responses(payload, routing_result, config)
+                    result = await self._invoke_via_gateway_responses(payload, routing_result, config, pool=pool)
                 except Exception as e:
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
                     )
                     continue
-                if pool is not None and pool.owner_user_id is not None:
-                    await _record_group_usage(
-                        pool.owner_user_id,
-                        routing_result.group_id_hit,
-                    )
                 return result
 
         # No route available — LiteLLM Router fallback removed (L2 final wave).
@@ -514,6 +538,7 @@ class LiteLLMExecutor:
 
     async def _invoke_via_gateway_responses(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
+        pool: PoolScope | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result (Responses API)."""
         metrics_tracker = get_metrics_tracker()
@@ -603,7 +628,13 @@ class LiteLLMExecutor:
                 logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
             if payload.stream:
-                result, _ = await self._stream_response(response, client_has_tools=client_has_tools)
+                result = await self._stream_response(
+                    self._guard_stream(response, routing_result),
+                    client_has_tools=client_has_tools,
+                    on_complete=lambda tokens: self._record_group_usage_for(
+                        pool, routing_result, payload.model, tokens,
+                    ),
+                )
             else:
                 result = cast("Any", _json_object(response))
                 if compression_service.config.enabled:
@@ -614,6 +645,9 @@ class LiteLLMExecutor:
                     )
                     if findings:
                         logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
+                await self._record_group_usage_for(
+                    pool, routing_result, payload.model, input_tokens + output_tokens,
+                )
             return result
 
         except Exception as e:
@@ -676,59 +710,207 @@ class LiteLLMExecutor:
 
         return {"object": "list", "data": []}
 
-    async def _stream_response(
-        self, response: Any, *, client_has_tools: bool = False
-    ) -> tuple[StreamingResponse, int | None]:
-        chunks: list[str] = []
-        actual_tokens: int | None = None
-        async for chunk in response:
-            value = chunk.model_dump(mode="json", exclude_none=True)
-            chunks.append(f"data: {json.dumps(value, separators=(',', ':'))}\n\n")
-            actual_tokens = _usage_tokens(value) or actual_tokens
-        chunks.append("data: [DONE]\n\n")
+    async def _record_group_usage_for(
+        self,
+        pool: PoolScope | None,
+        routing_result: Any,
+        model: str | None,
+        tokens: int | None,
+    ) -> None:
+        """Record group usage for a successful request (no-op for desktop)."""
+        if pool is None or pool.owner_user_id is None:
+            return
+        await _record_group_usage(
+            pool.owner_user_id,
+            routing_result.group_id_hit,
+            model=model,
+            tokens=tokens,
+        )
 
-        body = "".join(chunks)
+    async def _guard_stream(self, stream: Any, routing_result: Any) -> Any:
+        """Wrap an upstream SSE iterator: on mid-stream failure, mark the
+        credential/endpoint, then abort the client stream.
+
+        Pass-through streaming cannot retry after bytes were sent, so the
+        only correct response to a mid-flight upstream error is to record
+        it (cooldown/circuit breaker) and propagate.
+        """
+        try:
+            async for line in stream:
+                yield line
+        except Exception as exc:
+            captured = exc  # capture for closure — PEP 3110 deletes `exc` after except block
+            logger.warning(
+                "Upstream stream failed mid-flight (credential=%s): %s",
+                routing_result.credential.id[:8],
+                _sanitize_error(captured, secret=routing_result.secret),
+            )
+            try:
+                async def _record(session):
+                    await self._routing_engine.record_result(
+                        session,
+                        credential_id=routing_result.credential.id,
+                        endpoint_id=routing_result.endpoint.id,
+                        error=routing_result.adapter.classify_error(captured),
+                        http_status=None,
+                    )
+                await run_in_session(_record)
+            except Exception:
+                logger.warning("Failed to record mid-stream failure", exc_info=True)
+            raise
+
+    async def _stream_response(
+        self,
+        response: Any,
+        *,
+        client_has_tools: bool = False,
+        on_complete: Callable[[int | None], Awaitable[None]] | None = None,
+    ) -> StreamingResponse:
+        """OpenAI-shaped SSE pass-through.
+
+        Upstream adapters yield raw SSE lines (``data: {...}``).  Default
+        path streams them to the client as they arrive (real TTFB) while
+        extracting token usage from chunk payloads.  When HoloNe stream
+        inspection is enabled the stream is buffered first — redaction
+        cannot happen after bytes were sent.  ``on_complete`` fires with
+        the total token count (``None`` when unknown) after the upstream
+        stream ends.
+        """
         holone_service = get_holone_service()
         if holone_service.config.enabled:
-            result = holone_service.inspect_stream_openai(body, client_has_tools=client_has_tools)
-            if result.findings:
-                logger.info("HoloNe stream findings: %s (blocked=%s)", [f.rule_id for f in result.findings], result.blocked)
-            body = result.body
+            return await self._stream_response_buffered(
+                response, client_has_tools=client_has_tools, on_complete=on_complete,
+            )
+
+        actual_tokens: int | None = None
+
+        async def body_gen():
+            nonlocal actual_tokens
+            saw_done = False
+            async for line in response:
+                if not line:
+                    continue
+                if line.strip() == "data: [DONE]":
+                    saw_done = True
+                tokens = _tokens_from_sse_line(line)
+                if tokens is not None:
+                    actual_tokens = max(actual_tokens or 0, tokens)
+                yield f"{line}\n\n"
+            if not saw_done:
+                yield "data: [DONE]\n\n"
+            if on_complete is not None:
+                await on_complete(actual_tokens)
+
+        return StreamingResponse(body_gen(), media_type="text/event-stream")
+
+    async def _stream_response_buffered(
+        self,
+        response: Any,
+        *,
+        client_has_tools: bool,
+        on_complete: Callable[[int | None], Awaitable[None]] | None,
+    ) -> StreamingResponse:
+        """Buffered variant for HoloNe-enabled runs: collect, inspect/redact, emit."""
+        lines: list[str] = []
+        actual_tokens: int | None = None
+        async for line in response:
+            if not line or line.strip() == "data: [DONE]":
+                continue
+            lines.append(line)
+            tokens = _tokens_from_sse_line(line)
+            if tokens is not None:
+                actual_tokens = max(actual_tokens or 0, tokens)
+
+        body = "".join(f"{line}\n\n" for line in lines) + "data: [DONE]\n\n"
+        holone_service = get_holone_service()
+        result = holone_service.inspect_stream_openai(body, client_has_tools=client_has_tools)
+        if result.findings:
+            logger.info("HoloNe stream findings: %s (blocked=%s)", [f.rule_id for f in result.findings], result.blocked)
+        body = result.body
 
         async def body_gen():
             yield body.encode("utf-8")
+            if on_complete is not None:
+                await on_complete(actual_tokens)
 
-        return StreamingResponse(body_gen(), media_type="text/event-stream"), actual_tokens
+        return StreamingResponse(body_gen(), media_type="text/event-stream")
 
     async def _stream_anthropic_response(
-        self, response: Any, *, client_has_tools: bool = False
-    ) -> tuple[StreamingResponse, int | None]:
-        chunks: list[str] = []
+        self,
+        response: Any,
+        *,
+        client_has_tools: bool = False,
+        on_complete: Callable[[int | None], Awaitable[None]] | None = None,
+    ) -> StreamingResponse:
+        """Anthropic-shaped SSE pass-through (same contract as OpenAI)."""
+        holone_service = get_holone_service()
+        if holone_service.config.enabled:
+            return await self._stream_anthropic_response_buffered(
+                response, client_has_tools=client_has_tools, on_complete=on_complete,
+            )
+
         input_tokens = 0
         output_tokens = 0
         found_usage = False
-        async for chunk in response:
-            value = chunk.model_dump(mode="json", exclude_none=True)
-            chunks.append(f"data: {json.dumps(value, separators=(',', ':'))}\n\n")
-            usage = value.get("usage")
-            if isinstance(usage, dict):
-                found_usage = True
-                input_tokens = max(input_tokens, _integer(usage.get("input_tokens")))
-                output_tokens = max(output_tokens, _integer(usage.get("output_tokens")))
 
-        body = "".join(chunks)
+        async def body_gen():
+            nonlocal input_tokens, output_tokens, found_usage
+            saw_done = False
+            async for line in response:
+                if not line:
+                    continue
+                if line.strip() == "data: [DONE]":
+                    saw_done = True
+                usage = _anthropic_usage_from_sse_line(line)
+                if usage is not None:
+                    found_usage = True
+                    input_tokens = max(input_tokens, usage[0])
+                    output_tokens = max(output_tokens, usage[1])
+                yield f"{line}\n\n"
+            if not saw_done:
+                yield "data: [DONE]\n\n"
+            if on_complete is not None:
+                total = input_tokens + output_tokens if found_usage else None
+                await on_complete(total)
+
+        return StreamingResponse(body_gen(), media_type="text/event-stream")
+
+    async def _stream_anthropic_response_buffered(
+        self,
+        response: Any,
+        *,
+        client_has_tools: bool,
+        on_complete: Callable[[int | None], Awaitable[None]] | None,
+    ) -> StreamingResponse:
+        """Buffered Anthropic variant for HoloNe-enabled runs."""
+        lines: list[str] = []
+        input_tokens = 0
+        output_tokens = 0
+        found_usage = False
+        async for line in response:
+            if not line or line.strip() == "data: [DONE]":
+                continue
+            lines.append(line)
+            usage = _anthropic_usage_from_sse_line(line)
+            if usage is not None:
+                found_usage = True
+                input_tokens = max(input_tokens, usage[0])
+                output_tokens = max(output_tokens, usage[1])
+
+        body = "".join(f"{line}\n\n" for line in lines) + "data: [DONE]\n\n"
         holone_service = get_holone_service()
-        if holone_service.config.enabled:
-            result = holone_service.inspect_stream_anthropic(body, client_has_tools=client_has_tools)
-            if result.findings:
-                logger.info("HoloNe stream findings: %s (blocked=%s)", [f.rule_id for f in result.findings], result.blocked)
-            body = result.body
+        result = holone_service.inspect_stream_anthropic(body, client_has_tools=client_has_tools)
+        if result.findings:
+            logger.info("HoloNe stream findings: %s (blocked=%s)", [f.rule_id for f in result.findings], result.blocked)
+        body = result.body
 
         async def body_gen():
             yield body.encode("utf-8")
+            if on_complete is not None:
+                total = input_tokens + output_tokens if found_usage else None
+                await on_complete(total)
 
-        actual_tokens = input_tokens + output_tokens if found_usage else None
-        return StreamingResponse(body_gen(), media_type="text/event-stream"), actual_tokens
+        return StreamingResponse(body_gen(), media_type="text/event-stream")
 
 
 def _is_safe_transport_failure(exc: BaseException) -> bool:
@@ -771,6 +953,45 @@ def _usage_tokens(response: JsonObject) -> int | None:
     )
     total = input_tokens + output_tokens
     return total if total > 0 else None
+
+
+def _tokens_from_sse_line(line: str) -> int | None:
+    """Extract total token usage from a raw SSE ``data: {...}`` line."""
+    if not line.startswith("data:"):
+        return None
+    payload = line[5:].strip()
+    if not payload or payload == "[DONE]":
+        return None
+    try:
+        data = json.loads(payload)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return _usage_tokens(data)
+
+
+def _anthropic_usage_from_sse_line(line: str) -> tuple[int, int] | None:
+    """Extract (input_tokens, output_tokens) from an Anthropic SSE line."""
+    if not line.startswith("data:"):
+        return None
+    payload = line[5:].strip()
+    if not payload or payload == "[DONE]":
+        return None
+    try:
+        data = json.loads(payload)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        # message_start carries usage under ``message``
+        message = data.get("message")
+        usage = message.get("usage") if isinstance(message, dict) else None
+    if not isinstance(usage, dict):
+        return None
+    return (_integer(usage.get("input_tokens")), _integer(usage.get("output_tokens")))
 
 
 def _integer(value: object) -> int:

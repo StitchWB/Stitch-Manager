@@ -36,7 +36,12 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _to_response(account: Account, caller_uid: int | None = None) -> AccountResponse:
+def _to_response(
+    account: Account,
+    caller_uid: int | None = None,
+    group_ids: list[str] | None = None,
+    group_names: list[str] | None = None,
+) -> AccountResponse:
     """Convert an ORM model → Pydantic response DTO.
 
     Delegates to the ``@model_validator`` on AccountResponse which handles
@@ -45,11 +50,18 @@ def _to_response(account: Account, caller_uid: int | None = None) -> AccountResp
     When ``caller_uid`` is given, additive ``mine`` and ``shared`` fields
     are set on the response: ``mine`` = account.owner_id == caller_uid,
     ``shared`` = account.owner_id is None.
+
+    When ``group_ids`` / ``group_names`` are given, they are set on the
+    response so the frontend can show which groups the account belongs to.
     """
     resp = AccountResponse.model_validate(account)
     if caller_uid is not None:
         resp.mine = (account.owner_id == caller_uid)
         resp.shared = (account.owner_id is None)
+    if group_ids is not None:
+        resp.group_ids = group_ids
+    if group_names is not None:
+        resp.group_names = group_names
     return resp
 
 
@@ -81,6 +93,14 @@ class AccountService:
 
         When *caller_uid* is given, additive ``mine`` and ``shared``
         fields are set on each response.
+
+        When *caller_uid* is given, visibility is ALSO extended to include
+        accounts shared into any group where the caller is a member (via
+        the ``group_shares`` table).  Each visible account also gets
+        ``group_ids`` and ``group_names`` populated — listing only the
+        groups the caller is a member of (to avoid leaking group
+        existence).  Guest (caller None) behavior is unchanged: shared
+        pool only, no group fields.
         """
         stmt = select(Account).order_by(Account.created_at.desc())
         effective_provider = provider or provider_type or provider_subtype
@@ -88,12 +108,84 @@ class AccountService:
             stmt = stmt.where(Account.provider == effective_provider)
         if not show_archived:
             stmt = stmt.where(Account.status != "archived")
-        # Per-user isolation: shared pool (NULL) OR owned by caller.
-        stmt = stmt.where(
-            or_(Account.owner_id.is_(None), Account.owner_id == owner_id)
-        )
+
+        if caller_uid is not None:
+            # Extended visibility: shared (NULL) OR owned by caller OR
+            # shared into a group where the caller is a member.
+            from sqlalchemy import and_
+            from sqlalchemy import select as sa_select
+
+            from stitch_backend.domains.groups.models import GroupMember, GroupShare
+
+            member_group_ids_subq = (
+                sa_select(GroupMember.group_id)
+                .where(GroupMember.user_id == caller_uid)
+                .scalar_subquery()
+            )
+            # Account.id and GroupShare.resource_id are both TEXT, so the
+            # subquery compares like with like.
+            shared_account_ids_subq = (
+                sa_select(GroupShare.resource_id)
+                .where(
+                    and_(
+                        GroupShare.resource_type == "account",
+                        GroupShare.group_id.in_(member_group_ids_subq),
+                    )
+                )
+                .scalar_subquery()
+            )
+            stmt = stmt.where(
+                or_(
+                    Account.owner_id.is_(None),
+                    Account.owner_id == owner_id,
+                    Account.id.in_(shared_account_ids_subq),
+                )
+            )
+        else:
+            # Guest / desktop: shared pool (NULL) OR owned by caller
+            # (caller is None → owner_id is None → matches NULL only).
+            # Exactly the pre-group-shares behaviour.
+            stmt = stmt.where(
+                or_(Account.owner_id.is_(None), Account.owner_id == owner_id)
+            )
+
         result = await self._db.execute(stmt)
-        return [_to_response(a, caller_uid=caller_uid) for a in result.scalars().all()]
+        accounts = result.scalars().all()
+
+        if caller_uid is None or not accounts:
+            return [_to_response(a, caller_uid=caller_uid) for a in accounts]
+
+        # ── Populate group_ids / group_names via resource_shares ──────
+        # Only groups where the caller is a member are included (avoids
+        # leaking group existence to non-members).
+        from stitch_backend.domains.groups.service import (
+            group_ids_for_user,
+            resource_shares,
+        )
+
+        member_group_ids = set(await group_ids_for_user(self._db, caller_uid))
+        account_ids = [str(a.id) for a in accounts]
+        shares = await resource_shares(
+            self._db, resource_type="account", resource_ids=account_ids
+        )
+
+        responses: list[AccountResponse] = []
+        for a in accounts:
+            acct_shares = shares.get(str(a.id), [])
+            filtered = [
+                (gid, gname)
+                for gid, gname, _sby in acct_shares
+                if gid in member_group_ids
+            ]
+            responses.append(
+                _to_response(
+                    a,
+                    caller_uid=caller_uid,
+                    group_ids=[gid for gid, _ in filtered if gid is not None],
+                    group_names=[gname for _, gname in filtered if gname is not None],
+                )
+            )
+        return responses
 
     async def get_account(self, account_id: str) -> Account:
         stmt = select(Account).where(Account.id == str(account_id))
@@ -400,7 +492,22 @@ class AccountService:
         self, account_id: str, *, caller_uid: int | None = None,
     ) -> None:
         account = await self.get_account(account_id)
-        self._check_ownership(account, caller_uid, account_id)
+        # Extended delete permission: allow group owners to delete accounts
+        # shared into their groups (in addition to the standard
+        # owner/shared/desktop rules in ``_check_ownership``).  When the
+        # caller is a group role 'owner' of any group the account is shared
+        # into, the standard ownership check is skipped.
+        from stitch_backend.domains.groups.service import (
+            is_group_owner_of_resource,
+        )
+
+        if not await is_group_owner_of_resource(
+            self._db,
+            resource_type="account",
+            resource_id=str(account.id),
+            uid=caller_uid,
+        ):
+            self._check_ownership(account, caller_uid, account_id)
         await self._db.delete(account)
         await self._db.flush()
         logger.info("Account deleted: %s", account.email)
@@ -411,9 +518,35 @@ class AccountService:
         str_ids = [str(i) for i in ids]
         stmt = delete(Account).where(Account.id.in_(str_ids))
         if caller_uid is not None:
-            # Per-user isolation: only delete shared (NULL) or own rows.
+            # Per-user isolation + extended group-owner delete permission:
+            # delete shared (NULL), own, or accounts shared into groups
+            # where the caller has role 'owner'.
+            from sqlalchemy import and_
+            from sqlalchemy import select as sa_select
+
+            from stitch_backend.domains.groups.models import GroupMember, GroupShare
+
+            group_owner_account_ids_subq = (
+                sa_select(GroupShare.resource_id)
+                .join(
+                    GroupMember,
+                    GroupMember.group_id == GroupShare.group_id,
+                )
+                .where(
+                    and_(
+                        GroupShare.resource_type == "account",
+                        GroupMember.user_id == caller_uid,
+                        GroupMember.role == "owner",
+                    )
+                )
+                .scalar_subquery()
+            )
             stmt = stmt.where(
-                or_(Account.owner_id.is_(None), Account.owner_id == caller_uid)
+                or_(
+                    Account.owner_id.is_(None),
+                    Account.owner_id == caller_uid,
+                    Account.id.in_(group_owner_account_ids_subq),
+                )
             )
         result = await self._db.execute(stmt)
         await self._db.flush()

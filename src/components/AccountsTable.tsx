@@ -47,6 +47,7 @@ export interface AccountsTableProps {
   onRefreshRefUrl?: (accountId: number) => Promise<void>;
   onUpdate?: (accountId: number, updates: { notes?: string; tags?: string }) => Promise<void>;
   onClaim?: (accountId: number) => Promise<void>;
+  onShareToGroup?: (accountId: number) => void;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
   selectedProvider?: string | null;
 }
@@ -78,6 +79,7 @@ export default function AccountsTable({
   onRefreshRefUrl,
   onUpdate,
   onClaim,
+  onShareToGroup,
   onRelationEdgeClick,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -392,6 +394,7 @@ onCaptureWebCookies={onCaptureWebCookies}
                 onCopyRefUrl={onCopyRefUrl}
                 onRefreshRefUrl={onRefreshRefUrl}
                 onClaim={onClaim}
+                onShareToGroup={onShareToGroup}
                 onRelationEdgeClick={onRelationEdgeClick}
               />
             ))}

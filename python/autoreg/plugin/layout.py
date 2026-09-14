@@ -93,6 +93,33 @@ def plugin_local_path(plugin_id: str) -> Path:
     return plugins_local_dir() / plugin_id
 
 
+# ── dev-install --link pointer ──────────────────────────────────────────────
+#
+# A link install places a single ``.stitch-link`` text file (absolute path of
+# the author's working copy) inside ``plugins-local/{id}/`` instead of copying
+# the package.  Loaders call :func:`resolve_link` on candidate dirs so edits
+# in the working copy are live without re-install.
+
+LINK_FILENAME = ".stitch-link"
+
+
+def resolve_link(path: Path) -> Path:
+    """Follow a ``.stitch-link`` pointer dir, else return ``path`` unchanged.
+
+    Unreadable files and dangling targets fall back to ``path`` — resolution
+    must never break scanning.
+    """
+    link = path / LINK_FILENAME
+    if link.is_file():
+        try:
+            target = Path(link.read_text(encoding="utf-8").strip())
+        except OSError:
+            return path
+        if target.is_dir():
+            return target
+    return path
+
+
 # ── Sandbox (per-user) layout ───────────────────────────────────────────────
 #
 # Sandbox plugins live under ``<base>/sandbox/<user_id>/<plugin_id>/`` and are

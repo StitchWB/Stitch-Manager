@@ -67,6 +67,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       const url = match[11];
       if (SAFE_LINK.test(url)) {
         out.push(
+          // eslint-disable-next-line react/forbid-elements -- external URL (http/https/mailto) rendered by a safe-scheme markdown link tokenizer; react-router Link is internal-only and cannot be used here
           <a
             key={k}
             href={url}

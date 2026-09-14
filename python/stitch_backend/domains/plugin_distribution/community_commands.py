@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from autoreg.plugin.layout import plugins_local_dir
+from autoreg.plugin.layout import plugins_local_dir, resolve_link
 from autoreg.plugin.manifest import validate_manifest
 from stitch_backend.core.command_registry import register_command
 
@@ -93,7 +93,7 @@ async def cmd_list_installed_community(params: dict) -> dict:
 
 @register_command("list_local_packages", readonly=True)
 async def cmd_list_local_packages(params: dict) -> dict:
-    """Scan plugins-local for author dev packages."""
+    """Scan plugins-local for author dev packages (``.stitch-link`` followed)."""
     root = plugins_local_dir()
     if not root.is_dir():
         return {"packages": []}
@@ -101,6 +101,7 @@ async def cmd_list_local_packages(params: dict) -> dict:
     for entry in sorted(root.iterdir()):
         if not entry.is_dir():
             continue
+        entry = resolve_link(entry)
         manifest_path = entry / "plugin.json"
         if not manifest_path.is_file():
             continue

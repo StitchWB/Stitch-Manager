@@ -16,7 +16,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
 import Monitoring from '../../pages/Monitoring';
-import type { MonitoringSnapshot } from '@/lib/backend/modules/monitoring';
+import { getMonitoring, type MonitoringSnapshot } from '../../lib/backend/modules/monitoring';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 
 // ── Module mocks ────────────────────────────────────────────────────────────
@@ -111,9 +111,6 @@ const errorHost = {
 describe('Monitoring page — service plugins section', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    const { getMonitoring } = require('../../lib/backend/modules/monitoring') as {
-      getMonitoring: jest.Mock;
-    };
     getMonitoring.mockResolvedValue(snapshot);
   });
 

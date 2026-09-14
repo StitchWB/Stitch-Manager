@@ -16,6 +16,19 @@ let queue: ObsEventInput[] = [];
 let inFlight = false;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Reporting is disabled until the auth store confirms a session (or that auth
+// is disabled / desktop). Opt-in avoids firing /api/obs_ingest 401s before the
+// auth gate resolves. The auth store flips it on once a session exists.
+let reportingEnabled = false;
+
+export function setObsReportingEnabled(enabled: boolean): void {
+  reportingEnabled = enabled;
+  if (!enabled) {
+    queue = [];
+    clearFlushTimer();
+  }
+}
+
 // Events that have already been re-queued once after a failed flush. Each
 // event gets exactly one retry; a second failure drops it. WeakSet entries
 // are GC'd once the event object is no longer referenced.
@@ -58,6 +71,7 @@ function scheduleFlush(): void {
 
 async function flush(): Promise<void> {
   if (inFlight) return;
+  if (!reportingEnabled) return;
   // We are flushing now; cancel any pending interval tick so we don't double-fire.
   clearFlushTimer();
 

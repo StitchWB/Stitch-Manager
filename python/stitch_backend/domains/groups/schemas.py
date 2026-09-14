@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 -- pydantic resolves at runtime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Group
@@ -196,15 +196,17 @@ class PoolListResponse(BaseModel):
 
 
 class UsageRowResponse(BaseModel):
-    """A per-member daily usage row (FE: ``GroupUsageRow``).
+    """A per-member per-model daily usage row (FE: ``GroupUsageRow``).
 
     Used in ``groups_usage_list``.  ``day`` is ``'YYYY-MM-DD'`` (UTC).
+    ``model`` is the public model id (``''`` for pre-migration rows).
     """
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     user_id: int
     username: str
+    model: str = ""
     day: str
     requests: int
     tokens: int
@@ -223,6 +225,42 @@ class UsageListResponse(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Quota rules
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class QuotaRuleResponse(BaseModel):
+    """A group quota rule (FE: ``GroupQuotaRule``).
+
+    ``subject='member'`` caps each matching member (``user_id NULL`` =
+    every member); ``subject='pool'`` caps the whole group's combined
+    usage.  ``model NULL`` = all models; ``amount NULL`` = unlimited.
+    """
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: str
+    group_id: str
+    subject: str
+    user_id: int | None
+    model: str | None
+    unit: str
+    amount: int | None
+    period: str
+    created_at: datetime
+    """Current usage counter for progress display: member+user rule → that
+    member; member rule for everyone → max across members; pool rule →
+    whole pool.  ``0`` when absent from the response (older backends)."""
+    used: int = 0
+
+
+class QuotaRulesListResponse(BaseModel):
+    """Response for ``groups_quota_rules_list``."""
+
+    rules: list[QuotaRuleResponse]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Success (mutation commands)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -232,7 +270,39 @@ class SuccessResponse(BaseModel):
 
     Used by ``groups_delete``, ``groups_invite_resolve``,
     ``groups_invite_revoke``, ``groups_remove_member``, ``groups_leave``,
-    ``groups_share_credential``, ``groups_unshare_credential``.
+    ``groups_share_credential``, ``groups_unshare_credential``,
+    ``groups_share_account``, ``groups_unshare_account``.
     """
 
     success: bool
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Group accounts (groups_list_accounts)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class GroupAccountItemResponse(BaseModel):
+    """An account shared into a group (FE: ``GroupAccountItem``).
+
+    Used in ``groups_list_accounts``.  ``canRemoveShare`` and
+    ``canDelete`` reflect the caller's permissions per the
+    share/unshare/delete rules.
+
+    Unlike the rest of the groups schemas (which use snake_case field
+    names with no aliases), this model uses camelCase aliases because the
+    frozen feature contract specifies camelCase wire-format keys for the
+    account-list item shape.
+    """
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: str
+    provider: str
+    email: str
+    status: str
+    quota_used_percent: float = Field(0.0, alias="quotaUsedPercent")
+    owner_username: str | None = Field(None, alias="ownerUsername")
+    shared_by_username: str | None = Field(None, alias="sharedByUsername")
+    can_remove_share: bool = Field(False, alias="canRemoveShare")
+    can_delete: bool = Field(False, alias="canDelete")

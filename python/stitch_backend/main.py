@@ -173,6 +173,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Legacy auto-migration skipped: %s", _exc)
 
+    # Copy legacy group_usage rows into group_usage_by_model (model='').
+    # Idempotent (INSERT OR IGNORE) — safe on every boot.
+    try:
+        from stitch_backend.database import get_session_factory
+        from stitch_backend.domains.ai_gateway.usage_tracker import (
+            migrate_legacy_group_usage,
+        )
+
+        factory = get_session_factory()
+        async with factory() as _db:
+            await migrate_legacy_group_usage(_db)
+            await _db.commit()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("group_usage migration skipped: %s", _exc)
+
     # P0.2: convert old JSON-in-label rows to the new split (label=name,
     # legacy_metadata=extras).  Idempotent — rows already in the new format
     # are skipped.  Runs after the legacy auto-migration so newly migrated
@@ -253,6 +268,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.plugin_distribution.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.community_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.grant_commands  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.local_install_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.marketplace_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.source_commands  # noqa: F401
@@ -610,6 +626,16 @@ def create_app() -> FastAPI:
                     content={"error": {"message": "origin required"}},
                 )
         return await call_next(request)
+
+    @app.middleware("http")
+    async def cache_control(request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
     # ── Middleware (timing, error mapping) ─────────────────────────────────────
     install_middleware(app)

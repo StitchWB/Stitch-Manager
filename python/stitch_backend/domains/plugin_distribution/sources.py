@@ -228,13 +228,28 @@ async def _fetch_release(spec: PluginSourceSpec, dest_dir: Path) -> Path:
     return pkg_dir
 
 
+def _local_sources_allowed() -> bool:
+    """Local file sources are a dev/test affordance, off by default (SSRF/
+    local-file-read hardening).  Set STITCH_ALLOW_LOCAL_SOURCES=1 to enable."""
+    return os.environ.get("STITCH_ALLOW_LOCAL_SOURCES", "").strip() in ("1", "true")
+
+
 async def _download_or_read(url: str) -> bytes:
-    """Download from HTTP URL or read a local file path (tests / local dev)."""
-    if url.startswith("file://"):
-        return Path(url[7:]).read_bytes()
-    p = Path(url)
-    if p.exists() and p.is_file():
-        return p.read_bytes()
+    """Download from an HTTP(S) URL; local file paths only in dev/test.
+
+    ``file://`` / bare local paths are refused unless
+    ``STITCH_ALLOW_LOCAL_SOURCES`` is set, so a poisoned catalog entry cannot
+    read arbitrary local files in production.
+    """
+    is_local = url.startswith("file://") or (
+        not url.startswith(("http://", "https://"))
+        and Path(url).exists()
+        and Path(url).is_file()
+    )
+    if is_local:
+        if not _local_sources_allowed():
+            raise ValueError(f"local source URLs are disabled: {url}")
+        return Path(url[7:] if url.startswith("file://") else url).read_bytes()
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(url)
         resp.raise_for_status()

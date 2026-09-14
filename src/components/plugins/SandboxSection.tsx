@@ -56,6 +56,7 @@ export function SandboxSection() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount; loading flag set synchronously for immediate spinner
     if (user) void refresh();
   }, [user, refresh]);
 

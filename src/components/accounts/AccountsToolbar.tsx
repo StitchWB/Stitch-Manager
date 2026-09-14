@@ -12,6 +12,7 @@ import {
   Share2,
   Tag,
   Upload,
+  Users,
 } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
@@ -69,6 +70,8 @@ interface AccountsToolbarProps {
   visibleColumns: AccountsVisibleColumns;
   showArchived: boolean;
   onShowArchivedChange: (value: boolean) => void;
+  selectionCount?: number;
+  onBulkShareToGroup?: () => void;
   onEntityFilterChange: (value: AccountsEntityTab) => void;
   onViewModeChange: (value: string) => void;
   onSearchQueryChange: (value: string) => void;
@@ -123,6 +126,8 @@ export function AccountsToolbar({
   visibleColumns,
   showArchived,
   onShowArchivedChange,
+  selectionCount,
+  onBulkShareToGroup,
   onEntityFilterChange,
   onViewModeChange,
   onSearchQueryChange,
@@ -258,6 +263,23 @@ export function AccountsToolbar({
                   {t('common.settings')}
                 </Button>
               </div>
+            ) : null}
+
+            {/* Bulk: Share to group — visible when accounts are selected */}
+            {isAccountsList && selectionCount && selectionCount > 0 && onBulkShareToGroup ? (
+              <>
+                <div className="h-6 w-px bg-white/10 shrink-0" />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onBulkShareToGroup}
+                  leftIcon={<Users size={14} />}
+                  className="h-8 rounded-lg whitespace-nowrap"
+                >
+                  <span className="hidden sm:inline">{t('ownership.bulkToGroup')}</span>
+                  <span className="sm:hidden">{selectionCount}</span>
+                </Button>
+              </>
             ) : null}
 
             {/* Columns Menu */}

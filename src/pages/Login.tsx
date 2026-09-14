@@ -11,6 +11,9 @@ import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../lib/utils';
+import { isDesktopApp } from '@/lib/backend/core/url';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Input } from '@/components/ui/Input';
 
 export default function Login() {
   const { login, busy, error, sessionExpired, clearError, required, setAuthView } = useAuthStore();
@@ -39,7 +42,7 @@ export default function Login() {
       : null;
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0a0d]">
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden" style={{ background: '#0a0a0d' }}>
       {/* Ambient gradient mesh — Deep Space atmosphere */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -63,16 +66,16 @@ export default function Login() {
           <div className="h-px w-full bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
 
           <div className="px-8 pt-10 pb-8">
-            {/* Back link — only when auth is optional (!required) */}
-            {!required && (
-              <button
+            {/* Back link — when auth is optional, or on web (back to landing). */}
+            {(!required || !isDesktopApp()) && (
+              <ButtonBase
                 type="button"
                 onClick={() => setAuthView('welcome')}
                 className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors mb-6 -mt-2"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 {t('auth.back')}
-              </button>
+              </ButtonBase>
             )}
 
             {/* Logo + title */}
@@ -92,7 +95,7 @@ export default function Login() {
                 <label htmlFor="login-username" className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {t('auth.username')}
                 </label>
-                <input
+                <Input
                   ref={usernameRef}
                   id="login-username"
                   name="username"
@@ -105,7 +108,8 @@ export default function Login() {
                     if (error || sessionExpired) clearError();
                   }}
                   placeholder={t('auth.usernamePlaceholder')}
-                  className="w-full h-10 px-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-slate-200 placeholder-slate-600 outline-none transition-all duration-200 focus:border-indigo-500/40 focus:bg-white/[0.05] focus:ring-2 focus:ring-indigo-500/20"
+                  containerClassName=""
+                  shellClassName="h-10 bg-white/[0.03] border-white/[0.06] focus-within:border-indigo-500/40 focus-within:bg-white/[0.05] focus-within:ring-2 focus-within:ring-indigo-500/20"
                 />
               </div>
 
@@ -114,7 +118,7 @@ export default function Login() {
                 <label htmlFor="login-password" className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {t('auth.password')}
                 </label>
-                <input
+                <Input
                   id="login-password"
                   name="password"
                   type="password"
@@ -126,7 +130,8 @@ export default function Login() {
                     if (error || sessionExpired) clearError();
                   }}
                   placeholder={t('auth.passwordPlaceholder')}
-                  className="w-full h-10 px-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-slate-200 placeholder-slate-600 outline-none transition-all duration-200 focus:border-indigo-500/40 focus:bg-white/[0.05] focus:ring-2 focus:ring-indigo-500/20 font-mono tracking-widest"
+                  containerClassName=""
+                  shellClassName="h-10 bg-white/[0.03] border-white/[0.06] focus-within:border-indigo-500/40 focus-within:bg-white/[0.05] focus-within:ring-2 focus-within:ring-indigo-500/20"
                 />
               </div>
 
@@ -142,7 +147,7 @@ export default function Login() {
               )}
 
               {/* Submit */}
-              <button
+              <ButtonBase
                 type="submit"
                 disabled={busy || !username || !password}
                 className={cn(
@@ -160,11 +165,11 @@ export default function Login() {
                 ) : (
                   t('auth.submit')
                 )}
-              </button>
+              </ButtonBase>
              </form>
 
             {/* Tertiary: login via Telegram (available in mandatory mode too) */}
-            <button
+            <ButtonBase
               type="button"
               onClick={() => setAuthView('telegram')}
               data-testid="login-tg-link"
@@ -172,7 +177,7 @@ export default function Login() {
             >
               <Send className="w-3.5 h-3.5" />
               {t('auth.login.tgLink')}
-            </button>
+            </ButtonBase>
           </div>
         </div>
       </div>

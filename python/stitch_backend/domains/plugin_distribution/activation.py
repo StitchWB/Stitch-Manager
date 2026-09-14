@@ -30,6 +30,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _opt_int(v: object) -> int | None:
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, (int, float, str)):
+        try:
+            return int(v)
+        except ValueError:
+            return None
+    return None
+
+
 @dataclass
 class ActivationState:
     """Persisted activation state — the client's credential + sync metadata."""
@@ -43,6 +54,9 @@ class ActivationState:
     last_successful_heartbeat: str = ""
     tg_admin: bool = False
     tier: str | None = None
+    # Telegram id the activation code was issued to (server echoes it). Lets the
+    # web bind the local session to a per-TG-user account (security CRIT fix).
+    tg_user_id: int | None = None
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ActivationState:
@@ -60,6 +74,7 @@ class ActivationState:
             last_successful_heartbeat=str(raw.get("last_successful_heartbeat", "")),
             tg_admin=bool(raw.get("tg_admin", False)),
             tier=str(raw.get("tier")) if raw.get("tier") else None,
+            tg_user_id=_opt_int(raw.get("tg_user_id")),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -113,6 +128,7 @@ class ActivationService:
             server_url=server_url(),
             tg_admin=bool(body.get("tg_admin", False)),
             tier=body.get("tier") or None,
+            tg_user_id=_opt_int(body.get("tg_user_id")),
         )
         self._save(state)
         self._invalidate_entitlements_cache()

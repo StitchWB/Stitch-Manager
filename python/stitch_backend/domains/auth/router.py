@@ -75,6 +75,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/api/auth/status",
     "/api/auth/setup",
     "/api/auth/my_permissions",
+    # Bot-driven web-account management; authenticates via X-Admin-Key (not a
+    # session), so it must be reachable without a logged-in session.
+    "/api/auth/tg-sync-user",
 })
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -413,6 +416,14 @@ async def login_telegram(
         _sync_role_and_tier,
         exchange_telegram_code,
     )
+
+    # Symmetric with /telegram-oidc: when the deployment has irreversibly
+    # switched to OIDC, the legacy one-time-code path is disabled.
+    if get_settings().tg_auth_mode == "oidc":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Code login disabled (TG_AUTH_MODE=oidc). Use Telegram OIDC.",
+        )
 
     code = body.code.strip()
     if not code:

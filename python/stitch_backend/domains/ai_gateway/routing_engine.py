@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, false, func, or_, select
+from sqlalchemy import and_, false, or_, select
 from sqlalchemy.orm import aliased
 
 from stitch_backend.domains.ai_gateway import circuit_breaker, credential_state
@@ -129,6 +129,25 @@ class RoutingResult:
 
 class RoutingError(Exception):
     """Raised when no valid route can be found."""
+
+
+class QuotaExceededError(RoutingError):
+    """Raised when every route was excluded by group quota rules.
+
+    Carries the over-quota group ids so the HTTP layer can answer 429
+    with actionable detail instead of a generic 503.
+    """
+
+    def __init__(self, message: str, *, groups: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.groups = groups or []
+
+
+# How many credentials (LRU-ordered) each route target contributes as
+# candidates.  >1 lets the executor fail over between keys of the SAME
+# upstream model within one request (e.g. a 429 on key A retries with
+# key B) instead of failing the whole request.
+MAX_CANDIDATES_PER_TARGET = 3
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -267,9 +286,12 @@ class RoutingEngine:
 
         # 5b. Quota-aware filtering: when the caller is a real user with
         # group memberships, exclude credentials whose only visibility is
-        # via over-quota groups.  Credentials owned by the caller or
-        # instance-shared (group_id_hit is None) stay eligible.
-        over_quota = await _over_quota_group_ids(session, pool)
+        # via groups over quota FOR THIS MODEL (member rules + pool rules;
+        # legacy per-member daily cap is evaluated as a synthetic rule).
+        # Credentials owned by the caller or instance-shared
+        # (group_id_hit is None) stay eligible.
+        pre_quota_cred_count = len(cred_rows)
+        over_quota = await _over_quota_group_ids(session, pool, model=request.model)
         if over_quota:
             cred_rows = [
                 (uid_, cred, gid)
@@ -294,8 +316,7 @@ class RoutingEngine:
                 (c, gid) for c, gid in eligible
                 if c.next_retry_at is None or c.next_retry_at <= now
             ]
-            eligible_creds_only = [c for c, _ in eligible]
-            if not eligible_creds_only:
+            if not eligible:
                 continue
 
             # 7. Check endpoint circuit breaker.
@@ -304,25 +325,11 @@ class RoutingEngine:
             ):
                 continue
 
-            # 8. Select credential (round-robin via least-recently-used).
-            cred = min(
-                eligible_creds_only,
-                key=lambda c: c.last_success_at or datetime.min.replace(tzinfo=UTC),
-            )
-            # Find the group_id_hit for the selected credential (attribution).
-            group_id_hit = next(
-                (gid for c, gid in eligible if c.id == cred.id), None,
-            )
-
-            # 9. Get endpoint, secret, adapter.
+            # 9. Get endpoint + adapter (shared by all credentials below).
             from stitch_backend.domains.ai_gateway.service import ProviderEndpointService
             ep_svc = ProviderEndpointService(session)
             endpoint = await ep_svc.get_by_pk(upstream.provider_endpoint_id)
             if endpoint is None:
-                continue
-
-            secret = await cred_svc.get_secret_for_invocation(cred.id)
-            if not secret:
                 continue
 
             try:
@@ -335,23 +342,41 @@ class RoutingEngine:
                 )
                 continue
 
-            # Attribution: log caller uid, credential_id, owner_id, group_id_hit.
-            logger.info(
-                "RoutingEngine route: caller_uid=%s credential=%s owner_id=%s group_id_hit=%s",
-                pool.owner_user_id, cred.id, cred.owner_id, group_id_hit,
+            # 8. Select up to K credentials (LRU first) — one candidate per
+            # credential so the executor can fail over key→key within a
+            # single request.
+            eligible.sort(
+                key=lambda pair: pair[0].last_success_at
+                or datetime.min.replace(tzinfo=UTC),
             )
+            for cred, group_id_hit in eligible[:MAX_CANDIDATES_PER_TARGET]:
+                secret = await cred_svc.get_secret_for_invocation(cred.id)
+                if not secret:
+                    continue
 
-            results.append(RoutingResult(
-                endpoint=endpoint,
-                credential=cred,
-                upstream_model=upstream,
-                adapter=adapter,
-                secret=secret,
-                default_headers=endpoint.default_headers or {},
-                group_id_hit=group_id_hit,
-            ))
+                # Attribution: log caller uid, credential_id, owner_id, group_id_hit.
+                logger.info(
+                    "RoutingEngine route: caller_uid=%s credential=%s owner_id=%s group_id_hit=%s",
+                    pool.owner_user_id, cred.id, cred.owner_id, group_id_hit,
+                )
+
+                results.append(RoutingResult(
+                    endpoint=endpoint,
+                    credential=cred,
+                    upstream_model=upstream,
+                    adapter=adapter,
+                    secret=secret,
+                    default_headers=endpoint.default_headers or {},
+                    group_id_hit=group_id_hit,
+                ))
 
         if not results:
+            if over_quota and pre_quota_cred_count:
+                raise QuotaExceededError(
+                    f"Group quota exceeded for {request.model!r} "
+                    f"(groups: {', '.join(sorted(over_quota))})",
+                    groups=sorted(over_quota),
+                )
             raise RoutingError(f"No eligible credentials found for {request.model!r}")
 
         return results
@@ -402,61 +427,48 @@ class RoutingEngine:
 async def _over_quota_group_ids(
     session: AsyncSession,
     pool: PoolScope,
+    model: str | None = None,
 ) -> set[str]:
-    """Return the set of group ids where the caller has exceeded the
-    per-member daily request cap.
+    """Return the set of group ids over quota for (caller, *model*).
 
     No-op (returns ``set()``) when the caller is ``None`` (desktop) or has
-    no group memberships.  A single query joins ``groups`` with today's
-    ``group_usage`` row for the caller; a group is over-quota when
-    ``max_requests_per_member_daily`` is not NULL and today's usage is
-    already >= the cap.
+    no group memberships.  Evaluation lives in
+    :func:`groups.quota.over_quota_groups`: per-member rules (most
+    specific wins, ``amount NULL`` = unlimited override) plus pool-wide
+    rules over the whole group's combined usage.  The legacy
+    ``max_requests_per_member_daily`` column is evaluated as a synthetic
+    lowest-priority member rule, so old groups keep working unchanged.
 
-    Also consults the in-process ``usage_tracker._over_keys`` flag set by
-    the direct write path — gives immediate visibility after a write commits,
-    closing the in-process TOCTOU race to zero (the DB pre-check alone has a
-    read→write gap).  Cross-process (multi-worker) stays bounded by the DB
-    pre-check (documented).
+    Also consults the in-process ``usage_tracker._over_keys`` flags set by
+    the flush path — gives immediate visibility after a write commits,
+    closing the in-process TOCTOU race to zero (the DB pre-check alone has
+    a read→write gap).  Flags are keyed by concrete model
+    (``(group_id, user_id, model, day)`` member / ``(group_id, None,
+    model, day)`` pool); a NULL/glob-model rule that trips flags only the
+    model just recorded — other models are covered by the DB pre-check
+    within one flush interval.  Cross-process (multi-worker) stays bounded
+    by the DB pre-check (documented).
     """
     uid = pool.owner_user_id
     if uid is None or not pool.group_ids:
         return set()
     # Lazy import — avoids a top-level ``ai_gateway → groups`` edge.
-    from stitch_backend.domains.groups.models import Group, GroupUsage
+    from stitch_backend.domains.groups.quota import over_quota_groups
 
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
-    stmt = (
-        select(
-            Group.id,
-            Group.max_requests_per_member_daily,
-            func.coalesce(GroupUsage.requests, 0).label("requests"),
-        )
-        .outerjoin(
-            GroupUsage,
-            and_(
-                GroupUsage.group_id == Group.id,
-                GroupUsage.user_id == uid,
-                GroupUsage.day == today,
-            ),
-        )
-        .where(
-            Group.id.in_(list(pool.group_ids)),
-            Group.max_requests_per_member_daily.is_not(None),
-        )
+    model_key = model or ""
+    over = await over_quota_groups(
+        session, group_ids=pool.group_ids, user_id=uid, model=model_key,
     )
-    result = await session.execute(stmt)
-    over: set[str] = set()
-    for row in result.all():
-        cap = row.max_requests_per_member_daily
-        if cap is not None and int(row.requests) >= int(cap):
-            over.add(row.id)
-    # In-process immediate visibility: consult the _over_keys flag set by
-    # the direct write path (usage_tracker.record_usage).  This catches
+    # In-process immediate visibility: consult the _over_keys flags set by
+    # the flush path (usage_tracker.flush_group_usage).  This catches
     # over-quota state that was just written but might not yet be visible
     # to the DB read query (read→write race window).
     from stitch_backend.domains.ai_gateway.usage_tracker import _over_keys
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     for gid in pool.group_ids:
-        if (gid, uid, today) in _over_keys:
+        if (gid, uid, model_key, today) in _over_keys:
+            over.add(gid)
+        if (gid, None, model_key, today) in _over_keys:
             over.add(gid)
     return over
 

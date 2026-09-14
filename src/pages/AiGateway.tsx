@@ -17,7 +17,7 @@ import { t } from '@/lib/i18n';
 import { appToast } from '@/lib/observability/toast';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import { useFormDialog } from '@/hooks/useFormDialog';
-import { discoverModelsForEndpoint } from '@/lib/backend/modules/aiGateway';
+import { discoverModelsForEndpoint, importOpencodeProviders } from '@/lib/backend/modules/aiGateway';
 import type {
   ProviderEndpoint,
   Credential,
@@ -49,8 +49,34 @@ export default function AiGateway() {
   const [discovering, setDiscovering] = useState(false);
 
   // Migration state
-  const { migrateLegacyData, fetchUpstreamModels } = useAiGatewayStore();
+  const { migrateLegacyData, fetchUpstreamModels, fetchEndpoints, fetchPublicModels } = useAiGatewayStore();
   const [migrating, setMigrating] = useState(false);
+
+  // OpenCode import state
+  const [importing, setImporting] = useState(false);
+
+  const handleImportOpencode = async () => {
+    setImporting(true);
+    try {
+      const report = await importOpencodeProviders();
+      if (report.imported.length === 0) {
+        appToast.info(t('aiGateway.importOpencodeEmpty'), 'ai-gateway');
+      } else {
+        appToast.success(
+          t('aiGateway.importOpencodeResult', {
+            providers: report.imported.length,
+            models: report.models.length,
+          }),
+          'ai-gateway'
+        );
+      }
+      await Promise.all([fetchEndpoints(), fetchPublicModels()]);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : 'Import failed', 'ai-gateway');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleSelectEndpoint = (endpoint: ProviderEndpoint) => {
     setView({ type: 'endpoint-detail', endpoint });
@@ -164,15 +190,26 @@ export default function AiGateway() {
               <h1 className="text-3xl font-bold mb-2">{t('aiGateway.title')}</h1>
               <p className="text-muted-foreground">{t('aiGateway.subtitle')}</p>
             </div>
-            <ConfirmActionButton
-              variant="outline"
-              size="sm"
-              isLoading={migrating}
-              onConfirm={handleMigrate}
-            >
-              <Database className="h-4 w-4 mr-2" />
-              {t('aiGateway.migrate')}
-            </ConfirmActionButton>
+            <div className="flex items-center gap-2">
+              <ConfirmActionButton
+                variant="outline"
+                size="sm"
+                isLoading={importing}
+                onConfirm={handleImportOpencode}
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                {t('aiGateway.importOpencode')}
+              </ConfirmActionButton>
+              <ConfirmActionButton
+                variant="outline"
+                size="sm"
+                isLoading={migrating}
+                onConfirm={handleMigrate}
+              >
+                <Database className="h-4 w-4 mr-2" />
+                {t('aiGateway.migrate')}
+              </ConfirmActionButton>
+            </div>
           </div>
 
           {view.type === 'endpoints' && (

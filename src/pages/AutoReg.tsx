@@ -123,6 +123,7 @@ export default function AutoRegNext() {
       targetProvider?: string;
       awsBootstrapAccountId?: number;
       launchMode?: string;
+      targetGroupId?: string;
     } | null,
     'session'
   );
@@ -134,6 +135,12 @@ export default function AutoRegNext() {
   const [selectedAwsBootstrapAccountId, setSelectedAwsBootstrapAccountId] = useUIState(
     'autoreg-aws-bootstrap-account-id',
     null as number | null,
+    'session'
+  );
+  // Target group for auto-share after registration
+  const [targetGroupId, setTargetGroupId] = useUIState(
+    'autoreg-target-group-id',
+    '' as string,
     'session'
   );
 
@@ -292,7 +299,9 @@ export default function AutoRegNext() {
       emailDomain,
       useRegistrationV2,
       canStart,
-      launchContext: launchContext || undefined,
+      launchContext: targetGroupId
+        ? { ...launchContext, targetGroupId }
+        : (launchContext || undefined),
       pipelineStepOverrides: currentPipelineSteps,
     });
 
@@ -703,6 +712,8 @@ export default function AutoRegNext() {
         onStart={handleStart}
         onStop={handleStop}
         jobId={pipelineJobId}
+        targetGroupId={targetGroupId}
+        onTargetGroupIdChange={setTargetGroupId}
         saveStatus={saveStatus}
         disabled={activeThreads > 0}
       />

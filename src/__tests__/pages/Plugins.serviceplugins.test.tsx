@@ -18,6 +18,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import Plugins from '../../pages/Plugins';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import {
@@ -216,7 +217,7 @@ describe('Plugins page — service plugins section', () => {
 
     // Success toast.
     await waitFor(() => {
-      expect((require('sonner') as { toast: { success: jest.Mock } }).toast.success)
+      expect(toast.success as jest.Mock)
         .toHaveBeenCalledWith('admin.plugins.servicePluginRestarted');
     });
   });

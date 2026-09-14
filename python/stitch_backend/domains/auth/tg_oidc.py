@@ -27,8 +27,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from datetime import timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
@@ -117,21 +119,52 @@ def _reset_jwks_cache() -> None:
     _jwks_last_forced_at = 0.0
 
 
+def _proxy_candidates() -> list[str | None]:
+    """Direct first, then the freshest proxy list available.
+
+    ``TG_PROXY_FILE`` (default ``/data/tg-proxy``) is written by
+    ``scripts/proxy_autopilot.py`` into the web container's data volume, so
+    proxy rotation reaches a running container without a restart; the
+    ``TG_PROXY`` env is the startup-time fallback.
+    """
+    raw = ""
+    file_path = os.environ.get("TG_PROXY_FILE", "/data/tg-proxy")
+    try:
+        raw = Path(file_path).read_text(encoding="utf-8")
+    except OSError:
+        pass
+    raw += "," + os.environ.get("TG_PROXY", "")
+    return [None, *[p.strip() for p in raw.split(",") if p.strip()][:5]]
+
+
 async def _fetch_jwks() -> dict[str, Any]:
     """Fetch the JWKS dict from Telegram's well-known endpoint.
 
     This is the single HTTP seam — tests monkeypatch this function to
     avoid hitting the network.  Raises :class:`TelegramJWKSUnavailableError`
     on any transport/HTTP failure.
+
+    Hosts that cannot reach ``oauth.telegram.org`` directly (regional
+    blocks) fall back to the rotating proxy list — the same source the
+    Telegram bot rotates through.
     """
-    try:
-        async with httpx.AsyncClient(timeout=_JWKS_TIMEOUT) as client:
-            resp = await client.get(_JWKS_URL)
-            resp.raise_for_status()
-            return cast("dict[str, Any]", resp.json())
-    except Exception as exc:
-        logger.warning("Failed to fetch Telegram JWKS: %s", exc)
-        raise TelegramJWKSUnavailableError("Telegram JWKS unavailable") from exc
+    last_exc: Exception | None = None
+    for proxy in _proxy_candidates():
+        try:
+            async with httpx.AsyncClient(
+                timeout=_JWKS_TIMEOUT, proxy=proxy
+            ) as client:
+                resp = await client.get(_JWKS_URL)
+                resp.raise_for_status()
+                return cast("dict[str, Any]", resp.json())
+        except Exception as exc:  # noqa: BLE001 — try the next proxy
+            last_exc = exc
+            logger.warning(
+                "Failed to fetch Telegram JWKS (proxy=%s): %s",
+                "yes" if proxy else "no",
+                exc,
+            )
+    raise TelegramJWKSUnavailableError("Telegram JWKS unavailable") from last_exc
 
 
 async def _get_jwks(*, force_refresh: bool = False) -> dict[str, Any]:

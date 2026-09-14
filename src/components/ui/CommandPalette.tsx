@@ -80,7 +80,7 @@ export function CommandPalette() {
             <Command.Group heading={t('commandPalette.navigation')} className="mb-2">
               <CommandItem
                 icon={<LayoutDashboard />}
-                onSelect={() => runCommand(() => navigate('/'))}
+                onSelect={() => runCommand(() => navigate('/app'))}
               >
                 {t('sidebar.dashboard')}
               </CommandItem>

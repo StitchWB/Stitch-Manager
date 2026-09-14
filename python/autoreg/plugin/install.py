@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import shutil
 import uuid
+import zipfile
 from pathlib import Path
 
 from . import crypto
@@ -111,7 +112,26 @@ def _atomic_replace_dir(src: Path, dst: Path) -> None:
         os.replace(src, dst)
 
 
-# ── Install ────────────────────────────────────────────────────────────────
+def safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
+    """Extract ``zf`` into ``dest`` rejecting path-traversal entries (zip-slip).
+
+    Refuses absolute paths and any member whose resolved path escapes ``dest``,
+    raising ``ValueError`` BEFORE any file is written outside ``dest`` (fail
+    closed).  Mirrors PEP 706 ``filter="data"`` semantics for interpreters
+    below 3.12.  Call this instead of ``zf.extractall`` for untrusted archives.
+    """
+    dest = dest.resolve()
+    for info in zf.infolist():
+        name = info.filename.replace("\\", "/")
+        if name.startswith("/"):
+            raise ValueError(f"absolute path in zip: {info.filename}")
+        target = (dest / name).resolve()
+        if target != dest and dest not in target.parents:
+            raise ValueError(f"path traversal in zip: {info.filename}")
+    zf.extractall(dest)
+
+
+# ── Install ───────────────────────────────────────────────────────────────
 
 
 def install_package(

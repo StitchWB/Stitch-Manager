@@ -12,6 +12,9 @@ import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../lib/utils';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Input } from '@/components/ui/Input';
+import { Badge } from '@/components/ui/Badge';
 
 export default function Setup() {
   const { setup, busy, error, clearError, required, setAuthView } = useAuthStore();
@@ -53,7 +56,7 @@ export default function Setup() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0a0d]">
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden" style={{ background: '#0a0a0d' }}>
       {/* Ambient gradient mesh — Deep Space atmosphere */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -77,14 +80,14 @@ export default function Setup() {
           <div className="px-8 pt-10 pb-8">
             {/* Back link — only when auth is optional (!required) */}
             {!required && (
-              <button
+              <ButtonBase
                 type="button"
                 onClick={() => setAuthView('welcome')}
                 className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors mb-6 -mt-2"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 {t('auth.back')}
-              </button>
+              </ButtonBase>
             )}
 
             {/* Logo + title + first-admin badge */}
@@ -97,9 +100,9 @@ export default function Setup() {
                   <ShieldCheck className="w-3 h-3 text-white" />
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-widest mb-2">
+              <Badge variant="success" size="sm" className="border-emerald-500/20 text-[10px] font-bold tracking-widest mb-2">
                 {t('auth.setup.adminBadge')}
-              </span>
+              </Badge>
               <h1 className="text-white text-xl font-black tracking-tight">
                 {t('auth.setup.title')}
               </h1>
@@ -112,7 +115,7 @@ export default function Setup() {
                 <label htmlFor="setup-username" className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {t('auth.setup.username')}
                 </label>
-                <input
+                <Input
                   ref={usernameRef}
                   id="setup-username"
                   name="username"
@@ -125,7 +128,8 @@ export default function Setup() {
                     onChange();
                   }}
                   placeholder={t('auth.setup.usernamePlaceholder')}
-                  className="w-full h-10 px-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-slate-200 placeholder-slate-600 outline-none transition-all duration-200 focus:border-indigo-500/40 focus:bg-white/[0.05] focus:ring-2 focus:ring-indigo-500/20"
+                  containerClassName=""
+                  shellClassName="h-10 bg-white/[0.03] border-white/[0.06] focus-within:border-indigo-500/40 focus-within:bg-white/[0.05] focus-within:ring-2 focus-within:ring-indigo-500/20"
                 />
               </div>
 
@@ -134,7 +138,7 @@ export default function Setup() {
                 <label htmlFor="setup-password" className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {t('auth.setup.password')}
                 </label>
-                <input
+                <Input
                   id="setup-password"
                   name="password"
                   type="password"
@@ -146,7 +150,8 @@ export default function Setup() {
                     onChange();
                   }}
                   placeholder={t('auth.setup.passwordPlaceholder')}
-                  className="w-full h-10 px-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-slate-200 placeholder-slate-600 outline-none transition-all duration-200 focus:border-indigo-500/40 focus:bg-white/[0.05] focus:ring-2 focus:ring-indigo-500/20 font-mono tracking-widest"
+                  containerClassName=""
+                  shellClassName="h-10 bg-white/[0.03] border-white/[0.06] focus-within:border-indigo-500/40 focus-within:bg-white/[0.05] focus-within:ring-2 focus-within:ring-indigo-500/20"
                 />
               </div>
 
@@ -155,7 +160,7 @@ export default function Setup() {
                 <label htmlFor="setup-confirm" className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {t('auth.setup.confirmPassword')}
                 </label>
-                <input
+                <Input
                   id="setup-confirm"
                   name="confirm-password"
                   type="password"
@@ -167,7 +172,8 @@ export default function Setup() {
                     onChange();
                   }}
                   placeholder={t('auth.setup.confirmPasswordPlaceholder')}
-                  className="w-full h-10 px-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-slate-200 placeholder-slate-600 outline-none transition-all duration-200 focus:border-indigo-500/40 focus:bg-white/[0.05] focus:ring-2 focus:ring-indigo-500/20 font-mono tracking-widest"
+                  containerClassName=""
+                  shellClassName="h-10 bg-white/[0.03] border-white/[0.06] focus-within:border-indigo-500/40 focus-within:bg-white/[0.05] focus-within:ring-2 focus-within:ring-indigo-500/20"
                 />
               </div>
 
@@ -183,7 +189,7 @@ export default function Setup() {
               )}
 
               {/* Submit */}
-              <button
+              <ButtonBase
                 type="submit"
                 disabled={busy || !username || !password || !confirm}
                 className={cn(
@@ -201,7 +207,7 @@ export default function Setup() {
                 ) : (
                   t('auth.setup.submit')
                 )}
-              </button>
+              </ButtonBase>
             </form>
           </div>
         </div>

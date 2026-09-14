@@ -8,6 +8,7 @@ import {
   type MarketplaceItem,
   type MarketplaceSource,
 } from '../lib/backend';
+import { detailToMessage } from '../lib/errorText';
 
 // ============================================
 // Types
@@ -73,7 +74,7 @@ export const useMarketplaceStore = create<MarketplaceState>()(
         try {
           const result = await installMarketplacePlugin({ id, source });
           if (!result.success) {
-            throw new Error(result.error ?? 'install failed');
+            throw new Error(detailToMessage(result.error, 'install failed'));
           }
           // Refresh the list to reflect the new installed state. The refresh
           // sets `refreshing` but does not touch `actionInProgress`, so we
@@ -90,7 +91,7 @@ export const useMarketplaceStore = create<MarketplaceState>()(
         try {
           const result = await uninstallMarketplacePlugin({ id, source });
           if (!result.success) {
-            throw new Error(result.error ?? 'uninstall failed');
+            throw new Error(detailToMessage(result.error, 'uninstall failed'));
           }
           await get().fetchMarketplace(true);
         } finally {

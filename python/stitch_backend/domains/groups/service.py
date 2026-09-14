@@ -32,7 +32,9 @@ from stitch_backend.domains.groups.models import (
     Group,
     GroupInvite,
     GroupMember,
-    GroupUsage,
+    GroupQuotaRule,
+    GroupShare,
+    GroupUsageByModel,
     _utcnow,
 )
 
@@ -774,27 +776,29 @@ async def list_group_usage(
 
     stmt = (
         select(
-            GroupUsage.user_id,
+            GroupUsageByModel.user_id,
             User.username,
-            GroupUsage.day,
-            GroupUsage.requests,
-            GroupUsage.tokens,
+            GroupUsageByModel.model,
+            GroupUsageByModel.day,
+            GroupUsageByModel.requests,
+            GroupUsageByModel.tokens,
         )
-        .join(User, User.id == GroupUsage.user_id)
+        .join(User, User.id == GroupUsageByModel.user_id)
         .where(
-            GroupUsage.group_id == group_id,
-            GroupUsage.day >= cutoff_day,
+            GroupUsageByModel.group_id == group_id,
+            GroupUsageByModel.day >= cutoff_day,
         )
-        .order_by(GroupUsage.day.desc(), GroupUsage.user_id)
+        .order_by(GroupUsageByModel.day.desc(), GroupUsageByModel.user_id)
     )
     if not is_owner:
-        stmt = stmt.where(GroupUsage.user_id == uid)
+        stmt = stmt.where(GroupUsageByModel.user_id == uid)
 
     result = await db.execute(stmt)
     rows = [
         {
             "user_id": row.user_id,
             "username": row.username,
+            "model": row.model,
             "day": row.day,
             "requests": row.requests,
             "tokens": row.tokens,
@@ -813,7 +817,12 @@ async def set_group_quota(
     max_per_member_daily: int | None,
     caller_uid: int | None,
 ) -> Group:
-    """Owner sets the per-member daily request cap (NULL=unlimited)."""
+    """Owner sets the per-member daily request cap (NULL=unlimited).
+
+    Legacy single-cap API — evaluated as the lowest-priority member rule
+    (see :mod:`stitch_backend.domains.groups.quota`).  New code should
+    prefer :func:`set_quota_rule`.
+    """
     group = await get_group(db, group_id)
     if group is None:
         raise StitchError("Group not found")
@@ -824,6 +833,129 @@ async def set_group_quota(
     group.max_requests_per_member_daily = max_per_member_daily
     await db.flush()
     return group
+
+
+# ── Quota rules ────────────────────────────────────────────────────────────
+
+
+async def list_quota_rules(
+    db: AsyncSession, group_id: str, uid: int | None
+) -> list[GroupQuotaRule]:
+    """Any member can list the group's quota rules."""
+    group = await get_group(db, group_id)
+    if group is None:
+        raise StitchError("Group not found")
+    if not await is_member(db, group_id, uid):
+        raise StitchError("Not a member of this group")
+    result = await db.execute(
+        select(GroupQuotaRule)
+        .where(GroupQuotaRule.group_id == group_id)
+        .order_by(GroupQuotaRule.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def set_quota_rule(
+    db: AsyncSession,
+    group_id: str,
+    caller_uid: int | None,
+    *,
+    subject: str,
+    user_id: int | None = None,
+    model: str | None = None,
+    unit: str = "requests",
+    amount: int | None = None,
+    period: str = "daily",
+) -> GroupQuotaRule:
+    """Owner creates or updates a quota rule (natural-key upsert).
+
+    The natural key is ``(group_id, subject, user_id, model, unit,
+    period)`` — re-setting the same combination updates ``amount`` in
+    place instead of creating a duplicate.
+    """
+    from stitch_backend.domains.groups.quota import (
+        VALID_PERIODS,
+        VALID_SUBJECTS,
+        VALID_UNITS,
+    )
+
+    group = await get_group(db, group_id)
+    if group is None:
+        raise StitchError("Group not found")
+    if caller_uid is None or group.owner_id != caller_uid:
+        raise StitchError("Only the group owner can set quota rules")
+    if subject not in VALID_SUBJECTS:
+        raise StitchError(f"subject must be one of {VALID_SUBJECTS}")
+    if unit not in VALID_UNITS:
+        raise StitchError(f"unit must be one of {VALID_UNITS}")
+    if period not in VALID_PERIODS:
+        raise StitchError(f"period must be one of {VALID_PERIODS}")
+    if amount is not None and amount < 1:
+        raise StitchError("amount must be a positive integer or null (unlimited)")
+    if subject == "pool" and user_id is not None:
+        raise StitchError("pool rules apply to the whole group — user_id must be null")
+    model = model.strip() if model else None
+    if model == "*":
+        raise StitchError("model '*' is ambiguous — use null for all models")
+
+    stmt = select(GroupQuotaRule).where(
+        and_(
+            GroupQuotaRule.group_id == group_id,
+            GroupQuotaRule.subject == subject,
+            GroupQuotaRule.unit == unit,
+            GroupQuotaRule.period == period,
+            (
+                GroupQuotaRule.user_id == user_id
+                if user_id is not None
+                else GroupQuotaRule.user_id.is_(None)
+            ),
+            (
+                GroupQuotaRule.model == model
+                if model is not None
+                else GroupQuotaRule.model.is_(None)
+            ),
+        )
+    )
+    existing = (await db.execute(stmt)).scalar_one_or_none()
+    if existing is not None:
+        existing.amount = amount
+        await db.flush()
+        return existing
+
+    rule = GroupQuotaRule(
+        group_id=group_id,
+        subject=subject,
+        user_id=user_id,
+        model=model,
+        unit=unit,
+        amount=amount,
+        period=period,
+        created_at=_utcnow(),
+    )
+    db.add(rule)
+    await db.flush()
+    return rule
+
+
+async def delete_quota_rule(
+    db: AsyncSession, group_id: str, rule_id: str, caller_uid: int | None
+) -> bool:
+    """Owner deletes a quota rule."""
+    group = await get_group(db, group_id)
+    if group is None:
+        raise StitchError("Group not found")
+    if caller_uid is None or group.owner_id != caller_uid:
+        raise StitchError("Only the group owner can delete quota rules")
+    result = await db.execute(
+        delete(GroupQuotaRule).where(
+            and_(
+                GroupQuotaRule.id == rule_id,
+                GroupQuotaRule.group_id == group_id,
+            )
+        )
+    )
+    await db.flush()
+    return bool(getattr(result, "rowcount", 0) or 0)
 
 
 async def transfer_ownership(
@@ -874,3 +1006,187 @@ async def transfer_ownership(
     group.owner_id = target_user_id
     await db.flush()
     return group
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Generic resource shares (group_shares table)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def share_resource(
+    db: AsyncSession,
+    *,
+    group_id: str,
+    resource_type: str,
+    resource_id: str,
+    shared_by: int | None,
+) -> bool:
+    """Share a resource into a group; idempotent.
+
+    Inserts a ``group_shares`` row with ``(group_id, resource_type,
+    resource_id)``.  If the row already exists (same triple), this is a
+    no-op and returns ``True``.  ``shared_by`` is recorded on first
+    insert only — a re-share by a different user does not overwrite the
+    original sharer.
+    """
+    group = await get_group(db, group_id)
+    if group is None:
+        raise StitchError("Group not found")
+
+    existing_result = await db.execute(
+        select(GroupShare).where(
+            and_(
+                GroupShare.group_id == group_id,
+                GroupShare.resource_type == resource_type,
+                GroupShare.resource_id == str(resource_id),
+            )
+        )
+    )
+    if existing_result.scalar_one_or_none() is not None:
+        return True
+
+    share = GroupShare(
+        group_id=group_id,
+        resource_type=resource_type,
+        resource_id=str(resource_id),
+        shared_by=shared_by,
+        created_at=_utcnow(),
+    )
+    db.add(share)
+    await db.flush()
+    return True
+
+
+async def unshare_resource(
+    db: AsyncSession,
+    *,
+    group_id: str,
+    resource_type: str,
+    resource_id: str,
+) -> bool:
+    """Remove a resource share; idempotent.
+
+    Deletes the ``group_shares`` row matching ``(group_id, resource_type,
+    resource_id)``.  No-op (returns ``True``) when the share did not exist.
+    """
+    await db.execute(
+        delete(GroupShare).where(
+            and_(
+                GroupShare.group_id == group_id,
+                GroupShare.resource_type == resource_type,
+                GroupShare.resource_id == str(resource_id),
+            )
+        )
+    )
+    await db.flush()
+    return True
+
+
+async def list_group_resources(
+    db: AsyncSession,
+    *,
+    group_id: str,
+    resource_type: str,
+) -> list[str]:
+    """Return the list of resource_ids shared into *group_id* of *resource_type*."""
+    result = await db.execute(
+        select(GroupShare.resource_id).where(
+            and_(
+                GroupShare.group_id == group_id,
+                GroupShare.resource_type == resource_type,
+            )
+        )
+    )
+    return [row[0] for row in result.all()]
+
+
+async def resource_shares(
+    db: AsyncSession,
+    *,
+    resource_type: str,
+    resource_ids: list[str],
+) -> dict[str, list[tuple[str, str | None, int | None]]]:
+    """Return ``resource_id → list[(group_id, group_name, shared_by)]``.
+
+    Single join query over ``group_shares`` + ``groups``.  Resource IDs
+    not present in any share map to an empty list.  Empty input → ``{}``.
+    """
+    if not resource_ids:
+        return {}
+    str_ids = [str(rid) for rid in resource_ids]
+    result = await db.execute(
+        select(
+            GroupShare.resource_id,
+            GroupShare.group_id,
+            Group.name.label("group_name"),
+            GroupShare.shared_by,
+        )
+        .select_from(GroupShare)
+        .join(Group, Group.id == GroupShare.group_id)
+        .where(
+            and_(
+                GroupShare.resource_type == resource_type,
+                GroupShare.resource_id.in_(str_ids),
+            )
+        )
+    )
+    out: dict[str, list[tuple[str, str | None, int | None]]] = {
+        rid: [] for rid in str_ids
+    }
+    for row in result.all():
+        out.setdefault(row.resource_id, []).append(
+            (row.group_id, row.group_name, row.shared_by)
+        )
+    return out
+
+
+async def group_role(
+    db: AsyncSession, group_id: str, uid: int | None
+) -> str | None:
+    """Return the caller's role in *group_id* (``'owner'``/``'member'``) or ``None``.
+
+    Used by permission checks that need to distinguish group owners from
+    regular members (e.g. account unshare / delete rights).
+    """
+    if uid is None:
+        return None
+    result = await db.execute(
+        select(GroupMember.role).where(
+            and_(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == uid,
+            )
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def is_group_owner_of_resource(
+    db: AsyncSession,
+    *,
+    resource_type: str,
+    resource_id: str,
+    uid: int | None,
+) -> bool:
+    """True when *uid* has role ``'owner'`` in any group the resource is shared into.
+
+    Used by the extended account-delete permission rule.
+    """
+    if uid is None:
+        return False
+    result = await db.execute(
+        select(GroupMember.group_id)
+        .join(
+            GroupShare,
+            GroupShare.group_id == GroupMember.group_id,
+        )
+        .where(
+            and_(
+                GroupShare.resource_type == resource_type,
+                GroupShare.resource_id == str(resource_id),
+                GroupMember.user_id == uid,
+                GroupMember.role == "owner",
+            )
+        )
+    )
+    return result.scalar_one_or_none() is not None

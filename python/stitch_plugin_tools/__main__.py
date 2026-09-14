@@ -190,8 +190,9 @@ def _cmd_dev_install(args: argparse.Namespace) -> int:
     if not package_dir.is_dir():
         print(f"error: package dir not found: {package_dir}", file=sys.stderr)
         return 2
-    dest = dev_install(package_dir)
-    print(f"dev-installed to {dest}")
+    dest = dev_install(package_dir, link=args.link)
+    mode = "linked" if args.link else "copied"
+    print(f"dev-installed ({mode}) to {dest}")
     return 0
 
 
@@ -269,26 +270,38 @@ def _cmd_pack_provider(args: argparse.Namespace) -> int:
 
 
 def _cmd_new(args: argparse.Namespace) -> int:
-    """Scaffold a new kind=service plugin package.
+    """Scaffold a new plugin package (kind=service or kind=provider).
 
-    See :func:`stitch_plugin_tools.scaffold.scaffold_service_plugin` for
-    the generated layout.  The package is unsigned — run ``sign`` after.
+    See :func:`stitch_plugin_tools.scaffold.scaffold_service_plugin` and
+    :func:`stitch_plugin_tools.scaffold.scaffold_provider_plugin` for the
+    generated layouts.  The package is unsigned — run ``sign`` after.
     """
-    from stitch_plugin_tools.scaffold import scaffold_service_plugin
-
     out_dir = Path(args.out)
     try:
-        result = scaffold_service_plugin(
-            out_dir,
-            plugin_id=args.id,
-            name=args.name,
-            author=args.author,
-            version=args.version,
-        )
+        if args.kind == "provider":
+            from stitch_plugin_tools.scaffold import scaffold_provider_plugin
+
+            result = scaffold_provider_plugin(
+                out_dir,
+                plugin_id=args.id,
+                name=args.name,
+                author=args.author,
+                version=args.version,
+            )
+        else:
+            from stitch_plugin_tools.scaffold import scaffold_service_plugin
+
+            result = scaffold_service_plugin(
+                out_dir,
+                plugin_id=args.id,
+                name=args.name,
+                author=args.author,
+                version=args.version,
+            )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(f"scaffolded service plugin at {result}")
+    print(f"scaffolded {args.kind} plugin at {result}")
     print(f"  id:      {args.id}")
     print(f"  version: {args.version}")
     print(
@@ -637,6 +650,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "dev-install", help="copy a package to plugins-local for the dev loop"
     )
     p_dev.add_argument("package_dir", help="package directory (contains plugin.json)")
+    p_dev.add_argument(
+        "--link",
+        action="store_true",
+        help="link instead of copy: write a .stitch-link pointer so edits "
+        "in the working copy are live without re-install",
+    )
     p_dev.set_defaults(func=_cmd_dev_install)
 
     p_pack = sub.add_parser(
@@ -689,11 +708,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_new = sub.add_parser(
         "new",
-        help="scaffold a kind=service plugin package (manifest + RPC entry + storage)",
+        help="scaffold a plugin package (kind=service RPC or kind=provider method)",
     )
     p_new.add_argument("out", help="output directory for the package")
     p_new.add_argument(
         "--id", required=True, help="plugin id ([A-Za-z0-9_-], no dots)"
+    )
+    p_new.add_argument(
+        "--kind",
+        choices=["service", "provider"],
+        default="service",
+        help="package kind to scaffold (default: service)",
     )
     p_new.add_argument(
         "--name", default="", help="human-readable name (default: same as --id)"

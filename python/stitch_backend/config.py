@@ -196,6 +196,13 @@ class Settings(BaseSettings):
         None,
         validation_alias=AliasChoices("admin_password", "STITCH_ADMIN_PASSWORD"),
     )
+    # Shared admin secret (X-Admin-Key) used by the Telegram bot to manage web
+    # accounts (set password / sync username). Same value as the distribution
+    # server's STITCH_SERVER_ADMIN_KEY on the VDS. Never logged.
+    admin_key: str = Field(
+        "",
+        validation_alias=AliasChoices("admin_key", "STITCH_ADMIN_KEY"),
+    )
 
     # ── Telegram OIDC login ────────────────────────────────────────────────────
     # ``legacy`` (default) keeps the one-time bot-code flow

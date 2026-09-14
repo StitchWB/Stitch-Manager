@@ -13,6 +13,7 @@
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { getWsUrl } from '@/lib/backend/core/url';
+import { isDemoBackend } from '@/lib/backend/core/demoBackend';
 import { createLogger } from '../observability/logger';
 const log = createLogger('WsEvents');
 
@@ -186,9 +187,6 @@ function scheduleReconnect(): void {
   }, reconnectDelayMs);
 }
 
-// Start connection eagerly (module load)
-connect();
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -215,6 +213,15 @@ export async function listen<T = unknown>(
     );
   }
   set.add(handler as EventHandler);
+
+  if (isDemoBackend()) {
+    return () => {
+      set.delete(handler as EventHandler);
+      if (set.size === 0) {
+        listeners.delete(eventName);
+      }
+    };
+  }
 
   // Ensure connection is alive when a listener is added. connect() itself
   // guards against OPEN/CONNECTING, so this won't spawn duplicate sockets.

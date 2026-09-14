@@ -18,7 +18,7 @@ export default function NotFound() {
         <h1 className="text-4xl font-bold text-white mb-2">{t('notFoundPage.title')}</h1>
         <p className="text-slate-400 mb-6">{t('notFoundPage.description')}</p>
         <Button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/app')}
           variant="primary"
           size="md"
           leftIcon={<Home className="w-4 h-4" />}

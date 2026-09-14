@@ -24,6 +24,7 @@ import {
 import { safeInvoke } from '../lib/backend/core/invoke';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
 
 // ── Service-plugin host health (todo 25) ────────────────────────────────────
 // Fetched via the admin command `get_service_plugin_health` on the same 30s
@@ -165,6 +166,10 @@ export default function Monitoring() {
   }, [refresh]);
 
   useEffect(() => {
+    // Data-fetching effect with 30s auto-refresh: refresh is async; setState
+    // calls after the first await run in a microtask. The sync
+    // setLoading(true)/setLoadError(null) mirror the initial state on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh(true);
     const id = window.setInterval(() => void refresh(false), 30000);
     return () => window.clearInterval(id);
@@ -301,26 +306,26 @@ function ProxiesTable({ snapshot }: { snapshot: MonitoringSnapshot }) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.06] text-left">
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('monitoring.fields.url')}</th>
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.status')}</th>
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.latency')}</th>
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">{t('monitoring.fields.lastCheck')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="border-b border-white/[0.06] text-left">
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('monitoring.fields.url')}</TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.status')}</TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.latency')}</TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">{t('monitoring.fields.lastCheck')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {snapshot.proxies.map((p, i) => (
-                <tr key={`${p.url}-${i}`} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
-                  <td className="px-5 py-3 text-slate-200 font-mono text-xs truncate max-w-[400px]">{p.url}</td>
-                  <td className="px-5 py-3"><Badge variant={serviceBadgeVariant(p.status)} size="sm">{t(`monitoring.statuses.${p.status}`)}</Badge></td>
-                  <td className="px-5 py-3 text-slate-400 text-xs font-mono">{formatLatency(p.latency_ms)}</td>
-                  <td className="px-5 py-3 text-slate-400 text-xs">{formatDate(p.last_check)}</td>
-                </tr>
+                <TableRow key={`${p.url}-${i}`} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
+                  <TableCell className="px-5 py-3 text-slate-200 font-mono text-xs truncate max-w-[400px]">{p.url}</TableCell>
+                  <TableCell className="px-5 py-3"><Badge variant={serviceBadgeVariant(p.status)} size="sm">{t(`monitoring.statuses.${p.status}`)}</Badge></TableCell>
+                  <TableCell className="px-5 py-3 text-slate-400 text-xs font-mono">{formatLatency(p.latency_ms)}</TableCell>
+                  <TableCell className="px-5 py-3 text-slate-400 text-xs">{formatDate(p.last_check)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>
@@ -347,35 +352,35 @@ function ServicePluginsSection({ hosts }: { hosts: PluginHostHealth[] | null }) 
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.06] text-left">
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('monitoring.servicePlugins.plugin')}</th>
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.status')}</th>
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.uptime')}</th>
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">{t('monitoring.servicePlugins.restarts')}</th>
-                <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">{t('monitoring.servicePlugins.version')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="border-b border-white/[0.06] text-left">
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('monitoring.servicePlugins.plugin')}</TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.status')}</TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">{t('monitoring.fields.uptime')}</TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">{t('monitoring.servicePlugins.restarts')}</TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">{t('monitoring.servicePlugins.version')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {hosts.map(h => (
-                <tr key={h.plugin_id} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
-                  <td className="px-5 py-3 text-slate-200 font-mono text-xs">
+                <TableRow key={h.plugin_id} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
+                  <TableCell className="px-5 py-3 text-slate-200 font-mono text-xs">
                     {h.plugin_id}
                     {h.last_error && (
                       <p className="text-red-400/80 text-xs mt-0.5 font-sans truncate max-w-[400px]" title={h.last_error}>{h.last_error}</p>
                     )}
-                  </td>
-                  <td className="px-5 py-3">
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
                     <Badge variant={pluginBadgeVariant(h)} size="sm">{pluginStatusLabel(h)}</Badge>
-                  </td>
-                  <td className="px-5 py-3 text-slate-400 text-xs font-mono">{formatDuration(h.uptimeSeconds)}</td>
-                  <td className="px-5 py-3 text-slate-400 text-xs font-mono">{h.restarts}</td>
-                  <td className="px-5 py-3 text-slate-400 text-xs font-mono">{h.version ?? '—'}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-slate-400 text-xs font-mono">{formatDuration(h.uptimeSeconds)}</TableCell>
+                  <TableCell className="px-5 py-3 text-slate-400 text-xs font-mono">{h.restarts}</TableCell>
+                  <TableCell className="px-5 py-3 text-slate-400 text-xs font-mono">{h.version ?? '—'}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

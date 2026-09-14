@@ -21,6 +21,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import Plugins from '../../pages/Plugins';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { _resetForTests } from '@/lib/backend/modules/servicePlugins';
@@ -73,7 +74,7 @@ jest.mock('../../components/ui/Modal', () => ({
 }));
 
 jest.mock('../../components/ui/Input', () => ({
-  Input: ({ label, error, hint, containerClassName, shellClassName, leftIcon, rightElement, prefixText, suffixText, ...props }: any) => (
+  Input: ({ label, _error, _hint, _containerClassName, _shellClassName, _leftIcon, _rightElement, _prefixText, _suffixText, ...props }: any) => (
     <div>
       {label && <label>{label}</label>}
       <input {...props} />
@@ -248,7 +249,7 @@ describe('Plugins page — install from source dialog', () => {
     // Success toast (t is identity-mocked, so the key string is passed
     // directly; the real t() would interpolate {id}/{version}).
     await waitFor(() => {
-      expect((require('sonner') as { toast: { success: jest.Mock } }).toast.success)
+      expect(toast.success as jest.Mock)
         .toHaveBeenCalledWith('admin.plugins.installFromSource.success');
     });
   });
@@ -276,7 +277,7 @@ describe('Plugins page — install from source dialog', () => {
     await submit();
 
     await waitFor(() => {
-      expect((require('sonner') as { toast: { error: jest.Mock } }).toast.error)
+      expect(toast.error as jest.Mock)
         .toHaveBeenCalledWith(expect.stringContaining('admin.plugins.installFromSource.failed'));
     });
   });

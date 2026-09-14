@@ -12,6 +12,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Puzzle, AlertCircle, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { t } from '@/lib/i18n';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/Table';
+import { Checkbox } from '../ui/Checkbox';
 import {
   pluginGrantsGroupList,
   pluginGrantsGroupSet,
@@ -57,6 +59,7 @@ export function GroupPluginGrants() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount; loading flag set synchronously for immediate spinner
   useEffect(() => { void refresh(); }, [refresh]);
 
   // Re-fetch only the group matrix (used after successful group mutations
@@ -116,13 +119,17 @@ export function GroupPluginGrants() {
     const checked = isGroupGranted(groupId, pluginId);
     const isUpdating = updating === cellId;
     return (
-      <td key={groupId} className="px-5 py-3 text-center">
+      <TableCell key={groupId} className="px-5 py-3 text-center">
         <div className="flex items-center justify-center">
-          <label className="inline-flex items-center justify-center cursor-pointer p-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-            <input type="checkbox" checked={checked} disabled={isUpdating} onChange={() => void onToggleGroup(groupId, pluginId, !checked)} aria-label={`${groupId} ${pluginId}`} className="appearance-none h-[15px] w-[15px] rounded-[4px] border border-white/20 bg-white/[0.03] transition-all duration-200 checked:bg-indigo-500 checked:border-indigo-500 checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] hover:border-white/35 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed" />
-          </label>
+          <Checkbox
+            checked={checked}
+            disabled={isUpdating}
+            onChange={() => void onToggleGroup(groupId, pluginId, !checked)}
+            aria-label={`${groupId} ${pluginId}`}
+            className="inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-white/[0.04]"
+          />
         </div>
-      </td>
+      </TableCell>
     );
   };
 
@@ -169,55 +176,54 @@ export function GroupPluginGrants() {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-white/[0.06] text-left">
-            <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('admin.plugins.plugin')}</th>
-            {groupEntries.map(([groupId, name]) => (
-              <th key={groupId} className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider text-center w-28">
-                <div className="flex flex-col items-center gap-1">
-                  <span className="max-w-full truncate" title={name}>{name}</span>
-                </div>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {/* All plugins row */}
-          <tr className="border-b border-white/[0.04] bg-white/[0.01]">
-            <td className="px-5 py-3">
+    <Table className="w-full text-sm" containerClassName="overflow-x-auto">
+      <TableHeader className="bg-transparent">
+        <TableRow className="border-b border-white/[0.06] text-left hover:bg-transparent">
+          <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('admin.plugins.plugin')}</TableHead>
+          {groupEntries.map(([groupId, name]) => (
+            <TableHead key={groupId} className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider text-center w-28">
+              <div className="flex flex-col items-center gap-1">
+                <span className="max-w-full truncate" title={name}>{name}</span>
+              </div>
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {/* All plugins row */}
+        <TableRow className="border-b border-white/[0.04] bg-white/[0.01]">
+          <TableCell className="px-5 py-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-indigo-500/15 text-indigo-300">
+                <Puzzle className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-slate-200 font-medium">{t('admin.plugins.allPlugins')}</span>
+                <span className="text-[10px] text-slate-500 font-mono">{ALL_PLUGINS_ID}</span>
+              </div>
+            </div>
+          </TableCell>
+          {groupEntries.map(([groupId]) => renderCheckbox(groupId, ALL_PLUGINS_ID))}
+        </TableRow>
+        {/* Plugin rows */}
+        {state.plugins.map(p => (
+          <TableRow key={p.id} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
+            <TableCell className="px-5 py-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-indigo-500/15 text-indigo-300">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-white/5 text-slate-400">
                   <Puzzle className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-slate-200 font-medium">{t('admin.plugins.allPlugins')}</span>
-                  <span className="text-[10px] text-slate-500 font-mono">{ALL_PLUGINS_ID}</span>
+                  <span className="text-slate-200 font-medium truncate">{p.name}</span>
+                  {/* eslint-disable-next-line i18next/no-literal-string -- non-translatable plugin id/version token */}
+                  <span className="text-[10px] text-slate-500 font-mono truncate">{p.id} · v{p.version}</span>
                 </div>
               </div>
-            </td>
-            {groupEntries.map(([groupId]) => renderCheckbox(groupId, ALL_PLUGINS_ID))}
-          </tr>
-          {/* Plugin rows */}
-          {state.plugins.map(p => (
-            <tr key={p.id} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
-              <td className="px-5 py-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-white/5 text-slate-400">
-                    <Puzzle className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-slate-200 font-medium truncate">{p.name}</span>
-                    <span className="text-[10px] text-slate-500 font-mono truncate">{p.id} · v{p.version}</span>
-                  </div>
-                </div>
-              </td>
-              {groupEntries.map(([groupId]) => renderCheckbox(groupId, p.id))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+            </TableCell>
+            {groupEntries.map(([groupId]) => renderCheckbox(groupId, p.id))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

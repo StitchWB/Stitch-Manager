@@ -1,4 +1,4 @@
-import { Play, MoreHorizontal, Key, Copy, Clock, StickyNote, UserPlus } from 'lucide-react';
+import { Play, MoreHorizontal, Key, Copy, Clock, StickyNote, UserPlus, Users } from 'lucide-react';
 import {
   Badge,
   type BadgeProps,
@@ -27,7 +27,7 @@ import { AccountRefCell } from './AccountRefCell';
 import { AccountRowQuickActions } from './AccountRowQuickActions';
 import { TotpBadge } from '@/components/totp/TotpBadge';
 import { useTotpStore } from '@/stores/totp';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, effectiveRole } from '@/stores/auth';
 
 interface AccountRowProps {
   account: Account;
@@ -62,6 +62,7 @@ interface AccountRowProps {
   onCopyRefUrl?: (refUrl: string) => Promise<void>;
   onRefreshRefUrl?: (accountId: number) => Promise<void>;
   onClaim?: (accountId: number) => Promise<void>;
+  onShareToGroup?: (accountId: number) => void;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
 }
 
@@ -98,6 +99,7 @@ export function AccountRow({
   onCopyRefUrl,
   onRefreshRefUrl,
   onClaim,
+  onShareToGroup,
   onRelationEdgeClick,
 }: AccountRowProps) {
   const data = useAccountRowData(account, relationHints, relationEdges);
@@ -105,6 +107,8 @@ export function AccountRow({
   const allTotpKeys = useTotpStore((s) => s.keys);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canClaim = hasPermission('action.claim');
+  const user = useAuthStore((s) => s.user);
+  const canShareToGroup = account.mine || effectiveRole(user) === 'admin';
   const accountIdStr = String(account.id);
   const totpKeys = allTotpKeys.filter(
     (k) => k.enabled && k.accountId === accountIdStr
@@ -170,9 +174,20 @@ export function AccountRow({
           </Tooltip>
           <div className="flex items-center gap-1">
             <OwnershipBadge mine={account.mine} shared={account.shared} />
+            {account.groupNames && account.groupNames.length > 0 ? (
+              <Tooltip content={t('ownership.groupTooltip', { groups: account.groupNames.join(', ') })} side="top">
+                <Badge variant="indigo" size="sm" className="normal-case tracking-normal gap-1 max-w-[120px]">
+                  <Users size={10} className="shrink-0" />
+                  <span className="truncate">{account.groupNames[0]}</span>
+                  {account.groupNames.length > 1 ? (
+                    <span className="text-indigo-400/80">+{account.groupNames.length - 1}</span>
+                  ) : null}
+                </Badge>
+              </Tooltip>
+            ) : null}
             {account.shared && !account.mine && onClaim && canClaim ? (
               <Tooltip content={t('ownership.claim')} side="top">
-                <button
+                <ButtonBase
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -182,7 +197,7 @@ export function AccountRow({
                   aria-label={t('ownership.claim')}
                 >
                   <UserPlus size={12} />
-                </button>
+                </ButtonBase>
               </Tooltip>
             ) : null}
           </div>
@@ -452,6 +467,8 @@ export function AccountRow({
             onConfirmProfileSession={onConfirmProfileSession}
             onClearProfileSession={onClearProfileSession}
             onAuthorizeKiroAccount={onAuthorizeKiroAccount}
+            onShareToGroup={onShareToGroup ? () => onShareToGroup(account.id) : undefined}
+            canShareToGroup={canShareToGroup}
             onCopyRefUrl={onCopyRefUrl}
             onRefreshRefUrl={onRefreshRefUrl}
             onCopyToken={onCopyToken}
@@ -464,3 +481,4 @@ export function AccountRow({
     </TableRow>
   );
 }
+

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { useUIState } from './useUIState';
 import { t } from '@/lib/i18n';
+import { detailToMessage } from '@/lib/errorText';
 import {
   deleteFingerprintProfile,
   exportFingerprintProfileBundle,
@@ -229,7 +230,9 @@ export function makeUniqueAlias(params: {
 }
 
 export function extractActionErrorMessage(error: unknown, fallback: string): string {
-  const raw = error instanceof Error ? error.message : String(error ?? '').trim();
+  const raw = (
+    error instanceof Error && error.message ? error.message : detailToMessage(error, '')
+  ).trim();
   if (!raw) {
     return fallback;
   }

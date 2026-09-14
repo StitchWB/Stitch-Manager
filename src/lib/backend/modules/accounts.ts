@@ -398,3 +398,35 @@ export async function captureWebSessionCookies(params: {
 export async function claimAccount(accountId: number): Promise<{ success: boolean }> {
   return safeInvoke<{ success: boolean }>('claim_account', { accountId });
 }
+
+/**
+ * Share an account into a group. Idempotent server-side; permissions are
+ * enforced by the backend (account owner OR admin). Mirrors the
+ * ``groups_share_credential`` wrapper in the groups module (camelCase params,
+ * ``noCache`` because sharing state is volatile).
+ */
+export async function shareAccountToGroup(
+  groupId: string,
+  accountId: number
+): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>(
+    'groups_share_account',
+    { accountId, groupId },
+    { noCache: true }
+  );
+}
+
+/**
+ * Remove an account from a group. Permissions enforced server-side
+ * (account owner OR group owner OR admin).
+ */
+export async function unshareAccountFromGroup(
+  groupId: string,
+  accountId: number
+): Promise<{ success: boolean }> {
+  return safeInvoke<{ success: boolean }>(
+    'groups_unshare_account',
+    { accountId, groupId },
+    { noCache: true }
+  );
+}

@@ -78,9 +78,13 @@ async def _ensure_telegram_user(db: AsyncSession) -> User:
     if user is not None:
         return user
     random_pw = secrets.token_hex(32)
-    role = "admin" if await auth_service.count_users(db) == 0 else _TELEGRAM_ROLE
+    # Compute the role at INSERT time (not before) so two concurrent first
+    # logins can't both observe count==0 and both become admin (race).
     return await auth_service.create_user(
-        db, username=_TELEGRAM_USERNAME, password=random_pw, role=role
+        db,
+        username=_TELEGRAM_USERNAME,
+        password=random_pw,
+        role=await _bootstrap_role(db),
     )
 
 
@@ -180,7 +184,13 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, 
     tier = state.tier
 
     async def _op(db: AsyncSession) -> tuple[User, str, Any]:
-        user = await _ensure_telegram_user(db)
+        # Per-TG-user binding when the activation carries the issuing tg_id
+        # (security CRIT fix): each Telegram account gets its own local user.
+        # Legacy codes without tg_id fall back to the shared "telegram" user.
+        if state.tg_user_id is not None:
+            user = await ensure_oidc_user(db, state.tg_user_id, None)
+        else:
+            user = await _ensure_telegram_user(db)
         raw_token, expires_at = await auth_service.create_session(db, user.id)
         return user, raw_token, expires_at
 

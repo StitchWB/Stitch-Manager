@@ -1,12 +1,4 @@
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/StitchWB/Stitch-Manager?style=flat-square" alt="Release">
-  <img src="https://img.shields.io/github/actions/workflow/status/StitchWB/Stitch-Manager/ci.yml?style=flat-square" alt="CI">
-  <img src="https://img.shields.io/github/license/StitchWB/Stitch-Manager?style=flat-square&color=green" alt="License">
-  <img src="https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux">
-</p>
-
-<p align="center">
   <img src="resources/branding/stitch-ide-logo.png" alt="Stitch Manager Logo" width="200">
 </p>
 
@@ -53,20 +45,6 @@
 
 ---
 
-## 🧬 Open-core model
-
-Stitch Manager is **open-core**:
-
-- **Open** (this repo): the desktop client, the plugin SDK/runtime, and the
-  community **service plugins** (cards, mail, TOTP, …). PRs welcome.
-- **Closed**: the provider **registration methods** (Kiro, Windsurf, Trae, …).
-  They live in private repos, are compiled with Nuitka, signed, and delivered
-  to entitled clients as encrypted binaries. **This repository never contains
-  that source.**
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
-
----
 # 🇺🇸 English
 
 ## 🎯 What is Stitch Manager?
@@ -276,7 +254,6 @@ Track account health and usage:
 | `scripts/start-bot.ps1`         | Start bot with `-Token` and `-Proxy` flags                                  |
 | `scripts/toggle-local-role.ps1` | Toggle local user role for testing                                           |
 | `scripts/proxy_autopilot.py`    | Refresh free-proxy list for the bot                                          |
-| `scripts/release-public.ps1`    | Local open-core export and publish                                           |
 
 ---
 
@@ -500,7 +477,6 @@ Machine ID — это уникальный идентификатор, испо�
 | `scripts/start-bot.ps1`         | Запуск бота с флагами `-Token` и `-Proxy`                                   |
 | `scripts/toggle-local-role.ps1` | Переключение локальной роли пользователя для тестирования                   |
 | `scripts/proxy_autopilot.py`    | Обновление списка free-proxy для бота                                        |
-| `scripts/release-public.ps1`     | Локальный экспорт и публикация open-core                                    |
 
 ---
 

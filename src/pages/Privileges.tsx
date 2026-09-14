@@ -23,6 +23,8 @@ import {
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
+import { Checkbox } from '@/components/ui/Checkbox';
 
 const SECTION_KEYS = PERMISSION_KEYS.filter(k => k.startsWith('section.'));
 const ACTION_KEYS = PERMISSION_KEYS.filter(k => k.startsWith('action.'));
@@ -61,6 +63,10 @@ export default function Privileges() {
   }, []);
 
   useEffect(() => {
+    // Data-fetching effect: refresh is async; setState calls after the first
+    // await run in a microtask. The sync setLoading(true)/setLoadError(null)
+    // mirror the component's initial state on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -119,11 +125,11 @@ export default function Privileges() {
   const renderRow = (key: string) => {
     const isSection = key.startsWith('section.');
     return (
-      <tr
+      <TableRow
         key={key}
         className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors"
       >
-        <td className="px-5 py-3">
+        <TableCell className="px-5 py-3">
           <div className="flex items-center gap-2.5">
             <div className={cn(
               'w-7 h-7 rounded-full flex items-center justify-center shrink-0',
@@ -144,14 +150,14 @@ export default function Privileges() {
               </span>
             </div>
           </div>
-        </td>
+        </TableCell>
         {roles.map(role => {
           const cellId = `${role}:${key}`;
           const checked = Boolean(state.matrix[role]?.[key]);
           const isAdmin = role === 'admin';
           const isUpdating = updating === cellId;
           return (
-            <td
+            <TableCell
               key={role}
               className="px-5 py-3 text-center"
             >
@@ -159,33 +165,29 @@ export default function Privileges() {
                 {isAdmin ? (
                   <Tooltip content={t('privileges.adminImmutable')} side="top">
                     <span className="inline-flex">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked
                         disabled
                         readOnly
                         aria-label={`${role} ${key}`}
-                        className="appearance-none h-[15px] w-[15px] rounded-[4px] border border-indigo-500/40 bg-indigo-500/30 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] opacity-60 cursor-not-allowed"
+                        className="pointer-events-auto"
                       />
                     </span>
                   </Tooltip>
                 ) : (
-                  <label className="inline-flex items-center justify-center cursor-pointer p-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={isUpdating}
-                      onChange={() => void onToggle(role, key, !checked)}
-                      aria-label={`${role} ${key}`}
-                      className="appearance-none h-[15px] w-[15px] rounded-[4px] border border-white/20 bg-white/[0.03] transition-all duration-200 checked:bg-indigo-500 checked:border-indigo-500 checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] hover:border-white/35 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </label>
+                  <Checkbox
+                    checked={checked}
+                    disabled={isUpdating}
+                    onChange={() => void onToggle(role, key, !checked)}
+                    aria-label={`${role} ${key}`}
+                    className="inline-flex items-center justify-center p-1.5 hover:bg-white/[0.04]"
+                  />
                 )}
               </div>
-            </td>
+            </TableCell>
           );
         })}
-      </tr>
+      </TableRow>
     );
   };
 
@@ -238,14 +240,14 @@ export default function Privileges() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/[0.06] text-left">
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                <Table className="w-full text-sm">
+                  <TableHeader>
+                    <TableRow className="border-b border-white/[0.06] text-left">
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
                         {t('common.name')}
-                      </th>
+                      </TableHead>
                       {roles.map(role => (
-                        <th
+                        <TableHead
                           key={role}
                           className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider text-center w-28"
                         >
@@ -257,33 +259,33 @@ export default function Privileges() {
                               </Badge>
                             )}
                           </div>
-                        </th>
+                        </TableHead>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {/* Sections sub-header */}
-                    <tr className="border-b border-white/[0.04] bg-white/[0.01]">
-                      <td
+                    <TableRow className="border-b border-white/[0.04] bg-white/[0.01]">
+                      <TableCell
                         colSpan={roles.length + 1}
                         className="px-5 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]"
                       >
                         {t('privileges.sections')}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                     {SECTION_KEYS.map(renderRow)}
                     {/* Actions sub-header */}
-                    <tr className="border-b border-white/[0.04] bg-white/[0.01]">
-                      <td
+                    <TableRow className="border-b border-white/[0.04] bg-white/[0.01]">
+                      <TableCell
                         colSpan={roles.length + 1}
                         className="px-5 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]"
                       >
                         {t('privileges.actions')}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                     {ACTION_KEYS.map(renderRow)}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>

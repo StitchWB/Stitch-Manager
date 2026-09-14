@@ -18,8 +18,10 @@ where no official plugin is installed locally, ``installed=False``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
+import time
 from typing import Any
 
 import httpx
@@ -75,6 +77,65 @@ def _safe_semver(version: str) -> tuple[int, int, int]:
         return (0, 0, 0)
 
 
+# ── Short-TTL cache for upstream feeds (marketplace perf) ────────────────────
+# The official manifest (distribution server) and community catalog (GitHub)
+# are network-bound and change slowly; re-fetching them on every page load
+# made the marketplace hang for up to the upstream timeout.  Cache both for a
+# short TTL and fetch them concurrently with a short timeout so a slow
+# upstream degrades to an empty list quickly instead of blocking the page.
+_FEED_CACHE_TTL = 60.0
+_feed_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _cache_get(key: str) -> dict[str, Any] | None:
+    hit = _feed_cache.get(key)
+    if hit is not None and (time.monotonic() - hit[0]) < _FEED_CACHE_TTL:
+        return hit[1]
+    return None
+
+
+def _cache_set(key: str, value: dict[str, Any]) -> None:
+    _feed_cache[key] = (time.monotonic(), value)
+
+
+def _clear_feed_cache() -> None:
+    """Test/ops hook: drop cached upstream feeds (isolation / force refresh)."""
+    _feed_cache.clear()
+
+
+async def _fetch_manifest_cached(activation: ActivationService, token: str) -> dict:
+    cached = _cache_get("manifest")
+    if cached is not None:
+        return cached
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        sync = PluginSyncService(activation, client=client)
+        manifest = await sync.fetch_manifest(token)
+    _cache_set("manifest", manifest)
+    return manifest
+
+
+async def _fetch_catalog_cached() -> dict:
+    cached = _cache_get("catalog")
+    if cached is not None:
+        return cached
+    # fetch_catalog is a blocking GitHub fetch — run off the event loop.
+    catalog = await asyncio.to_thread(fetch_catalog)
+    _cache_set("catalog", catalog)
+    return catalog
+
+
+async def _fetch_public_catalog_cached(activation: ActivationService) -> dict:
+    """Public official listing (no token) for the unactivated marketplace."""
+    cached = _cache_get("catalog_public")
+    if cached is not None:
+        return cached
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        sync = PluginSyncService(activation, client=client)
+        catalog = await sync.fetch_public_catalog()
+    _cache_set("catalog_public", catalog)
+    return catalog
+
+
 @register_command("get_marketplace", readonly=True)
 async def cmd_get_marketplace(params: dict) -> dict:
     """Merge official + community + installed state into one list.
@@ -102,11 +163,13 @@ async def cmd_get_marketplace(params: dict) -> dict:
             caller_user_id, caller_role
         )
 
+    # Fetch the two upstream feeds concurrently (cached, short timeout) so a
+    # slow upstream degrades fast instead of blocking the marketplace page.
+    catalog_task = asyncio.create_task(_fetch_catalog_cached())
+
     if state is not None and not state.degraded:
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                sync = PluginSyncService(activation, client=client)
-                manifest = await sync.fetch_manifest(state.token)
+            manifest = await _fetch_manifest_cached(activation, state.token)
             # FIX 5 (P1): bulk-fetch required tiers in a single DB query
             # instead of N+1 per-plugin get_required_tier calls.
             manifest_plugin_ids = [
@@ -149,9 +212,47 @@ async def cmd_get_marketplace(params: dict) -> dict:
         except Exception as exc:  # noqa: BLE001 — marketplace must not crash
             logger.warning("Marketplace: official manifest fetch failed: %s", exc)
             activated = False
+    elif state is None:
+        # No activation: official plugins stay VISIBLE but locked — the
+        # marketplace is the funnel; downloads require activation.
+        try:
+            public_catalog = await _fetch_public_catalog_cached(activation)
+            public_ids = [
+                str(e.get("id", ""))
+                for e in public_catalog.get("plugins", [])
+                if isinstance(e, dict) and e.get("id") and e.get("version")
+            ]
+            public_tiers = await get_required_tiers(public_ids)
+            for entry in public_catalog.get("plugins", []):
+                plugin_id = str(entry.get("id", ""))
+                version = str(entry.get("version", ""))
+                if not plugin_id or not version:
+                    continue
+                installed_versions = list_installed_versions(plugin_id)
+                items.append(
+                    {
+                        "id": plugin_id,
+                        "name": str(entry.get("name") or plugin_id),
+                        "description": entry.get("description"),
+                        "author": entry.get("author"),
+                        "version": version,
+                        "source": "official",
+                        "entitled": False,
+                        "installed": bool(installed_versions),
+                        "installed_version": (
+                            max(installed_versions, key=lambda v: _safe_semver(v))
+                            if installed_versions
+                            else None
+                        ),
+                        "can_download": False,
+                        "required_tier": public_tiers.get(plugin_id),
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001 — marketplace must not crash
+            logger.warning("Marketplace: public catalog fetch failed: %s", exc)
 
     try:
-        catalog = fetch_catalog()
+        catalog = await catalog_task
         installed_community = {
             (p["id"], p["version"]): p for p in list_installed_community()
         }

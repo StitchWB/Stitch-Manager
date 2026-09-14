@@ -25,13 +25,11 @@ import {
 } from '@/lib/backend/modules/servicePlugins';
 import { useAppStore } from '@/stores/app';
 import { useAuthStore } from '@/stores/auth';
-import { useGroupsStore } from '@/stores/groups';
 
 type AiTabId =
   | 'overview'
   | 'providers'
   | 'gateway'
-  | 'groups'
   | 'routing'
   | 'connections'
   | 'monitor'
@@ -58,7 +56,6 @@ const AI_TABS: AiTab[] = [
   { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers', icon: Server },
   { id: 'gateway', label: 'Gateway', to: '/ai/gateway', icon: Network },
   { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity', icon: Orbit },
-  { id: 'groups', label: 'ai.groups.title', to: '/ai/groups', icon: Users, authOnly: true },
   { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
   { id: 'connections', label: 'Connections', to: '/ai/integrations', icon: Cable },
   { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
@@ -70,7 +67,6 @@ const AI_TABS: AiTab[] = [
 function activeTab(pathname: string): AiTabId {
   if (pathname === '/ai' || pathname === '/ai/overview') return 'overview';
   if (pathname.startsWith('/ai/gateway')) return 'gateway';
-  if (pathname.startsWith('/ai/groups')) return 'groups';
   if (pathname.startsWith('/ai/routing')) return 'routing';
   if (pathname.startsWith('/ai/integrations') || pathname.startsWith('/ai/opencode-config')) {
     return 'connections';
@@ -129,7 +125,6 @@ export function AiTopTabs() {
   const location = useLocation();
   const language = useAppStore(state => state.language);
   const authEnabled = useAuthStore(state => state.enabled);
-  const pendingInvites = useGroupsStore(state => state.invites);
   const current = activeTab(location.pathname);
 
   const plugins = useSyncExternalStore(
@@ -198,7 +193,6 @@ export function AiTopTabs() {
                 : tab.pluginId
                   ? getPluginTabLabel(tab.pluginId, tab.label)
                   : getLabel(tab.label);
-          const pendingCount = tab.id === 'groups' ? pendingInvites.length : 0;
           const isCommunity = tab.source === 'community';
           const tabTitle = isCommunity
             ? `${label} — ${t('admin.plugins.servicePluginCommunityTabTooltip')}`
@@ -216,13 +210,6 @@ export function AiTopTabs() {
                 icon={<Icon size={14} />}
                 label={label}
               />
-              {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 z-10 pointer-events-none">
-                  <Badge variant="warning" size="sm" withPulse>
-                    <span className="motion-reduce:animate-none">{pendingCount}</span>
-                  </Badge>
-                </span>
-              )}
               {isCommunity && (
                 <span className="absolute -top-1 -right-1 z-10 pointer-events-none">
                   <Badge variant="warning" size="sm">

@@ -30,6 +30,32 @@ def get_project_root() -> Path:
     return script_dir.parent.parent.parent
 
 
+def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
+    """Extract refusing zip-slip entries (fail closed)."""
+    dest = dest.resolve()
+    for info in zf.infolist():
+        name = info.filename.replace("\\", "/")
+        if name.startswith("/"):
+            raise ValueError(f"absolute path in zip: {info.filename}")
+        target = (dest / name).resolve()
+        if target != dest and dest not in target.parents:
+            raise ValueError(f"path traversal in zip: {info.filename}")
+    zf.extractall(dest)
+
+
+def _safe_extract_tar(tf: tarfile.TarFile, dest: Path) -> None:
+    """Extract refusing links/traversal (fail closed)."""
+    dest = dest.resolve()
+    for member in tf.getmembers():
+        name = member.name.replace("\\", "/")
+        if name.startswith("/") or member.islnk() or member.issym():
+            raise ValueError(f"unsafe tar member: {member.name}")
+        target = (dest / name).resolve()
+        if target != dest and dest not in target.parents:
+            raise ValueError(f"path traversal in tar: {member.name}")
+    tf.extractall(dest)
+
+
 def download_cloakbrowser(resources_dir: Path | None = None) -> Path:
     system = platform.system()
     url = CLOAKBROWSER_URLS.get(system)
@@ -63,10 +89,10 @@ def download_cloakbrowser(resources_dir: Path | None = None) -> Path:
     print("Extracting...")
     if system == "Windows":
         with zipfile.ZipFile(archive_path, 'r') as zf:
-            zf.extractall(resources_dir)
+            _safe_extract_zip(zf, resources_dir)
     else:
         with tarfile.open(archive_path, 'r:gz') as tf:
-            tf.extractall(resources_dir)
+            _safe_extract_tar(tf, resources_dir)
 
     archive_path.unlink()
 

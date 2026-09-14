@@ -19,6 +19,7 @@ interface UseRegistrationFlowProps {
     targetProvider?: string;
     awsBootstrapAccountId?: number;
     launchMode?: string;
+    targetGroupId?: string;
   };
   pipelineStepOverrides?: PipelineStepOverride[];
 }

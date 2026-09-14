@@ -59,6 +59,8 @@ async function parseJson(response: Response): Promise<unknown> {
   }
 }
 
+import { detailToMessage } from '../../errorText';
+
 function makeError(message: string, status: number, detail?: unknown): Error & { status: number } {
   const err = new Error(message) as Error & { status: number; detail?: unknown };
   err.status = status;
@@ -89,7 +91,7 @@ export async function listDistCodes(unusedOnly?: boolean): Promise<DistCodeInfo[
 
   if (!response.ok) {
     const detail = data && !Array.isArray(data) ? data.detail : undefined;
-    throw makeError(detail ?? 'Failed to list codes', response.status, detail);
+    throw makeError(detailToMessage(detail, 'Failed to list codes'), response.status, detail);
   }
 
   if (!data || !Array.isArray(data.codes)) return [];
@@ -112,7 +114,7 @@ export async function issueDistCode(params: DistIssueParams): Promise<DistIssueR
 
   if (!response.ok) {
     const detail = data && !Array.isArray(data) ? data.detail : undefined;
-    throw makeError(detail ?? 'Failed to issue code', response.status, detail);
+    throw makeError(detailToMessage(detail, 'Failed to issue code'), response.status, detail);
   }
 
   if (!data?.codes) {
@@ -141,7 +143,7 @@ export async function revokeDistCode(codeId: number): Promise<DistRevokeResult> 
 
   if (!response.ok) {
     const detail = data && !Array.isArray(data) ? data.detail : undefined;
-    throw makeError(detail ?? 'Failed to revoke code', response.status, detail);
+    throw makeError(detailToMessage(detail, 'Failed to revoke code'), response.status, detail);
   }
 
   return {

@@ -16,6 +16,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 
 export default function WelcomeGate() {
   const hasUsers = useAuthStore(state => state.hasUsers);
@@ -25,7 +26,7 @@ export default function WelcomeGate() {
   void language; // re-render on language change
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0a0d]">
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden" style={{ background: '#0a0a0d' }}>
       {/* Ambient gradient mesh — Deep Space atmosphere */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -66,7 +67,7 @@ export default function WelcomeGate() {
             </p>
 
             {/* Primary: login via Telegram */}
-            <button
+            <ButtonBase
               type="button"
               onClick={() => setAuthView('telegram')}
               data-testid="guest-telegram-btn"
@@ -79,11 +80,11 @@ export default function WelcomeGate() {
             >
               <Send className="w-4 h-4" />
               {t('auth.login.tgLink')}
-            </button>
+            </ButtonBase>
 
             {/* Secondary: password login (always visible) */}
             <div className="mt-3">
-              <button
+              <ButtonBase
                 type="button"
                 onClick={() => setAuthView('login')}
                 data-testid="guest-login-btn"
@@ -96,23 +97,23 @@ export default function WelcomeGate() {
               >
                 <LogIn className="w-4 h-4" />
                 {t('auth.guest.loginPassword')}
-              </button>
+              </ButtonBase>
 
               {/* Hint link: create a local account when none exist */}
               {!hasUsers && (
-                <button
+                <ButtonBase
                   type="button"
                   onClick={() => setAuthView('setup')}
                   data-testid="guest-no-account-hint"
                   className="w-full mt-2 text-xs text-slate-500 hover:text-slate-300 transition-colors"
                 >
                   {t('auth.guest.noAccountHint')}
-                </button>
+                </ButtonBase>
               )}
             </div>
 
             {/* Tertiary: continue without login (guest) */}
-            <button
+            <ButtonBase
               type="button"
               onClick={enterAsGuest}
               data-testid="guest-continue-btn"
@@ -125,7 +126,7 @@ export default function WelcomeGate() {
             >
               {t('auth.guest.continue')}
               <ArrowRight className="w-4 h-4" />
-            </button>
+            </ButtonBase>
           </div>
         </div>
       </div>

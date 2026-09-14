@@ -52,6 +52,7 @@ export interface RegistrationOptions {
     targetProvider?: string;
     awsBootstrapAccountId?: number;
     launchMode?: string;
+    targetGroupId?: string;
   };
   pipelineStepOverrides?: PipelineStepOverride[];
   onLog: (level: LogLevel, message: string) => void;
@@ -978,6 +979,7 @@ async function runProviderRegistration(params: {
         ? 'kiro_oauth_only_existing_session'
         : null),
     awsBootstrapAccountId: launchContext?.awsBootstrapAccountId ?? null,
+    targetGroupId: launchContext?.targetGroupId ?? null,
     addyioEnabled: config.imap.addyioEnabled ?? null,
     addyioApiToken: config.imap.addyioApiToken ?? null,
     addyioDomain: config.imap.addyioDomain ?? null,
@@ -997,6 +999,7 @@ async function runProviderRegistration(params: {
     launchProfileAlias?: string | null;
     launchMode?: string | null;
     awsBootstrapAccountId?: number | null;
+    targetGroupId?: string | null;
   };
 
   const startResponse = await startPythonAutoregJob(pythonConfig);

@@ -25,6 +25,7 @@ from typing import Any
 
 import httpx
 
+from autoreg.plugin.install import safe_extract_zip
 from autoreg.plugin.manifest import validate_manifest
 
 from .config import data_dir
@@ -150,8 +151,8 @@ async def install_community(
         try:
             try:
                 with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
-                    zf.extractall(tmp_dir)
-            except (zipfile.BadZipFile, OSError) as exc:
+                    safe_extract_zip(zf, tmp_dir)
+            except (zipfile.BadZipFile, OSError, ValueError) as exc:
                 return {"success": False, "error": f"zip extract failed: {exc}"}
 
             top = _find_repo_root(tmp_dir)

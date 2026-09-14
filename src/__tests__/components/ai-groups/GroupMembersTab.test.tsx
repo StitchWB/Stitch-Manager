@@ -229,7 +229,7 @@ describe('GroupMembersTab — transfer ownership', () => {
   it('does not show transfer item for self (owner row)', () => {
     storeState.detail = makeDetail();
 
-    const { container } = render(
+    const { container: _container } = render(
       <GroupMembersTab groupId="g-1" isOwner={true} currentUserId="1" />,
     );
 

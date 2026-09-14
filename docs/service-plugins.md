@@ -572,8 +572,13 @@ return 504.
 The dev loop uses `plugins-local/` — a directory of unsigned packages
 that the host discovers when `STITCH_DEV_MODE=1`.
 
-The in-repo reference plugins (`plugins-src/`) commit their
-`_vendor/rpc_server.py`, so a bare clone runs them standalone
+The official service plugins live in their own **public repos**
+(`StitchWB/stitch-cards`, `stitch-mail`, `stitch-notebooklm`,
+`stitch-opencode`, `stitch-radar`, `stitch-sheets`, `stitch-totp`) — that is
+their source of truth and where external PRs land. The hub keeps a mirror in
+`plugins-src/`, refreshed one-way (public → hub) by
+`scripts/sync_service_plugins.py` / `sync-service-plugins.yml`. Each plugin
+commits its `_vendor/rpc_server.py`, so a bare clone runs it standalone
 (`python -m <module>` from the plugin dir) without `pip install -e`.
 `dev-install` and the `vendor` command refresh `_vendor/` from the
 canonical `autoreg/plugin/rpc.py` on demand, and discovery warns when a
@@ -1023,13 +1028,15 @@ offline; the public key ships with the app.
 
 ## 10. Worked Example: `stitch-notebooklm`
 
-The `plugins-src/stitch-notebooklm/` package in this repo is a
-complete service plugin that demonstrates the full contract.
+The `stitch-notebooklm` service plugin (source of truth:
+`StitchWB/stitch-notebooklm`, mirrored to `plugins-src/stitch-notebooklm/`
+in this hub) is a complete service plugin that demonstrates the full
+contract.
 
 ### Layout
 
 ```
-plugins-src/stitch-notebooklm/
+plugins-src/stitch-notebooklm/          # hub mirror of StitchWB/stitch-notebooklm
 ├── plugin.json                              # v2 manifest (kind=service)
 └── stitch_notebooklm/
     ├── __init__.py

@@ -4,6 +4,7 @@
 
 import { BackendError } from './types';
 import { getApiBaseUrl } from './url';
+import { demoInvoke, isDemoBackend } from './demoBackend';
 
 export const API_BASE_URL = getApiBaseUrl();
 
@@ -154,6 +155,10 @@ export async function safeInvoke<T>(
   opts?: { noCache?: boolean; _suppressAuthExpired?: boolean },
 ): Promise<T> {
   const key = getRequestKey(command, args);
+
+  if (isDemoBackend()) {
+    return demoInvoke(command) as Promise<T>;
+  }
 
   // noCache: secrets must not linger in the renderer response cache
   // (security review: expired entries were never evicted from the Map).

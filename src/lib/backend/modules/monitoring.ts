@@ -88,6 +88,8 @@ async function parseJson(response: Response): Promise<unknown> {
   }
 }
 
+import { detailToMessage } from '../../errorText';
+
 function makeError(message: string, status: number, detail?: unknown): Error & { status: number } {
   const err = new Error(message) as Error & { status: number; detail?: unknown };
   err.status = status;
@@ -114,7 +116,7 @@ export async function getMonitoring(): Promise<MonitoringSnapshot> {
 
   if (!response.ok) {
     const detail = data && !Array.isArray(data) && 'detail' in data ? data.detail : undefined;
-    throw makeError(detail ?? 'Failed to load monitoring snapshot', response.status, detail);
+    throw makeError(detailToMessage(detail, 'Failed to load monitoring snapshot'), response.status, detail);
   }
 
   if (!data || !('server' in data)) {

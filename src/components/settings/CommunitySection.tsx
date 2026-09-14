@@ -13,7 +13,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge, Button, EmptyState, SectionHeader, Toggle } from '@/components/ui';
+import { Badge, Button, EmptyState, Input, SectionHeader, Toggle } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import { getSettings, updateSettings } from '@/lib/backend/modules/settings';
@@ -23,7 +23,10 @@ import {
   uninstallCommunityPlugin,
   listInstalledCommunity,
   listLocalPackages,
+  installLocalPlugin,
+  uninstallLocalPlugin,
   type CommunityCatalogPlugin,
+  type InstallLocalPluginResult,
   type InstalledCommunityPackage,
   type LocalPackage,
 } from '@/lib/backend/modules/community';
@@ -61,6 +64,11 @@ export function CommunitySection() {
   const [overrideActionPluginId, setOverrideActionPluginId] = useState<string | null>(null);
   const [submitPackageId, setSubmitPackageId] = useState<string | null>(null);
   const [submitOverridePluginId, setSubmitOverridePluginId] = useState<string | null>(null);
+  const [manualPath, setManualPath] = useState('');
+  const [manualPathError, setManualPathError] = useState<string | null>(null);
+  const [isInstallingLocal, setIsInstallingLocal] = useState(false);
+  const [manualResult, setManualResult] = useState<InstallLocalPluginResult | null>(null);
+  const [localActionId, setLocalActionId] = useState<string | null>(null);
 
   const loadConsent = useCallback(async () => {
     try {
@@ -213,6 +221,57 @@ export function CommunitySection() {
       );
     } finally {
       setActionPluginId(null);
+    }
+  };
+
+  // ── Manual install handlers (ADR-006, channels B1/B2) ───────────────
+
+  const handleInstallLocal = async () => {
+    const path = manualPath.trim();
+    if (!path) {
+      setManualPathError(t('settings.community.manualInstallPathRequired'));
+      return;
+    }
+    setManualPathError(null);
+    setIsInstallingLocal(true);
+    setManualResult(null);
+    try {
+      const result = await installLocalPlugin({ path });
+      if (result.success) {
+        setManualResult(result);
+        setManualPath('');
+        toast.success(t('settings.community.manualInstallSuccess'));
+        await Promise.all([loadLocalPackages(), loadInstalled()]);
+      } else if ((result.error || '').includes('requires dev mode')) {
+        toast.error(t('settings.community.manualInstallDevModeRequired'));
+      } else {
+        toast.error(result.error || t('settings.community.manualInstallFailed'));
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t('settings.community.manualInstallFailed'),
+      );
+    } finally {
+      setIsInstallingLocal(false);
+    }
+  };
+
+  const handleUninstallLocal = async (pkg: LocalPackage) => {
+    setLocalActionId(pkg.id);
+    try {
+      const result = await uninstallLocalPlugin({ id: pkg.id });
+      if (result.success) {
+        toast.success(t('settings.community.uninstallSuccess'));
+        await loadLocalPackages();
+      } else {
+        toast.error(result.error || t('settings.community.uninstallFailed'));
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t('settings.community.uninstallFailed'),
+      );
+    } finally {
+      setLocalActionId(null);
     }
   };
 
@@ -428,6 +487,79 @@ export function CommunitySection() {
           )}
         </div>
 
+        {/* Manual install from file */}
+        <div className="space-y-2">
+          <div>
+            <h4 className="text-sm font-medium text-slate-200">
+              {t('settings.community.manualInstallTitle')}
+            </h4>
+            <p className="text-xs text-slate-500">
+              {t('settings.community.manualInstallDescription')}
+            </p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <Input
+                containerClassName="flex-1"
+                placeholder={t('settings.community.manualInstallPlaceholder')}
+                value={manualPath}
+                onChange={e => {
+                  setManualPath(e.target.value);
+                  if (manualPathError) setManualPathError(null);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') void handleInstallLocal();
+                }}
+                error={manualPathError ?? undefined}
+                leftIcon={<FolderOpen className="w-3.5 h-3.5" />}
+                disabled={isInstallingLocal}
+                spellCheck={false}
+              />
+              <Button
+                size="sm"
+                variant="primary"
+                className="shrink-0"
+                onClick={() => void handleInstallLocal()}
+                isLoading={isInstallingLocal}
+                disabled={isInstallingLocal}
+                leftIcon={<Package className="w-3.5 h-3.5" />}
+              >
+                {isInstallingLocal
+                  ? t('settings.community.installing')
+                  : t('settings.community.manualInstallButton')}
+              </Button>
+            </div>
+            {manualResult?.success && (
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-xs text-emerald-300 font-medium">
+                    {t('settings.community.manualInstallSuccess')}
+                  </span>
+                  <span className="text-xs text-slate-300 font-mono">
+                    {manualResult.id}@{manualResult.version}
+                  </span>
+                  {manualResult.trust === 'official' && (
+                    <Badge variant="success" size="sm" withDot>
+                      {t('settings.community.trustOfficialBadge')}
+                    </Badge>
+                  )}
+                  {manualResult.trust === 'local' && (
+                    <Badge variant="warning" size="sm" withDot>
+                      {t('settings.community.trustLocalBadge')}
+                    </Badge>
+                  )}
+                </div>
+                {manualResult.path && (
+                  <p className="text-xs text-slate-500 font-mono truncate">
+                    {t('settings.community.pathLabel')}: {manualResult.path}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Author cabinet */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -470,6 +602,9 @@ export function CommunitySection() {
                       <span className="text-xs text-slate-500 font-mono">
                         {pkg.version}
                       </span>
+                      <Badge variant="warning" size="sm">
+                        {t('settings.community.trustLocalBadge')}
+                      </Badge>
                     </div>
                     {pkg.services.length > 0 && (
                       <div className="mt-1 flex items-center gap-1 flex-wrap">
@@ -486,14 +621,26 @@ export function CommunitySection() {
                       </p>
                     )}
                   </div>
-                  <Button
-                    size="xs"
-                    variant="primary"
-                    onClick={() => setSubmitPackageId(pkg.id)}
-                    leftIcon={<GitPullRequest className="w-3 h-3" />}
-                  >
-                    {t('settings.community.submitForReview')}
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="xs"
+                      variant="danger"
+                      onClick={() => void handleUninstallLocal(pkg)}
+                      isLoading={localActionId === pkg.id}
+                      disabled={localActionId !== null}
+                    >
+                      {t('settings.community.uninstall')}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="primary"
+                      onClick={() => setSubmitPackageId(pkg.id)}
+                      disabled={localActionId !== null}
+                      leftIcon={<GitPullRequest className="w-3 h-3" />}
+                    >
+                      {t('settings.community.submitForReview')}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

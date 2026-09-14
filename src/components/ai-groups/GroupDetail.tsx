@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pencil, LogOut, Trash2, ChevronLeft } from 'lucide-react';
+import { Pencil, LogOut, Trash2, ChevronLeft, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   PageHeader,
@@ -18,6 +18,8 @@ import { GroupPoolTab } from './GroupPoolTab';
 import { GroupMembersTab } from './GroupMembersTab';
 import { GroupSettingsTab } from './GroupSettingsTab';
 import { GroupUsageTab } from './GroupUsageTab';
+import { GroupQuotasTab } from './GroupQuotasTab';
+import { GroupAccountsTab } from './GroupAccountsTab';
 
 interface GroupDetailProps {
   groupId: string;
@@ -27,7 +29,7 @@ interface GroupDetailProps {
   onLeft: () => void;
 }
 
-type DetailTab = 'pool' | 'members' | 'usage' | 'settings';
+type DetailTab = 'pool' | 'members' | 'accounts' | 'usage' | 'quotas' | 'settings';
 
 /**
  * Right pane of the Groups master-detail. Renders a PageHeader with an
@@ -212,11 +214,26 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
           label={t('ai.groups.members.title')}
         />
         <TabButton
+          active={tab === 'accounts'}
+          onClick={() => setTab('accounts')}
+          appearance="section"
+          size="sm"
+          icon={<Users size={14} />}
+          label={t('ai.groups.tabAccounts')}
+        />
+        <TabButton
           active={tab === 'usage'}
           onClick={() => setTab('usage')}
           appearance="section"
           size="sm"
           label={t('ai.groups.usage.title')}
+        />
+        <TabButton
+          active={tab === 'quotas'}
+          onClick={() => setTab('quotas')}
+          appearance="section"
+          size="sm"
+          label={t('ai.groups.quotas.title')}
         />
         <TabButton
           active={tab === 'settings'}
@@ -238,8 +255,14 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
             onLeft={onLeft}
           />
         )}
+        {tab === 'accounts' && (
+          <GroupAccountsTab groupId={groupId} />
+        )}
         {tab === 'usage' && (
           <GroupUsageTab groupId={groupId} isOwner={isOwner} />
+        )}
+        {tab === 'quotas' && (
+          <GroupQuotasTab groupId={groupId} isOwner={isOwner} />
         )}
         {tab === 'settings' && (
           <GroupSettingsTab

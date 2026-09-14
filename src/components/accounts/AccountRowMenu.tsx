@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff, KeyRound, Link, RotateCcw } from 'lucide-react';
+import { RefreshCw, Globe, Square, Play, User, Check, X, Copy, Info, Trash2, Zap, ZapOff, KeyRound, Link, RotateCcw, Share2 } from 'lucide-react';
 import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
@@ -38,6 +38,8 @@ interface AccountRowMenuProps {
   onConfirmProfileSession?: (accountId: number) => Promise<void>;
   onClearProfileSession?: (accountId: number) => Promise<void>;
   onAuthorizeKiroAccount?: (accountId: number) => Promise<void>;
+  onShareToGroup?: () => void;
+  canShareToGroup?: boolean;
   onCopyToken: (token: string) => Promise<void>;
   onCopyRefUrl?: (refUrl: string) => Promise<void>;
   onRefreshRefUrl?: (accountId: number) => Promise<void>;
@@ -64,6 +66,8 @@ export function AccountRowMenu({
   onConfirmProfileSession,
   onClearProfileSession,
   onAuthorizeKiroAccount,
+  onShareToGroup,
+  canShareToGroup,
   onCopyToken,
   onCopyRefUrl,
   onRefreshRefUrl,
@@ -201,6 +205,20 @@ export function AccountRowMenu({
         >
           <Copy size={12} />
           {t('accounts.copyToken')}
+        </ButtonBase>
+      ) : null}
+
+      {onShareToGroup && canShareToGroup ? (
+        <ButtonBase
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-slate-200 hover:bg-white/5"
+          onClick={() => {
+            onShareToGroup();
+            onCloseMenu();
+          }}
+        >
+          <Share2 size={12} className="text-indigo-400" />
+          {t('ownership.shareGroup')}
         </ButtonBase>
       ) : null}
 

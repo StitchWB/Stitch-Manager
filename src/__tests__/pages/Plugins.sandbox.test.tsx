@@ -23,6 +23,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import Plugins from '../../pages/Plugins';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { _resetForTests } from '@/lib/backend/modules/servicePlugins';
@@ -79,7 +80,7 @@ jest.mock('../../components/ui/ConfirmDialogHost', () => ({
 
 // Simplified UI primitives for reliable test interaction.
 jest.mock('../../components/ui/Input', () => ({
-  Input: ({ label, error, hint, containerClassName, shellClassName, leftIcon, rightElement, prefixText, suffixText, ...props }: any) => (
+  Input: ({ label, _error, _hint, _containerClassName, _shellClassName, _leftIcon, _rightElement, _prefixText, _suffixText, ...props }: any) => (
     <div>
       {label && <label>{label}</label>}
       <input {...props} />
@@ -97,7 +98,7 @@ jest.mock('../../components/ui/Toggle', () => ({
 }));
 
 jest.mock('../../components/ui/Textarea', () => ({
-  Textarea: ({ label, error, hint, containerClassName, shellClassName, ...props }: any) => (
+  Textarea: ({ label, _error, _hint, _containerClassName, _shellClassName, ...props }: any) => (
     <div>
       {label && <label>{label}</label>}
       <textarea {...props} />
@@ -253,7 +254,7 @@ describe('Plugins page — developer sandbox', () => {
       expect(sandboxListCalls).toBeGreaterThan(initialCalls);
     });
     await waitFor(() => {
-      expect((require('sonner') as { toast: { success: jest.Mock } }).toast.success)
+      expect(toast.success as jest.Mock)
         .toHaveBeenCalledWith('admin.plugins.sandbox.install.success');
     });
   });

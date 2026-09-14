@@ -47,9 +47,17 @@ const DESKTOP_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
  * file:// load or the Vite dev server on localhost/127.0.0.1. Returns false
  * on the public web app (e.g. https://stitch.whitebite.ru). Used to gate
  * desktop-only features (IDE patcher, marketplace install/uninstall).
+ *
+ * QA override: `?platform=web` forces web mode and `?platform=desktop`
+ * forces desktop mode regardless of host. Lets the web-only surfaces be
+ * exercised from localhost during development. Default detection is
+ * unchanged when the param is absent.
  */
 export function isDesktopApp(): boolean {
   if (typeof window === 'undefined') return false;
+  const platformOverride = new URLSearchParams(window.location.search).get('platform');
+  if (platformOverride === 'web') return false;
+  if (platformOverride === 'desktop') return true;
   const { protocol, hostname } = window.location;
   return protocol === FILE_PROTOCOL || DESKTOP_HOSTNAMES.has(hostname);
 }

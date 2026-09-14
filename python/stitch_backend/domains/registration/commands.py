@@ -101,7 +101,8 @@ async def cmd_auto_register(params: dict) -> dict:
         return {"error": f"Unknown provider: {provider}"}
     config = {"email": email, "password": password, "headless": True,
               "owner_id": params.get("_caller_user_id"),
-              "_caller_role": params.get("_caller_role")}
+              "_caller_role": params.get("_caller_role"),
+              "group_id": params.get("groupId") or params.get("group_id")}
     job_id = await registration_service.submit(provider, config)
     return {"jobId": job_id, "success": True}
 
@@ -191,6 +192,9 @@ async def _start_autoreg_job(provider: str, params: dict) -> dict:
     # entitlement gate (FIX 1 P0).
     config["owner_id"] = params.get("_caller_user_id")
     config["_caller_role"] = params.get("_caller_role")
+    # Thread optional groupId for auto-share after successful registration.
+    # Normalized to snake_case group_id so _run() can read it uniformly.
+    config["group_id"] = params.get("groupId") or params.get("group_id")
 
     job_id = await registration_service.submit(provider, config)
     return {"jobId": job_id}
@@ -477,6 +481,8 @@ async def cmd_start_registration_v2(params: dict) -> dict:
     # entitlement gate (FIX 1 P0).
     req = {**req, "owner_id": params.get("_caller_user_id")}
     req = {**req, "_caller_role": params.get("_caller_role")}
+    # Thread optional groupId for auto-share after successful registration.
+    req = {**req, "group_id": params.get("groupId") or params.get("group_id")}
     job_id = await registration_service.submit("kiro_v2", req)
     return {"success": True, "jobId": job_id, "email": req.get("email", "")}
 

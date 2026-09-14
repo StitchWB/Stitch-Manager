@@ -255,6 +255,7 @@ function TableNode({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
     setLoading(true);
     setError(null);
     invokeAction<Record<string, unknown> | Record<string, unknown>[]>(
@@ -487,6 +488,7 @@ function CardGridNode({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
     setLoading(true);
     setError(null);
     invokeAction<Record<string, unknown> | Record<string, unknown>[]>(
@@ -641,6 +643,7 @@ function MarkdownNode({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
     setLoading(true);
     setError(null);
     setText(null);
@@ -734,6 +737,7 @@ export function PluginPageHost() {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
     setLoading(true);
     setNotInstalled(false);
     safeInvoke<ServicePluginInfo[]>('list_service_plugins')

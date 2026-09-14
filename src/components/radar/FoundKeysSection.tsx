@@ -2,8 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Copy, KeyRound, RefreshCw } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Button } from '@/components/ui/Button';
+import { ButtonBase } from '@/components/ui/ButtonBase';
 import { IconButton } from '@/components/ui/IconButton';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/Table';
 import { t } from '@/lib/i18n';
 import {
   getFoundKeys,
@@ -36,7 +45,6 @@ export function FoundKeysSection() {
   const locked =
     authEnabled &&
     (!authUser || (ROLE_LEVEL[effectiveRole(authUser) ?? 'user'] ?? 0) < ROLE_LEVEL.vip);
-  if (locked) return null;
 
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<FoundKey[]>([]);
@@ -63,10 +71,16 @@ export function FoundKeysSection() {
   // Error in the guard: a failed load must not re-fire the effect in an
   // infinite loop (review CRITICAL: no-token default state hammered backend).
   useEffect(() => {
-    if (open && items.length === 0 && !loading && !error) void load();
-  }, [open, items.length, loading, error, load]);
+    if (locked) return;
+    if (open && items.length === 0 && !loading && !error) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount; loading flag set synchronously for immediate spinner
+      void load();
+    }
+  }, [open, items.length, loading, error, load, locked]);
 
   useEffect(() => () => window.clearTimeout(copyTimer.current), []);
+
+  if (locked) return null;
 
   const handleCopy = async (k: FoundKey) => {
     setBusyId(k.id);
@@ -95,7 +109,7 @@ export function FoundKeysSection() {
   return (
     <div className="px-4 pt-3">
       <GlassCard className="p-3">
-        <button
+        <ButtonBase
           type="button"
           className="w-full flex items-center gap-2"
           onClick={() => setOpen(o => !o)}
@@ -123,7 +137,7 @@ export function FoundKeysSection() {
             )}
             {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </span>
-        </button>
+        </ButtonBase>
 
         {open && (
           loading ? (
@@ -135,32 +149,32 @@ export function FoundKeysSection() {
           ) : items.length === 0 ? (
             <p className="text-2xs text-slate-500 pt-2">{t('foundKeys.empty')}</p>
           ) : (
-            <table className="w-full pt-2">
-              <thead>
-                <tr className="text-left text-2xs text-slate-500">
-                  <th className="pb-1 pr-2 font-normal">{t('foundKeys.provider')}</th>
-                  <th className="pb-1 pr-2 font-normal">{t('foundKeys.key')}</th>
-                  <th className="pb-1 pr-2 font-normal">{t('foundKeys.status')}</th>
-                  <th className="pb-1 pr-2 font-normal">{t('foundKeys.source')}</th>
-                  <th className="pb-1 pr-2 font-normal">{t('foundKeys.firstSeen')}</th>
-                  <th className="pb-1" />
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full pt-2">
+              <TableHeader className="bg-transparent">
+                <TableRow className="text-left text-2xs text-slate-500 border-b-0 hover:bg-transparent">
+                  <TableHead className="pb-1 pr-2 font-normal">{t('foundKeys.provider')}</TableHead>
+                  <TableHead className="pb-1 pr-2 font-normal">{t('foundKeys.key')}</TableHead>
+                  <TableHead className="pb-1 pr-2 font-normal">{t('foundKeys.status')}</TableHead>
+                  <TableHead className="pb-1 pr-2 font-normal">{t('foundKeys.source')}</TableHead>
+                  <TableHead className="pb-1 pr-2 font-normal">{t('foundKeys.firstSeen')}</TableHead>
+                  <TableHead className="pb-1" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {items.map(k => (
-                  <tr key={k.id} className="border-t border-white/[0.04]">
-                    <td className="py-1.5 pr-2 text-2xs text-slate-300">{k.provider}</td>
-                    <td className="py-1.5 pr-2 font-mono text-2xs text-slate-400">
+                  <TableRow key={k.id} className="border-t border-white/[0.04] border-b-0 hover:bg-transparent">
+                    <TableCell className="py-1.5 pr-2 pl-0 text-2xs text-slate-300">{k.provider}</TableCell>
+                    <TableCell className="py-1.5 pr-2 pl-0 font-mono text-2xs text-slate-400">
                       {k.key_masked}
-                    </td>
-                    <td className="py-1.5 pr-2 text-2xs text-slate-500">{k.status}</td>
-                    <td className="py-1.5 pr-2 text-2xs text-slate-500">
+                    </TableCell>
+                    <TableCell className="py-1.5 pr-2 pl-0 text-2xs text-slate-500">{k.status}</TableCell>
+                    <TableCell className="py-1.5 pr-2 pl-0 text-2xs text-slate-500">
                       {k.source_platform ?? '—'}
-                    </td>
-                    <td className="py-1.5 pr-2 text-2xs text-slate-500">
+                    </TableCell>
+                    <TableCell className="py-1.5 pr-2 pl-0 text-2xs text-slate-500">
                       {(k.first_seen_at || '').slice(0, 10)}
-                    </td>
-                    <td className="py-1.5 text-right">
+                    </TableCell>
+                    <TableCell className="py-1.5 pl-0 text-right">
                       <Button
                         size="sm"
                         variant="ghost"
@@ -172,11 +186,11 @@ export function FoundKeysSection() {
                           {copiedId === k.id ? t('foundKeys.copied') : t('foundKeys.copy')}
                         </span>
                       </Button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )
         )}
 

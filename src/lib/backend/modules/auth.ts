@@ -13,6 +13,7 @@
  */
 
 import { getApiBaseUrl } from '../core/url';
+import { detailToMessage } from '../../errorText';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,11 @@ export interface AuthStatus {
    * the frontend renders the OIDC button only when this is 'oidc'.
    */
   tg_auth_mode: 'legacy' | 'oidc';
+  /**
+   * False when the status endpoint could not be fetched (network failure,
+   * connection refused, etc.). Missing or true means the backend answered.
+   */
+  reachable?: boolean;
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -89,7 +95,7 @@ export async function getAuthStatus(): Promise<AuthStatus> {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
-    if (!response.ok) return { enabled: false, has_users: false, required: false, enforce_login: true, tg_auth_mode: 'legacy' };
+    if (!response.ok) return { enabled: false, has_users: false, required: false, enforce_login: true, tg_auth_mode: 'legacy', reachable: false };
     const data = (await parseJson(response)) as Partial<AuthStatus> | null;
     const enabled = Boolean(data?.enabled);
     const hasUsers = Boolean(data?.has_users);
@@ -105,9 +111,9 @@ export async function getAuthStatus(): Promise<AuthStatus> {
     // so the existing one-time-code surface stays the working path.
     const tgAuthMode =
       data?.tg_auth_mode === 'oidc' ? 'oidc' : 'legacy';
-    return { enabled, has_users: hasUsers, required, enforce_login: enforceLogin, tg_auth_mode: tgAuthMode };
+    return { enabled, has_users: hasUsers, required, enforce_login: enforceLogin, tg_auth_mode: tgAuthMode, reachable: true };
   } catch {
-    return { enabled: false, has_users: false, required: false, enforce_login: true, tg_auth_mode: 'legacy' };
+    return { enabled: false, has_users: false, required: false, enforce_login: true, tg_auth_mode: 'legacy', reachable: false };
   }
 }
 
@@ -126,7 +132,7 @@ export async function loginUser(username: string, password: string): Promise<Aut
   const data = (await parseJson(response)) as { user?: AuthUser; detail?: string } | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Login failed') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Login failed')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -202,7 +208,7 @@ export async function setPreviewRole(role: string | null): Promise<void> {
   const data = (await parseJson(response)) as { success?: boolean; detail?: string } | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Failed to set preview role') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Failed to set preview role')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -224,7 +230,7 @@ export async function setupUser(username: string, password: string): Promise<Aut
   const data = (await parseJson(response)) as { user?: AuthUser; detail?: string } | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Setup failed') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Setup failed')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -253,7 +259,7 @@ export async function listUsers(): Promise<AuthUser[]> {
 
   if (!response.ok) {
     const detail = Array.isArray(data) ? 'Failed to list users' : (data as { detail?: string })?.detail;
-    const err = new Error(detail ?? 'Failed to list users') as Error & { status: number };
+    const err = new Error(detailToMessage(detail, 'Failed to list users')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -282,7 +288,7 @@ export async function createUser(username: string, password: string, role: AuthU
   const data = (await parseJson(response)) as { user?: AuthUser; detail?: string } | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Failed to create user') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Failed to create user')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -311,7 +317,7 @@ export async function updateUserRole(id: string | number, role: string): Promise
   const data = (await parseJson(response)) as { user?: AuthUser; detail?: string } | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Failed to update role') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Failed to update role')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -338,7 +344,7 @@ export async function deleteUser(id: string | number): Promise<void> {
 
   if (!response.ok) {
     const data = (await parseJson(response)) as { detail?: string } | null;
-    const err = new Error(data?.detail ?? 'Failed to delete user') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Failed to delete user')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -360,7 +366,7 @@ export async function setLoginPolicy(enforceLogin: boolean): Promise<boolean> {
   const data = (await parseJson(response)) as { enforce_login?: boolean; detail?: string } | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Failed to update login policy') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Failed to update login policy')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -431,7 +437,7 @@ export async function getPermissionsMatrix(): Promise<{
     | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Failed to load permissions matrix') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Failed to load permissions matrix')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -459,7 +465,7 @@ export async function setPermission(role: string, key: string, allowed: boolean)
   const data = (await parseJson(response)) as { detail?: string } | null;
 
   if (!response.ok) {
-    const err = new Error(data?.detail ?? 'Failed to update permission') as Error & { status: number };
+    const err = new Error(detailToMessage(data?.detail, 'Failed to update permission')) as Error & { status: number };
     err.status = response.status;
     throw err;
   }
@@ -485,7 +491,7 @@ export async function loginTelegram(code: string): Promise<TelegramLoginResult> 
     | null;
 
   if (!response.ok) {
-    throw new Error(data?.detail ?? data?.error ?? 'Telegram login failed');
+    throw new Error(detailToMessage(data?.detail, detailToMessage(data?.error, 'Telegram login failed')));
   }
   return (data ?? { success: false }) as TelegramLoginResult;
 }
@@ -517,7 +523,9 @@ export async function loginTelegramOidc(idToken: string): Promise<TelegramLoginR
     | null;
 
   if (!response.ok) {
-    throw new Error(data?.detail ?? data?.error ?? 'Telegram OIDC login failed');
+    throw new Error(
+      detailToMessage(data?.detail, detailToMessage(data?.error, 'Telegram OIDC login failed')),
+    );
   }
   return (data ?? { success: false }) as TelegramLoginResult;
 }

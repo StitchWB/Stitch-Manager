@@ -910,6 +910,59 @@ class RegistrationService:
                         f"[db] Account saved: id={account_id} email={reg_email}"
                     )
 
+                    # ── Auto-share to group if groupId was provided ──────
+                    # After a successful registration + account save, if
+                    # the caller passed a groupId AND is a member of that
+                    # group, insert a group_shares row
+                    # (resource_type='account', shared_by=caller).  Silent
+                    # no-op when groupId is absent or the caller is not a
+                    # member.  Non-fatal on failure — the account is
+                    # already saved.
+                    _group_id = config.get("group_id") or config.get("groupId")
+                    if _group_id and account_id:
+                        try:
+                            from stitch_backend.domains.groups.service import (
+                                is_member as _is_group_member,
+                            )
+                            from stitch_backend.domains.groups.service import (
+                                share_resource as _share_resource,
+                            )
+
+                            _caller_uid = (
+                                config.get("owner_id")
+                                or config.get("_caller_user_id")
+                            )
+
+                            async def _auto_share(session):
+                                if await _is_group_member(
+                                    session, _group_id, _caller_uid
+                                ):
+                                    await _share_resource(
+                                        session,
+                                        group_id=_group_id,
+                                        resource_type="account",
+                                        resource_id=str(account_id),
+                                        shared_by=_caller_uid,
+                                    )
+                                    return True
+                                return False
+
+                            _shared = await run_in_session(_auto_share)
+                            if _shared:
+                                log_callback(
+                                    f"[db] Account auto-shared to group {_group_id}"
+                                )
+                            else:
+                                log_callback(
+                                    f"[db] Group auto-share skipped: "
+                                    f"caller is not a member of group {_group_id}"
+                                )
+                        except Exception as _share_exc:
+                            log_callback(
+                                f"[db] Group auto-share failed (non-fatal): "
+                                f"{_share_exc}"
+                            )
+
                     # Link TOTP key to the account if MFA was registered
                     totp_key_id = result.get("totp_key_id")
                     if totp_key_id and account_id:

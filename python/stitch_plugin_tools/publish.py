@@ -201,8 +201,13 @@ def _find_flat_i18n_keys(i18n: dict) -> list[str]:
     return flat
 
 
-def dev_install(package_dir: Path) -> Path:
+def dev_install(package_dir: Path, *, link: bool = False) -> Path:
     """Copy a package into ``plugins-local/{id}/`` (dev loop, no server).
+
+    With ``link=True`` no copy is made: the destination holds only a
+    ``.stitch-link`` pointer file with the absolute path of ``package_dir``,
+    so edits in the working copy are live without re-install.  Vendor refresh
+    is skipped in link mode — the working copy belongs to the author.
 
     Overwrites any existing copy of the same plugin id.  Returns the
     destination path.  Excludes ``__pycache__``, ``*.pyc``, ``*.db``, and
@@ -218,6 +223,8 @@ def dev_install(package_dir: Path) -> Path:
     dot-paths through nested objects, so flat keys silently never resolve.
     Catching this at dev-install time saves a confusing runtime failure.
     """
+    from autoreg.plugin.layout import LINK_FILENAME
+
     manifest = crypto.read_manifest(package_dir)
 
     # i18n flat-key check — catch the silent walkBundle resolution failure
@@ -234,8 +241,18 @@ def dev_install(package_dir: Path) -> Path:
 
     dest = plugins_local_dir() / manifest.id
     if dest.exists():
+        # A link dest contains only the pointer file; a copy dest is a full
+        # package tree.  Both are safe to rmtree: links never hold real files.
         shutil.rmtree(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
+
+    if link:
+        dest.mkdir()
+        (dest / LINK_FILENAME).write_text(
+            str(package_dir.resolve()), encoding="utf-8"
+        )
+        return dest
+
     shutil.copytree(
         package_dir,
         dest,
@@ -244,7 +261,8 @@ def dev_install(package_dir: Path) -> Path:
         ),
     )
 
-    # Refresh _vendor/ from canonical so the dev install is standalone.
+    # Refresh _vendor/ from canonical so the dev install always carries the
+    # current vendored server (idempotent byte-refresh).
     module = manifest.entry.get("module") if manifest.entry else None
     if module and (dest / module).is_dir():
         from stitch_plugin_tools.vendoring import vendor_rpc_server
@@ -373,7 +391,7 @@ def pack_engine(
     if engine_pack_src.is_dir():
         shutil.copytree(
             engine_pack_src, captcha_dst, dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
         )
         # Add aliyun_slider from autoreg/captcha/ (not part of unified pack).
         aliyun_src = captcha_src / "aliyun_slider.py"
@@ -539,7 +557,7 @@ def pack_provider(
     # ── 1. Copy provider implementation ────────────────────────────────
     shutil.copytree(
         provider_src, out_dir, dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
     )
 
     # ── 2. Bundle base.py + common.py if any bundled file imports them ──

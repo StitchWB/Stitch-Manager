@@ -27,6 +27,8 @@ import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
 import { STITCH_BOT_LOGIN_URL } from '@/lib/links';
 import { cn } from '../../lib/utils';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { Input } from '@/components/ui/Input';
 import {
   ensureTelegramLoginScript,
   TG_OIDC_CLIENT_ID,
@@ -51,6 +53,15 @@ export default function TelegramLogin() {
     codeRef.current?.focus();
   }, []);
 
+  // The store re-throws i18n keys as Error messages and legacy payloads can
+  // still stringify to "[object Object]" — always surface readable text.
+  const humanize = (err: unknown, fallbackKey: string): string => {
+    const raw = err instanceof Error && err.message ? err.message : '';
+    if (!raw || raw === '[object Object]') return t(fallbackKey);
+    if (/^[a-z]+(\.[a-z0-9_]+)+$/i.test(raw)) return t(raw);
+    return raw;
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
@@ -61,11 +72,7 @@ export default function TelegramLogin() {
       // On success the store re-runs init() and the gate closes; this
       // component unmounts. No further UI updates needed here.
     } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : t('auth.tg.errorGeneric');
-      setLocalError(message);
+      setLocalError(humanize(err, 'auth.tg.errorGeneric'));
     }
   };
 
@@ -77,6 +84,26 @@ export default function TelegramLogin() {
   // route that renders this surface. Nothing in this repo currently sets
   // COOP — keep it that way, or relax it explicitly in the nginx config
   // for /login and /telegram paths.
+
+  const handleOidcResult = (result: TelegramAuthResult) => {
+    // User closed the popup before completing — not an error, just abort.
+    if (result.error === 'popup_closed') return;
+    if (result.error) {
+      setLocalError(t('auth.tg.oidc.errorGeneric'));
+      return;
+    }
+    if (!result.id_token) {
+      setLocalError(t('auth.tg.oidc.errorGeneric'));
+      return;
+    }
+    // Fire-and-forget: the store sets `busy` while in flight and the
+    // component re-renders with the spinner. Errors are surfaced locally
+    // via the same channel as the code-form errors.
+    void loginTelegramOidc(result.id_token).catch(err => {
+      setLocalError(humanize(err, 'auth.tg.oidc.errorGeneric'));
+    });
+  };
+
   // Load the official script once and register options + callback; the
   // library's own click handler on .tg-auth-button opens the popup
   // (proven pattern from the radar team — data-* auto-init reads the
@@ -107,33 +134,10 @@ export default function TelegramLogin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleOidcResult is stable per render
   }, [tgAuthMode]);
 
-  const handleOidcResult = (result: TelegramAuthResult) => {
-    // User closed the popup before completing — not an error, just abort.
-    if (result.error === 'popup_closed') return;
-    if (result.error) {
-      setLocalError(t('auth.tg.oidc.errorGeneric'));
-      return;
-    }
-    if (!result.id_token) {
-      setLocalError(t('auth.tg.oidc.errorGeneric'));
-      return;
-    }
-    // Fire-and-forget: the store sets `busy` while in flight and the
-    // component re-renders with the spinner. Errors are surfaced locally
-    // via the same channel as the code-form errors.
-    void loginTelegramOidc(result.id_token).catch(err => {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : t('auth.tg.oidc.errorGeneric');
-      setLocalError(message);
-    });
-  };
-
   const errorMessage = localError;
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0a0d]">
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden" style={{ background: '#0a0a0d' }}>
       {/* Ambient gradient mesh — Deep Space atmosphere */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -158,14 +162,14 @@ export default function TelegramLogin() {
 
           <div className="px-8 pt-10 pb-8">
             {/* Back link — 'welcome' when optional, 'login' when required */}
-            <button
+            <ButtonBase
               type="button"
               onClick={() => setAuthView(required ? 'login' : 'welcome')}
               className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors mb-6 -mt-2"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               {t('auth.tg.back')}
-            </button>
+            </ButtonBase>
 
             {/* Logo + title */}
             <div className="flex flex-col items-center text-center mb-8">
@@ -193,7 +197,7 @@ export default function TelegramLogin() {
                 {/* No onClick: the library's document-level handler on
                     .tg-auth-button calls open() with the init() options.
                     disabled={busy} suppresses clicks while in flight. */}
-                <button
+                <ButtonBase
                   type="button"
                   disabled={busy}
                   data-style="shine"
@@ -201,7 +205,7 @@ export default function TelegramLogin() {
                   data-testid="tg-auth-button"
                 >
                   {busy ? t('auth.submitting') : t('auth.tg.oidc.button')}
-                </button>
+                </ButtonBase>
               </div>
             )}
 
@@ -221,6 +225,7 @@ export default function TelegramLogin() {
             )}
 
             {/* Open-bot shortcut — jumps straight to the bot chat */}
+            {/* eslint-disable-next-line react/forbid-elements -- external URL to Telegram bot chat; react-router Link is internal-only */}
             <a
               href={STITCH_BOT_LOGIN_URL}
               target="_blank"
@@ -243,7 +248,7 @@ export default function TelegramLogin() {
                 <label htmlFor="tg-code" className="block text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {t('auth.tg.codePlaceholder')}
                 </label>
-                <input
+                <Input
                   ref={codeRef}
                   id="tg-code"
                   name="code"
@@ -257,7 +262,9 @@ export default function TelegramLogin() {
                   }}
                   placeholder={t('auth.tg.codePlaceholder')}
                   data-testid="telegram-code-input"
-                  className="w-full h-10 px-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-slate-200 placeholder-slate-600 outline-none transition-all duration-200 focus:border-indigo-500/40 focus:bg-white/[0.05] focus:ring-2 focus:ring-indigo-500/20 font-mono tracking-widest"
+                  containerClassName=""
+                  shellClassName="h-10 bg-white/[0.03] border-white/[0.06] focus-within:border-indigo-500/40 focus-within:bg-white/[0.05] focus-within:ring-2 focus-within:ring-indigo-500/20"
+                  className="font-mono tracking-widest"
                 />
               </div>
 
@@ -273,7 +280,7 @@ export default function TelegramLogin() {
               )}
 
               {/* Submit */}
-              <button
+              <ButtonBase
                 type="submit"
                 disabled={busy || !code}
                 data-testid="telegram-submit-btn"
@@ -296,7 +303,7 @@ export default function TelegramLogin() {
                     {t('auth.tg.submit')}
                   </>
                   )}
-              </button>
+              </ButtonBase>
             </form>
           </div>
         </div>

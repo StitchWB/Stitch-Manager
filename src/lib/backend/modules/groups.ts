@@ -94,6 +94,8 @@ export interface GroupsPoolListResponse {
 export interface GroupUsageRow {
   user_id: number;
   username: string;
+  /** Public model id; '' for pre-migration rows. */
+  model?: string;
   day: string;
   requests: number;
   tokens: number;
@@ -187,13 +189,13 @@ export async function groupsUnshareCredential(params: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Usage accounting + quota + ownership transfer
+// Usage accounting + ownership transfer
 //
-// ``groups_usage_list`` returns per-member daily rows for the last 30 days
-// (members see only their own rows; owners see all members' rows) plus
-// the group-wide ``max_per_member_daily`` cap (null=unlimited).
-// ``groups_set_quota`` sets the per-member daily request cap (owner only;
-// null=unlimited) and returns the updated Group.
+// ``groups_usage_list`` returns per-member per-model daily rows for the
+// last 30 days (members see only their own rows; owners see all members'
+// rows).  Quota management lives in the quota-rules API below; the legacy
+// ``groups_set_quota`` command still exists backend-side (evaluated as the
+// lowest-priority member rule) but is intentionally not exposed here.
 // ``groups_transfer_ownership`` transfers ownership to an existing member
 // (owner only) and returns the updated Group.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -202,16 +204,119 @@ export async function groupsUsageList(groupId: string): Promise<GroupsUsageListR
   return safeInvoke('groups_usage_list', { groupId }, { noCache: true });
 }
 
-export async function groupsSetQuota(params: {
-  groupId: string;
-  maxPerMemberDaily: number | null;
-}): Promise<Group> {
-  return safeInvoke('groups_set_quota', params, { noCache: true });
-}
-
 export async function groupsTransferOwnership(params: {
   groupId: string;
   userId: number;
 }): Promise<Group> {
   return safeInvoke('groups_transfer_ownership', params, { noCache: true });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Quota rules (flexible per-member / per-pool caps)
+//
+// ``subject``: 'member' caps each matching member (``user_id`` null = every
+// member), 'pool' caps the whole group's combined usage. ``model``: null =
+// all models, exact id, or 'prefix-*' glob. ``amount``: null = unlimited
+// (overrides broader rules). ``period``: 'daily' | 'total'.
+// ``groups_quota_rule_set`` is a natural-key upsert on
+// (subject, userId, model, unit, period). ``used`` is the current usage
+// counter for progress display (member rule → that member or max across
+// members; pool rule → whole pool).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type GroupQuotaSubject = 'member' | 'pool';
+export type GroupQuotaUnit = 'requests' | 'tokens';
+export type GroupQuotaPeriod = 'daily' | 'total';
+
+export interface GroupQuotaRule {
+  id: string;
+  group_id: string;
+  subject: GroupQuotaSubject;
+  user_id: number | null;
+  model: string | null;
+  unit: GroupQuotaUnit;
+  amount: number | null;
+  period: GroupQuotaPeriod;
+  created_at: string;
+  used: number;
+}
+
+export interface GroupQuotaRulesListResponse {
+  rules: GroupQuotaRule[];
+}
+
+export async function groupsQuotaRulesList(
+  groupId: string,
+): Promise<GroupQuotaRulesListResponse> {
+  return safeInvoke('groups_quota_rules_list', { groupId }, { noCache: true });
+}
+
+export async function groupsQuotaRuleSet(params: {
+  groupId: string;
+  subject: GroupQuotaSubject;
+  userId?: number | null;
+  model?: string | null;
+  unit: GroupQuotaUnit;
+  amount: number | null;
+  period: GroupQuotaPeriod;
+}): Promise<GroupQuotaRule> {
+  return safeInvoke('groups_quota_rule_set', params, { noCache: true });
+}
+
+export async function groupsQuotaRuleDelete(params: {
+  groupId: string;
+  ruleId: string;
+}): Promise<{ success: boolean }> {
+  return safeInvoke('groups_quota_rule_delete', params, { noCache: true });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Account sharing (M:N account ↔ group)
+//
+// ``groups_share_account`` shares an account into a group (idempotent).
+// ``groups_unshare_account`` removes an account from a group (account-owner
+// OR group-owner gated). ``groups_list_accounts`` lists the accounts shared
+// into a group, with per-row action flags (``canRemoveShare`` /
+// ``canDelete``) computed by the backend based on the caller's rights.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface GroupAccountItem {
+  id: number;
+  provider: string;
+  email: string;
+  status: string;
+  quotaUsedPercent: number | null;
+  ownerUsername: string;
+  sharedByUsername: string;
+  canRemoveShare: boolean;
+  canDelete: boolean;
+}
+
+export interface GroupAccountsListResponse {
+  items: GroupAccountItem[];
+}
+
+export async function shareAccount(
+  groupId: string,
+  accountId: number,
+): Promise<{ success: boolean }> {
+  return safeInvoke('groups_share_account', { groupId, accountId }, { noCache: true });
+}
+
+export async function unshareAccount(
+  groupId: string,
+  accountId: number,
+): Promise<{ success: boolean }> {
+  return safeInvoke('groups_unshare_account', { groupId, accountId }, { noCache: true });
+}
+
+export async function listGroupAccounts(groupId: string): Promise<GroupAccountsListResponse> {
+  // The command returns a bare list; normalize to the {items} shape the
+  // UI expects (tolerates either wire format).
+  const res = await safeInvoke<GroupAccountItem[] | GroupAccountsListResponse>(
+    'groups_list_accounts',
+    { groupId },
+    { noCache: true },
+  );
+  return Array.isArray(res) ? { items: res } : res;
 }

@@ -106,6 +106,14 @@ class AccountResponse(BaseModel):
     mine: bool | None = None
     shared: bool | None = None
 
+    # Additive group membership fields — populated by the service layer
+    # via resource_shares() when the caller is a member of groups the
+    # account is shared into.  Empty lists when the caller is None
+    # (desktop/guest) or the account is not shared into any of the
+    # caller's groups.
+    group_ids: list[str] = Field(default_factory=list, alias="groupIds")
+    group_names: list[str] = Field(default_factory=list, alias="groupNames")
+
     @model_validator(mode="before")
     @classmethod
     def _from_orm(cls, data: Any) -> Any:

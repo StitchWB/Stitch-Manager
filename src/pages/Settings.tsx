@@ -141,12 +141,16 @@ export default function Settings() {
   const authUser = useAuthStore(state => state.user);
   const enforceLogin = useAuthStore(state => state.enforceLogin);
   const setLoginPolicy = useAuthStore(state => state.setLoginPolicy);
-  const [enforceLoginDraft, setEnforceLoginDraft] = useState(true);
+  const [enforceLoginDraft, setEnforceLoginDraft] = useState(enforceLogin);
   const [policyBusy, setPolicyBusy] = useState(false);
   // Sync the draft when the store value changes (init / after policy update).
-  useEffect(() => {
+  // Adjust during render (React-recommended) instead of an effect to avoid
+  // cascading renders (react-hooks/set-state-in-effect).
+  const [prevEnforceLogin, setPrevEnforceLogin] = useState(enforceLogin);
+  if (enforceLogin !== prevEnforceLogin) {
+    setPrevEnforceLogin(enforceLogin);
     setEnforceLoginDraft(enforceLogin);
-  }, [enforceLogin]);
+  }
 
   const [activeCategory, setActiveCategory] = useUIState<SettingsCategory>(
     'settings-active-category',

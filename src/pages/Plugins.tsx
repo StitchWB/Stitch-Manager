@@ -31,11 +31,14 @@ import {
 import { listUsers, type AuthUser } from '../lib/backend/modules/auth';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '../components/ui/Button';
+import { ButtonBase } from '../components/ui/ButtonBase';
 import { Badge } from '../components/ui/Badge';
 import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Toggle } from '../components/ui/Toggle';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
+import { Checkbox } from '../components/ui/Checkbox';
 import { UserPluginGrants } from '../components/admin/UserPluginGrants';
 import { GroupPluginGrants } from '../components/admin/GroupPluginGrants';
 import { safeInvoke } from '@/lib/backend/core';
@@ -115,6 +118,7 @@ export default function Plugins() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount; loading flag set synchronously for immediate spinner
   useEffect(() => { void refresh(); }, [refresh]);
 
   const onRestartServicePlugin = useCallback(async (pluginId: string) => {
@@ -245,19 +249,25 @@ export default function Plugins() {
     const isAdmin = role === 'admin';
     const isUpdating = updating === cellId;
     return (
-      <td key={role} className="px-5 py-3 text-center">
+      <TableCell key={role} className="px-5 py-3 text-center">
         <div className="flex items-center justify-center">
           {isAdmin ? (
             <Tooltip content={t('admin.plugins.adminLockedHint')} side="top">
-              <span><input type="checkbox" checked disabled readOnly aria-label={`${role} ${pluginId}`} className="appearance-none h-[15px] w-[15px] rounded-[4px] border border-indigo-500/40 bg-indigo-500/30 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] opacity-60 cursor-not-allowed" /></span>
+              <span>
+                <Checkbox checked disabled readOnly aria-label={`${role} ${pluginId}`} className="inline-flex items-center justify-center p-1.5 hover:bg-transparent" />
+              </span>
             </Tooltip>
           ) : (
-            <label className="inline-flex items-center justify-center cursor-pointer p-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
-              <input type="checkbox" checked={checked} disabled={isUpdating} onChange={() => void onToggleRole(role, pluginId, !checked)} aria-label={`${role} ${pluginId}`} className="appearance-none h-[15px] w-[15px] rounded-[4px] border border-white/20 bg-white/[0.03] transition-all duration-200 checked:bg-indigo-500 checked:border-indigo-500 checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22white%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22%2F%3E%3C%2Fsvg%3E')] hover:border-white/35 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed" />
-            </label>
+            <Checkbox
+              checked={checked}
+              disabled={isUpdating}
+              onChange={() => void onToggleRole(role, pluginId, !checked)}
+              aria-label={`${role} ${pluginId}`}
+              className="inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-white/[0.04]"
+            />
           )}
         </div>
-      </td>
+      </TableCell>
     );
   };
 
@@ -310,69 +320,68 @@ export default function Plugins() {
                 <p className="text-xs text-slate-600 mt-1">{t('admin.plugins.noPluginsDesc')}</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/[0.06] text-left">
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('admin.plugins.plugin')}</th>
-                      {roles.map(role => (
-                        <th key={role} className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider text-center w-28">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center gap-1.5">
-                              <span>{t(`auth.role.${role}`)}</span>
-                              {role === 'admin' && <Badge variant="indigo" size="sm" className="!px-1.5 !py-0"><ShieldCheck className="w-2.5 h-2.5" /></Badge>}
-                            </div>
-                            {role !== 'admin' && (
-                              <button
-                                type="button"
-                                onClick={() => void onToggleAllForRole(role, !isRoleGranted(role, ALL_PLUGINS_ID))}
-                                disabled={updating === `${role}:${ALL_PLUGINS_ID}`}
-                                className="text-[10px] text-slate-500 hover:text-indigo-400 transition-colors disabled:opacity-50"
-                              >
-                                {t('admin.plugins.grantAll')}
-                              </button>
-                            )}
+              <Table className="w-full text-sm" containerClassName="overflow-x-auto">
+                <TableHeader className="bg-transparent">
+                  <TableRow className="border-b border-white/[0.06] text-left hover:bg-transparent">
+                    <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">{t('admin.plugins.plugin')}</TableHead>
+                    {roles.map(role => (
+                      <TableHead key={role} className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider text-center w-28">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span>{t(`auth.role.${role}`)}</span>
+                            {role === 'admin' && <Badge variant="indigo" size="sm" className="!px-1.5 !py-0"><ShieldCheck className="w-2.5 h-2.5" /></Badge>}
                           </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* All plugins row */}
-                    <tr className="border-b border-white/[0.04] bg-white/[0.01]">
-                      <td className="px-5 py-3">
+                          {role !== 'admin' && (
+                            <ButtonBase
+                              type="button"
+                              onClick={() => void onToggleAllForRole(role, !isRoleGranted(role, ALL_PLUGINS_ID))}
+                              disabled={updating === `${role}:${ALL_PLUGINS_ID}`}
+                              className="text-[10px] text-slate-500 hover:text-indigo-400 transition-colors disabled:opacity-50"
+                            >
+                              {t('admin.plugins.grantAll')}
+                            </ButtonBase>
+                          )}
+                        </div>
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {/* All plugins row */}
+                  <TableRow className="border-b border-white/[0.04] bg-white/[0.01]">
+                    <TableCell className="px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-indigo-500/15 text-indigo-300">
+                          <Puzzle className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-slate-200 font-medium">{t('admin.plugins.allPlugins')}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">{ALL_PLUGINS_ID}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    {roles.map(role => renderCheckbox(role, ALL_PLUGINS_ID))}
+                  </TableRow>
+                  {/* Plugin rows */}
+                  {state.plugins.map(p => (
+                    <TableRow key={p.id} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
+                      <TableCell className="px-5 py-3">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-indigo-500/15 text-indigo-300">
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-white/5 text-slate-400">
                             <Puzzle className="w-3.5 h-3.5" />
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <span className="text-slate-200 font-medium">{t('admin.plugins.allPlugins')}</span>
-                            <span className="text-[10px] text-slate-500 font-mono">{ALL_PLUGINS_ID}</span>
+                            <span className="text-slate-200 font-medium truncate">{p.name}</span>
+                            {/* eslint-disable-next-line i18next/no-literal-string -- non-translatable plugin id/version token */}
+                            <span className="text-[10px] text-slate-500 font-mono truncate">{p.id} · v{p.version}</span>
                           </div>
                         </div>
-                      </td>
-                      {roles.map(role => renderCheckbox(role, ALL_PLUGINS_ID))}
-                    </tr>
-                    {/* Plugin rows */}
-                    {state.plugins.map(p => (
-                      <tr key={p.id} className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-white/5 text-slate-400">
-                              <Puzzle className="w-3.5 h-3.5" />
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-slate-200 font-medium truncate">{p.name}</span>
-                              <span className="text-[10px] text-slate-500 font-mono truncate">{p.id} · v{p.version}</span>
-                            </div>
-                          </div>
-                        </td>
-                        {roles.map(role => renderCheckbox(role, p.id))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                      </TableCell>
+                      {roles.map(role => renderCheckbox(role, p.id))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </div>
 
@@ -530,6 +539,7 @@ function ServicePluginCard({
                 </Tooltip>
               )}
             </div>
+            {/* eslint-disable-next-line i18next/no-literal-string -- non-translatable version prefix */}
             <span className="text-[10px] text-slate-500 font-mono">v{plugin.version}</span>
           </div>
         </div>

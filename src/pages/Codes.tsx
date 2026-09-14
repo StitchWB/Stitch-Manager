@@ -34,8 +34,10 @@ import {
 import { askConfirm } from '../components/ui/ConfirmDialogHost';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { ButtonBase } from '../components/ui/ButtonBase';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
 
 type FilterValue = 'all' | 'unused';
 type TtlValue = '60' | '1440' | '10080' | '0';
@@ -147,6 +149,10 @@ export default function Codes() {
   }, [filter]);
 
   useEffect(() => {
+    // Data-fetching effect: refresh is async; setState calls after the first
+    // await run in a microtask. The sync setLoading(true)/setLoadError(null)
+    // mirror the component's initial state on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -306,7 +312,7 @@ export default function Codes() {
 
           {/* Issue form (collapsible) */}
           <div className="rounded-xl border border-white/[0.06] bg-black/40 backdrop-blur-sm overflow-hidden">
-            <button
+            <ButtonBase
               type="button"
               onClick={() => setShowIssueForm(v => !v)}
               className="w-full px-5 py-3 border-b border-white/[0.06] flex items-center gap-2 text-left hover:bg-white/[0.02] transition-colors"
@@ -317,7 +323,7 @@ export default function Codes() {
                 : <ChevronRight className="w-4 h-4 text-indigo-400" />}
               <Plus className="w-4 h-4 text-indigo-400" />
               <h2 className="text-sm font-semibold text-white">{t('codes.issue.title')}</h2>
-            </button>
+            </ButtonBase>
             {showIssueForm && (
               <form onSubmit={onIssue} className="p-5 flex flex-col gap-4" noValidate>
                 <div className="grid grid-cols-1 md:grid-cols-[120px_180px_1fr_auto] gap-3 items-end">
@@ -416,59 +422,59 @@ export default function Codes() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/[0.06] text-left">
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-16">
+                <Table className="w-full text-sm">
+                  <TableHeader>
+                    <TableRow className="border-b border-white/[0.06] text-left">
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-16">
                         {t('codes.columns.id')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
                         {t('codes.columns.hashPrefix')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
                         {t('codes.columns.entitlements')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
                         {t('codes.columns.status')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
                         {t('codes.columns.tgUser')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
                         {t('codes.columns.label')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
                         {t('codes.columns.createdAt')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
                         {t('codes.columns.expiresAt')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
                         {t('codes.columns.usedAt')}
-                      </th>
-                      <th className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24 text-right">
+                      </TableHead>
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24 text-right">
                         {t('codes.columns.actions')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {codes.map(code => {
                       const status = codeStatus(code);
                       const canRevoke = status === 'unused';
                       return (
-                        <tr
+                        <TableRow
                           key={String(code.id)}
                           className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors"
                         >
-                          <td className="px-5 py-3 text-slate-400 font-mono text-xs">
+                          <TableCell className="px-5 py-3 text-slate-400 font-mono text-xs">
                             {code.id}
-                          </td>
-                          <td className="px-5 py-3">
+                          </TableCell>
+                          <TableCell className="px-5 py-3">
                             <span className="text-slate-200 font-mono text-xs">
                               {code.code_hash_prefix}
                             </span>
-                          </td>
-                          <td className="px-5 py-3">
+                          </TableCell>
+                          <TableCell className="px-5 py-3">
                             <div className="flex flex-wrap gap-1">
                               {code.entitlements.length === 0 ? (
                                 <span className="text-slate-600 text-xs">—</span>
@@ -483,28 +489,28 @@ export default function Codes() {
                                 ))
                               )}
                             </div>
-                          </td>
-                          <td className="px-5 py-3">
+                          </TableCell>
+                          <TableCell className="px-5 py-3">
                             <Badge variant={statusBadgeVariant(status)} size="sm">
                               {statusLabel(status)}
                             </Badge>
-                          </td>
-                          <td className="px-5 py-3 text-slate-400 text-xs">
+                          </TableCell>
+                          <TableCell className="px-5 py-3 text-slate-400 text-xs">
                             {code.tg_user_id ?? '—'}
-                          </td>
-                          <td className="px-5 py-3 text-slate-300 text-xs">
+                          </TableCell>
+                          <TableCell className="px-5 py-3 text-slate-300 text-xs">
                             {code.label ?? '—'}
-                          </td>
-                          <td className="px-5 py-3 text-slate-400 text-xs">
+                          </TableCell>
+                          <TableCell className="px-5 py-3 text-slate-400 text-xs">
                             {formatDate(code.created_at)}
-                          </td>
-                          <td className="px-5 py-3 text-slate-400 text-xs">
+                          </TableCell>
+                          <TableCell className="px-5 py-3 text-slate-400 text-xs">
                             {formatDate(code.expires_at)}
-                          </td>
-                          <td className="px-5 py-3 text-slate-400 text-xs">
+                          </TableCell>
+                          <TableCell className="px-5 py-3 text-slate-400 text-xs">
                             {formatDate(code.used_at)}
-                          </td>
-                          <td className="px-5 py-3 text-right">
+                          </TableCell>
+                          <TableCell className="px-5 py-3 text-right">
                             {canRevoke ? (
                               <Button
                                 variant="ghost"
@@ -519,12 +525,12 @@ export default function Codes() {
                             ) : (
                               <span className="text-slate-700 text-xs">—</span>
                             )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>
