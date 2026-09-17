@@ -312,7 +312,10 @@ def main() -> None:
         watchdog_thread.start()
 
     # Use EdgeChromium on Windows for faster startup (4-6s vs 20-30s with CEF)
-    start_kwargs: dict = {"debug": args.dev}
+    # private_mode=False: persist cookies/localStorage across restarts,
+    # otherwise the TG session cookie dies with the process and the app asks
+    # to log in on every launch.
+    start_kwargs: dict = {"debug": args.dev, "private_mode": False}
     if sys.platform == "win32":
         # Try EdgeChromium first (uses system WebView2, much faster)
         try:
@@ -347,7 +350,7 @@ def main() -> None:
     except Exception as e:
         print(f"[run_gui] ERROR: webview.start() failed: {e}", flush=True)
         print("[run_gui] Falling back to default GUI...", flush=True)
-        webview.start(debug=args.dev)
+        webview.start(debug=args.dev, private_mode=False)
 
 
 if __name__ == "__main__":

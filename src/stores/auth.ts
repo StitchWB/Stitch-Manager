@@ -19,10 +19,11 @@
  * is disabled, the store stays in the "checked, no user, not enabled" state
  * and the app renders exactly as before — no login surface, no gate.
  *
- * `guest` is an in-memory-only flag (never persisted) that lets a desktop
- * user dismiss the welcome gate and use the app without authenticating. It
- * survives route changes but is cleared on logout, session expiry, or page
- * reload (since zustand state is not persisted).
+ * `guest` lets a desktop user dismiss the welcome gate and use the app
+ * without authenticating. On desktop it persists (localStorage) so the
+ * choice survives restarts; on web it is in-memory only (shared machines).
+ * It is cleared on logout, session expiry, exitGuest, or — web only — page
+ * reload.
  *
  * `authView` tracks which optional auth surface the user navigated to from
  * the welcome gate or the sidebar guest chip ('welcome' | 'setup' | 'login'
@@ -56,7 +57,24 @@ import {
   type AuthUser,
 } from '../lib/backend/modules/auth';
 import { setAuthExpiredHandler } from '../lib/backend/core/invoke';
+import { isDesktopApp } from '../lib/backend/core/url';
 import { setObsReportingEnabled } from '../lib/observability/client';
+
+/** localStorage key for the persisted desktop guest choice. */
+const GUEST_STORAGE_KEY = 'stitch.guest';
+
+/** Desktop persists the guest choice (your own machine); web never does. */
+function _readPersistedGuest(): boolean {
+  return isDesktopApp() && localStorage.getItem(GUEST_STORAGE_KEY) === '1';
+}
+
+function _persistGuest(): void {
+  if (isDesktopApp()) localStorage.setItem(GUEST_STORAGE_KEY, '1');
+}
+
+function _clearPersistedGuest(): void {
+  if (isDesktopApp()) localStorage.removeItem(GUEST_STORAGE_KEY);
+}
 
 export type AuthRole = 'admin' | 'user';
 export type AuthView = 'welcome' | 'setup' | 'login' | 'telegram';
@@ -297,8 +315,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
             // re-render) must NOT wipe the banner set by the 401 handler.
             sessionExpired: user ? false : get().sessionExpired,
             // If already authenticated, guest mode is irrelevant. Otherwise
-            // default to the welcome surface when not required.
-            guest: false,
+            // default to the persisted desktop guest choice (web: never).
+            guest: user ? false : _readPersistedGuest(),
             authView: 'welcome',
           });
           if (user) startSessionKeepalive(get);
@@ -419,6 +437,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         set({ user: null, busy: false, sessionExpired: false, guest: false, authView: 'welcome' });
         stopSessionKeepalive();
         setObsReportingEnabled(!get().enabled);
+        _clearPersistedGuest();
       }
     },
 
@@ -427,14 +446,17 @@ export const useAuthStore = create<AuthState>((set, get) => {
     clearSession: () => {
       stopSessionKeepalive();
       setObsReportingEnabled(!get().enabled);
+      _clearPersistedGuest();
       set({ user: null, sessionExpired: true, guest: false, authView: 'welcome', permissions: [], permissionsLoaded: false });
     },
 
     enterAsGuest: () => {
+      _persistGuest();
       set({ guest: true, authView: 'welcome' });
     },
 
     exitGuest: (view) => {
+      _clearPersistedGuest();
       set({ guest: false, authView: view ?? 'welcome' });
     },
 

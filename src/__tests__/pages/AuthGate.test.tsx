@@ -203,6 +203,8 @@ describe('Auth gate', () => {
     // Reset to the desktop-default URL; web-surface tests opt into
     // ?platform=web explicitly (isDesktopApp() reads location.search live).
     window.history.pushState({}, '', '/');
+    // The desktop guest choice persists in localStorage — clear between tests.
+    localStorage.removeItem('stitch.guest');
     // Reset the auth store between tests so init() runs fresh.
     useAuthStore.setState({
       enabled: false,
@@ -474,6 +476,38 @@ describe('Auth gate', () => {
     // No password login, no "create local account" hint on desktop.
     expect(screen.queryByTestId('guest-login-btn')).toBeNull();
     expect(screen.queryByTestId('guest-no-account-hint')).toBeNull();
+  });
+
+  it('desktop persists the guest choice across init; exitGuest clears it', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('guest-continue-btn'));
+    });
+    expect(useAuthStore.getState().guest).toBe(true);
+    expect(localStorage.getItem('stitch.guest')).toBe('1');
+
+    // App restart → init reads the persisted choice, no gate.
+    await act(async () => {
+      await useAuthStore.getState().init();
+    });
+    expect(useAuthStore.getState().guest).toBe(true);
+
+    act(() => {
+      useAuthStore.getState().exitGuest('telegram');
+    });
+    expect(localStorage.getItem('stitch.guest')).toBeNull();
+    expect(useAuthStore.getState().guest).toBe(false);
   });
 
   it('desktop never renders setup/login pages for optional auth views', async () => {
