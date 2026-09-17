@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Final
 
 try:
-    from re import _parser as _re_parser
+    from re import _parser as _re_parser  # type: ignore[attr-defined]
 except ImportError:  # Python < 3.11
-    import sre_parse as _re_parser  # type: ignore[no-redef]
+    import sre_parse as _re_parser
 
 
 class Severity(IntEnum):
@@ -47,7 +47,7 @@ class _Rule:
     pattern: re.Pattern[str]
     description: str
     # None = unconditional (pattern has no extractable required literal)
-    gate: tuple[tuple[tuple[frozenset[str], bool, int | None], ...], tuple[int, ...]] | None
+    gate: tuple[tuple[tuple[frozenset[str], bool, int | None, int | None], ...], tuple[int, ...]] | None
     gate_ci: bool
     max_span: int | None  # None = unbounded match length
 
@@ -468,7 +468,7 @@ class HoloneInspector:
         pos_bounds: list[int] = []
         cursor = 0
         last_end = 0
-        prev_prefix = 0
+        prev_prefix: int | None = 0
         prev_span: int | None = 0
         first = True
         for part, positional, prefix, span in gate:
@@ -479,6 +479,7 @@ class HoloneInspector:
             elif first:
                 limit = None  # the match may start anywhere up to the hit
             else:
+                assert prefix is not None and prev_prefix is not None and prev_span is not None
                 limit = cursor + max(0, prefix - prev_prefix - prev_span)
             best_start = -1
             best_end = 0
@@ -670,7 +671,7 @@ def _token_max_span(tokens) -> int | None:
             width = _token_max_span(arg[3])
         elif op is rp.BRANCH:
             widths = [_token_max_span(b) for b in arg[1]]
-            width = None if any(w is None for w in widths) else max(widths)
+            width = None if any(w is None for w in widths) else max(w for w in widths if w is not None)
         elif op in (rp.MAX_REPEAT, rp.MIN_REPEAT, rp.POSSESSIVE_REPEAT):
             lo, hi, sub = arg
             sub_max = _token_max_span(sub)
@@ -833,7 +834,7 @@ def _node_parts(tokens, ascii_only: bool, base: int | None) -> list[_Part] | Non
         elif op is rp.BRANCH:
             _, branches = arg
             widths = [_token_max_span(b) for b in branches]
-            tok_w = None if any(w is None for w in widths) else max(widths)
+            tok_w = None if any(w is None for w in widths) else max(w for w in widths if w is not None)
             d = _branch_zip_parts(branches, ascii_only)
             if d is None:
                 flush()
@@ -914,9 +915,10 @@ def _extract_gate(
     out = []
     for part, positional, prefix, span in parts:
         if ci:
-            part = _ci_part_variants(part)
-            if part is None:
+            part_ci = _ci_part_variants(part)
+            if part_ci is None:
                 continue
+            part = part_ci
         out.append((part, positional, prefix, span))
     if not out:
         return None
@@ -932,7 +934,7 @@ def _extract_gate(
 
 
 def _gate_hits(
-    gate: tuple[tuple[tuple[frozenset[str], bool, int | None], ...], tuple[int, ...]],
+    gate: tuple[tuple[tuple[frozenset[str], bool, int | None, int | None], ...], tuple[int, ...]],
     present,
 ) -> bool:
     parts, eval_order = gate
@@ -974,7 +976,7 @@ def _make_presence(hay: str, cache: dict[str, bool]):
     bigrams = frozenset(zip(hay, hay[1:], strict=False))
     trigrams = frozenset(zip(hay, hay[1:], hay[2:], strict=False))
 
-    def present(lit: str) -> bool:
+    def present_harvested(lit: str) -> bool:
         result = cache.get(lit)
         if result is None:
             n = len(lit)
@@ -992,7 +994,7 @@ def _make_presence(hay: str, cache: dict[str, bool]):
             cache[lit] = result
         return result
 
-    return present
+    return present_harvested
 
 
 def _boundary_pattern(value: str) -> re.Pattern[str]:
