@@ -202,7 +202,9 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, 
         # (security CRIT fix): each Telegram account gets its own local user.
         # Legacy codes without tg_id fall back to the shared "telegram" user.
         if state.tg_user_id is not None:
-            user = await ensure_oidc_user(db, state.tg_user_id, state.tg_username)
+            user = await ensure_oidc_user(
+                db, state.tg_user_id, getattr(state, "tg_username", None)
+            )
         else:
             user = await _ensure_telegram_user(db)
         raw_token, expires_at = await auth_service.create_session(db, user.id)
