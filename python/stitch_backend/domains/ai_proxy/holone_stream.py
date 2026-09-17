@@ -4,7 +4,13 @@ import json
 from dataclasses import dataclass
 from enum import StrEnum
 
-from stitch_backend.domains.ai_proxy.holone_inspector import Finding, Severity, default_engine
+from stitch_backend.domains.ai_proxy.holone_inspector import (
+    Finding,
+    Severity,
+    analyze_content,
+    analyze_tool_call,
+    default_engine,
+)
 
 
 class SecurityMode(StrEnum):
@@ -19,6 +25,9 @@ class ProtectionResult:
     blocked: bool
 
 
+_MAX_ARG_CHARS = 8 * 1024 * 1024
+
+
 def protect_openai_response(
     payload: dict, *, mode: SecurityMode, client_has_tools: bool
 ) -> tuple[dict, tuple[Finding, ...], bool]:
@@ -31,9 +40,9 @@ def protect_openai_response(
         message = choice.get("message") if isinstance(choice, dict) else None
         if not isinstance(message, dict):
             continue
-        content = message.get("content")
-        if isinstance(content, str):
-            findings.extend(default_engine().inspect(content, source="text"))
+        for text in _content_texts(message.get("content")):
+            findings.extend(default_engine().inspect(text, source="text"))
+            findings.extend(analyze_content(text, source="text"))
         calls = message.get("tool_calls")
         if not isinstance(calls, list):
             continue
@@ -42,19 +51,22 @@ def protect_openai_response(
             if not isinstance(function, dict):
                 continue
             saw_tool = True
+            name = function.get("name", "")
             arguments = function.get("arguments")
+            if isinstance(arguments, dict):
+                arguments = json.dumps(arguments)
             if isinstance(arguments, str):
                 findings.extend(
                     default_engine().inspect(
-                        arguments,
-                        source=f"tool_call:{function.get('name', '')}",
+                        f"{name}\n{arguments}",
+                        source=f"tool_call:{name}",
                     )
                 )
+                findings.extend(analyze_tool_call(name, arguments))
     if saw_tool and not client_has_tools:
         findings.append(_unsolicited("tool_call"))
-    drop = saw_tool and (
-        not client_has_tools or any(item.severity is Severity.HIGH for item in findings)
-    )
+    has_high = any(item.severity is Severity.HIGH for item in findings)
+    drop = (saw_tool and (not client_has_tools or has_high)) or has_high
     if mode is SecurityMode.MONITOR or not drop:
         return payload, tuple(findings), False
 
@@ -63,12 +75,10 @@ def protect_openai_response(
         if not isinstance(choice, dict):
             continue
         message = choice.get("message")
-        if not isinstance(message, dict) or "tool_calls" not in message:
+        if not isinstance(message, dict):
             continue
         message.pop("tool_calls", None)
-        content = message.get("content")
-        prefix = content if isinstance(content, str) else ""
-        message["content"] = f"{prefix}[holone blocked a suspicious tool call: {reason}]"
+        message["content"] = f"[holone blocked suspicious content: {reason}]"
         choice["finish_reason"] = "stop"
     return payload, tuple(findings), True
 
@@ -91,34 +101,35 @@ def protect_anthropic_response(
             text = block.get("text")
             if isinstance(text, str):
                 findings.extend(default_engine().inspect(text, source="text"))
+                findings.extend(analyze_content(text, source="text"))
         elif block_type == "tool_use":
             saw_tool = True
             name = block.get("name", "")
             input_data = block.get("input")
             if isinstance(input_data, dict):
+                args = json.dumps(input_data)
                 findings.extend(
                     default_engine().inspect(
-                        json.dumps(input_data),
+                        f"{name}\n{args}",
                         source=f"tool_use:{name}",
                     )
                 )
+                findings.extend(analyze_tool_call(name, args))
 
     if saw_tool and not client_has_tools:
         findings.append(_unsolicited("tool_use"))
 
-    drop = saw_tool and (
-        not client_has_tools or any(item.severity is Severity.HIGH for item in findings)
-    )
+    has_high = any(item.severity is Severity.HIGH for item in findings)
+    drop = (saw_tool and (not client_has_tools or has_high)) or has_high
     if mode is SecurityMode.MONITOR or not drop:
         return payload, tuple(findings), False
 
     reason = _block_reason(findings)
-    new_content = []
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "tool_use":
-            continue
-        new_content.append(block)
-    new_content.append({"type": "text", "text": f"[holone blocked a suspicious tool call: {reason}]"})
+    new_content = [
+        block for block in content
+        if not (isinstance(block, dict) and block.get("type") == "tool_use")
+    ]
+    new_content.append({"type": "text", "text": f"[holone blocked suspicious content: {reason}]"})
     payload["content"] = new_content
     if payload.get("stop_reason") == "tool_use":
         payload["stop_reason"] = "end_turn"
@@ -139,10 +150,9 @@ def protect_openai_sse(
     findings: list[Finding] = []
     arguments: dict[int, str] = {}
     names: dict[int, str] = {}
+    texts: dict[int, str] = {}
     saw_tool = False
-    finished_indexes: set[int] = set()
-    arg_sizes: dict[int, int] = {}
-    inspection_cap = 1048576  # 1 MiB
+    capped: set[int] = set()
 
     for frame in frames:
         payload = _json(frame.data)
@@ -150,14 +160,18 @@ def protect_openai_sse(
         if not isinstance(choices, list):
             continue
         for choice in choices:
-            if isinstance(choice, dict) and choice.get("finish_reason") in ("tool_calls", "stop"):
-                for call in (choice.get("delta", {}).get("tool_calls") or []):
-                    if isinstance(call, dict):
-                        idx = call.get("index", 0)
-                        if isinstance(idx, int):
-                            finished_indexes.add(idx)
-            delta = choice.get("delta") if isinstance(choice, dict) else None
-            calls = delta.get("tool_calls") if isinstance(delta, dict) else None
+            if not isinstance(choice, dict):
+                continue
+            choice_index = choice.get("index", 0)
+            if not isinstance(choice_index, int):
+                choice_index = 0
+            delta = choice.get("delta")
+            if not isinstance(delta, dict):
+                continue
+            content = delta.get("content")
+            if isinstance(content, str) and content:
+                texts[choice_index] = texts.get(choice_index, "") + content
+            calls = delta.get("tool_calls")
             if not isinstance(calls, list):
                 continue
             for call in calls:
@@ -171,31 +185,39 @@ def protect_openai_sse(
                 if isinstance(name, str) and name:
                     names[index] = name
                 if isinstance(fragment, str):
-                    current_size = arg_sizes.get(index, 0)
-                    if current_size < inspection_cap:
-                        remaining = inspection_cap - current_size
-                        if len(fragment) > remaining:
-                            fragment = fragment[:remaining]
-                            findings.append(Finding(
-                                rule_id="inspection-truncated",
-                                category="protocol",
-                                severity=Severity.LOW,
-                                match=f"tool_call:{index} truncated at 1 MiB",
-                                excerpt="",
-                                source=f"tool_call:{names.get(index, '')}",
-                                description="Tool call arguments exceeded 1 MiB inspection buffer",
-                            ))
-                        arguments[index] = arguments.get(index, "") + fragment
-                        arg_sizes[index] = current_size + len(fragment)
+                    if index in capped:
+                        continue
+                    current = arguments.get(index, "")
+                    if len(current) + len(fragment) > _MAX_ARG_CHARS:
+                        arguments[index] = current + fragment[: _MAX_ARG_CHARS - len(current)]
+                        capped.add(index)
+                        findings.append(Finding(
+                            rule_id="inspection-cap-exceeded",
+                            category="protocol",
+                            severity=Severity.HIGH,
+                            match=f"tool_call:{index} exceeded 8 MiB inspection ceiling",
+                            excerpt="",
+                            source=f"tool_call:{names.get(index, '')}",
+                            description="Tool call arguments exceeded the 8 MiB inspection ceiling; tail not inspected",
+                        ))
+                    else:
+                        arguments[index] = current + fragment
 
+    for value in texts.values():
+        findings.extend(default_engine().inspect(value, source="text"))
+        findings.extend(analyze_content(value, source="text"))
     for index, value in arguments.items():
-        findings.extend(default_engine().inspect(value, source=f"tool_call:{names.get(index, '')}"))
+        name = names.get(index, "")
+        findings.extend(default_engine().inspect(f"{name}\n{value}", source=f"tool_call:{name}"))
+        findings.extend(analyze_tool_call(name, value))
     if saw_tool and not client_has_tools:
         findings.append(_unsolicited("tool_call"))
 
-    drop = saw_tool and (
-        not client_has_tools or any(item.severity is Severity.HIGH for item in findings)
+    has_high = any(item.severity is Severity.HIGH for item in findings)
+    text_high = any(
+        item.severity is Severity.HIGH and item.source.startswith("text") for item in findings
     )
+    drop = (saw_tool and (not client_has_tools or has_high)) or has_high
     if mode is SecurityMode.MONITOR or not drop:
         return ProtectionResult(body, tuple(findings), False)
 
@@ -206,17 +228,18 @@ def protect_openai_sse(
         payload = _json(frame.data)
         choices = payload.get("choices") if payload else None
         choice = choices[0] if isinstance(choices, list) and choices else None
+        if isinstance(choice, dict) and choice.get("finish_reason") in ("tool_calls", "stop"):
+            if not finished:
+                output.extend((_openai_note(reason), _openai_finish()))
+                finished = True
+            continue
         delta = choice.get("delta") if isinstance(choice, dict) else None
-        calls = delta.get("tool_calls") if isinstance(delta, dict) else None
-        if isinstance(calls, list) and calls:
-            content = delta.get("content") if isinstance(delta, dict) else None
-            if isinstance(content, str) and content:
-                output.append(_openai_content(content))
-            continue
-        if isinstance(choice, dict) and choice.get("finish_reason") == "tool_calls":
-            output.extend((_openai_note(reason), _openai_finish()))
-            finished = True
-            continue
+        if isinstance(delta, dict):
+            calls = delta.get("tool_calls")
+            if isinstance(calls, list) and calls:
+                continue
+            if text_high and isinstance(delta.get("content"), str):
+                continue
         output.append(frame.raw)
     if not finished:
         output.extend((_openai_note(reason), _openai_finish()))
@@ -229,10 +252,9 @@ def protect_anthropic_sse(
     frames = _frames(body)
     findings: list[Finding] = []
     tools: dict[int, tuple[str, str]] = {}
+    texts: dict[int, str] = {}
     active: dict[int, str] = {}
-    finished_indexes: set[int] = set()
-    arg_sizes: dict[int, int] = {}
-    inspection_cap = 1048576  # 1 MiB
+    capped: set[int] = set()
 
     for frame in frames:
         payload = _json(frame.data)
@@ -244,43 +266,61 @@ def protect_anthropic_sse(
             continue
         block = payload.get("content_block")
         delta = payload.get("delta")
-        if event_type == "content_block_start" and isinstance(block, dict) and block.get("type") == "tool_use":
-            active[index] = str(block.get("name", ""))
-            tools[index] = (active[index], "")
-        elif event_type == "content_block_delta" and index in tools and isinstance(delta, dict):
-            fragment = delta.get("partial_json")
-            if isinstance(fragment, str):
-                current_size = arg_sizes.get(index, 0)
-                if current_size < inspection_cap:
-                    remaining = inspection_cap - current_size
-                    if len(fragment) > remaining:
-                        fragment = fragment[:remaining]
+        if event_type == "content_block_start" and isinstance(block, dict):
+            block_type = block.get("type")
+            if block_type == "tool_use":
+                active[index] = str(block.get("name", ""))
+                tools[index] = (active[index], "")
+            elif block_type == "text":
+                texts[index] = ""
+        elif event_type == "content_block_delta" and isinstance(delta, dict):
+            if index in tools:
+                fragment = delta.get("partial_json")
+                if isinstance(fragment, str):
+                    if index in capped:
+                        continue
+                    current = tools[index][1]
+                    if len(current) + len(fragment) > _MAX_ARG_CHARS:
+                        tools[index] = (tools[index][0], current + fragment[: _MAX_ARG_CHARS - len(current)])
+                        capped.add(index)
                         findings.append(Finding(
-                            rule_id="inspection-truncated",
+                            rule_id="inspection-cap-exceeded",
                             category="protocol",
-                            severity=Severity.LOW,
-                            match=f"tool_use:{index} truncated at 1 MiB",
+                            severity=Severity.HIGH,
+                            match=f"tool_use:{index} exceeded 8 MiB inspection ceiling",
                             excerpt="",
                             source=f"tool_use:{active.get(index, '')}",
-                            description="Tool use input exceeded 1 MiB inspection buffer",
+                            description="Tool use input exceeded the 8 MiB inspection ceiling; tail not inspected",
                         ))
-                    tools[index] = (tools[index][0], tools[index][1] + fragment)
-                    arg_sizes[index] = current_size + len(fragment)
-        elif event_type == "content_block_stop":
-            finished_indexes.add(index)
+                    else:
+                        tools[index] = (tools[index][0], current + fragment)
+            elif index in texts:
+                fragment = delta.get("text")
+                if isinstance(fragment, str):
+                    texts[index] += fragment
 
+    for value in texts.values():
+        if value:
+            findings.extend(default_engine().inspect(value, source="text"))
+            findings.extend(analyze_content(value, source="text"))
     for name, value in tools.values():
-        findings.extend(default_engine().inspect(value, source=f"tool_use:{name}"))
+        findings.extend(default_engine().inspect(f"{name}\n{value}", source=f"tool_use:{name}"))
+        findings.extend(analyze_tool_call(name, value))
     if tools and not client_has_tools:
         findings.append(_unsolicited("tool_use"))
 
-    drop = bool(tools) and (
-        not client_has_tools or any(item.severity is Severity.HIGH for item in findings)
-    )
+    has_high = any(item.severity is Severity.HIGH for item in findings)
+    bad_text_indexes = {
+        index for index in texts
+        if texts[index] and any(
+            f.severity is Severity.HIGH and f.source.startswith("text") for f in findings
+        )
+    }
+    drop = (bool(tools) and (not client_has_tools or has_high)) or has_high
     if mode is SecurityMode.MONITOR or not drop:
         return ProtectionResult(body, tuple(findings), False)
 
-    blocked_indexes = set(tools)
+    blocked_indexes = set(tools) | bad_text_indexes
     reason = _block_reason(findings)
     output: list[str] = []
     buffering: set[int] = set()
@@ -292,7 +332,7 @@ def protect_anthropic_sse(
         event_type = payload.get("type")
         index = payload.get("index", 0)
         block = payload.get("content_block")
-        if event_type == "content_block_start" and index in blocked_indexes and isinstance(block, dict) and block.get("type") == "tool_use":
+        if event_type == "content_block_start" and index in blocked_indexes and isinstance(block, dict):
             buffering.add(index)
             continue
         if index in buffering and event_type == "content_block_delta":
@@ -310,6 +350,20 @@ def protect_anthropic_sse(
     for index in buffering:
         output.append(_anthropic_note(index, reason))
     return ProtectionResult("".join(output), tuple(findings), True)
+
+
+def _content_texts(content: object) -> list[str]:
+    if isinstance(content, str):
+        return [content]
+    if isinstance(content, list):
+        return [
+            part["text"]
+            for part in content
+            if isinstance(part, dict)
+            and part.get("type") in ("text", "output_text")
+            and isinstance(part.get("text"), str)
+        ]
+    return []
 
 
 def _frames(body: str) -> list[_Frame]:
@@ -366,7 +420,7 @@ def _openai_content(content: str) -> str:
 
 
 def _openai_note(reason: str) -> str:
-    return _openai_content(f"[holone blocked a suspicious tool call: {reason}]")
+    return _openai_content(f"[holone blocked suspicious content: {reason}]")
 
 
 def _openai_finish() -> str:
@@ -378,7 +432,7 @@ def _event_frame(event: str, payload: dict) -> str:
 
 
 def _anthropic_note(index: int, reason: str) -> str:
-    note = f"[holone blocked a suspicious tool call: {reason}]"
+    note = f"[holone blocked suspicious content: {reason}]"
     return "".join((
         _event_frame("content_block_start", {"type": "content_block_start", "index": index, "content_block": {"type": "text", "text": ""}}),
         _event_frame("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {"type": "text_delta", "text": note}}),

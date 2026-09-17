@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import logging
-import math
 import re
 import time
-import unicodedata
-from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Any
 
 from stitch_backend.core.event_bus import event_bus
-from stitch_backend.domains.ai_proxy.holone_inspector import Finding, Severity, default_engine
+from stitch_backend.domains.ai_proxy.holone_inspector import (
+    Finding,
+    Severity,
+    default_engine,
+    redact_secrets,
+)
 from stitch_backend.domains.ai_proxy.holone_stream import (
     ProtectionResult,
     SecurityMode,
@@ -23,32 +25,18 @@ from stitch_backend.domains.ai_proxy.holone_stream import (
 
 logger = logging.getLogger(__name__)
 
-# Invisible characters used for steganography
-ZERO_WIDTH_CHARS = {
-    '\u200B', '\u200C', '\u200D', '\u200E', '\u200F',
-    '\uFEFF', '\u2060', '\u2061', '\u2062', '\u2063', '\u2064',
-}
-
-
-def _entropy(s: str) -> float:
-    """Calculate Shannon entropy (bits per character).
-
-    Base64: ~6 bits/char, hex: ~4 bits/char, plain text: ~3-4 bits/char
-    """
-    if not s or len(s) < 20:
-        return 0.0
-    counts = Counter(s)
-    total = len(s)
-    return -sum((c / total) * math.log2(c / total) for c in counts.values())
-
 
 def _extract_file_path(args: str) -> str | None:
     """Extract file path from command arguments."""
     patterns = [
-        r'>\s*([^\s]+)',              # shell redirect
-        r'Out-File\s+([^\s]+)',       # PowerShell
-        r'Set-Content\s+([^\s]+)',    # PowerShell
-        r'writeFileSync\([^,]+,\s*["\']([^"\']+)["\']',  # Node.js
+        r'"(?:path|file_path|filePath|filename|file|target|destination|outfile)"\s*:\s*"([^"]+)"',  # JSON tool args
+        r'>>?\s*([^\s|]+)',                              # shell redirect
+        r'(?:Out-File|Set-Content|Add-Content)\s+(?:-[\w]+\s+)*([^\s]+)',
+        r'tee(?:-Object)?\s+(?:-[\w]+\s+)*([^\s]+)',
+        r'writeFileSync\(\s*["\']([^"\']+)["\']',
+        r'writeFile\(\s*["\']([^"\']+)["\']',
+        r'open\(\s*["\']([^"\']+)["\']\s*,\s*["\'][wa]',
+        r'(?:cp|copy|Copy-Item|mv|Move-Item)\s+(?:-[\w]+\s+)*[^\s|]+\s+([^\s|]+)',
     ]
     for pattern in patterns:
         match = re.search(pattern, args, re.IGNORECASE)
@@ -57,86 +45,77 @@ def _extract_file_path(args: str) -> str | None:
     return None
 
 
-def _analyze_content(text: str, source: str) -> list[Finding]:
-    """Analyze text for encoded/hidden content."""
-    findings = []
-
-    # 1. High entropy (encoded content)
-    entropy = _entropy(text)
-    if entropy > 4.5 and len(text) > 50:
-        findings.append(Finding(
-            rule_id="encoded-content",
-            category="security",
-            severity=Severity.HIGH,
-            match=f"entropy={entropy:.2f}",
-            excerpt=text[:100],
-            source=source,
-            description="High-entropy content detected (potential encoded instructions)"
-        ))
-
-    # 2. Invisible characters (steganography)
-    invisible_count = sum(1 for c in text if c in ZERO_WIDTH_CHARS)
-    if invisible_count > 5:
-        findings.append(Finding(
-            rule_id="invisible-characters",
-            category="security",
-            severity=Severity.HIGH,
-            match=f"count={invisible_count}",
-            excerpt="",
-            source=source,
-            description="Invisible characters detected (potential steganography)"
-        ))
-
-    # 3. Non-printable characters (control codes)
-    non_printable = sum(
-        1 for c in text
-        if unicodedata.category(c).startswith('C')
-    )
-    if non_printable > 10:
-        findings.append(Finding(
-            rule_id="non-printable-characters",
-            category="security",
-            severity=Severity.MEDIUM,
-            match=f"count={non_printable}",
-            excerpt="",
-            source=source,
-            description="Non-printable characters detected"
-        ))
-
-    return findings
+_DOWNLOAD_TARGET_PATTERNS = [
+    r'\bcurl\b[^\n|]*?(?-i:\s-O)\s+\S+/([^/\s"\']+)',  # curl -O: remote-name, track the basename
+    r'\bcurl\b[^\n|]*?\s--remote-name\s+\S+/([^/\s"\']+)',
+    r'\bcurl\b[^\n|]*?(?-i:\s-o)\s+(\S+)',  # curl -o <file>: explicit target
+    r'\bwget\b[^\n|]*?(?-i:\s-O)\s+(\S+)',  # wget -O <file>
+    r'\bwget\b[^\n|]*?--output-document=(\S+)',
+    r'\binvoke-webrequest\b[^\n|]*?-outfile\s+(\S+)',
+    r'\bstart-bitstransfer\b[^\n|]*?-destination\s+(\S+)',
+    r'\burlretrieve\s*\([^)]*,\s*["\']([^"\']+)["\']',
+]
 
 
-def _analyze_tool_call(name: str, args: str) -> list[Finding]:
-    """Analyze tool call for suspicious behavior."""
-    findings = []
-    text = f"{name} {args}"
+def _extract_download_target(args: str) -> str | None:
+    for pattern in _DOWNLOAD_TARGET_PATTERNS:
+        match = re.search(pattern, args, re.IGNORECASE)
+        if match:
+            return match.group(1).strip("\"'")
+    return None
 
-    # 1. Network access (any URL)
-    if "://" in text or "Invoke-Web" in text.lower():
-        findings.append(Finding(
-            rule_id="network-access",
-            category="security",
-            severity=Severity.HIGH,
-            match="://",
-            excerpt=args[:100],
-            source=f"tool_call:{name}",
-            description="Network access detected in tool call"
-        ))
 
-    # 2. High entropy (encoded content in arguments)
-    entropy = _entropy(args)
-    if entropy > 4.5 and len(args) > 50:
-        findings.append(Finding(
-            rule_id="encoded-arguments",
-            category="security",
-            severity=Severity.HIGH,
-            match=f"entropy={entropy:.2f}",
-            excerpt=args[:100],
-            source=f"tool_call:{name}",
-            description="High-entropy arguments detected (potential encoded payload)"
-        ))
+_EXECUTE_HINTS = (
+    "powershell", "pwsh", "bash", "sh", "python", "node", "ruby", "perl",
+    "chmod", "start-process", "cmd", "./", "invoke-item", "ii ",
+)
 
-    return findings
+_AUTOEXEC_HINTS = (
+    "startup", "tasks.json", "folderopen", "postcreatecommand", "poststartcommand",
+    "postattachcommand", "devcontainer", "kernel.json", "launchagents", "launchdaemons",
+    "autostart", "authorized_keys", "sitecustomize", "usercustomize", "crontab",
+    ".bashrc", ".zshrc", ".zprofile", ".profile", "/hooks/", "core.hookspath",
+)
+
+
+def _content_parts(content: Any) -> list[str]:
+    """Text fragments from string / multipart / Anthropic-block content shapes."""
+    if isinstance(content, str):
+        return [content]
+    if not isinstance(content, list):
+        return []
+    parts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        part_type = part.get("type")
+        if part_type in ("text", "output_text"):
+            text = part.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+        elif part_type == "tool_result":
+            parts.extend(_content_parts(part.get("content")))
+    return parts
+
+
+def _request_text(messages: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        parts.extend(_content_parts(msg.get("content")))
+        if msg.get("role") == "assistant":
+            calls = msg.get("tool_calls")
+            if isinstance(calls, list):
+                for call in calls:
+                    function = call.get("function") if isinstance(call, dict) else None
+                    if not isinstance(function, dict):
+                        continue
+                    name = function.get("name", "")
+                    arguments = function.get("arguments")
+                    if isinstance(arguments, str):
+                        parts.append(f"{name}\n{arguments}")
+    return "\n".join(parts)
 
 
 @dataclass
@@ -155,6 +134,10 @@ class _FindingEntry:
     finding: Finding
 
 
+def _sanitize(f: Finding) -> Finding:
+    return replace(f, match=redact_secrets(f.match), excerpt=redact_secrets(f.excerpt))
+
+
 @dataclass
 class HoloneService:
     """Config-aware wrapper around HoloneInspector and stream protection."""
@@ -170,12 +153,12 @@ class HoloneService:
         """Inspect incoming message content for rule matches."""
         if not self.config.enabled:
             return []
-        text = " ".join(
-            msg.get("content", "")
+        if not any(
+            isinstance(msg, dict) and msg.get("role") in ("assistant", "tool")
             for msg in messages
-            if isinstance(msg.get("content"), str)
-        )
-        findings = default_engine().inspect(text, source="request")
+        ):
+            self._session_file_writes.clear()
+        findings = default_engine().inspect(_request_text(messages), source="request")
         if findings:
             self._record(findings)
         return findings
@@ -188,58 +171,25 @@ class HoloneService:
         if not self.config.enabled:
             return response, [], False
 
-        # Heuristic analysis first
-        findings: list[Finding] = []
+        chain_findings: list[Finding] = []
         for choice in response.get("choices", []):
             message = choice.get("message", {})
-
-            # Analyze response content
-            content = message.get("content", "")
-            if isinstance(content, str):
-                findings.extend(_analyze_content(content, source="response"))
-
-            # Analyze tool calls
             tool_calls = message.get("tool_calls", [])
             for call in tool_calls:
                 func = call.get("function", {})
                 name = func.get("name", "")
                 args = func.get("arguments", "")
+                self._track_file_write(name, args, chain_findings, source_prefix="tool_call")
 
-                # Heuristic tool call analysis
-                findings.extend(_analyze_tool_call(name, args))
-
-                # File write tracking
-                path = _extract_file_path(args)
-                if path:
-                    self._session_file_writes.add(path)
-
-                # File write + execute chain detection
-                for written_path in self._session_file_writes:
-                    if written_path in f"{name} {args}":
-                        execute_keywords = ["powershell", "bash", "sh", "python", "node", "ruby", "perl"]
-                        if any(kw in f"{name} {args}".lower() for kw in execute_keywords):
-                            findings.append(Finding(
-                                rule_id="file-write-execute",
-                                category="security",
-                                severity=Severity.HIGH,
-                                match=written_path,
-                                excerpt=args[:100],
-                                source=f"tool_call:{name}",
-                                description=f"Executing previously written file: {written_path}"
-                            ))
-
-        # Existing rule-based protection
         result, findings_tuple, blocked = protect_openai_response(
             response, mode=self.config.security_mode, client_has_tools=client_has_tools
         )
-        findings.extend(findings_tuple)
-
+        findings = chain_findings + list(findings_tuple)
         if findings:
             self._record(findings)
 
-        # Block if HIGH severity findings in block mode
         has_high = any(f.severity == Severity.HIGH for f in findings)
-        if has_high and self.config.mode == "block":
+        if has_high and self.config.mode == "block" and not blocked:
             for choice in result.get("choices", []):
                 message = choice.get("message", {})
                 message.pop("tool_calls", None)
@@ -254,62 +204,26 @@ class HoloneService:
         if not self.config.enabled:
             return response, [], False
 
-        # Heuristic analysis first
-        findings: list[Finding] = []
+        chain_findings: list[Finding] = []
         content_blocks = response.get("content", [])
         if isinstance(content_blocks, list):
             for block in content_blocks:
-                if not isinstance(block, dict):
+                if not isinstance(block, dict) or block.get("type") != "tool_use":
                     continue
+                name = block.get("name", "")
+                input_data = block.get("input", {})
+                args_str = str(input_data) if input_data else ""
+                self._track_file_write(name, args_str, chain_findings, source_prefix="tool_use")
 
-                # Analyze text blocks
-                if block.get("type") == "text":
-                    text = block.get("text", "")
-                    if isinstance(text, str):
-                        findings.extend(_analyze_content(text, source="response"))
-
-                # Analyze tool_use blocks
-                elif block.get("type") == "tool_use":
-                    name = block.get("name", "")
-                    input_data = block.get("input", {})
-                    args_str = str(input_data) if input_data else ""
-
-                    # Heuristic tool call analysis
-                    findings.extend(_analyze_tool_call(name, args_str))
-
-                    # File write tracking
-                    path = _extract_file_path(args_str)
-                    if path:
-                        self._session_file_writes.add(path)
-
-                    # File write + execute chain detection
-                    for written_path in self._session_file_writes:
-                        if written_path in f"{name} {args_str}":
-                            execute_keywords = ["powershell", "bash", "sh", "python", "node", "ruby", "perl"]
-                            if any(kw in f"{name} {args_str}".lower() for kw in execute_keywords):
-                                findings.append(Finding(
-                                    rule_id="file-write-execute",
-                                    category="security",
-                                    severity=Severity.HIGH,
-                                    match=written_path,
-                                    excerpt=args_str[:100],
-                                    source=f"tool_use:{name}",
-                                    description=f"Executing previously written file: {written_path}"
-                                ))
-
-        # Existing rule-based protection
         result, findings_tuple, blocked = protect_anthropic_response(
             response, mode=self.config.security_mode, client_has_tools=client_has_tools
         )
-        findings.extend(findings_tuple)
-
+        findings = chain_findings + list(findings_tuple)
         if findings:
             self._record(findings)
 
-        # Block if HIGH severity findings in block mode
         has_high = any(f.severity == Severity.HIGH for f in findings)
-        if has_high and self.config.mode == "block":
-            # Strip tool_use blocks
+        if has_high and self.config.mode == "block" and not blocked:
             new_content = [
                 block for block in result.get("content", [])
                 if not (isinstance(block, dict) and block.get("type") == "tool_use")
@@ -324,6 +238,74 @@ class HoloneService:
             return result, findings, True
 
         return result, findings, blocked
+
+    def inspect_response_responses(
+        self, response: dict[str, Any], *, client_has_tools: bool = False
+    ) -> tuple[dict[str, Any], list[Finding], bool]:
+        """Inspect an OpenAI Responses API payload (output[] items)."""
+        if not self.config.enabled:
+            return response, [], False
+
+        findings: list[Finding] = []
+        output = response.get("output")
+        if not isinstance(output, list):
+            return response, [], False
+
+        saw_tool = False
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "message":
+                for part in item.get("content") or []:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") == "output_text":
+                        text = part.get("text")
+                        if isinstance(text, str):
+                            findings.extend(default_engine().inspect(text, source="text"))
+            elif item_type == "function_call":
+                saw_tool = True
+                name = item.get("name", "")
+                arguments = item.get("arguments", "")
+                if isinstance(arguments, str):
+                    findings.extend(
+                        default_engine().inspect(
+                            f"{name}\n{arguments}",
+                            source=f"function_call:{name}",
+                        )
+                    )
+                    self._track_file_write(name, arguments, findings, source_prefix="function_call")
+
+        if saw_tool and not client_has_tools:
+            findings.append(Finding(
+                rule_id="proto-tooluse-unsolicited",
+                category="protocol",
+                severity=Severity.HIGH,
+                match="tool call without advertised tools",
+                excerpt="tool call without advertised tools",
+                source="function_call",
+                description="Provider returned a tool call although the client advertised no tools",
+            ))
+
+        if findings:
+            self._record(findings)
+
+        has_high = any(f.severity == Severity.HIGH for f in findings)
+        if has_high and self.config.mode == "block":
+            new_output = [
+                item for item in output
+                if not (isinstance(item, dict) and item.get("type") == "function_call")
+            ]
+            new_output.append({
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "[HoloNe blocked suspicious content]"}],
+            })
+            response["output"] = new_output
+            return response, findings, True
+
+        return response, findings, False
 
     # ── Stream inspection ──────────────────────────────────────────────────
 
@@ -351,12 +333,50 @@ class HoloneService:
             self._record(list(result.findings))
         return result
 
+    # ── File-write → execute chain tracking ────────────────────────────────
+
+    def _track_file_write(
+        self, name: str, args: str, findings: list[Finding], *, source_prefix: str
+    ) -> None:
+        path = _extract_file_path(args)
+        if path:
+            self._session_file_writes.add(path)
+        download = _extract_download_target(args)
+        if download:
+            self._session_file_writes.add(download)
+
+        text = f"{name} {args}"
+        lowered = text.lower()
+        for written_path in self._session_file_writes:
+            if written_path not in text:
+                continue
+            if any(kw in lowered for kw in _EXECUTE_HINTS):
+                findings.append(Finding(
+                    rule_id="file-write-execute",
+                    category="security",
+                    severity=Severity.HIGH,
+                    match=written_path,
+                    excerpt=args[:100],
+                    source=f"{source_prefix}:{name}",
+                    description=f"Executing previously written or downloaded file: {written_path}"
+                ))
+            elif any(hint in lowered for hint in _AUTOEXEC_HINTS):
+                findings.append(Finding(
+                    rule_id="file-write-autoexec-ref",
+                    category="security",
+                    severity=Severity.HIGH,
+                    match=written_path,
+                    excerpt=args[:100],
+                    source=f"{source_prefix}:{name}",
+                    description=f"Previously written file referenced from an auto-exec surface: {written_path}"
+                ))
+
     # ── Findings history ───────────────────────────────────────────────────
 
     def _record(self, findings: list[Finding]) -> None:
         now = time.time()
         for f in findings:
-            self._findings.append(_FindingEntry(timestamp=now, finding=f))
+            self._findings.append(_FindingEntry(timestamp=now, finding=_sanitize(f)))
         # Trim to max
         if len(self._findings) > self._max_findings:
             self._findings = self._findings[-self._max_findings :]

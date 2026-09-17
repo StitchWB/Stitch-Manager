@@ -9,7 +9,6 @@ import {
   Check,
   AlertTriangle,
   Send,
-  SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -621,7 +620,6 @@ export default function Marketplace() {
               onChange={e => setQuery(e.target.value)}
               placeholder={t('marketplace.searchPlaceholder')}
               leftIcon={<Search className="w-4 h-4" />}
-              rightElement={<SlidersHorizontal className="w-4 h-4 text-slate-500" />}
             />
           </div>
 

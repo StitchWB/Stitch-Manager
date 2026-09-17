@@ -89,16 +89,16 @@ async def _ensure_telegram_user(db: AsyncSession) -> User:
 
 
 async def ensure_oidc_user(
-    db: AsyncSession, tg_id: int, preferred_username: str | None
+    db: AsyncSession, tg_id: int, display_name: str | None
 ) -> User:
     """Return the local user for Telegram id *tg_id*, creating it if absent.
 
     The authoritative binding is the ``telegram_id`` column (TG handles
     change; the numeric id does not), so each Telegram account keeps exactly
     one Stitch user row and the Users page shows who is who.  The username
-    is the TG handle (*preferred_username*, capped for defense-in-depth)
-    when free — so the name is visible — with a deterministic ``tg_<id>``
-    fallback.
+    is the TG display name (*display_name* — handle, else first name, capped
+    for defense-in-depth) when free — so the name is visible — with a
+    deterministic ``tg_<id>`` fallback.
 
     Rows created before the column existed (username ``tg_<id>``) are
     ADOPTED: the first OIDC login stamps ``telegram_id`` onto them instead
@@ -107,17 +107,31 @@ async def ensure_oidc_user(
     OIDC (privilege-escalation vector flagged in security review — TG
     handles are reusable and guessable).
 
+    HEALING: a row still named ``tg_<id>`` gets renamed to the current
+    display name on login when it is free — the row is already bound to this
+    telegram_id, so this never touches foreign rows.
+
     The password is a random 32-byte hex string — login is via OIDC
     ``id_token``, not password.  The FIRST user ever created gets role
     ``admin`` (bootstrap, same spirit as ``/api/auth/setup``); later OIDC
     logins are regular users.
     """
-    user = await auth_service.get_user_by_telegram_id(db, tg_id)
-    if user is not None:
+    fallback = f"tg_{tg_id}"
+    handle = (display_name or "").strip()[:64]
+
+    async def _heal_name(user: User) -> User:
+        """Rename a fallback-named row to the display name when free."""
+        if not handle or user.username != fallback:
+            return user
+        clash = await auth_service.get_user_by_username(db, handle)
+        if clash is None or clash.id == user.id:
+            user.username = handle
+            await db.flush()
         return user
 
-    fallback = f"tg_{tg_id}"
-    handle = (preferred_username or "").strip()[:64]
+    user = await auth_service.get_user_by_telegram_id(db, tg_id)
+    if user is not None:
+        return await _heal_name(user)
 
     # Adopt pre-column tg_<id> rows (stable continuity across migration).
     user = await auth_service.get_user_by_username(db, fallback)
@@ -125,7 +139,7 @@ async def ensure_oidc_user(
         if user.telegram_id is None:
             user.telegram_id = tg_id
             await db.flush()
-        return user
+        return await _heal_name(user)
 
     random_pw = secrets.token_hex(32)
     username = fallback
@@ -188,7 +202,7 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, 
         # (security CRIT fix): each Telegram account gets its own local user.
         # Legacy codes without tg_id fall back to the shared "telegram" user.
         if state.tg_user_id is not None:
-            user = await ensure_oidc_user(db, state.tg_user_id, None)
+            user = await ensure_oidc_user(db, state.tg_user_id, state.tg_username)
         else:
             user = await _ensure_telegram_user(db)
         raw_token, expires_at = await auth_service.create_session(db, user.id)

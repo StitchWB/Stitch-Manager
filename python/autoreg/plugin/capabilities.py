@@ -814,8 +814,11 @@ def totp_register_capability(
                 continue  # tolerant
 
         # 7. Persist secret to DB (raw-SQL, same schema as kiro_v2 mfa).
-        label = str(store.get("account.email") or "plugin")
-        _persist_totp_secret(secret=secret, label=label)
+        # Only registration runs seed account.email; drift/e2e runs execute
+        # scenarios with an empty store and must not pollute the totp table.
+        label = str(store.get("account.email") or "")
+        if label:
+            _persist_totp_secret(secret=secret, label=label)
 
         # 8. Store output for account.save.
         store["account.totp_ref"] = secret

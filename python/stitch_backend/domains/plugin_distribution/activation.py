@@ -57,6 +57,9 @@ class ActivationState:
     # Telegram id the activation code was issued to (server echoes it). Lets the
     # web bind the local session to a per-TG-user account (security CRIT fix).
     tg_user_id: int | None = None
+    # TG display name (handle/first name) recorded at issuance — shown instead
+    # of the tg_<id> fallback.
+    tg_username: str | None = None
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ActivationState:
@@ -75,6 +78,7 @@ class ActivationState:
             tg_admin=bool(raw.get("tg_admin", False)),
             tier=str(raw.get("tier")) if raw.get("tier") else None,
             tg_user_id=_opt_int(raw.get("tg_user_id")),
+            tg_username=str(raw["tg_username"]) if raw.get("tg_username") else None,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -129,6 +133,7 @@ class ActivationService:
             tg_admin=bool(body.get("tg_admin", False)),
             tier=body.get("tier") or None,
             tg_user_id=_opt_int(body.get("tg_user_id")),
+            tg_username=str(body["tg_username"]) if body.get("tg_username") else None,
         )
         self._save(state)
         self._invalidate_entitlements_cache()

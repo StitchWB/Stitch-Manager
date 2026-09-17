@@ -469,7 +469,7 @@ class LiteLLMExecutor:
                 if compression_service.config.enabled:
                     result = compression_service.compress_output(result)
                 if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_openai(
+                    result, findings, blocked = holone_service.inspect_response_anthropic(
                         result, client_has_tools=client_has_tools
                     )
                     if findings:
@@ -570,7 +570,7 @@ class LiteLLMExecutor:
             from stitch_backend.domains.ai_proxy.compression.caveman import compress_text
             input_data = compress_text(input_data, level=compression_service.config.level)
 
-        client_has_tools = False  # Responses API doesn't use client tool advertisement
+        client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
         start_time = time.time()
 
         try:
@@ -640,7 +640,7 @@ class LiteLLMExecutor:
                 if compression_service.config.enabled:
                     result = compression_service.compress_output(result)
                 if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_openai(
+                    result, findings, blocked = holone_service.inspect_response_responses(
                         result, client_has_tools=client_has_tools
                     )
                     if findings:

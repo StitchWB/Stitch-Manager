@@ -527,7 +527,11 @@ async def login_telegram_oidc(
             detail="Invalid Telegram id in token",
         ) from exc
 
-    preferred_username = claims.get("preferred_username")
+    preferred_username = (
+        claims.get("preferred_username")
+        or claims.get("given_name")
+        or claims.get("name")
+    )
 
     async def _op(session: AsyncSession):
         user = await ensure_oidc_user(session, tg_id, preferred_username)

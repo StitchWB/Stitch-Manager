@@ -1,0 +1,447 @@
+{
+  "version": 1,
+  "note": "Python-only ATR patterns (lookaround/backreferences — NOT RE2-compatible, never sync into rules.json). Same source and generator as rules_atr.json.",
+  "rules": [
+    {
+      "id": "atr-2026-00010-l3",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)(curl|wget|fetch|lwp-download|aria2c|invoke-webrequest|iwr|Invoke-RestMethod|irm)\\s+[^|]{0,200}(https?://\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|http://(?!localhost|127\\.|0\\.0\\.0\\.0|\\[::1\\])|@)[^|]{0,120}\\|\\s*(bash|sh|zsh|python[23]?|perl|ruby|node|powershell|pwsh|cmd|source)",
+      "description": "Download-and-execute pipe to shell, narrowed to malicious-leaning sources (raw IP, plain external http://, or userinfo@ URL). Benign https://official-domain installer pipes, http://localhost health-ch"
+    },
+    {
+      "id": "atr-2026-00011-l11",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)[\\u200B\\u200C\\u200D\\uFEFF\\u2060]{3,64}+(?![\\u200B\\u200C\\u200D\\uFEFF\\u2060]).{0,200}(ignore|override|execute|call|send|disregard|you\\s+must|instruction)",
+      "description": "Zero-width characters preceding injection keywords in tool output"
+    },
+    {
+      "id": "atr-2026-00012-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(;|&&|\\|\\|)\\s*(?:sudo\\s+)?(?:curl\\s+(?:-\\S+\\s+)*['\"]?https?://(?!localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)|wget\\s+(?:-\\S+\\s+)*['\"]?https?://(?!localhost|127\\.)|\\bnc\\b\\s+-?[a-z0-9]|ncat\\s+\\S|\\b(?:ba)?sh\\s+-[ic]|python[0-9]?\\s+-c|perl\\s+-e|ruby\\s+-e|node\\s+-e|\\beval\\s|rm\\s+-[rf]|cat\\s+/etc/(?:passwd|shadow|sudoers)|whoami|\\bid\\b\\s*(?:;|&|\\||$)|uname\\s+-a|base64\\s+(?:-d|--decode)|ifconfig|>&\\s*/dev/tcp)|[$`]\\([^)`]{0,80}(?:curl|wget|\\bnc\\b|\\bbash\\b|\\bsh\\s+-|whoami|\\bid\\b|base64\\s+-d|/etc/(?:passwd|shadow))",
+      "description": "Shell metacharacter chained to a genuinely dangerous command — external network fetch, pipe-to-shell / interpreter one-liner, recon (whoami/id/uname -a), or sensitive-file read (v2 tightened; legit bu"
+    },
+    {
+      "id": "atr-2026-00161-l2",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "\\b(?:id_rsa|id_dsa|id_ed25519|id_ecdsa)\\b(?!\\.pub)|\\b(?:\\.aws/credentials|\\.kube/config|\\.docker/config\\.json|\\.netrc|known_hosts)\\b|/etc/(?:passwd|shadow|ssl/private)|/proc/self/environ|\\b\\.env(?:\\.local|\\.production|\\.secret)?\\b(?![/a-zA-Z])",
+      "description": "Sensitive credential file referenced in tool description — private keys or cloud credentials (v2: dropped mcp.json + .aws/config — common non-secret config files that appear in ordinary git/edit opera"
+    },
+    {
+      "id": "atr-2026-00270-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "<script\\b(?![^>]*(?:\\bsetup\\b|\\blang[\\s=]))[^>]*>\\s*(?:[^\\n<]{0,200}(?:eval\\s*\\(|document\\.cookie|window\\.location\\s*=|fetch\\s*\\(|XMLHttpRequest|localStorage|sessionStorage|atob\\s*\\()[^\\n<]{0,200})<\\/script>",
+      "description": "Script tag whose body contains a known XSS sink (eval/cookie/fetch/etc) — excludes bare src= includes"
+    },
+    {
+      "id": "atr-2026-00270-l4",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "<(?:script\\b(?![^>]*(?:\\bsetup\\b|\\blang[\\s=]))|iframe|svg)\\b[^>]*>[^<]{0,200}(?:eval\\s*\\(|alert\\s*\\(|document\\.cookie|window\\.location\\s*=|fetch\\s*\\(|XMLHttpRequest)",
+      "description": "Script/iframe/SVG block containing known XSS sink functions"
+    },
+    {
+      "id": "atr-2026-00393-l2",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?:decode|unescape|interpret)\\s+(?:(?:the\\s+following|it|this)\\s*)?(?:as\\s+raw\\s+bytes?:?\\s*|as\\s+(?:ansi\\s+)?escape\\s+sequences?:?\\s*)?:?\\s*(?:\\\\x1b|\\\\033|\\\\u001b|\\\\27|\\\\e|\\x1b)",
+      "description": "\"Decode the following as raw bytes: \\x1b…\" — garak UNESCAPE_STUBS + ESCAPED_PAYLOADS; instructs model to interpret string literals as executable escape bytes"
+    },
+    {
+      "id": "atr-2026-00393-l3",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?:print\\s+the\\s+following|output\\s+everything\\s+after\\s+(?:this\\s+)?colon|repeat)\\s*:?\\s*(?:\\\\x1b|\\\\033|\\\\u001b|\\\\27|\\\\x9[bd]|\\x1b|\\x9b|\\x9d)",
+      "description": "\"Print the following: \\x1b[\" and \"Output everything after this colon: \\x1b]8;;\" — garak REPEAT_STUBS followed by live or escaped ANSI payload"
+    },
+    {
+      "id": "atr-2026-00435-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"mcpServers\"\\s*:\\s*\\{[^}]*\"[^\"]*azure[^\"]*\"\\s*:\\s*\\{(?:(?!\"(?:auth|authorization|headers|token|apiKey|bearerToken)\")[^{}])*\\}",
+      "description": "MCP server config block whose key references Azure but has no auth-related field — direct CVE-2026-32211 exposure pattern"
+    },
+    {
+      "id": "atr-2026-00435-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"url\"\\s*:\\s*\"https://[^\"]*\\.(?:azure|azurewebsites|microsoftcontainerregistry|microsoft)\\.[^\"/]+/(?:mcp|tools|invoke|list)[^\"]*\"(?:(?!\"(?:auth|headers|token|apiKey)\")[\\s\\S]){0,400}\\}",
+      "description": "MCP server URL pointing at Azure-hosted MCP endpoint without auth/headers field within the same config object"
+    },
+    {
+      "id": "atr-2026-00435-l2",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"tools\"\\s*:\\s*\\[[^\\]]{20,}\\]\\s*,\\s*\"server\"\\s*:\\s*\"azure-mcp[^\"]*\"(?![\\s\\S]{0,400}?(?:authorization|www-?authenticate|access[_-]?token))",
+      "description": "Azure MCP handshake exposes tools list with no authentication challenge present in the same exchange"
+    },
+    {
+      "id": "atr-2026-00448-l5",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)[\\x27\"]\\s+(?:or|and)\\s+(?:1\\s*=+\\s*1|true)\\s*(?:--(?=\\s|$|[\"\\x27\\)])|/\\*)",
+      "description": "Canonical SQL/DSL tautology with sentinel comment-out terminator (-- at EOL or /*) — conservative shape that excludes markdown `#` heading false positives; supports = and == comparator"
+    },
+    {
+      "id": "atr-2026-00526-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?<![A-Za-z_])(?:file_?path|filename|input_file|output_file|target_file|source_file|file|path|source|destination|target)[\"']?\\s*[:=]\\s*[\"'][^\"']{0,500}(?:\\$\\([^)]{1,300}\\)|`[^`]{1,300}`)",
+      "description": "Path-shaped argument key (file_path / filename / path / source / target / input_file / output_file / destination) bound via : or = to a string literal containing $(...) command substitution OR backtic"
+    },
+    {
+      "id": "atr-2026-00529-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?<![A-Za-z_])(?:team_id|user_id|key_id|model_id|customer_id|budget_id|alias_id|tag_id)\\s*[:=]\\s*[\"'][\\s\\S]{0,200}(?:'\\s*(?:OR|UNION|AND|SELECT)|\"\\s*(?:OR|UNION|AND|SELECT)|\\bOR\\s+1\\s*=\\s*1\\b|\\bUNION\\s+(?:ALL\\s+)?SELECT\\b|;\\s*DROP\\s+TABLE|;\\s*DELETE\\s+FROM)",
+      "description": "LiteLLM Proxy SQL Injection (CVE-2026-42208, CISA KEV 2026-05-08)"
+    },
+    {
+      "id": "atr-2026-00530-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?<![A-Za-z_])(?:ShellTool|shell_tool|BashTool|bash_tool|ExecTool|exec_tool|SystemTool|system_tool|CommandExecutor|CommandExecutionTool|CodeInterpreterTool|TerminalTool|terminal_tool|RunCommand|run_command|run_shell|@tool\\s*\\(\\s*[\"'](?:shell|bash|exec|system|terminal|cmd|command|run_shell|run_command)[\"']\\s*\\))[\\s\\S]{0,400}(?:subprocess\\.(?:run|call|Popen|check_output)\\s*\\([^)]*shell\\s*=\\s*True|os\\.(?:system|popen)\\s*\\(|exec\\s*\\(\\s*(?:input|sys\\.argv|request|payload|params|args|user_input|message|prompt)|child_process\\.exec\\s*\\(|new\\s+Function\\s*\\(|eval\\s*\\(\\s*(?:input|user_input|request|payload))",
+      "description": "ModelScope MS-Agent Shell Tool Unsanitized Argv RCE (CVE-2026-2256)"
+    },
+    {
+      "id": "atr-2026-00530-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?<![A-Za-z_])(?:tool_name|tool|name)[\"']?\\s*[:=]\\s*[\"'](?:shell|bash|exec|system|terminal|run_command|run_shell|execute|cmd)[\"'][\\s\\S]{0,300}(?:tool_input|args?|command|input|payload|params?)[\"']?\\s*[:=]\\s*[\"'][^\"']{0,300}(?:(?:;|&&|\\|\\||`|\\$\\([^)]+\\)|`[^`]+`|\\|\\s*(?:nc|bash|sh|curl|wget))[\\s\\S]{0,100})",
+      "description": "ModelScope MS-Agent Shell Tool Unsanitized Argv RCE (CVE-2026-2256)"
+    },
+    {
+      "id": "atr-2026-00531-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"url\"\\s*:\\s*\"https?://[^\"]{0,120}(?:praisonai|praison[_\\-]?ai|praison\\.ai)[^\"]{0,60}(?:/agents?|/chat|/api/v1/(?:agents?|chat))[^\"]*\"(?![\\s\\S]{0,400}\"(?:auth|headers?|token|apiKey|authorization|bearer)\")",
+      "description": "MCP server config pointing at PraisonAI /agents or /chat endpoint URL without auth/headers field — unauthenticated surface exposure"
+    },
+    {
+      "id": "atr-2026-00531-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)(?:\"(?:url|endpoint|target)\"\\s*:\\s*\"[^\"]{0,120}(?:praisonai|praison[_\\-]?ai)[^\"]{0,60}(?:/agents?|/chat)\"|(?:curl|wget|fetch|requests?\\.post)[^\\n]{0,200}(?:praisonai|praison[_\\-]?ai)[^\\n]{0,100}(?:/agents?|/chat))(?![\\s\\S]{0,400}(?:authorization|bearer|api[_\\-]?key|x-api-key|token|x-auth))",
+      "description": "HTTP call to PraisonAI agent execution endpoint in tool arguments without auth header — CVE-2026-44338 direct exploitation"
+    },
+    {
+      "id": "atr-2026-00531-l3",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"tools\"\\s*:\\s*\\[(?:[^\\]]{0,400}(?:run_agent|execute_agent|create_agent|agent_run|praisonai[_\\-](?:run|execute|create|task))[^\\]]{0,400})\\](?![\\s\\S]{0,600}(?:www[_\\-]?authenticate|authorization|x-api-key|bearer\\s+token))",
+      "description": "PraisonAI MCP handshake exposes agent execution tools without an authentication challenge"
+    },
+    {
+      "id": "atr-2026-00532-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"url\"\\s*:\\s*\"https?://[^\"]{0,120}(?:apache[_\\-]?doris|doris[_\\-]?mcp|doris\\.apache)[^\"]{0,60}(?:/mcp|/tools?|/api)[^\"]*\"(?![\\s\\S]{0,400}\"(?:auth|headers?|token|apiKey|authorization|bearer)\")",
+      "description": "MCP config pointing at Apache Doris endpoint without auth — unauthenticated SQL injection surface"
+    },
+    {
+      "id": "atr-2026-00533-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"(?:name|tool)\"\\s*:\\s*\"(?:pinot_(?:create|delete|update|drop|add|modify|alter)_(?:table|schema|segment|tenant|instance)|apache[_\\-]?pinot[_\\-](?:admin|manage|cluster|delete|drop))[^\"]{0,60}\"(?:(?!(?:authorization|bearer|api[_\\-]?key|x-api-key|token|x-auth))[\\s\\S]){0,500}",
+      "description": "MCP tool call targeting Apache Pinot cluster management function without auth — unauthenticated takeover vector"
+    },
+    {
+      "id": "atr-2026-00533-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"url\"\\s*:\\s*\"https?://[^\"]{0,120}(?:apache[_\\-]?pinot|pinot[_\\-]?mcp|pinot\\.apache)[^\"]{0,60}(?:/mcp|/tools?|/controller|/api)[^\"]*\"(?![\\s\\S]{0,400}\"(?:auth|headers?|token|apiKey|authorization|bearer)\")",
+      "description": "MCP server config pointing at Apache Pinot endpoint without auth — unauthenticated management surface"
+    },
+    {
+      "id": "atr-2026-00534-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"(?:name|tool)\"\\s*:\\s*\"(?:rds_(?:describe|list|get|fetch)_(?:instances?|databases?|schemas?|credentials?|connection[_\\-]?strings?|accounts?|passwords?)|alibaba[_\\-]rds[_\\-](?:describe|list|metadata|credentials?|schema))[^\"]{0,60}\"(?:(?!(?:authorization|bearer|api[_\\-]?key|x-api-key|token|x-auth))[\\s\\S]){0,500}",
+      "description": "MCP tool call targeting Alibaba RDS metadata or credential enumeration without auth — unauthenticated exfiltration vector"
+    },
+    {
+      "id": "atr-2026-00534-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"url\"\\s*:\\s*\"https?://[^\"]{0,120}(?:alibaba[_\\-]?rds|aliyun[_\\-]?rds|rds\\.aliyuncs\\.com|rds[_\\-]mcp\\.alibaba)[^\"]{0,60}(?:/mcp|/tools?|/api|/metadata)[^\"]*\"(?![\\s\\S]{0,400}\"(?:auth|headers?|token|apiKey|authorization|bearer)\")",
+      "description": "MCP config pointing at Alibaba RDS endpoint without auth — unpatched credential exposure surface"
+    },
+    {
+      "id": "atr-2026-00536-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"(?:name|tool)\"\\s*:\\s*\"(?:nginx_command_execute|nginx_reload|nginx_restart|nginx_test|nginx_config_write|nginx_config_reload|nginx[_\\-](?:command|exec|run|reload|restart|stop|start|test|config))[^\"]{0,60}\"(?:(?!(?:authorization|bearer|api[_\\-]?key|x-api-key|token|x-auth))[\\s\\S]){0,500}",
+      "description": "MCP tool call targeting nginx management function without any Authorization/token field in surrounding context — CVE-2026-33032 direct exploitation pattern"
+    },
+    {
+      "id": "atr-2026-00536-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"url\"\\s*:\\s*\"https?://[^\"]{0,80}(?:nginx[_\\-]?ui|nginx\\.ui|nginxui|/nginx/ui)[^\"]{0,60}(?:/mcp|/tools?|/api/v1/mcp)[^\"]*\"(?:(?!\"(?:auth|headers|token|apiKey|authorization|bearer)\")[\\s\\S]){0,400}}",
+      "description": "MCP server config pointing at nginx-ui endpoint URL without auth/headers field — unauthenticated surface exposure"
+    },
+    {
+      "id": "atr-2026-00536-l4",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"tools\"\\s*:\\s*\\[(?:[^\\]]{0,400}(?:nginx_(?:command_execute|reload|restart|config_write|test)|manage_nginx|nginx[_\\-]service)[^\\]]{0,400})\\](?:(?!(?:www[_\\-]?authenticate|authorization|x-api-key|bearer\\s+token))[\\s\\S]){0,600}",
+      "description": "nginx-ui MCP handshake exposes nginx management tools without an authentication challenge in the same exchange"
+    },
+    {
+      "id": "atr-2026-00537-l2",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"name\"\\s*:\\s*\"[^\"]*[&|><^()][^\"]*\"\\s*[,}](?=[^\"]{0,200}\"(?:transport|command|install|server_type|mcp)\"\\s*:)",
+      "description": "JSON MCP server configuration block with a name field containing cmd.exe metacharacter — config-injection shape targeting FastMCP or compatible MCP installers\n"
+    },
+    {
+      "id": "atr-2026-00538-l2",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"transport(?:_type)?\"\\s*:\\s*\"stdio\"\\s*[,}][^}]{0,600}\"command\"\\s*:\\s*\"(?!(?:npx|uvx|node|python3?)\\s*[\"\\x27])[^\"]{2,200}\"",
+      "description": "STDIO transport config where the command value is not an expected MCP launcher (npx/uvx/python) — suspicious arbitrary binary in STDIO transport\n"
+    },
+    {
+      "id": "atr-2026-01983-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\\b(?:log_file_name|log_name)\\b[\"\\x27]?\\s*[:=]\\s*[\"\\x27][\\s\\S]{0,80}[\"\\x27][\\s\\S]{0,40}(?:\\bshell\\b|\\bpython\\b|\\berase\\b|\\bwinexec\\b|(?<![\\w=])!(?!=))",
+      "description": "A stata_do log_file_name/log_name parameter value that breaks out of its quoted string and is followed by a dangerous Stata command token (shell / python / erase / winexec / ! shell-escape) — the CVE-"
+    },
+    {
+      "id": "atr-2026-02041-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?:;|\\|)\\s*echo\\s+(?!(?:restarted|deployed|started|stopped|finished|completed?|success(?:ful)?|ok|passed|failed|running|ready|healthy|updated|installed|built|synced|done|tests?[_-]?passed|backed[_-]?up|cleaned|rebooted|restored|migrated|published|released)\\b)\\S[\\s\\S]{0,40}>\\s*\\/(?:tmp|var\\/tmp|dev\\/shm)\\/[\\w./-]*[\\s\\S]{0,15}(?:;\\s*#|#)",
+      "description": "Semicolon/pipe-chained echo-to-file redirect into a throwaway/scratch path (/tmp, /var/tmp, /dev/shm) followed by a trailing comment terminator (shell-injection PoC verification idiom); excludes ordin"
+    },
+    {
+      "id": "atr-2026-02041-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "`\\s*echo\\s+(?!(?:restarted|deployed|started|stopped|finished|completed?|success(?:ful)?|ok|passed|failed|running|ready|healthy|updated|installed|built|synced|done|tests?[_-]?passed|backed[_-]?up|cleaned|rebooted|restored|migrated|published|released)\\b)\\S[\\s\\S]{0,40}>\\s*\\/(?:tmp|var\\/tmp|dev\\/shm)\\/[\\w./-]*[\\s\\S]{0,10}`",
+      "description": "Backtick command substitution running an echo-to-file redirect into a throwaway/scratch path"
+    },
+    {
+      "id": "atr-2026-02041-l2",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "\\$\\(\\s*echo\\s+(?!(?:restarted|deployed|started|stopped|finished|completed?|success(?:ful)?|ok|passed|failed|running|ready|healthy|updated|installed|built|synced|done|tests?[_-]?passed|backed[_-]?up|cleaned|rebooted|restored|migrated|published|released)\\b)\\S[\\s\\S]{0,40}>\\s*\\/(?:tmp|var\\/tmp|dev\\/shm)\\/[\\w./-]*[\\s\\S]{0,10}\\)",
+      "description": "$() command substitution running an echo-to-file redirect into a throwaway/scratch path"
+    },
+    {
+      "id": "atr-2026-02141-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\"command\"\\s*:\\s*\"(?:bash|sh|python3?|perl)\"[\\s\\S]{0,20}\"args\"\\s*:\\s*\\[\\s*\"-c\"\\s*,\\s*\"(?=(?:[^\"\\\\]|\\\\.)*(?:curl\\b|wget\\b|\\bnc\\b|\\bncat\\b|/dev/tcp|base64\\s+(?:-d|--decode)|\\beval\\(|\\bexec\\(|os\\.system|subprocess\\.|reverse[_ -]?shell|mkfifo|\\.ssh/|\\.aws/|\\.gnupg/|id_rsa|/etc/passwd|/etc/shadow|credentials\\.json|\\$\\(|`))(?:[^\"\\\\]|\\\\.)*\"",
+      "description": "MCP server config command set to a shell/interpreter with -c whose payload itself contains a dangerous signal (network fetch, reverse shell, credential-file read, or code-exec obfuscation) — v2 tighte"
+    },
+    {
+      "id": "atr-2026-02233-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\\b(drop|delete|truncate|wipe|erase)\\s+all\\s+(available\\s+)?(tables?|databases?)\\b(?!\\s+(command|statement|query|operation)\\b)(?!\\s*(?:in|from|on|within)\\s+(?:the\\s+)?(?:test|dev(?:elopment)?|staging|sandbox|demo)\\s+(?:database|db|schema|environment|env)\\b(?![\\s\\S]*?\\b(?:prod(?:uction)?|live|real)\\b))",
+      "description": "Blind unscoped destructive DB operation naming no specific table/database (excludes descriptive/documentation mentions like 'X command deletes data'; also excludes a request explicitly scoped to a tes"
+    },
+    {
+      "id": "atr-2026-02260-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)(##\\s*resolution|recommended\\s+fix|to\\s+(resolve|fix)\\s+(this|the)\\b[^\\n]{0,40}\\b(error|issue|failure|problem|bug|build|vulnerabilit)|as\\s+a\\s+(required|mandatory)\\b[^\\n]{0,25}\\bstep[^\\n]{0,20})[\\s\\S]{0,80}(\\b(npx|uvx|pipx)\\s+(?!(?:eslint|ruff|mypy|prettier|black|pyright|pylint|playwright|pre-commit|tsc|jest|vitest|biome|isort|flake8|pytest|stylelint|tox|nox|poetry|pipenv|cypress|webpack|vite|rollup|esbuild|nodemon)\\b|create-)[@a-z0-9._/-]{2,}|\\b(curl|wget)\\b[^\\n]{0,100}\\|\\s*(ba)?sh\\b)",
+      "description": "Remediation/resolution-framed instruction in tool output that, in close proximity, runs an external package executor or pipe-to-shell (agentjacking core signature)"
+    },
+    {
+      "id": "atr-2026-02260-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\\b(you\\s+)?must\\s+run\\s+(the\\s+following[:\\s]+)?(\\b(npx|uvx|pipx)\\s+(?!(?:eslint|ruff|mypy|prettier|black|pyright|pylint|playwright|pre-commit|tsc|jest|vitest|biome|isort|flake8|pytest|stylelint|tox|nox|poetry|pipenv|cypress|webpack|vite|rollup|esbuild|nodemon)\\b|create-)[@a-z0-9._/-]{2,}|\\b(curl|wget)\\b[^\\n]{0,100}\\|\\s*(ba)?sh\\b)",
+      "description": "Tool output imperatively directs the agent to run an external package executor or pipe-to-shell immediately (mandatory-execution directive)"
+    },
+    {
+      "id": "atr-2026-02260-l3",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)(after\\s+[^\\n]{0,40}\\bapprov[^\\n]{0,40}|on\\s+(subsequent|later|future)\\s+runs|every\\s+time\\s+(the\\s+agent|you)\\s+(run|execute))[\\s\\S]{0,120}(\\b(npx|uvx|pipx)\\s+(?!(?:eslint|ruff|mypy|prettier|black|pyright|pylint|playwright|pre-commit|tsc|jest|vitest|biome|isort|flake8|pytest|stylelint|tox|nox|poetry|pipenv|cypress|webpack|vite|rollup|esbuild|nodemon)\\b|create-)[@a-z0-9._/-]{2,}|\\b(curl|wget)\\b[^\\n]{0,100}\\||\\bbash\\s+-c|\\bsh\\s+-c|\\beval\\s*\\()",
+      "description": "Post-approval persistence framing in tool output directing the agent to execute a command on later runs (rug-pull in tool response)"
+    },
+    {
+      "id": "atr-2026-02263-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\\b(?:SELECT|INSERT|UPDATE|DELETE)\\b[^\\n]{0,40}\\b(?:FROM|SET|INTO|WHERE|TABLE)\\b(?:(?!\\?|:[a-zA-Z_]|\\$\\d)[\\s\\S]){0,200}\\{\\{\\s*\\$[^}]{0,98}\\}\\}",
+      "description": "SQL verb followed closely by a real SQL clause keyword (FROM/SET/INTO/VALUES/WHERE/TABLE), then a {{ $... }} template expression embedded directly in the query text with no parameterization marker (?,"
+    },
+    {
+      "id": "atr-2026-02372-l0",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\\b(?:validation|task|hub|worker|remote|agent)_commands?\\b\\s*[=:]\\s*\\[?\\s*[\"'`]?\\s*npm\\s+install\\s+(?!-)[\\w@]",
+      "description": "Automated task/validation-command feed field invoking npm install of a specific, named package (not a bare dependency-lockfile install and not a --flag-only invocation) -- GHSA-jxh8-jh77-xh6g lifecycl"
+    },
+    {
+      "id": "atr-2026-02372-l1",
+      "category": "atr-tool-poisoning",
+      "severity": "high",
+      "pattern": "(?i)\\b(?:validation|task|hub|worker|remote|agent)_commands?\\b\\s*[=:]\\s*\\[?\\s*[\"'`]?\\s*npx\\s+-y(?!\\s+(?:-p\\s+)?(?:prettier|eslint|tsc|typescript|jest|vitest|webpack|vite|rollup|babel(?:-cli)?|husky|lint-staged|ts-node|tsx|mocha|cypress|playwright|npm-check-updates|depcheck|standard|stylelint)\\b)\\s+",
+      "description": "Automated task/validation-command feed field invoking npx -y (auto-confirm, skips install prompt) against a package that is not one of the common, well-known dev-tool packages -- same lifecycle-script"
+    },
+    {
+      "id": "atr-2026-00114-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)redirect_uri\\s*=\\s*https?://(?!localhost|127\\.0\\.0\\.1)[^\\s]*",
+      "description": "OAuth redirect_uri pointing to a non-local external domain"
+    },
+    {
+      "id": "atr-2026-00115-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)(?:process\\.env|os\\.environ|System\\.getenv)(?!\\[|\\.|\\w)",
+      "description": "Accessing the entire environment object rather than a specific variable"
+    },
+    {
+      "id": "atr-2026-00411-l0",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?:generate|create|make|produce)\\s+(?:a\\s+)?(?:new\\s+)?(?:openai|google|aws|stripe|anthropic|github|sendgrid|twilio|azure|huggingface)\\s+(?:(?:api|access|secret)\\s+)?key\\b(?!\\s*(?:from\\s+(?:your|the)|via\\s+(?:your|the)|in\\s+(?:your|the))\\s+(?:dashboard|console|settings|portal|website|account\\s+page))",
+      "description": "Direct named-service API key generation request — GetKey probe pattern; excludes dashboard/console redirection (documentation FP)"
+    },
+    {
+      "id": "atr-2026-00524-l0",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\"ANTHROPIC_BASE_URL\"\\s*:\\s*\"https?://(?!(?:api\\.anthropic\\.com|[a-z0-9\\-]+\\.googleapis\\.com|(?:bedrock|bedrock-runtime|bedrock-agent|bedrock-agent-runtime)\\.[a-z0-9\\-]+\\.amazonaws\\.com|localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|ai-gateway\\.vercel\\.sh|gateway\\.portkey\\.ai|api\\.openrouter\\.ai|[a-z0-9\\-]+\\.helicone\\.ai)(?:[:/\"]|$))[^\"]+\"",
+      "description": "Claude Code `.claude/settings.json` setting `ANTHROPIC_BASE_URL` to any host outside the Anthropic-controlled allowlist (api.anthropic.com / Google Vertex *.googleapis.com / AWS Bedrock bedrock*.<regi"
+    },
+    {
+      "id": "atr-2026-00524-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\\bANTHROPIC_BASE_URL\\s*=\\s*[\"\\x27]?https?://(?!(?:api\\.anthropic\\.com|[a-z0-9\\-]+\\.googleapis\\.com|(?:bedrock|bedrock-runtime|bedrock-agent|bedrock-agent-runtime)\\.[a-z0-9\\-]+\\.amazonaws\\.com|localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|ai-gateway\\.vercel\\.sh|gateway\\.portkey\\.ai|api\\.openrouter\\.ai|[a-z0-9\\-]+\\.helicone\\.ai)(?:[:/\\s\"\\x27]|$))[^\\s\"\\x27]+",
+      "description": "Shell / dotenv / Dockerfile / GitHub Actions env-var form (`ANTHROPIC_BASE_URL=https://attacker.example`) outside the Anthropic allowlist — variant ingress path for the same exploit class."
+    },
+    {
+      "id": "atr-2026-00524-l2",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\"ANTHROPIC_BASE_URL\"\\s*:\\s*\"https?://(?!(?:127\\.|10\\.|0\\.0\\.0\\.0|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.))(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d{1,5})?(?![\\d.])",
+      "description": "ANTHROPIC_BASE_URL set to a bare IPv4 address (excluding loopback 127.0.0.0/8 + RFC1918 private ranges 10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12, and 0.0.0.0) — strong indicator of attacker-controlled"
+    },
+    {
+      "id": "atr-2026-00524-l3",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\"ANTHROPIC_BASE_URL\"\\s*:\\s*\"http://(?!(?:localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)(?:[:/\"]|$))[^\"]+\"",
+      "description": "ANTHROPIC_BASE_URL set to plain `http://` (not HTTPS) against a non-loopback host — credential leaks in cleartext, never a legitimate production configuration."
+    },
+    {
+      "id": "atr-2026-00524-l4",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\\.claude[/\\\\]settings(?:\\.local)?\\.json[\\s\\S]{0,400}\"ANTHROPIC_BASE_URL\"\\s*:\\s*\"https?://(?!(?:api\\.anthropic\\.com|[a-z0-9\\-]+\\.googleapis\\.com|(?:bedrock|bedrock-runtime|bedrock-agent|bedrock-agent-runtime)\\.[a-z0-9\\-]+\\.amazonaws\\.com|localhost|127\\.0\\.0\\.1)(?:[:/\"]|$))",
+      "description": "Repo-scoped `.claude/settings.json` co-located with an off-allowlist ANTHROPIC_BASE_URL — path + payload co-occurrence anchor for skill / documentation scans."
+    },
+    {
+      "id": "atr-2026-00580-l0",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)(?:https?|wss?):\\/\\/[A-Za-z0-9.@:\\/_~%+-]{1,120}\\?[A-Za-z0-9._~%+\\/=&-]{0,80}?\\b(?:session[_-]?id|sessionid|session[_-]?token|auth[_-]?token|access[_-]?token|api[_-]?key)=(?=[A-Za-z0-9._~+\\/-]*[0-9])[A-Za-z0-9._~+\\/-]{12,}",
+      "description": "A session/auth credential keyword carrying a realistic high-entropy (12+ char, contains a digit) value inside the query string of an http(s)/ws(s) URL (session leak via logs/referrer/history). The dig"
+    },
+    {
+      "id": "atr-2026-00580-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\\b(?:GET|POST|url[\"']?\\s*[:=]\\s*[\"']?)\\s*\\/[A-Za-z0-9._~%+\\/-]{0,60}\\?[A-Za-z0-9._~%+\\/=&-]{0,60}?\\b(?:session[_-]?id|sessionid|session[_-]?token|auth[_-]?token|access[_-]?token|api[_-]?key)=(?=[A-Za-z0-9._~+\\/-]*[0-9])[A-Za-z0-9._~+\\/-]{12,}",
+      "description": "An MCP/SSE-shaped relative endpoint (request line or config url field, e.g. GET /messages/?sessionId=..., url=/sse?session_id=...) carrying a realistic high-entropy credential (12+ char, contains a di"
+    },
+    {
+      "id": "atr-2026-00702-l0",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)(?:exfiltrate|send|email|forward|share)\\s+(?:the\\s+)?(?:API\\s+key|password|credentials?|secret\\s+key|private\\s+key|auth\\s+(?:key|token)|stored\\s+passwords?)[^.\\n]{0,120}(?:[\\w.+-]+@[\\w-]+\\.[\\w.]+|https?://(?!(?:github|docs|example)\\.com))",
+      "description": "Send/exfil credential + explicit email address or external URL destination"
+    },
+    {
+      "id": "atr-2026-01451-l0",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)<img\\b[^>]{0,200}\\bonerror\\s*=\\s*['\"]?(?!this\\.src)[^>\"']{0,300}",
+      "description": "IMG tag with onerror event handler (not benign this.src fallback)"
+    },
+    {
+      "id": "atr-2026-01454-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)(?<!!)\\[[^\\]]{0,60}\\]\\(https?://(?:attacker|evil|exfil|collect|malicious|pwn|steal|grab|harvest)\\.[a-z]{2,}[^)]{0,200}\\)",
+      "description": "Markdown hyperlink with attacker-pattern domain"
+    },
+    {
+      "id": "atr-2026-01454-l3",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)(?<!!)\\[[^\\]]{0,60}\\]\\(https?://[a-z0-9._%-]+\\.[a-z]{2,}[^)]{0,100}\\?(?:secret|payload|api[_-]?key|token|credential|auth|exfil)=[A-Z_]{3,}",
+      "description": "Markdown link with high-confidence exfil query parameter placeholder"
+    },
+    {
+      "id": "atr-2026-01463-l3",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)(#{2,}\\s*\\[SYSTEM[:\\]](?!\\()|<\\|system\\|>|\\[SYSTEM\\s*(?:PROMPT|MESSAGE|OVERRIDE)\\](?!\\())",
+      "description": "Markdown-heading or special-token SYSTEM marker injection (not markdown link text)"
+    },
+    {
+      "id": "atr-2026-01957-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)bing\\.com/images/searchbyimage\\?[^\\s\"]*cbir=sbi[^\\s\"]*imgurl=https?(?:://|%3a%2f%2f)(?!www\\.bing\\.com|.*\\.microsoft\\.com)[^\\s\"&]+/[^\\s\"&]*(?:\\$?title|\\$?me|token|otp|mfa|secret|cookie|email)",
+      "description": "Bing image-proxy SSRF exfil sink carrying captured M365 data to a non-Microsoft attacker imgurl host"
+    },
+    {
+      "id": "atr-2026-02107-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "https?://(?:[\\w-]+\\.)?(?:docs|api|cdn|static|assets)\\.[\\w-]+\\.(?:com|org|io|dev|net)\\.(?!s3-website[\\w.-]*\\.amazonaws\\.com\\b|s3[\\w.-]*\\.amazonaws\\.com\\b|cloudfront\\.net\\b|github\\.io\\b|pages\\.dev\\b|vercel\\.app\\b|netlify\\.app\\b)[\\w-]+",
+      "description": "Domain-allowlist startsWith() bypass - a trusted documentation/API domain is followed by an extra dot-segment, defeating a naive string-prefix allowlist check. Excludes the extra dot-segment when it i"
+    },
+    {
+      "id": "atr-2026-02190-l0",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "\\b(?:ping|dig|nslookup)\\b[\\s\\S]{0,20}\\b(?:[0-9a-f]{16,}|[0-9A-F]{16,}|(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Z])(?=[A-Za-z0-9]*[a-z])[A-Za-z0-9]{10,})-[A-Za-z0-9]{4,}-[A-Za-z0-9-]{4,}\\.[a-z]{2,}(?:\\.[a-z]{2,})?\\b",
+      "description": "ping/dig/nslookup target hostname whose leftmost label is a long dash-segmented blob that actually looks like ENCODED data -- a pure 16+ char hex run, or a 10+ char alphanumeric run mixing uppercase, "
+    },
+    {
+      "id": "atr-2026-02262-l0",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\"?(?:api[_-]?token|api[_-]?key|secret|auth[_-]?token)\"?\\s*[:=]\\s*\"?env:[A-Z_][A-Z0-9_]{2,}\"?[\\s\\S]{0,300}\"?base[_-]?url\"?\\s*[:=]\\s*\"?https?://(?!api\\.(?:openai|anthropic|openrouter)\\.com)(?![^\\s\"]*\\.(?:internal|local|lan)\\b)(?!(?:[\\w.-]*\\.)?(?:internal|private|corp|intranet)[.\\-])(?!localhost|127\\.0\\.0\\.1|10\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.|192\\.168\\.)",
+      "description": "Credential-like field set to the literal env:VARNAME resolution trick, co-located with a base_url pointing off the well-known first-party provider domains AND not an internal/private-looking host (.in"
+    },
+    {
+      "id": "atr-2026-02262-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\"?base[_-]?url\"?\\s*[:=]\\s*\"?https?://(?!api\\.(?:openai|anthropic|openrouter)\\.com)(?![^\\s\"]*\\.(?:internal|local|lan)\\b)(?!(?:[\\w.-]*\\.)?(?:internal|private|corp|intranet)[.\\-])(?!localhost|127\\.0\\.0\\.1|10\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.|192\\.168\\.)[^\\s\"]{1,200}[\\s\\S]{0,300}\"?(?:api[_-]?token|api[_-]?key|secret|auth[_-]?token)\"?\\s*[:=]\\s*\"?env:[A-Z_][A-Z0-9_]{2,}\"?",
+      "description": "Same primitive expressed base_url-first (reverse order) — a redirect target (excluding internal/private-looking hosts) followed by an env: resolution-trick credential field"
+    },
+    {
+      "id": "atr-2026-02373-l1",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\"secrets_from_env\"\\s*:\\s*true[\\s\\S]{0,40}\"(?:base_url|openai_api_base|azure_endpoint)\"\\s*:\\s*\"https?://(?![^\"]{0,60}\\.(?:azure\\.com|amazonaws\\.com|googleapis\\.com|openai\\.com|anthropic\\.com)\\b|[^\"]{0,60}\\b(?:internal|corp|local)\\b|localhost|127\\.0\\.0\\.1|10\\.\\d{1,3}\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)[^\"]{0,80}\"",
+      "description": "Deserialized prompt-manifest kwargs combine secrets_from_env with an LLM-client base_url override to a non-major-cloud, non-internal-looking domain -- CVE-2026-45134 credential-exfil + traffic-redirec"
+    },
+    {
+      "id": "atr-2026-02373-l2",
+      "category": "atr-context-exfiltration",
+      "severity": "high",
+      "pattern": "(?i)\"(?:base_url|openai_api_base|azure_endpoint)\"\\s*:\\s*\"https?://(?![^\"]{0,60}\\.(?:azure\\.com|amazonaws\\.com|googleapis\\.com|openai\\.com|anthropic\\.com)\\b|[^\"]{0,60}\\b(?:internal|corp|local)\\b|localhost|127\\.0\\.0\\.1|10\\.\\d{1,3}\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)[^\"]{0,80}\"[\\s\\S]{0,40}\"secrets_from_env\"\\s*:\\s*true",
+      "description": "Same combination, base_url override appearing before secrets_from_env in the serialized manifest"
+    }
+  ]
+}

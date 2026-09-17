@@ -524,8 +524,8 @@
       "id": "persist-shell-rc-poison",
       "category": "persistence",
       "severity": "high",
-      "pattern": "(?i)(\\.bashrc|\\.zshrc|\\.profile|\\.bash_profile|\\.zprofile)[\\s\\S]{0,120}(curl|wget|iex|invoke-expression|http[s]?://|base64|\\bnc\\b|bash\\s+-i|/dev/tcp/|/bin/sh)",
-      "description": "Shell RC/profile file carrying a fetch/exec payload — persistent execution on every new shell (Linux/macOS)"
+      "pattern": "(?i)(\\.bashrc|\\.zshrc|\\.profile|\\.bash_profile|\\.zprofile)[\\s\\S]{0,120}((curl|wget|iwr|irm)[^\\n|]{0,60}\\|\\s*(sudo\\s+)?(ba|z|k)?sh\\b|/dev/tcp/|invoke-expression|iex\\s*[\\( ]|\\bnc\\s+-[a-z]*e\\s|base64\\s+-{1,2}d[^\\n|]{0,30}\\|\\s*(ba)?sh\\b|bash\\s+-i)",
+      "description": "Shell RC/profile file carrying a fetch-and-exec payload — persistent execution on every new shell (Linux/macOS). Payload must be fetch|sh-shaped: a bare 'curl' mention (apt install curl) is not it"
     },
     {
       "id": "cfg-thinking-inject",
@@ -736,6 +736,160 @@
       "severity": "high",
       "pattern": "(?i)(LD_PRELOAD|ld\\.so\\.preload|\\/etc\\/ld\\.so\\.preload|\\/etc\\/ld\\.so\\.pre\\.d\\/|\\.so\\b[\\s\\S]{0,60}\\bchmod\\s+\\+x|\\bldd\\b[\\s\\S]{0,40}(hook|inject|evil))",
       "description": "LD_PRELOAD / ld.so.preload manipulation — library injection persistence (Linux)"
+    },
+    {
+      "id": "dl-pipe-any-interpreter",
+      "category": "download-exec",
+      "severity": "high",
+      "pattern": "(?i)\\b(curl|wget|fetch|lwp-download|aria2c|busybox\\s+wget)\\b[^|\\n]*\\|\\s*(sudo\\s+)?((ba|z|k|c|fi)?sh|pwsh|powershell(\\.exe)?|python[23]?|perl|ruby|node|php)\\b",
+      "description": "Remote payload piped into any interpreter (curl ... | python/pwsh/node/perl), not just sh/iex"
+    },
+    {
+      "id": "dl-pipe-win-interpreter",
+      "category": "download-exec",
+      "severity": "high",
+      "pattern": "(?i)\\b(iwr|irm|curl(\\.exe)?|wget|invoke-webrequest|invoke-restmethod)\\b[^|\\n]*\\|\\s*(iex|invoke-expression|pwsh|powershell(\\.exe)?|cmd(\\.exe)?|wscript|cscript|mshta)\\b",
+      "description": "Remote payload piped into a Windows interpreter (IEX/pwsh/cmd/script hosts)"
+    },
+    {
+      "id": "dl-plain-download-to-disk",
+      "category": "download-exec",
+      "severity": "medium",
+      "pattern": "(?i)\\b(curl|wget)\\b[^\\n|]*\\s(-o|-O|--output(-document)?)\\s+\\S+|\\binvoke-webrequest\\b[^\\n|]*-outfile\\s+\\S+|\\bstart-bitstransfer\\b[^\\n|]*-destination\\s+\\S+",
+      "description": "Plain download to disk without an exec step (dual-use; the exec step is caught by chain tracking)"
+    },
+    {
+      "id": "dl-python-urlretrieve",
+      "category": "download-exec",
+      "severity": "high",
+      "pattern": "(?i)urlretrieve\\s*\\([^)]*https?://|urllib\\.request[^\\n]{0,40}(urlretrieve|urlopen)[^\\n]{0,60}https?://",
+      "description": "Python urlretrieve/urlopen download cradle"
+    },
+    {
+      "id": "dl-node-https-get",
+      "category": "download-exec",
+      "severity": "medium",
+      "pattern": "(?i)\\bnode\\s+-e\\s+[\"'][^\"']*https?\\.(get|request)\\b",
+      "description": "node -e inline HTTPS download"
+    },
+    {
+      "id": "dl-ftp-tftp-get",
+      "category": "download-exec",
+      "severity": "medium",
+      "pattern": "(?i)\\b(ftp|sftp)\\b[^\\n]*\\b(get|mget|recv)\\b|\\btftp\\b[^\\n]*\\b(GET|get)\\b|\\btftp\\s+-i\\s+\\S+\\s+(GET|get)\\b",
+      "description": "ftp/sftp/tftp file download (legacy transfer channels)"
+    },
+    {
+      "id": "dl-nc-redirect-file",
+      "category": "download-exec",
+      "severity": "high",
+      "pattern": "(?i)\\b(nc|ncat|netcat)\\s+[^\\s|>]+\\s+\\d{1,5}\\s*>\\s*[^\\s|]+|\\bsocat\\b[^\\n]*\\bopen:[^,\\s]+",
+      "description": "nc/ncat/socat writing a remote stream to a file (pull-style download)"
+    },
+    {
+      "id": "dl-openssl-sclient-fetch",
+      "category": "download-exec",
+      "severity": "medium",
+      "pattern": "(?i)openssl\\s+s_client[^\\n]*\\|\\s*(dd|tee|cat\\s*>)",
+      "description": "openssl s_client piped to a file writer (covert TLS download)"
+    },
+    {
+      "id": "dl-ssh-remote-pull",
+      "category": "download-exec",
+      "severity": "medium",
+      "pattern": "(?i)\\bssh\\s+\\S+\\s+['\"]?(cat|dd|tar\\s+[cx])\\b[^\\n]*>\\s*[^\\s|]+|\\bssh\\s+[^\\n|]+\\s+(sudo\\s+)?(ba|z)?sh\\s+-s\\b",
+      "description": "ssh used to pull a file onto the host (ssh host cat > file) or stream a script into a shell"
+    },
+    {
+      "id": "dl-misc-lolbin-fetch",
+      "category": "download-exec",
+      "severity": "medium",
+      "pattern": "(?i)\\bcertreq\\b[^\\n]*-post[^\\n]*http|\\besentutl(\\.exe)?\\b[^\\n]*(/y|/o)[^\\n]*\\\\\\\\|\\b(extrac32|expand)(\\.\\w+)?\\b[^\\n]*\\\\\\\\[^\\s]+\\s|\\bpresentationhost(\\.exe)?\\b[^\\n]*http|\\bxwizard(\\.exe)?\\b[^\\n]*(http|\\.xwiz)",
+      "description": "Exotic Windows LOLBins used to fetch files (certreq -Post / esentutl UNC / extrac32 / presentationhost / xwizard)"
+    },
+    {
+      "id": "exec-msbuild-inline-task",
+      "category": "download-exec",
+      "severity": "medium",
+      "pattern": "(?i)\\b(msbuild(\\.exe)?|dotnet\\s+(build|msbuild))\\b[^\\n]*\\.(xml|targets|proj)\\b",
+      "description": "MSBuild/dotnet build on .xml/.targets/.proj — inline-task arbitrary code execution carrier"
+    },
+    {
+      "id": "persist-autostart-artifact",
+      "category": "persistence",
+      "severity": "high",
+      "pattern": "(?i)(start\\s?menu\\\\{1,2}programs\\\\{1,2}startup|/etc/xdg/autostart|\\.config/autostart|/library/launchagents|/library/launchdaemons|~/library/launchagents)[^\\n]{0,80}\\.(bat|cmd|ps1|exe|sh|plist|desktop|vbs|js|hta|dll|jar)\\b",
+      "description": "Executable-type artifact written to an autostart location (Startup folder / autostart / LaunchAgents) — no exec step needed"
+    },
+    {
+      "id": "cfg-tasks-json-folderopen",
+      "category": "client-config",
+      "severity": "high",
+      "pattern": "(?i)\"runOn\"\\s*:\\s*\"folderOpen\"|tasks\\.json[\\s\\S]{0,300}folderOpen|folderOpen[\\s\\S]{0,300}tasks\\.json",
+      "description": "VS Code tasks.json with runOn=folderOpen — command executes when the user opens the folder"
+    },
+    {
+      "id": "cfg-devcontainer-lifecycle-exec",
+      "category": "client-config",
+      "severity": "high",
+      "pattern": "(?i)\"(postCreateCommand|postStartCommand|postAttachCommand)\"\\s*:\\s*\"[^\"]*(curl|wget|http|\\|\\s*(ba|z)?sh|powershell|pwsh|base64|/tmp/)",
+      "description": "devcontainer.json lifecycle command carrying a fetch/exec payload — runs on container create/attach"
+    },
+    {
+      "id": "cfg-jupyter-kernel-hijack",
+      "category": "client-config",
+      "severity": "high",
+      "pattern": "(?i)kernel\\.json[\\s\\S]{0,120}\"argv\"\\s*:\\s*\\[[^\\]]*(curl|wget|http|powershell|\\|\\s*(ba|z)?sh|base64|/tmp/)",
+      "description": "Jupyter kernel.json argv carrying a fetch/exec payload — hijacks kernel startup"
+    },
+    {
+      "id": "persist-sitecustomize",
+      "category": "persistence",
+      "severity": "high",
+      "pattern": "(?i)(sitecustomize|usercustomize)\\.py[\\s\\S]{0,120}(import\\s+(os|subprocess|socket)|os\\.system|subprocess\\.|exec\\()",
+      "description": "sitecustomize/usercustomize.py with exec payload — runs at every Python interpreter start"
+    },
+    {
+      "id": "supply-postinstall-local-interpreter",
+      "category": "supply-chain",
+      "severity": "high",
+      "pattern": "(?i)\"postinstall\"\\s*:\\s*\"[^\"]*\\b(node|python[23]?|sh|bash|powershell|pwsh|cmd|perl|ruby)\\b\\s+[^\"]*\\.(js|py|sh|ps1|bat|rb|pl)\"",
+      "description": "npm postinstall invoking a local script file via an interpreter (no URL needed)"
+    },
+    {
+      "id": "git-ssh-command-inject",
+      "category": "git-attack",
+      "severity": "high",
+      "pattern": "(?i)git\\s+config\\b[^\\n]*core\\.sshcommand",
+      "description": "git config core.sshCommand — replacing the SSH transport command (credential theft / RCE on next git-over-ssh op)"
+    },
+    {
+      "id": "git-gitmodules-url",
+      "category": "git-attack",
+      "severity": "medium",
+      "pattern": "(?i)\\.gitmodules[\\s\\S]{0,80}url\\s*=\\s*https?://|url\\s*=\\s*https?://[^\\s\"']+[\\s\\S]{0,40}\\.gitmodules",
+      "description": ".gitmodules pointing at an HTTP(S) submodule URL — clone-time supply-chain surface"
+    },
+    {
+      "id": "cred-gh-firefox-stores",
+      "category": "credential-theft",
+      "severity": "high",
+      "pattern": "(?i)(cat|get-content|type|cp|copy|curl|slurp|send|upload)\\b[\\s\\S]{0,80}(gh[/\\\\]hosts\\.yml|cookies\\.sqlite|logins\\.json|key4\\.db)",
+      "description": "Read of gh CLI token store (hosts.yml) or Firefox credential stores (cookies.sqlite / logins.json / key4.db)"
+    },
+    {
+      "id": "cred-dpapi-unprotect",
+      "category": "credential-theft",
+      "severity": "medium",
+      "pattern": "(?i)(CryptUnprotectData|ProtectedData[\\s\\S]{0,30}Unprotect|dpapi[\\s\\S]{0,40}(decrypt|unprotect|dump))",
+      "description": "DPAPI unprotect/decrypt calls — Windows secret-store decryption"
+    },
+    {
+      "id": "anti-holone-tamper",
+      "category": "anti-forensics",
+      "severity": "high",
+      "pattern": "(?i)(rm|del|remove-item|unlink|shred|erase)[^\\n]{0,60}(holone|holone_rules)|(holone|holone_rules)[^\\n]{0,60}(rm|del|remove-item|unlink|shred|erase)|\\b(disable|turn\\s+off|deactivate|bypass|отключи|выключи)\\b[^\\n]{0,25}\\bholone\\b",
+      "description": "Attempts to delete holone rules or instruct disabling/bypassing holone (anti-security)"
     }
   ]
 }
