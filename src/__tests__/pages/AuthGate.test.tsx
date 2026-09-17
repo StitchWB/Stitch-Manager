@@ -200,6 +200,9 @@ describe('Auth gate', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset to the desktop-default URL; web-surface tests opt into
+    // ?platform=web explicitly (isDesktopApp() reads location.search live).
+    window.history.pushState({}, '', '/');
     // Reset the auth store between tests so init() runs fresh.
     useAuthStore.setState({
       enabled: false,
@@ -289,6 +292,7 @@ describe('Auth gate', () => {
   });
 
   it('renders WelcomeGate when auth enabled, not required, no users, no guest', async () => {
+    window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
 
@@ -314,6 +318,7 @@ describe('Auth gate', () => {
   });
 
   it('renders WelcomeGate with Login secondary when auth not required and users exist', async () => {
+    window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
 
@@ -363,6 +368,7 @@ describe('Auth gate', () => {
   });
 
   it('navigates to Setup when "No account? Create a local one" hint is clicked (!required, !has_users)', async () => {
+    window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
 
@@ -388,6 +394,7 @@ describe('Auth gate', () => {
   });
 
   it('navigates to Login when "Login" is clicked (!required, has_users)', async () => {
+    window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
 
@@ -432,6 +439,7 @@ describe('Auth gate', () => {
   });
 
   it('welcome gate shows three buttons (Telegram, password, continue)', async () => {
+    window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
 
@@ -446,6 +454,44 @@ describe('Auth gate', () => {
     });
     expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
     expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+  });
+
+  it('desktop welcome gate shows only Telegram + guest (no local account surfaces)', async () => {
+    // jsdom default URL is localhost → isDesktopApp() is true (no override).
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    });
+    expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+    // No password login, no "create local account" hint on desktop.
+    expect(screen.queryByTestId('guest-login-btn')).toBeNull();
+    expect(screen.queryByTestId('guest-no-account-hint')).toBeNull();
+  });
+
+  it('desktop never renders setup/login pages for optional auth views', async () => {
+    authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
+    authModule.getCurrentUser.mockResolvedValue(null);
+    useAuthStore.setState({ authView: 'setup' });
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('setup-page')).toBeNull();
+    expect(screen.queryByTestId('login-page')).toBeNull();
   });
 
   it('navigates to TelegramLogin when TG button is clicked', async () => {

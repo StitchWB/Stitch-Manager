@@ -40,6 +40,15 @@ import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { OverflowMenu } from '@/components/ui/OverflowMenu';
 import { openUrlInBrowser } from '@/lib/backend/modules/aiProxy';
+
+/** Guest-state account CTA. Desktop is local-only or TG-bound — the local
+ * account setup is a web surface, so desktop leads to the TG bind flow. */
+function guestCta(authHasUsers: boolean): { view: 'telegram' | 'login' | 'setup'; label: string } {
+  if (isDesktopApp()) return { view: 'telegram', label: t('auth.login.tgLink') };
+  return authHasUsers
+    ? { view: 'login', label: t('auth.guest.login') }
+    : { view: 'setup', label: t('auth.guest.createLocal') };
+}
 import { isDesktopApp } from '@/lib/backend/core/url';
 import { MAIN_TELEGRAM_URL } from '@/lib/links';
 import { Eye } from 'lucide-react';
@@ -507,14 +516,14 @@ export default function Sidebar() {
               </>
             )}
             <Tooltip
-              content={authHasUsers ? t('auth.guest.login') : t('auth.guest.createLocal')}
+              content={guestCta(authHasUsers).label}
               side={sidebarCollapsed ? 'right' : 'top'}
             >
               <IconButton
-                onClick={() => exitGuest(authHasUsers ? 'login' : 'setup')}
+                onClick={() => exitGuest(guestCta(authHasUsers).view)}
                 size="md"
                 variant="ghost"
-                aria-label={authHasUsers ? t('auth.guest.login') : t('auth.guest.createLocal')}
+                aria-label={guestCta(authHasUsers).label}
                 className="text-slate-500 hover:text-indigo-400"
               >
                 <ShieldCheck size={16} />

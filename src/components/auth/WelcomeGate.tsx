@@ -16,6 +16,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useAppStore } from '../../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../../lib/utils';
+import { isDesktopApp } from '@/lib/backend/core/url';
 import { ButtonBase } from '@/components/ui/ButtonBase';
 
 export default function WelcomeGate() {
@@ -24,6 +25,9 @@ export default function WelcomeGate() {
   const setAuthView = useAuthStore(state => state.setAuthView);
   const language = useAppStore(state => state.language);
   void language; // re-render on language change
+  // Desktop is local-only or TG-bound — password login / local account
+  // creation are web surfaces.
+  const showLocalAuth = !isDesktopApp();
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden" style={{ background: '#0a0a0d' }}>
@@ -82,35 +86,37 @@ export default function WelcomeGate() {
               {t('auth.login.tgLink')}
             </ButtonBase>
 
-            {/* Secondary: password login (always visible) */}
-            <div className="mt-3">
-              <ButtonBase
-                type="button"
-                onClick={() => setAuthView('login')}
-                data-testid="guest-login-btn"
-                className={cn(
-                  'w-full h-10 rounded-lg font-medium text-sm transition-all duration-200 select-none',
-                  'bg-white/[0.03] border border-white/[0.06] text-slate-200',
-                  'hover:bg-white/[0.05] hover:border-white/[0.10] active:scale-[0.98]',
-                  'flex items-center justify-center gap-2'
-                )}
-              >
-                <LogIn className="w-4 h-4" />
-                {t('auth.guest.loginPassword')}
-              </ButtonBase>
-
-              {/* Hint link: create a local account when none exist */}
-              {!hasUsers && (
+            {/* Secondary: password login (web only — desktop is local/TG) */}
+            {showLocalAuth && (
+              <div className="mt-3">
                 <ButtonBase
                   type="button"
-                  onClick={() => setAuthView('setup')}
-                  data-testid="guest-no-account-hint"
-                  className="w-full mt-2 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                  onClick={() => setAuthView('login')}
+                  data-testid="guest-login-btn"
+                  className={cn(
+                    'w-full h-10 rounded-lg font-medium text-sm transition-all duration-200 select-none',
+                    'bg-white/[0.03] border border-white/[0.06] text-slate-200',
+                    'hover:bg-white/[0.05] hover:border-white/[0.10] active:scale-[0.98]',
+                    'flex items-center justify-center gap-2'
+                  )}
                 >
-                  {t('auth.guest.noAccountHint')}
+                  <LogIn className="w-4 h-4" />
+                  {t('auth.guest.loginPassword')}
                 </ButtonBase>
-              )}
-            </div>
+
+                {/* Hint link: create a local account when none exist */}
+                {!hasUsers && (
+                  <ButtonBase
+                    type="button"
+                    onClick={() => setAuthView('setup')}
+                    data-testid="guest-no-account-hint"
+                    className="w-full mt-2 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {t('auth.guest.noAccountHint')}
+                  </ButtonBase>
+                )}
+              </div>
+            )}
 
             {/* Tertiary: continue without login (guest) */}
             <ButtonBase

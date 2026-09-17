@@ -543,10 +543,13 @@ function App() {
   } else if (authEnabled && !authGuest) {
     // Optional auth, not yet a guest: show welcome gate or the optional
     // setup/login/telegram surface the user navigated to from the gate.
-    if (authView === 'setup') {
+    // Desktop: local-only or TG-bound — local password accounts are a web
+    // concept, so the setup/login pages never render on desktop.
+    const desktop = isDesktopApp();
+    if (authView === 'setup' && !desktop) {
       return <Setup />;
     }
-    if (authView === 'login') {
+    if (authView === 'login' && !desktop) {
       return <Login />;
     }
     if (authView === 'telegram') {
