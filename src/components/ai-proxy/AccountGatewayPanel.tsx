@@ -61,9 +61,13 @@ export function AccountGatewayPanel({ account }: AccountGatewayPanelProps) {
         const scoped = endpoint
           ? credentials.filter(c => c.providerEndpointId === endpoint.id)
           : [];
+        // The migration-linked credential is only a valid fallback when it
+        // actually belongs to the resolved endpoint; otherwise it references
+        // a different (possibly deleted) endpoint and the panel would show
+        // mismatched endpoint/credential data.
         const credential =
           scoped.find(c => c.label && migratedLabels.has(c.label)) ??
-          linked ??
+          (linked && linked.providerEndpointId === endpoint?.id ? linked : undefined) ??
           scoped[0] ??
           null;
         const models = endpoint ? await listUpstreamModels(endpoint.id) : [];
