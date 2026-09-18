@@ -42,12 +42,23 @@ async def holone_findings():
 
 @router.post("/config")
 async def holone_config_update(body: HoloneConfigUpdate):
-    """Update HoloNe configuration (enabled, mode)."""
+    """Update HoloNe configuration (enabled, mode) and persist it."""
     if body.mode not in ("monitor", "block"):
         raise HTTPException(status_code=422, detail="mode must be 'monitor' or 'block'")
     service = get_holone_service()
     service.config.enabled = body.enabled
     service.config.mode = body.mode
+
+    from stitch_backend.database import run_in_session
+    from stitch_backend.domains.settings.service import SettingsService
+
+    async def _persist(session):
+        await SettingsService(session).update(
+            {"holone_enabled": body.enabled, "holone_mode": body.mode}
+        )
+
+    await run_in_session(_persist)
+
     await event_bus.emit(
         "holone.status_changed",
         {

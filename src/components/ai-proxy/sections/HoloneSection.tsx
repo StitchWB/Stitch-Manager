@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
 import { listen, type UnlistenFn } from '@/lib/events';
 import { t } from '@/lib/i18n';
@@ -193,25 +194,32 @@ export function HoloneSection() {
     };
   }, [fetchStatus, fetchFindings]);
 
-  // ── Save settings ──────────────────────────────────────────────────────
+  // ── Auto-save settings ─────────────────────────────────────────────────
 
-  const handleSave = useCallback(async () => {
+  const applyConfig = useCallback(async (next: HoloneConfig) => {
+    if (isSaving) return;
+    const prev: HoloneConfig = { enabled, mode };
+    if (next.enabled === prev.enabled && next.mode === prev.mode) return;
+    setEnabled(next.enabled);
+    setMode(next.mode);
     setIsSaving(true);
     try {
-      const config: HoloneConfig = { enabled, mode };
       const res = await fetch(`${API_BASE_URL}/api/holone/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify(next),
       });
       if (!res.ok) throw new Error('config save failed');
+      toast.success(t('aiHub.holone.toasts.configSaved'));
       await fetchStatus();
     } catch {
-      // ponytail: silently fail
+      setEnabled(prev.enabled);
+      setMode(prev.mode);
+      toast.error(t('aiHub.holone.toasts.configSaveFailed'));
     } finally {
       setIsSaving(false);
     }
-  }, [enabled, mode, fetchStatus]);
+  }, [enabled, mode, isSaving, fetchStatus]);
 
   // ── Derived ────────────────────────────────────────────────────────────
 
@@ -232,8 +240,6 @@ export function HoloneSection() {
     }
     return { low, medium, high };
   }, [findings]);
-
-  const hasUnsavedChanges = isLoaded && status !== null && (enabled !== status.enabled || mode !== status.mode);
 
   // ── Sound notification on new HIGH findings ──────────────────────────
 
@@ -268,7 +274,12 @@ export function HoloneSection() {
                 {t('aiHub.holone.protectionDescription')}
               </p>
             </div>
-            <Toggle checked={enabled} onChange={setEnabled} label={t('aiHub.holone.enabled')} />
+            <Toggle
+              checked={enabled}
+              onChange={(next) => void applyConfig({ enabled: next, mode })}
+              disabled={isSaving}
+              label={t('aiHub.holone.enabled')}
+            />
           </div>
         </GlassCard>
 
@@ -281,7 +292,8 @@ export function HoloneSection() {
             <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="secondary"
-                onClick={() => setMode('monitor')}
+                onClick={() => void applyConfig({ enabled, mode: 'monitor' })}
+                disabled={isSaving}
                 className={cn(
                   '!flex-col !items-start !text-left w-full p-3 h-auto',
                   mode === 'monitor'
@@ -301,7 +313,8 @@ export function HoloneSection() {
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => setMode('block')}
+                onClick={() => void applyConfig({ enabled, mode: 'block' })}
+                disabled={isSaving}
                 className={cn(
                   '!flex-col !items-start !text-left w-full p-3 h-auto',
                   mode === 'block'
@@ -496,22 +509,6 @@ export function HoloneSection() {
           <GlassCard className="p-3">
             <p className="text-xs text-slate-400 text-center">{t('aiHub.holone.notConfigured')}</p>
           </GlassCard>
-        )}
-
-        {/* ── Save Bar ─────────────────────────────────────────────────── */}
-        {hasUnsavedChanges && (
-          <div className="sticky bottom-3">
-            <GlassCard className="p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-300">
-                  {t('aiHub.holone.unsavedChanges')}
-                </span>
-                <Button variant="primary" size="sm" onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? t('aiHub.actions.saving') : t('aiHub.holone.saveChanges')}
-                </Button>
-              </div>
-            </GlassCard>
-          </div>
         )}
 
       </div>

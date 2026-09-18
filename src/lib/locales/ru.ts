@@ -729,6 +729,10 @@ export const ru: Translations = {
       soundNotifications: "Звуковые уведомления",
       testSound: "Проверить звук",
       timestamp: "Время",
+      toasts: {
+        configSaved: "Настройки HoloNe сохранены",
+        configSaveFailed: "Не удалось сохранить настройки HoloNe",
+      },
       unsavedChanges: "Есть несохранённые изменения",
       volume: "Громкость",
     },

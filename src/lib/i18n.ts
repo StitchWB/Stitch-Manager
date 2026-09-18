@@ -768,6 +768,10 @@ export interface Translations {
       soundNotifications: string;
       testSound: string;
       timestamp: string;
+      toasts: {
+        configSaved: string;
+        configSaveFailed: string;
+      }
       unsavedChanges: string;
       volume: string;
     }

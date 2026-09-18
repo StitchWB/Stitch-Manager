@@ -51,6 +51,8 @@ _BOOL_KEYS = {
     "autoReplenishEnabled", "proxyList",
     # Auth policy — admin-controllable login enforcement toggle.
     "auth.enforce_login",
+    # HoloNe security toggle (persisted; restored into the service singleton).
+    "holone_enabled",
 }
 _FLOAT_KEYS = {"uiScale", "speedMultiplier"}
 _JSON_KEYS = {"customIdePaths"}

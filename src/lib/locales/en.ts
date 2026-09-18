@@ -729,6 +729,10 @@ export const en: Translations = {
       soundNotifications: "Sound Notifications",
       testSound: "Test Sound",
       timestamp: "Time",
+      toasts: {
+        configSaved: "HoloNe settings saved",
+        configSaveFailed: "Failed to save HoloNe settings",
+      },
       unsavedChanges: "You have unsaved changes",
       volume: "Volume",
     },

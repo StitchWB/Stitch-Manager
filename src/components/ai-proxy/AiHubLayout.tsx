@@ -41,6 +41,14 @@ type AiTabId =
   | 'antigravity'
   | 'notebooklm';
 
+interface AiTabChild {
+  id: string;
+  label: string;
+  to: string;
+  /** Query-param value under the parent route that marks this child active. */
+  tabParam: string;
+}
+
 interface AiTab {
   id: string;
   label: string;
@@ -52,6 +60,8 @@ interface AiTab {
   pluginId?: string;
   /** Origin of the plugin: "community" tabs get a warning badge. */
   source?: string;
+  /** Sub-pages rendered indented under this item; active via ?tab= param. */
+  children?: AiTabChild[];
 }
 
 interface AiTabGroup {
@@ -89,7 +99,16 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     header: 'aiHub.groups.usage',
     tabs: [
       { id: 'chat', label: 'aiHub.tabs.chat', to: '/ai/chat', icon: MessageSquare },
-      { id: 'tools', label: 'aiHub.tabs.tools', to: '/ai/tools', icon: Wrench },
+      {
+        id: 'tools',
+        label: 'aiHub.tabs.tools',
+        to: '/ai/tools',
+        icon: Wrench,
+        children: [
+          { id: 'compression', label: 'aiHub.tabs.compression', to: '/ai/tools?tab=compression', tabParam: 'compression' },
+          { id: 'holone', label: 'aiHub.tabs.holone', to: '/ai/tools?tab=holone', tabParam: 'holone' },
+        ],
+      },
       { id: 'notebooklm', label: 'aiHub.tabs.notebooklm', to: '/ai/notebooklm', icon: BookOpen },
     ],
   },
@@ -218,6 +237,33 @@ function RailItem({ tab, label, active, title, community, iconOnly, onClick }: R
   );
 }
 
+interface RailSubItemProps {
+  child: AiTabChild;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+function RailSubItem({ child, label, active, onClick }: RailSubItemProps) {
+  return (
+    <ButtonBase
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      title={label}
+      data-testid={`ai-hub-rail-subitem-${child.id}`}
+      className={cn(
+        'flex h-7 w-full items-center rounded-md border border-transparent py-1 pl-2.5 pr-2 text-left text-[11px] font-medium transition-colors duration-150',
+        active
+          ? 'border-white/[0.08] bg-white/[0.05] text-white'
+          : 'text-slate-400 hover:bg-white/[0.035] hover:text-slate-200'
+      )}
+    >
+      <span className="truncate whitespace-nowrap">{label}</span>
+    </ButtonBase>
+  );
+}
+
 export function AiHubLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -225,6 +271,7 @@ export function AiHubLayout() {
   const authEnabled = useAuthStore(state => state.enabled);
   const isMdUp = useMediaQuery('(min-width: 768px)');
   const current = activeTab(location.pathname);
+  const tabParam = new URLSearchParams(location.search).get('tab');
 
   const plugins = useSyncExternalStore(
     subscribeServicePlugins,
@@ -302,25 +349,46 @@ export function AiHubLayout() {
               )}
               <div className="flex flex-col gap-0.5">
                 {group.tabs.map(tab => {
+                  const activeChild =
+                    current === tab.id
+                      ? tab.children?.find(child => child.tabParam === tabParam)
+                      : undefined;
                   const isActive = tab.pluginId
                     ? location.pathname.startsWith('/ai/plugin/' + tab.pluginId)
-                    : current === tab.id;
+                    : current === tab.id && !activeChild;
                   const label = resolveLabel(tab);
                   const isCommunity = tab.source === 'community';
                   const title = isCommunity
                     ? `${label} — ${t('admin.plugins.servicePluginCommunityTabTooltip')}`
                     : label;
                   return (
-                    <RailItem
-                      key={tab.id}
-                      tab={tab}
-                      label={label}
-                      active={isActive}
-                      title={title}
-                      community={isCommunity}
-                      iconOnly={!isMdUp}
-                      onClick={() => navigate(tab.to)}
-                    />
+                    <div key={tab.id} className="flex flex-col gap-0.5">
+                      <RailItem
+                        tab={tab}
+                        label={label}
+                        active={isActive}
+                        title={title}
+                        community={isCommunity}
+                        iconOnly={!isMdUp}
+                        onClick={() => navigate(tab.to)}
+                      />
+                      {tab.children && tab.children.length > 0 && (
+                        <div
+                          className="hidden ml-4 flex-col gap-0.5 border-l border-white/[0.08] pl-1 md:flex"
+                          data-testid={`ai-hub-rail-subitems-${tab.id}`}
+                        >
+                          {tab.children.map(child => (
+                            <RailSubItem
+                              key={child.id}
+                              child={child}
+                              label={getLabel(child.label)}
+                              active={activeChild?.id === child.id}
+                              onClick={() => navigate(child.to)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

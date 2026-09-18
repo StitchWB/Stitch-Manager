@@ -9,6 +9,9 @@
  *       navigates to /ai/plugin/{pluginId}.
  *   (d) Below md the rail collapses to icon-only: asserted via classes
  *       (w-12 / md:w-48, hidden md:inline labels) and Tooltip wrapping.
+ *   (e-h) Tools sub-items: rendered indented under the parent, active child
+ *       follows the ?tab= param (parent stays active without/unknown param),
+ *       clicking navigates to the param URL, hidden below md.
  *
  * Mocks: invoke (safeInvoke), i18n (t = identity), @/components/ui
  * (Badge/Tooltip stubs), stores (app/auth), useMediaQuery. The real
@@ -66,12 +69,14 @@ jest.mock('@/stores/auth', () => ({
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 let navigatedPath = '/ai';
+let navigatedSearch = '';
 
 function LocationSpy() {
   const loc = useLocation();
   useEffect(() => {
     navigatedPath = loc.pathname;
-  }, [loc.pathname]);
+    navigatedSearch = loc.search;
+  }, [loc.pathname, loc.search]);
   return null;
 }
 
@@ -83,6 +88,7 @@ function renderAt(path: string) {
         <Route element={<AiHubLayout />}>
           <Route path="/ai" element={<div data-testid="page-content" />} />
           <Route path="/ai/routing" element={<div data-testid="page-content" />} />
+          <Route path="/ai/tools" element={<div data-testid="page-content" />} />
           <Route path="/ai/plugin/:id" element={<div data-testid="page-content" />} />
         </Route>
       </Routes>
@@ -118,6 +124,7 @@ describe('AiHubLayout rail navigation', () => {
     jest.clearAllMocks();
     _resetForTests();
     navigatedPath = '/ai';
+    navigatedSearch = '';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
@@ -207,5 +214,65 @@ describe('AiHubLayout rail navigation', () => {
     expect(screen.getByTestId('ai-hub-rail-item-routing').getAttribute('title')).toBe(
       'aiHub.tabs.routing',
     );
+  });
+
+  it('(e) renders sub-items under the tools tab; parent active without tab param', () => {
+    renderAt('/ai/tools');
+
+    expect(screen.getByTestId('ai-hub-rail-subitems-tools')).toBeTruthy();
+    expect(screen.getByTestId('ai-hub-rail-subitem-compression')).toBeTruthy();
+    expect(screen.getByTestId('ai-hub-rail-subitem-holone')).toBeTruthy();
+    expect(screen.getByText('aiHub.tabs.compression')).toBeTruthy();
+    expect(screen.getByText('aiHub.tabs.holone')).toBeTruthy();
+
+    expect(screen.getByTestId('ai-hub-rail-item-tools').getAttribute('aria-current')).toBe('page');
+    expect(
+      screen.getByTestId('ai-hub-rail-subitem-compression').getAttribute('aria-current'),
+    ).toBeNull();
+    expect(screen.getByTestId('ai-hub-rail-subitem-holone').getAttribute('aria-current')).toBeNull();
+  });
+
+  it('(f) highlights the child matching the tab param and deactivates the parent', () => {
+    renderAt('/ai/tools?tab=holone');
+
+    expect(screen.getByTestId('ai-hub-rail-subitem-holone').getAttribute('aria-current')).toBe(
+      'page',
+    );
+    expect(
+      screen.getByTestId('ai-hub-rail-subitem-compression').getAttribute('aria-current'),
+    ).toBeNull();
+    expect(screen.getByTestId('ai-hub-rail-item-tools').getAttribute('aria-current')).toBeNull();
+  });
+
+  it('(f2) unknown tab param keeps the parent active', () => {
+    renderAt('/ai/tools?tab=bogus');
+
+    expect(screen.getByTestId('ai-hub-rail-item-tools').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('ai-hub-rail-subitem-holone').getAttribute('aria-current')).toBeNull();
+    expect(
+      screen.getByTestId('ai-hub-rail-subitem-compression').getAttribute('aria-current'),
+    ).toBeNull();
+  });
+
+  it('(g) clicking a sub-item navigates to the tab param URL', async () => {
+    renderAt('/ai/tools');
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('ai-hub-rail-subitem-compression'));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/tools');
+      expect(navigatedSearch).toBe('?tab=compression');
+    });
+  });
+
+  it('(h) sub-items hide below md (class-based)', () => {
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+    renderAt('/ai/tools');
+
+    const subitems = screen.getByTestId('ai-hub-rail-subitems-tools');
+    expect(subitems.className).toContain('hidden');
+    expect(subitems.className).toContain('md:flex');
   });
 });

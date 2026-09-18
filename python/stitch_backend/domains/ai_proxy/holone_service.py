@@ -410,4 +410,16 @@ class HoloneService:
 
 @lru_cache(maxsize=1)
 def get_holone_service() -> HoloneService:
-    return HoloneService()
+    """Process-wide HoloNe service singleton.
+
+    Config and findings live here; a fresh instance per call would drop
+    every config write (the old bug: toggle never stuck).  Persisted via
+    settings keys holone_enabled/holone_mode (restored at startup).
+    """
+    global _SERVICE
+    if _SERVICE is None:
+        _SERVICE = HoloneService()
+    return _SERVICE
+
+
+_SERVICE: HoloneService | None = None

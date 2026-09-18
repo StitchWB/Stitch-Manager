@@ -387,6 +387,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.warning("iCloud pool service init skipped: %s", _exc)
 
+    # HoloNe — restore persisted config (enabled/mode) into the singleton.
+    try:
+        from stitch_backend.database import get_session_factory as _gsf_holone
+        from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
+
+        async with _gsf_holone() as _db:
+            from stitch_backend.domains.settings.service import SettingsService
+
+            _hs = await SettingsService(_db).get_all()
+        _svc = get_holone_service()
+        if _hs.get("holone_enabled") is not None:
+            _svc.config.enabled = bool(_hs["holone_enabled"])
+        if _hs.get("holone_mode"):
+            _svc.config.mode = str(_hs["holone_mode"])
+    except Exception as _exc:
+        logger.warning("HoloNe config restore skipped: %s", _exc)
+
     # Start AI Gateway background workers
     try:
         from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
