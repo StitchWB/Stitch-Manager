@@ -108,6 +108,102 @@ describe('parseProviderPackage — missing parts', () => {
   });
 });
 
+describe('parseProviderPackage — messy chat formats', () => {
+  const KEY = 'sk-8rYKLLlExIrwKMR166zMCKpIQsp3wBlBaQMJ0LujlvNtIU7S';
+
+  it('Telegram desktop export with "[date] sender:" prefixes', () => {
+    const blob = [
+      '[27.08.2026 16:00] Даня: Привет! Вот пакет провайдера:',
+      `[27.08.2026 16:01] Даня: Ключ: ${KEY}`,
+      '[27.08.2026 16:02] Даня: Base: https://api.ikhdev.xyz/v1',
+      '[27.08.2026 16:03] Даня: Модели: glm-5.3, deepseek-v4-pro, kimi-k3',
+    ].join('\n');
+    const parsed = parseProviderPackage(blob);
+    expect(parsed.apiKey).toBe(KEY);
+    expect(parsed.bases).toEqual([
+      { url: 'https://api.ikhdev.xyz/v1', adapterType: 'openai_compatible' },
+    ]);
+    expect(parsed.models).toEqual(['glm-5.3', 'deepseek-v4-pro', 'kimi-k3']);
+    expect(parsed.suggestedName).toBe('ikhdev.xyz');
+  });
+
+  it('timestamp-only prefix directly followed by a URL keeps the URL intact', () => {
+    const parsed = parseProviderPackage('[27.08.2026 16:00] https://api.foo.dev/v1');
+    expect(parsed.bases).toEqual([
+      { url: 'https://api.foo.dev/v1', adapterType: 'openai_compatible' },
+    ]);
+  });
+
+  it('WhatsApp-style "date, time - sender:" prefixes', () => {
+    const blob = [
+      '27.08.2026, 16:00 - Даня: Держи пакет',
+      `27.08.2026, 16:01 - Даня: Ключ: ${KEY}`,
+      '27.08.2026, 16:02 - Даня: Base: https://api.ikhdev.xyz/v1',
+    ].join('\n');
+    const parsed = parseProviderPackage(blob);
+    expect(parsed.apiKey).toBe(KEY);
+    expect(parsed.bases).toEqual([
+      { url: 'https://api.ikhdev.xyz/v1', adapterType: 'openai_compatible' },
+    ]);
+  });
+
+  it('code fences, markdown quotes, bullets and bold are stripped', () => {
+    const blob = [
+      '> Пакет от провайдера',
+      '```',
+      '**Ключ:** sk-abcdefgh12345678',
+      'Base:',
+      '- https://api.foo.dev/v1',
+      '```',
+      'Модели:',
+      '* gpt-4o',
+      '* claude-3.5-sonnet',
+      '',
+      'Лишняя строка после пустой',
+    ].join('\n');
+    const parsed = parseProviderPackage(blob);
+    expect(parsed.apiKey).toBe('sk-abcdefgh12345678');
+    expect(parsed.bases).toEqual([
+      { url: 'https://api.foo.dev/v1', adapterType: 'openai_compatible' },
+    ]);
+    expect(parsed.models).toEqual(['gpt-4o', 'claude-3.5-sonnet']);
+  });
+
+  it('no-models blob inside chat noise parses fine with empty models', () => {
+    const blob = [
+      '[27.08.2026 16:00] Даня: Вот, только ключ и база:',
+      `[27.08.2026 16:00] Даня: ${KEY}`,
+      '[27.08.2026 16:01] Даня: https://api.ikhdev.xyz/v1',
+    ].join('\n');
+    const parsed = parseProviderPackage(blob);
+    expect(parsed.apiKey).toBe(KEY);
+    expect(parsed.bases).toHaveLength(1);
+    expect(parsed.models).toEqual([]);
+    expect(isPackageEmpty(parsed)).toBe(false);
+  });
+
+  it('both-formats blob in a Telegram export yields openai base first, anthropic second', () => {
+    const blob = [
+      '[27.08.2026 16:00] Даня: Ключ: sk-8rYKLLlExIrwKMR166zMCKpIQsp3wBlBaQMJ0LujlvNtIU7S',
+      '[27.08.2026 16:01] Даня: Base:',
+      '[27.08.2026 16:01] Даня:  https://api.ikhdev.xyz/v1   (для OpenAI-формата)',
+      '[27.08.2026 16:02] Даня:  https://api.ikhdev.xyz       (для Claude/Anthropic-формата, без /v1!)',
+    ].join('\n');
+    const parsed = parseProviderPackage(blob);
+    expect(parsed.bases).toEqual([
+      { url: 'https://api.ikhdev.xyz/v1', adapterType: 'openai_compatible' },
+      { url: 'https://api.ikhdev.xyz', adapterType: 'anthropic' },
+    ]);
+  });
+
+  it('anthropic host without hints is inferred as anthropic', () => {
+    const parsed = parseProviderPackage('https://api.anthropic.com');
+    expect(parsed.bases).toEqual([
+      { url: 'https://api.anthropic.com', adapterType: 'anthropic' },
+    ]);
+  });
+});
+
 describe('parseProviderPackage — garbage input', () => {
   it('garbage text → nothing recognized, never throws', () => {
     expect(() => parseProviderPackage('привет как дела %%% ### <<<>>>')).not.toThrow();

@@ -13,12 +13,43 @@ export interface ParsedProviderPackage {
 }
 
 const URL_RE = /https?:\/\/[^\s<>"']+/gi;
-const SK_KEY_RE = /\bsk-[A-Za-z0-9_-]{8,}/i;
-const LABELED_KEY_RE = /(?:api[-\s]?key|ключ|key|token|secret|секрет)\s*[:=]\s*([A-Za-z0-9_-]{16,})/i;
+const SK_KEY_RE = /\b(?:sk|gsk|hf|xai|tvly|rk|pk)[-_][A-Za-z0-9_-]{8,}/i;
+const LABELED_KEY_RE = /(?:api[-\s]?key|ключ|key|token|secret|секрет)\s*[:=]\s*([A-Za-z0-9_.-]{16,})/i;
 const LONG_TOKEN_RE = /[A-Za-z0-9_-]{24,}/g;
 const MODELS_LABEL_RE = /^[ \t]*(?:модели|models?)[ \t]*[:\-–—]?[ \t]*(.*)$/gim;
 const MODEL_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const TRAILING_PUNCT_RE = /^[.,;:!?)\]}]+|[.,;:!?)\]}]+$/g;
+
+const FENCE_LINE_RE = /^\s*(?:```|~~~)/;
+const TELEGRAM_PREFIX_RE =
+  /^\[\d{1,2}[./-]\d{1,2}[./-]\d{2,4}[ ,]+\d{1,2}:\d{2}(?::\d{2})?\]\s*(?:[^:\n]{0,64}:(?!\/\/)\s?)?/;
+const WHATSAPP_PREFIX_RE =
+  /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*[-–—]\s*(?:[^:\n]{0,64}:(?!\/\/)\s?)?/;
+const QUOTE_PREFIX_RE = /^\s*>\s?/;
+const BULLET_PREFIX_RE = /^\s*[-*•]\s+/;
+
+function stripLinePrefixes(line: string): string {
+  let s = line;
+  for (let i = 0; i < 4; i++) {
+    const before = s;
+    s = s.replace(QUOTE_PREFIX_RE, '');
+    s = s.replace(TELEGRAM_PREFIX_RE, '');
+    s = s.replace(WHATSAPP_PREFIX_RE, '');
+    s = s.replace(BULLET_PREFIX_RE, '');
+    if (s === before) break;
+  }
+  return s;
+}
+
+export function normalizePackageText(text: string): string {
+  const lines: string[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    if (FENCE_LINE_RE.test(raw)) continue;
+    const line = raw.replace(/\*\*/g, '').replace(/`/g, '');
+    lines.push(stripLinePrefixes(line));
+  }
+  return lines.join('\n');
+}
 
 function cleanToken(token: string): string {
   return token.replace(TRAILING_PUNCT_RE, '');
@@ -67,7 +98,7 @@ function extractBases(text: string): ParsedPackageBase[] {
         hasV1 = /\/v\d+(\/|$)/.test(url);
       }
 
-      const hint = line.toLowerCase();
+      const hint = `${line} ${url}`.toLowerCase();
       const adapterType: PackageAdapterType = hasV1
         ? 'openai_compatible'
         : /claude|anthropic/.test(hint)
@@ -131,7 +162,7 @@ function extractSuggestedName(bases: ParsedPackageBase[]): string | null {
 }
 
 export function parseProviderPackage(text: string): ParsedProviderPackage {
-  const safe = typeof text === 'string' ? text : '';
+  const safe = typeof text === 'string' ? normalizePackageText(text) : '';
   const apiKey = extractApiKey(safe);
   const bases = extractBases(safe);
   const models = extractModels(safe, apiKey);

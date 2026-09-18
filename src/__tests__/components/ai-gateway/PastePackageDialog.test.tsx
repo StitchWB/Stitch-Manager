@@ -1,8 +1,9 @@
 /**
- * PastePackageDialog smoke test: open dialog, paste the provider blob,
- * preview shows parsed values; confirm creates endpoints/credential/models
- * through the store bindings. Garbage input shows the "nothing recognized"
- * state and disables confirm.
+ * PastePackageDialog compact-UX test: paste the provider blob, summary shows
+ * one line per detected piece (masked key, base + adapter chip, models);
+ * both-formats blob creates ONLY the OpenAI endpoint by default, the collapsed
+ * checkbox adds the Anthropic one; confirm runs discoverModelsForEndpoint.
+ * Garbage input shows "nothing recognized" and disables confirm.
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
@@ -30,9 +31,8 @@ jest.mock('@/components/ui', () => ({
   Button: ({ children, onClick, disabled }: any) => (
     <button onClick={onClick} disabled={disabled}>{children}</button>
   ),
-  Input: (props: any) => <input {...props} />,
-  Select: ({ children, value, onChange }: any) => (
-    <select value={value} onChange={onChange}>{children}</select>
+  Input: ({ containerClassName: _cc, shellClassName: _sc, label: _l, error: _e, hint: _h, ...props }: any) => (
+    <input {...props} />
   ),
   Textarea: ({ label, placeholder, value, onChange, className }: any) => (
     <textarea
@@ -42,6 +42,13 @@ jest.mock('@/components/ui', () => ({
       onChange={onChange}
       className={className}
     />
+  ),
+  Badge: ({ children }: any) => <span>{children}</span>,
+  Checkbox: ({ label, description: _d, className: _c, ...props }: any) => (
+    <label>
+      <input type="checkbox" {...props} />
+      {label}
+    </label>
   ),
   Modal: ({ children, isOpen, footer, title }: any) =>
     isOpen ? (
@@ -63,25 +70,50 @@ jest.mock('@/stores/aiGateway', () => ({
   useAiGatewayStore: () => gatewayState,
 }));
 
-import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
+const discoverState: any = {
+  discoverModelsForEndpoint: jest.fn(async () => ({ models_count: 6 })),
+};
 
-const BLOB = [
-  'Ключ: sk-8rYKLLlExIrwKMR166zMCKpIQsp3wBlBaQMJ0LujlvNtIU7S',
+jest.mock('@/lib/backend/modules/aiGateway', () => ({
+  discoverModelsForEndpoint: (id: string) => discoverState.discoverModelsForEndpoint(id),
+}));
+
+import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
+import { appToast } from '@/lib/observability/toast';
+
+const KEY = 'sk-8rYKLLlExIrwKMR166zMCKpIQsp3wBlBaQMJ0LujlvNtIU7S';
+const MASKED_KEY = 'sk-8rY…IU7S';
+
+const BOTH_FORMATS_BLOB = [
+  `Ключ: ${KEY}`,
   'Base:',
   ' https://api.ikhdev.xyz/v1   (для OpenAI-формата)',
   ' https://api.ikhdev.xyz       (для Claude/Anthropic-формата, без /v1!)',
   'Модели: glm-5.3, glm-5.2, deepseek-v4-pro, deepseek-v4-flash, kimi-k3, qwen3.8-max',
 ].join('\n');
 
-const KEY = 'sk-8rYKLLlExIrwKMR166zMCKpIQsp3wBlBaQMJ0LujlvNtIU7S';
+const NO_MODELS_BLOB = [
+  '[27.08.2026 16:00] Даня: Ключ: sk-abcdefgh12345678',
+  '[27.08.2026 16:01] Даня: Base: https://api.foo.dev/v1',
+].join('\n');
 
 beforeEach(() => {
   jest.clearAllMocks();
+  discoverState.discoverModelsForEndpoint.mockResolvedValue({ models_count: 6 });
 });
 
-function pasteBlob() {
+function paste(value: string) {
   const textarea = screen.getByPlaceholderText('aiGateway.paste.textareaPlaceholder');
-  fireEvent.change(textarea, { target: { value: BLOB } });
+  fireEvent.change(textarea, { target: { value } });
+}
+
+function confirmButton(): HTMLButtonElement {
+  return screen.getByText('aiGateway.paste.confirm').closest('button') as HTMLButtonElement;
+}
+
+function anthropicCheckbox(): HTMLInputElement {
+  const label = screen.getByText('aiGateway.paste.alsoAnthropic').closest('label');
+  return label?.querySelector('input[type="checkbox"]') as HTMLInputElement;
 }
 
 describe('PastePackageDialog', () => {
@@ -90,61 +122,139 @@ describe('PastePackageDialog', () => {
     expect(screen.queryByPlaceholderText('aiGateway.paste.textareaPlaceholder')).toBeNull();
   });
 
-  it('shows parsed preview after pasting the blob', async () => {
+  it('shows a compact summary: masked key, OpenAI base only, models count', async () => {
     render(<PastePackageDialog open onClose={jest.fn()} />);
-    pasteBlob();
+    paste(BOTH_FORMATS_BLOB);
 
     await waitFor(() => {
-      expect(screen.getByText('aiGateway.paste.previewTitle')).toBeTruthy();
+      expect(screen.getByText('aiGateway.paste.summaryTitle')).toBeTruthy();
     });
 
-    // Two endpoint cards with suggested names and bases.
-    expect(screen.getByDisplayValue('ikhdev.xyz (OpenAI)')).toBeTruthy();
-    expect(screen.getByDisplayValue('ikhdev.xyz (Anthropic)')).toBeTruthy();
-    expect(screen.getByDisplayValue('https://api.ikhdev.xyz/v1')).toBeTruthy();
-    expect(screen.getByDisplayValue('https://api.ikhdev.xyz')).toBeTruthy();
+    // Key masked, raw key never rendered.
+    expect(screen.getByTestId('key-masked').textContent).toBe(MASKED_KEY);
+    expect(screen.queryByDisplayValue(KEY)).toBeNull();
 
-    // Adapters detected: one openai_compatible select, one anthropic select.
-    const selects = screen.getAllByDisplayValue(/^(aiGateway\.form\.optOpenai|aiGateway\.form\.optAnthropic)$/);
-    expect(selects.length).toBe(2);
+    // Default: only the OpenAI base row; Anthropic base hidden behind the checkbox.
+    expect(screen.getByText('https://api.ikhdev.xyz/v1')).toBeTruthy();
+    expect(screen.queryByText('https://api.ikhdev.xyz', { exact: true })).toBeNull();
+    expect(screen.getByText('aiGateway.paste.adapterOpenai')).toBeTruthy();
+    expect(screen.queryByText('aiGateway.paste.adapterAnthropic')).toBeNull();
 
-    // Key lands in the (masked) password input; label from host.
-    expect(screen.getByDisplayValue(KEY)).toBeTruthy();
-    expect((screen.getByDisplayValue(KEY) as HTMLInputElement).type).toBe('password');
-    expect(screen.getByDisplayValue('ikhdev.xyz')).toBeTruthy();
+    // Collapsed anthropic option is present and unchecked.
+    expect(anthropicCheckbox()).toBeTruthy();
+    expect(anthropicCheckbox().checked).toBe(false);
 
-    // Models rendered as chips.
-    for (const model of ['glm-5.3', 'glm-5.2', 'deepseek-v4-pro', 'deepseek-v4-flash', 'kimi-k3', 'qwen3.8-max']) {
-      expect(screen.getByText(model)).toBeTruthy();
-    }
+    // Models row: count + names, no auto-discovery text.
+    expect(screen.getAllByText('aiGateway.paste.modelsFound').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/glm-5\.3/).length).toBeGreaterThan(0);
+    expect(screen.queryByText('aiGateway.paste.modelsAuto')).toBeNull();
+
+    // No editable fields for name/label/models — only the textarea.
+    expect(screen.queryByDisplayValue('ikhdev.xyz')).toBeNull();
+    expect(confirmButton().disabled).toBe(false);
+  });
+
+  it('no-models blob shows the auto-discovery line', async () => {
+    render(<PastePackageDialog open onClose={jest.fn()} />);
+    paste(NO_MODELS_BLOB);
+
+    await waitFor(() => {
+      expect(screen.getByText('aiGateway.paste.modelsAuto')).toBeTruthy();
+    });
+    expect(screen.queryByText('aiGateway.paste.modelsFound')).toBeNull();
+  });
+
+  it('missing key shows an inline input; typing it feeds the credential', async () => {
+    render(<PastePackageDialog open onClose={jest.fn()} />);
+    paste('Base: https://api.example.com/v1\nМодели: gpt-4o');
+
+    const keyInput = await screen.findByPlaceholderText('aiGateway.paste.keyMissing');
+    fireEvent.change(keyInput, { target: { value: 'sk-manual123456789' } });
+
+    fireEvent.click(confirmButton());
+    await waitFor(() => {
+      expect(gatewayState.createCredential).toHaveBeenCalledTimes(1);
+    });
+    expect(gatewayState.createCredential).toHaveBeenCalledWith({
+      providerEndpointId: 'ep-example.com',
+      label: 'example.com',
+      authType: 'api_key',
+      secret: 'sk-manual123456789',
+    });
   });
 
   it('garbage input shows nothing-recognized state and disables confirm', async () => {
     render(<PastePackageDialog open onClose={jest.fn()} />);
-    const textarea = screen.getByPlaceholderText('aiGateway.paste.textareaPlaceholder');
-    fireEvent.change(textarea, { target: { value: 'привет %%% ###' } });
+    paste('привет %%% ###');
 
     await waitFor(() => {
       expect(screen.getByText('aiGateway.paste.nothingRecognized')).toBeTruthy();
     });
-    expect(screen.queryByText('aiGateway.paste.previewTitle')).toBeNull();
-    expect((screen.getByText('aiGateway.paste.confirm').closest('button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText('aiGateway.paste.summaryTitle')).toBeNull();
+    expect(confirmButton().disabled).toBe(true);
   });
 
-  it('confirm creates two endpoints sharing one credential label plus all models', async () => {
+  it('confirm creates ONE OpenAI endpoint by default and runs discovery', async () => {
     const onClose = jest.fn();
     render(<PastePackageDialog open onClose={onClose} />);
-    pasteBlob();
+    paste(BOTH_FORMATS_BLOB);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('ikhdev.xyz (OpenAI)')).toBeTruthy();
+      expect(screen.getByText('aiGateway.paste.summaryTitle')).toBeTruthy();
     });
-
-    fireEvent.click(screen.getByText('aiGateway.paste.confirm'));
+    fireEvent.click(confirmButton());
 
     await waitFor(() => {
-      expect(gatewayState.createEndpoint).toHaveBeenCalledTimes(2);
+      expect(onClose).toHaveBeenCalled();
     });
+
+    expect(gatewayState.createEndpoint).toHaveBeenCalledTimes(1);
+    expect(gatewayState.createEndpoint).toHaveBeenCalledWith({
+      name: 'ikhdev.xyz',
+      adapterType: 'openai_compatible',
+      baseUrl: 'https://api.ikhdev.xyz/v1',
+      enabled: true,
+    });
+
+    expect(gatewayState.createCredential).toHaveBeenCalledTimes(1);
+    expect(gatewayState.createCredential).toHaveBeenCalledWith({
+      providerEndpointId: 'ep-ikhdev.xyz',
+      label: 'ikhdev.xyz',
+      authType: 'api_key',
+      secret: KEY,
+    });
+
+    // Blob models merged in manually, then discovery runs for the endpoint.
+    expect(gatewayState.createUpstreamModel).toHaveBeenCalledTimes(6);
+    expect(gatewayState.createUpstreamModel).toHaveBeenCalledWith({
+      providerEndpointId: 'ep-ikhdev.xyz',
+      upstreamModelId: 'glm-5.3',
+      enabled: true,
+      discoverySource: 'manual',
+    });
+    expect(discoverState.discoverModelsForEndpoint).toHaveBeenCalledWith('ep-ikhdev.xyz');
+
+    expect(appToast.success).toHaveBeenCalledWith('aiGateway.paste.success', 'ai-gateway');
+  });
+
+  it('checking the anthropic option adds the second endpoint', async () => {
+    const onClose = jest.fn();
+    render(<PastePackageDialog open onClose={onClose} />);
+    paste(BOTH_FORMATS_BLOB);
+
+    await waitFor(() => {
+      expect(screen.getByText('aiGateway.paste.summaryTitle')).toBeTruthy();
+    });
+    fireEvent.click(anthropicCheckbox());
+    expect(anthropicCheckbox().checked).toBe(true);
+    expect(screen.getByText('https://api.ikhdev.xyz', { exact: true })).toBeTruthy();
+
+    fireEvent.click(confirmButton());
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    expect(gatewayState.createEndpoint).toHaveBeenCalledTimes(2);
     expect(gatewayState.createEndpoint).toHaveBeenCalledWith({
       name: 'ikhdev.xyz (OpenAI)',
       adapterType: 'openai_compatible',
@@ -157,21 +267,25 @@ describe('PastePackageDialog', () => {
       baseUrl: 'https://api.ikhdev.xyz',
       enabled: true,
     });
+    expect(discoverState.discoverModelsForEndpoint).toHaveBeenCalledTimes(2);
+  });
+
+  it('discovery failure still succeeds with the pending-sync toast', async () => {
+    const onClose = jest.fn();
+    discoverState.discoverModelsForEndpoint.mockRejectedValue(new Error('backend down'));
+    render(<PastePackageDialog open onClose={onClose} />);
+    paste(NO_MODELS_BLOB);
 
     await waitFor(() => {
-      expect(gatewayState.createUpstreamModel).toHaveBeenCalledTimes(12);
+      expect(screen.getByText('aiGateway.paste.summaryTitle')).toBeTruthy();
     });
-    expect(gatewayState.createCredential).toHaveBeenCalledTimes(2);
-    const labels = gatewayState.createCredential.mock.calls.map((c: any[]) => c[0].label);
-    expect(labels).toEqual(['ikhdev.xyz', 'ikhdev.xyz']);
-    const secrets = gatewayState.createCredential.mock.calls.map((c: any[]) => c[0].secret);
-    expect(secrets).toEqual([KEY, KEY]);
-    expect(gatewayState.createUpstreamModel).toHaveBeenCalledWith({
-      providerEndpointId: 'ep-ikhdev.xyz (OpenAI)',
-      upstreamModelId: 'glm-5.3',
-      enabled: true,
-      discoverySource: 'manual',
+    fireEvent.click(confirmButton());
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
     });
-    expect(onClose).toHaveBeenCalled();
+    expect(gatewayState.createEndpoint).toHaveBeenCalledTimes(1);
+    expect(gatewayState.createUpstreamModel).not.toHaveBeenCalled();
+    expect(appToast.success).toHaveBeenCalledWith('aiGateway.paste.successPending', 'ai-gateway');
   });
 });
