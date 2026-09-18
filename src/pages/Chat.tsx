@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
   Trash2,
@@ -14,7 +14,6 @@ import {
   Pencil,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
-import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { ChatHistory, ChatInput } from '../components/chat';
 import { useChat } from '../hooks/useChat';
 import { useChatStore, type ChatSession } from '../stores/chat';
@@ -64,7 +63,6 @@ interface SetupSnapshot {
  */
 export default function Chat() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { language } = useAppStore();
   // Individual selectors: Zustand guarantees function identity is stable,
   // and primitive/string values are compared by Object.is. Only array/object
@@ -355,9 +353,6 @@ export default function Chat() {
           </div>
         }
       />
-
-      {/* AI Hub tabs — shown when accessed via /ai/chat */}
-      {location.pathname.startsWith('/ai/') && <AiTopTabs />}
 
       {/* Main content: session sidebar + chat area */}
       <div className="flex flex-1 overflow-hidden">

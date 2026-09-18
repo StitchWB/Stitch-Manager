@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import Header from '@/components/layout/Header';
 import { Button, GlassCard, PageHeader } from '@/components/ui';
 import { useAppStore } from '@/stores/app';
@@ -134,7 +133,6 @@ export default function AiOverview() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-void-base">
       <Header title="AI Hub" icon={<LayoutDashboard size={18} />} />
-      <AiTopTabs />
       <PageHeader
         eyebrow="AI Hub"
         title={isRu ? 'Центр управления AI' : 'AI control center'}

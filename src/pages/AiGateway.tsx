@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, Server, Globe, Search, Database, Zap } from 'lucide-react';
 import Header from '../components/layout/Header';
-import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import { ProviderEndpointsList } from '@/components/ai-gateway/ProviderEndpointsList';
 import { ProviderEndpointForm } from '@/components/ai-gateway/ProviderEndpointForm';
 import { CredentialsList } from '@/components/ai-gateway/CredentialsList';
@@ -182,7 +181,6 @@ export default function AiGateway() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-void-base">
       <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
-      <AiTopTabs />
       <div className="flex-1 overflow-y-auto">
         <div className="container mx-auto p-6 max-w-6xl">
           <div className="mb-6 flex items-start justify-between">

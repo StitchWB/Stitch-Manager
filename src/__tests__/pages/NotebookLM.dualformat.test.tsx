@@ -14,7 +14,7 @@
  *       without reload (assert via rerender).
  *
  * Mocks: invoke (safeInvoke), i18n (t = identity), DeclarativePage (stub),
- * Header, AiTopTabs, sonner. The real servicePlugins module runs — only
+ * Header, sonner. The real servicePlugins module runs — only
  * safeInvoke is mocked, so the cache + useSyncExternalStore + invalidate
  * path is exercised end-to-end.
  */
@@ -54,10 +54,6 @@ jest.mock('@/components/layout/Header', () => ({
   default: ({ title }: { title: string }) => (
     <div data-testid="header">{title}</div>
   ),
-}));
-
-jest.mock('@/components/ai-proxy/AiTopTabs', () => ({
-  AiTopTabs: () => <div data-testid="ai-top-tabs" />,
 }));
 
 jest.mock('sonner', () => ({

@@ -3,7 +3,6 @@ import { Check, Copy, Download, FileJson, Gauge, Terminal, Upload, Zap } from 'l
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import { ConnectionsNav } from '@/components/ai-proxy/ConnectionsNav';
 import { AiTransferModal } from '@/components/ai-proxy/modals/AiTransferModal';
 import Header from '@/components/layout/Header';
@@ -140,7 +139,6 @@ export function AiIntegrations({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-void-base">
       <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
-      <AiTopTabs />
       <ConnectionsNav />
       <PageHeader
         eyebrow={t('sidebar.aiHub')}

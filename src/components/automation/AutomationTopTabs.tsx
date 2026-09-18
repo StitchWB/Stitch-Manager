@@ -34,7 +34,7 @@ export function resolveAutomationTab(param: string | undefined): AutomationTabId
 /**
  * Sticky tab strip for the /automation hub. Renders three tabs that map to
  * the three sub-routes (`/automation/schedule`, `/automation/scenarios`,
- * `/automation/replenishment`). Visual analogue of `AiTopTabs`.
+ * `/automation/replenishment`). Visual analogue of the AI Hub rail navigation.
  */
 export function AutomationTopTabs() {
   const navigate = useNavigate();

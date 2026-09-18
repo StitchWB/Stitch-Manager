@@ -48,7 +48,7 @@ const headingSizes = [
  * i18n keys: text starting with `<pluginId>.` is resolved via
  * `t('plugin.{id}.{text}')` against the plugin's registered bundle (see
  * i18nPluginBundles.ts) — the same convention the scaffold generates and
- * AiTopTabs uses for plugin tab labels. Anything else (plain strings like
+ * AiHubLayout uses for plugin tab labels. Anything else (plain strings like
  * "ID", "Email", or version strings like "v1.2.3") renders as-is.
  */
 function resolveLabel(pluginId: string, text: string): string {

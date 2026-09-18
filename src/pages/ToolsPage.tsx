@@ -1,6 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
 import Header from '@/components/layout/Header';
-import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import { CompressionSection } from '@/components/ai-proxy/sections/CompressionSection';
 import { HoloneSection } from '@/components/ai-proxy/sections/HoloneSection';
 import { TabButton } from '@/components/ui';
@@ -27,7 +26,6 @@ export default function ToolsPage() {
         title={language === 'ru' ? 'Инструменты' : 'Tools'}
         icon={<Wrench size={18} />}
       />
-      <AiTopTabs />
 
       {/* ── Sub-tab bar ────────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-vsc-border-light bg-vsc-panel/60 px-3 md:px-5">

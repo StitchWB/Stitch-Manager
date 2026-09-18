@@ -70,6 +70,9 @@ const Tools = lazy(() => import('./pages/Tools'));
 const Automation = lazy(() => import('./pages/Automation'));
 const Totp = lazy(() => import('./pages/Totp'));
 const AiGateway = lazy(() => import('./pages/AiGateway'));
+const AiHubLayout = lazy(() =>
+  import('./components/ai-proxy/AiHubLayout').then(m => ({ default: m.AiHubLayout }))
+);
 const Radar = lazy(() => import('./pages/Radar'));
 const Friends = lazy(() => import('./pages/Friends'));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
@@ -590,26 +593,30 @@ function App() {
             <Route path="/chat" element={<Chat />} />
             {/* Product surface — open to any authenticated user */}
             <Route path="/autoreg" element={<AutoReg />} />
-            <Route path="/ai" element={<AiOverview />} />
-            <Route path="/ai/overview" element={<Navigate to="/ai" replace />} />
-            {/* Groups moved to a first-class route (/groups). Redirect the
-                legacy /ai/groups deep link so bookmarks and the old AI Hub
-                tab path keep working. */}
-            <Route path="/ai/groups" element={<Navigate to="/groups" replace />} />
-            <Route path="/ai/integrations" element={<AiIntegrations />} />
-            <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
-            <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
-            <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai/antigravity" element={<Antigravity />} />
-            <Route path="/ai/holone" element={<HoloneSecurity />} />
-            <Route path="/ai/tools" element={<ToolsPage />} />
-            <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
-            <Route path="/ai/chat" element={<Chat />} />
-            <Route path="/ai/analytics" element={<AiAnalytics />} />
-            <Route path="/ai/gateway" element={<AiGateway />} />
-            <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
-            <Route path="/ai/:section" element={<AiProviders />} />
+            {/* AI Hub — vertical rail layout shared by all /ai/* pages */}
+            <Route element={<AiHubLayout />}>
+              <Route path="/ai" element={<AiOverview />} />
+              <Route path="/ai/overview" element={<Navigate to="/ai" replace />} />
+              {/* Groups moved to a first-class route (/groups). Redirect the
+                  legacy /ai/groups deep link so bookmarks and the old AI Hub
+                  tab path keep working. */}
+              <Route path="/ai/groups" element={<Navigate to="/groups" replace />} />
+              <Route path="/ai/integrations" element={<AiIntegrations />} />
+              <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
+              <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
+              <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
+              <Route path="/ai/antigravity" element={<Antigravity />} />
+              <Route path="/ai/holone" element={<HoloneSecurity />} />
+              <Route path="/ai/tools" element={<ToolsPage />} />
+              <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />
+              <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
+              <Route path="/ai/chat" element={<Chat />} />
+              <Route path="/ai/analytics" element={<AiAnalytics />} />
+              <Route path="/ai/gateway" element={<AiGateway />} />
+              <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
+              <Route path="/ai/:section" element={<AiProviders />} />
+              <Route path="/ai/notebooklm" element={<NotebookLM />} />
+            </Route>
             <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
             <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />
             <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
@@ -623,7 +630,6 @@ function App() {
             <Route path="/scenarios" element={<Scenarios />} />
             <Route path="/tools" element={<Tools />} />
             <Route path="/totp" element={<Totp />} />
-            <Route path="/ai/notebooklm" element={<NotebookLM />} />
             <Route path="/notebooklm" element={<Navigate to="/ai/notebooklm" replace />} />
             {/* Admin zone — guarded by AdminRoute */}
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />

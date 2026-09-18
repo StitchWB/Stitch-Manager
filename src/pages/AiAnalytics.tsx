@@ -3,7 +3,6 @@ import { Activity, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import Header from '../components/layout/Header';
-import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import {
   Button,
   EmptyState,
@@ -249,7 +248,6 @@ export default function AiAnalytics() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-void-base">
       <Header title={t('sidebar.aiHub')} icon={<Activity size={18} />} />
-      <AiTopTabs />
 
       <PageHeader
         eyebrow={t('sidebar.aiHub')}

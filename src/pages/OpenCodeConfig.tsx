@@ -3,7 +3,6 @@ import { Bot, Package, Save, Server, Settings, Sliders, TestTube } from 'lucide-
 import { toast } from 'sonner';
 
 import { AiSectionNav, type AiSectionNavItem } from '@/components/ai-proxy/AiSectionNav';
-import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import { ConnectionsNav } from '@/components/ai-proxy/ConnectionsNav';
 import { AgentsSection } from '@/components/opencode/AgentsSection';
 import { ApiTesterSection } from '@/components/opencode/ApiTesterSection';
@@ -194,7 +193,6 @@ export default function OpenCodeConfig() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-void-base">
       <Header title="AI Hub" icon={<Settings size={18} />} />
-      <AiTopTabs />
       <ConnectionsNav />
       <PageHeader
         eyebrow={copy.eyebrow}

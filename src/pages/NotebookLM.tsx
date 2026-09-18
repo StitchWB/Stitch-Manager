@@ -1,7 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { BookOpen, Zap } from 'lucide-react';
 import Header from '../components/layout/Header';
-import { AiTopTabs } from '@/components/ai-proxy/AiTopTabs';
 import { t } from '@/lib/i18n';
 import DeclarativePage from '@/components/plugin-ui/DeclarativePage';
 import type { PluginPageSchema } from '@/components/plugin-ui/schema';
@@ -49,7 +48,6 @@ export default function NotebookLM() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-void-base">
       <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
-      <AiTopTabs />
       <div className="flex-1 overflow-y-auto">
         {declarativeSchema ? (
           <DeclarativePage pluginId={NOTEBOOKLM_PLUGIN_ID} schema={declarativeSchema} />

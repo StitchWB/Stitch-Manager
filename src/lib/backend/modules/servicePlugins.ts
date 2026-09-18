@@ -83,7 +83,7 @@ export function getServicePlugins(): ServicePluginInfo[] {
 
 /**
  * Subscribe to cache changes. Returns an unsubscribe function. Used by
- * useSyncExternalStore in React components (e.g. AiTopTabs).
+ * useSyncExternalStore in React components (e.g. AiHubLayout).
  */
 export function subscribeServicePlugins(listener: () => void): () => void {
   subscribers.add(listener);

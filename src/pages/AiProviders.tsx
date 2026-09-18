@@ -9,7 +9,6 @@ import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
-import { AiTopTabs } from '../components/ai-proxy/AiTopTabs';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
 import { UserProxyCard } from '../components/ai-proxy/UserProxyCard';
@@ -425,7 +424,6 @@ export default function AiProviders() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-void-base">
       <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
-      <AiTopTabs />
 
       <PageHeader
         eyebrow={headerForSection.eyebrow}
