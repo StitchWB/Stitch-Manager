@@ -170,8 +170,8 @@ async def cmd_delete_ai_proxy_account(params: dict) -> None:
 
     from stitch_backend.config import get_settings
     from stitch_backend.domains.ai_proxy.legacy_accounts_api import (
-        _caller_can_modify_credential,
         _find_credential_by_legacy_id,
+        caller_can_delete_credential,
         delete_account,
     )
 
@@ -180,16 +180,19 @@ async def cmd_delete_ai_proxy_account(params: dict) -> None:
     caller_role = params.get("_caller_role")
 
     async def _op(session):
-        # Authz: owner or admin only; instance-shared → admin only.
-        # Desktop (auth-disabled) is allowed unconditionally.
+        # Authz: delete anything except group-shared rows you neither own
+        # nor administer.  Desktop (auth-disabled) is allowed unconditionally.
         if get_settings().auth_enabled:
             credential = await _find_credential_by_legacy_id(session, int(account_id))
-            if credential is not None and not _caller_can_modify_credential(
-                credential, caller_uid, caller_role,
+            if credential is not None and not await caller_can_delete_credential(
+                session, credential, caller_uid, caller_role,
             ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the credential owner or an admin may delete this account",
+                    detail=(
+                        "Only the credential owner, a group owner, or an admin "
+                        "may delete a group-shared account"
+                    ),
                 )
         await delete_account(session, int(account_id))
 

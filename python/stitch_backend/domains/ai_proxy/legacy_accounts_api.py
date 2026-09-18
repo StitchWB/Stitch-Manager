@@ -337,6 +337,56 @@ def _caller_can_modify_credential(
     return credential.owner_id == caller_uid
 
 
+async def caller_can_delete_credential(
+    session: Any,
+    credential: Credential,
+    caller_uid: int | None,
+    caller_role: str | None,
+) -> bool:
+    """Deletion policy: delete anything EXCEPT group-shared rows you neither
+    added nor administer.
+
+    - app admin → always;
+    - unauthenticated (web guest) → never (desktop guests resolve to admin
+      upstream via STITCH_DESKTOP_MODE);
+    - own credential → yes;
+    - not shared into any group → yes (delete anything);
+    - shared into a group → only its owner (above), an app admin (above), or
+      the owner of a group it is shared into.
+    """
+    if caller_role == "admin":
+        return True
+    if caller_uid is None:
+        return False
+    if credential.owner_id == caller_uid:
+        return True
+
+    from sqlalchemy import and_
+
+    from stitch_backend.domains.ai_gateway.models import CredentialGroupShare
+    from stitch_backend.domains.groups.models import Group
+
+    shares = (
+        await session.execute(
+            select(CredentialGroupShare).where(
+                CredentialGroupShare.credential_id == credential.id
+            )
+        )
+    ).scalars().all()
+    if not shares:
+        return True  # not group-shared → free to delete
+
+    group_ids = [s.group_id for s in shares]
+    owned = (
+        await session.execute(
+            select(Group.id).where(
+                and_(Group.id.in_(group_ids), Group.owner_id == caller_uid)
+            )
+        )
+    ).first()
+    return owned is not None
+
+
 async def _credential_to_account(
     session: Any,
     credential: Credential,
