@@ -7,7 +7,9 @@
  *   - Installed rows show an Installed button (disabled, with Check icon).
  *   - Search filters the list client-side.
  *   - Activation-required banner renders when not activated.
- *   - Lock screen renders when no authenticated user (getMarketplace not called).
+ *   - Guest mode (no user): the catalog still renders; official items are
+ *     locked with the auth-required tooltip; clicking a locked install
+ *     button opens the Telegram login view; community items stay installable.
  *   - TierBadge renders for locked items with required_tier.
  *
  * NOTE: The page uses an IDEA-style master-detail layout. The left pane
@@ -225,10 +227,19 @@ describe('Marketplace page', () => {
     expect(screen.getByText(/activation required/i)).toBeTruthy();
   });
 
-  it('shows lock screen when no authenticated user and does not call getMarketplace', () => {
-    useAuthStore.setState({ user: null });
+  it('guest mode: renders the catalog, locks official items with the auth tooltip, keeps community installable', async () => {
+    const user = userEvent.setup();
+    useAuthStore.setState({ user: null, authView: 'welcome' });
 
-    const getMarketplaceSpy = jest.spyOn(marketplaceModule, 'getMarketplace');
+    jest
+      .spyOn(marketplaceModule, 'getMarketplace')
+      .mockResolvedValue({
+        activated: false,
+        items: [
+          mk.locked({ id: 'official-plugin', name: 'Official Plugin' }),
+          mk.available({ id: 'community-plugin', name: 'Community Plugin' }),
+        ],
+      });
 
     render(
       <MemoryRouter>
@@ -236,10 +247,41 @@ describe('Marketplace page', () => {
       </MemoryRouter>
     );
 
-    // Lock screen title is shown.
-    expect(screen.getByText('Authorized users only')).toBeTruthy();
-    // getMarketplace was NOT called (no fetch attempted).
-    expect(getMarketplaceSpy).not.toHaveBeenCalled();
+    const listPane = screen.getByTestId('plugin-list');
+
+    // The catalog is fetched and rendered for guests (no lock wall).
+    await waitFor(() => {
+      expect(within(listPane).getByText('Official Plugin')).toBeTruthy();
+    });
+    expect(within(listPane).getByText('Community Plugin')).toBeTruthy();
+
+    // Official (locked) item: the lock icon is labeled with the
+    // auth-required tooltip text.
+    expect(
+      screen.getAllByLabelText(
+        'Official plugins are available after signing in via Telegram',
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+
+    // Community item: the install button is enabled.
+    const communityRow = within(listPane)
+      .getByText('Community Plugin')
+      .closest('div[role="button"]') as HTMLElement;
+    const communityInstall = within(communityRow).getByRole('button', {
+      name: 'Install',
+    });
+    expect(communityInstall.hasAttribute('disabled')).toBe(false);
+
+    // Official item: clicking the locked install button switches the auth
+    // store to the Telegram login view.
+    const officialRow = within(listPane)
+      .getByText('Official Plugin')
+      .closest('div[role="button"]') as HTMLElement;
+    const officialInstall = within(officialRow).getByRole('button', {
+      name: 'Install',
+    });
+    await user.click(officialInstall);
+    expect(useAuthStore.getState().authView).toBe('telegram');
   });
 
   it('shows TierBadge for locked items with required_tier', async () => {

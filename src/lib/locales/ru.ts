@@ -948,6 +948,12 @@ export const ru: Translations = {
       noExportPayload: "Сгенерируйте экспорт, чтобы увидеть данные.",
       noMappings: "Правила не настроены"
     },
+    groups: {
+      plugins: "Плагины",
+      processing: "Обработка",
+      sources: "Источники",
+      usage: "Использование"
+    },
     integrations: {
       description: "Используйте мастер настройки OpenCode/Cursor/Cline/Continue для маршрутизации через AI Proxy.",
       eyebrow: "Интеграции",
@@ -4452,6 +4458,7 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     desktopOnly: "Доступно в десктоп-приложении",
     authRequiredTitle: "Только для авторизованных",
     authRequiredText: "Плагины доступны авторизованным пользователям. Войдите или получите одноразовый код в Telegram.",
+    authRequiredTooltip: "Официальные плагины доступны после входа через Telegram",
     noDescription: "Без описания",
     installed: "Установлено",
     update: "Обновить",

@@ -8,7 +8,6 @@ import {
   Download,
   Check,
   AlertTriangle,
-  Send,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -62,16 +61,28 @@ interface ListRowProps {
   item: MarketplaceItem;
   selected: boolean;
   busy: boolean;
+  isGuest: boolean;
   onSelect: (id: string) => void;
   onInstall: (item: MarketplaceItem) => void;
+  onLockedClick: () => void;
 }
 
-function MarketplaceListRow({ item, selected, busy, onSelect, onInstall }: ListRowProps) {
+function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, onInstall, onLockedClick }: ListRowProps) {
   const locked = !item.can_download && !item.installed;
   const unavailableMsg = t('marketplace.unavailableForRole');
+  const lockLabel = isGuest ? t('marketplace.authRequiredTooltip') : unavailableMsg;
+  const tooltipMsg = isGuest
+    ? lockLabel
+    : item.required_tier
+      ? t('marketplace.requiresTierNote', { tier: t(`auth.role.${item.required_tier}`) })
+      : unavailableMsg;
 
   const handleLockedClick = () => {
-    toast.error(unavailableMsg);
+    if (isGuest) {
+      onLockedClick();
+    } else {
+      toast.error(unavailableMsg);
+    }
   };
 
   const hasUpdate =
@@ -122,7 +133,7 @@ function MarketplaceListRow({ item, selected, busy, onSelect, onInstall }: ListR
           {locked && (
             <Lock
               className="w-3 h-3 text-slate-500 shrink-0"
-              aria-label={unavailableMsg}
+              aria-label={lockLabel}
             />
           )}
           {!item.entitled && item.required_tier && (
@@ -137,15 +148,15 @@ function MarketplaceListRow({ item, selected, busy, onSelect, onInstall }: ListR
       {/* Action button — stopPropagation so clicking it doesn't select the row */}
       <div className="shrink-0" onClick={e => e.stopPropagation()}>
         {locked ? (
-          <Tooltip content={item.required_tier ? t('marketplace.requiresTierNote', { tier: t(`auth.role.${item.required_tier}`) }) : unavailableMsg} side="left">
+          <Tooltip content={tooltipMsg} side="left">
             <span>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={handleLockedClick}
-                disabled
+                disabled={!isGuest}
                 leftIcon={<Lock className="w-3.5 h-3.5" />}
-                title={unavailableMsg}
+                title={lockLabel}
               >
                 {t('marketplace.install')}
               </Button>
@@ -195,11 +206,13 @@ function MarketplaceListRow({ item, selected, busy, onSelect, onInstall }: ListR
 interface DetailProps {
   item: MarketplaceItem;
   busy: boolean;
+  isGuest: boolean;
   onInstall: (item: MarketplaceItem) => void;
   onUninstall: (item: MarketplaceItem) => void;
+  onLockedClick: () => void;
 }
 
-function PluginDetail({ item, busy, onInstall, onUninstall }: DetailProps) {
+function PluginDetail({ item, busy, isGuest, onInstall, onUninstall, onLockedClick }: DetailProps) {
   const [detailTab, setDetailTab] = useState<'overview' | 'info'>('overview');
 
   const locked = !item.can_download && !item.installed;
@@ -246,14 +259,29 @@ function PluginDetail({ item, busy, onInstall, onUninstall }: DetailProps) {
         {/* Action row */}
         <div className="flex items-center gap-2 mb-6">
           {locked ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled
-              leftIcon={<Lock className="w-3.5 h-3.5" />}
-            >
-              {t('marketplace.install')}
-            </Button>
+            isGuest ? (
+              <Tooltip content={t('marketplace.authRequiredTooltip')}>
+                <span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={onLockedClick}
+                    leftIcon={<Lock className="w-3.5 h-3.5" />}
+                  >
+                    {t('marketplace.install')}
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled
+                leftIcon={<Lock className="w-3.5 h-3.5" />}
+              >
+                {t('marketplace.install')}
+              </Button>
+            )
           ) : !item.installed ? (
             <Button
               size="sm"
@@ -430,12 +458,17 @@ export default function Marketplace() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
     void fetchMarketplace(true);
   }, [fetchMarketplace, user]);
 
+  const isGuest = !user;
+
   const handleRefresh = () => {
     void fetchMarketplace(true);
+  };
+
+  const handleLockedClick = () => {
+    setAuthView('telegram');
   };
 
   const handleInstall = (item: MarketplaceItem) => {
@@ -482,71 +515,6 @@ export default function Marketplace() {
   const selectedItem = filtered.find(i => i.id === selectedId) ?? null;
 
   const installedCount = items.filter(i => i.installed).length;
-
-  // Auth gate: unauthenticated visitors (no session user) see a lock screen
-  // instead of the plugin list. getMarketplace is not called.
-  if (!user) {
-    return (
-      <div className="flex flex-col h-full overflow-hidden">
-        <Header
-          title={t('marketplace.title')}
-          subtitle={t('marketplace.subtitle')}
-          icon={<Store size={18} />}
-        />
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-md">
-            <div className="rounded-2xl border border-white/[0.06] bg-black/40 backdrop-blur-2xl shadow-2xl shadow-indigo-950/40 overflow-hidden">
-              {/* Top accent line */}
-              <div className="h-px w-full bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
-              <div className="px-8 pt-10 pb-8">
-                {/* Icon + title + text */}
-                <div className="flex flex-col items-center text-center mb-8">
-                  <div className="rounded-xl w-12 h-12 flex items-center justify-center mb-4 bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-xl shadow-indigo-900/40">
-                    <Lock className="w-6 h-6 text-white" />
-                  </div>
-                  <h2 className="text-white text-xl font-black tracking-tight uppercase">
-                    {t('marketplace.authRequiredTitle')}
-                  </h2>
-                  <p className="text-slate-400 text-sm mt-1 leading-relaxed px-2">
-                    {t('marketplace.authRequiredText')}
-                  </p>
-                </div>
-
-                {/* Primary: password login */}
-                <ButtonBase
-                  type="button"
-                  onClick={() => setAuthView('login')}
-                  className={cn(
-                    'w-full h-10 rounded-lg font-medium text-sm transition-all duration-200 select-none',
-                    'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-900/40',
-                    'hover:from-indigo-400 hover:to-indigo-500 hover:shadow-indigo-900/60 active:scale-[0.98]',
-                    'flex items-center justify-center gap-2',
-                  )}
-                >
-                  {t('auth.guest.login')}
-                </ButtonBase>
-
-                {/* Secondary: Telegram login */}
-                <ButtonBase
-                  type="button"
-                  onClick={() => setAuthView('telegram')}
-                  className={cn(
-                    'w-full h-10 mt-3 rounded-lg font-medium text-sm transition-all duration-200 select-none',
-                    'bg-white/[0.03] border border-white/[0.06] text-slate-200',
-                    'hover:bg-white/[0.05] hover:border-white/[0.10] active:scale-[0.98]',
-                    'flex items-center justify-center gap-2',
-                  )}
-                >
-                  <Send className="w-4 h-4" />
-                  {t('auth.login.tgLink')}
-                </ButtonBase>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Split into INSTALLED (first) and AVAILABLE sections for the Marketplace tab.
   const installedItems = filtered.filter(i => i.installed);
@@ -686,8 +654,10 @@ export default function Marketplace() {
                             item={item}
                             selected={item.id === selectedId}
                             busy={actionInProgress === item.id}
+                            isGuest={isGuest}
                             onSelect={setSelectedId}
                             onInstall={handleInstall}
+                            onLockedClick={handleLockedClick}
                           />
                         ))}
                       </section>
@@ -706,8 +676,10 @@ export default function Marketplace() {
                             item={item}
                             selected={item.id === selectedId}
                             busy={actionInProgress === item.id}
+                            isGuest={isGuest}
                             onSelect={setSelectedId}
                             onInstall={handleInstall}
+                            onLockedClick={handleLockedClick}
                           />
                         ))}
                       </section>
@@ -721,8 +693,10 @@ export default function Marketplace() {
                       item={item}
                       selected={item.id === selectedId}
                       busy={actionInProgress === item.id}
+                      isGuest={isGuest}
                       onSelect={setSelectedId}
                       onInstall={handleInstall}
+                      onLockedClick={handleLockedClick}
                     />
                   ))
                 )}
@@ -740,8 +714,10 @@ export default function Marketplace() {
             <PluginDetail
               item={selectedItem}
               busy={actionInProgress === selectedItem.id}
+              isGuest={isGuest}
               onInstall={handleInstall}
               onUninstall={handleUninstall}
+              onLockedClick={handleLockedClick}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-6">

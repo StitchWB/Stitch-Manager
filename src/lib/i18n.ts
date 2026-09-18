@@ -954,6 +954,12 @@ export interface Translations {
       noExportPayload: string;
       noMappings: string;
     }
+    groups: {
+      plugins: string;
+      processing: string;
+      sources: string;
+      usage: string;
+    }
     integrations: {
       description: string;
       eyebrow: string;
@@ -3900,6 +3906,7 @@ export interface Translations {
     desktopOnly: string;
     authRequiredTitle: string;
     authRequiredText: string;
+    authRequiredTooltip: string;
     noDescription: string;
     installed: string;
     update: string;

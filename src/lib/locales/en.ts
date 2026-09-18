@@ -948,6 +948,12 @@ export const en: Translations = {
       noExportPayload: "Generate an export to view payload.",
       noMappings: "No mappings configured"
     },
+    groups: {
+      plugins: "Plugins",
+      processing: "Processing",
+      sources: "Sources",
+      usage: "Usage"
+    },
     integrations: {
       description: "Use the wizard to configure OpenCode/Cursor/Cline/Continue to route via AI Proxy.",
       eyebrow: "Integrations",
@@ -4456,6 +4462,7 @@ addMailboxFromSheets: "Import from Google Sheets",
     desktopOnly: "Available in the desktop app",
     authRequiredTitle: "Authorized users only",
     authRequiredText: "Plugins are available to authorized users. Log in or use a one-time Telegram code.",
+    authRequiredTooltip: "Official plugins are available after signing in via Telegram",
     noDescription: "No description",
     installed: "Installed",
     update: "Update",
