@@ -107,6 +107,12 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         caller_user_id = user.id if user is not None else None
         caller_username = user.username if user is not None else None
         caller_telegram_id = user.telegram_id if user is not None else None
+        if user is None and get_settings().desktop_mode:
+            # Desktop guest (auth on, no session, desktop launcher): the local
+            # machine is the trusted owner — act as admin, same as the
+            # auth-disabled desktop path.  Web guests (desktop_mode unset)
+            # stay None — below every tier.
+            caller_role = "admin"
     # Overwrite any client-supplied _caller_* keys — they are NEVER trusted.
     body["_caller_role"] = caller_role
     body["_caller_user_id"] = caller_user_id

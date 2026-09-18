@@ -78,11 +78,20 @@ jest.mock('@/lib/backend/modules/aiGateway', () => ({
   discoverModelsForEndpoint: (id: string) => discoverState.discoverModelsForEndpoint(id),
 }));
 
+import { MemoryRouter } from 'react-router-dom';
 import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
 import { appToast } from '@/lib/observability/toast';
 
 const KEY = 'sk-8rYKLLlExIrwKMR166zMCKpIQsp3wBlBaQMJ0LujlvNtIU7S';
 const MASKED_KEY = 'sk-8rY…IU7S';
+
+
+const renderDialog = (props: { open: boolean; onClose: () => void }) =>
+  render(
+    <MemoryRouter>
+      <PastePackageDialog {...props} />
+    </MemoryRouter>,
+  );
 
 const BOTH_FORMATS_BLOB = [
   `Ключ: ${KEY}`,
@@ -118,12 +127,12 @@ function anthropicCheckbox(): HTMLInputElement {
 
 describe('PastePackageDialog', () => {
   it('renders nothing when closed', () => {
-    render(<PastePackageDialog open={false} onClose={jest.fn()} />);
+    renderDialog({ open: false, onClose: jest.fn() });
     expect(screen.queryByPlaceholderText('aiGateway.paste.textareaPlaceholder')).toBeNull();
   });
 
   it('shows a compact summary: masked key, OpenAI base only, models count', async () => {
-    render(<PastePackageDialog open onClose={jest.fn()} />);
+    renderDialog({ open: true, onClose: jest.fn() });
     paste(BOTH_FORMATS_BLOB);
 
     await waitFor(() => {
@@ -155,7 +164,7 @@ describe('PastePackageDialog', () => {
   });
 
   it('no-models blob shows the auto-discovery line', async () => {
-    render(<PastePackageDialog open onClose={jest.fn()} />);
+    renderDialog({ open: true, onClose: jest.fn() });
     paste(NO_MODELS_BLOB);
 
     await waitFor(() => {
@@ -165,7 +174,7 @@ describe('PastePackageDialog', () => {
   });
 
   it('missing key shows an inline input; typing it feeds the credential', async () => {
-    render(<PastePackageDialog open onClose={jest.fn()} />);
+    renderDialog({ open: true, onClose: jest.fn() });
     paste('Base: https://api.example.com/v1\nМодели: gpt-4o');
 
     const keyInput = await screen.findByPlaceholderText('aiGateway.paste.keyMissing');
@@ -184,7 +193,7 @@ describe('PastePackageDialog', () => {
   });
 
   it('garbage input shows nothing-recognized state and disables confirm', async () => {
-    render(<PastePackageDialog open onClose={jest.fn()} />);
+    renderDialog({ open: true, onClose: jest.fn() });
     paste('привет %%% ###');
 
     await waitFor(() => {
@@ -196,7 +205,7 @@ describe('PastePackageDialog', () => {
 
   it('confirm creates ONE OpenAI endpoint by default and runs discovery', async () => {
     const onClose = jest.fn();
-    render(<PastePackageDialog open onClose={onClose} />);
+    renderDialog({ open: true, onClose });
     paste(BOTH_FORMATS_BLOB);
 
     await waitFor(() => {
@@ -239,7 +248,7 @@ describe('PastePackageDialog', () => {
 
   it('checking the anthropic option adds the second endpoint', async () => {
     const onClose = jest.fn();
-    render(<PastePackageDialog open onClose={onClose} />);
+    renderDialog({ open: true, onClose });
     paste(BOTH_FORMATS_BLOB);
 
     await waitFor(() => {
@@ -273,7 +282,7 @@ describe('PastePackageDialog', () => {
   it('discovery failure still succeeds with the pending-sync toast', async () => {
     const onClose = jest.fn();
     discoverState.discoverModelsForEndpoint.mockRejectedValue(new Error('backend down'));
-    render(<PastePackageDialog open onClose={onClose} />);
+    renderDialog({ open: true, onClose });
     paste(NO_MODELS_BLOB);
 
     await waitFor(() => {

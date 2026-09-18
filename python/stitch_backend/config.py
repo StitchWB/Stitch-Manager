@@ -177,6 +177,13 @@ class Settings(BaseSettings):
         False,
         validation_alias=AliasChoices("auth_required", "STITCH_AUTH_REQUIRED"),
     )
+    # Desktop mode marker (set by the desktop launcher / dev launcher).  A
+    # guest session on a desktop backend is the machine owner → admin caller
+    # context.  Never set on the VDS (web guests must stay below every tier).
+    desktop_mode: bool = Field(
+        False,
+        validation_alias=AliasChoices("desktop_mode", "STITCH_DESKTOP_MODE"),
+    )
     # Domain-binding gate (desktop).  When ``True``, the desktop (auth
     # disabled, no caller context) no longer gets the ``{"*"}`` wildcard:
     # official plugins are only entitled per the server-granted activation

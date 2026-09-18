@@ -204,6 +204,10 @@ def _backend_watchdog(
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # Mark this backend as desktop: a guest session on the local machine is
+    # the owner (admin caller context).  Never set on the VDS.
+    os.environ.setdefault("STITCH_DESKTOP_MODE", "1")
+
     parser = argparse.ArgumentParser(description="Stitch Manager v2 GUI launcher")
     parser.add_argument(
         "--dev",

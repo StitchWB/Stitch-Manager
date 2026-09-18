@@ -8,6 +8,8 @@ import {
   type ParsedPackageBase,
 } from '@/lib/providerPackageParser';
 import { Button, Input, Textarea, Modal, Badge, Checkbox } from '@/components/ui';
+import { useNavigate } from 'react-router-dom';
+
 import { appToast } from '@/lib/observability/toast';
 import { t } from '@/lib/i18n';
 
@@ -43,6 +45,7 @@ function SummaryRow({
 }
 
 export function PastePackageDialog({ open, onClose }: PastePackageDialogProps) {
+  const navigate = useNavigate();
   const { createEndpoint, createCredential, createUpstreamModel } = useAiGatewayStore();
 
   const [raw, setRaw] = useState('');
@@ -128,6 +131,9 @@ export function PastePackageDialog({ open, onClose }: PastePackageDialogProps) {
         'ai-gateway',
       );
       handleClose();
+      // Land the user where the created endpoints live — "where did it go"
+      // is answered by navigation, not by a toast.
+      navigate('/ai/gateway');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setSaving(false);
