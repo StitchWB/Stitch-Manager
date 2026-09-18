@@ -10,7 +10,7 @@ import { Terminal, MessageSquare } from 'lucide-react';
 type CavemanLevel = 'lite' | 'full' | 'ultra';
 
 interface CompressionStatus {
-  compression_enabled: boolean;
+  enabled: boolean;
   rtk_enabled: boolean;
   caveman_enabled: boolean;
   caveman_level: CavemanLevel;
@@ -55,7 +55,7 @@ export function CompressionSection() {
         const data: CompressionStatus = await statusRes.json();
         setStatus(data);
         if (!isLoaded) {
-          setCompressionEnabled(data.compression_enabled ?? false);
+          setCompressionEnabled(data.enabled ?? false);
           setRtkEnabled(data.rtk_enabled ?? false);
           setCavemanEnabled(data.caveman_enabled ?? false);
           setCavemanLevel(data.caveman_level ?? 'full');
@@ -118,7 +118,7 @@ export function CompressionSection() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            compression_enabled: nextState.compressionEnabled,
+            enabled: nextState.compressionEnabled,
             rtk_enabled: nextState.rtkEnabled,
             caveman_enabled: nextState.cavemanEnabled,
             caveman_level: nextState.cavemanLevel,
