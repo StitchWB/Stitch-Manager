@@ -1257,6 +1257,7 @@ export interface Translations {
       status: string;
       testConnection: string;
       today: string;
+      toggleDetails: string;
     }
     tabs: {
       antigravity: string;
@@ -4651,6 +4652,12 @@ columnHeader: string;
     quotaExhausted: string;
     rateLimited: string;
     unknown: string;
+  };
+  accountPanel: {
+    credential: string;
+    endpoint: string;
+    noLink: string;
+    noLinkDesc: string;
   };
   }
 uiTexts: {

@@ -139,7 +139,7 @@ describe('AiHubLayout rail navigation', () => {
 
     // t is identity → keyed labels render as their keys.
     expect(screen.getByText('aiHub.tabs.providers')).toBeTruthy();
-    expect(screen.getByText('Gateway')).toBeTruthy();
+    expect(screen.queryByText('Gateway')).toBeNull();
     expect(screen.getByText('aiHub.tabs.antigravity')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.routing')).toBeTruthy();
     expect(screen.getByText('Connections')).toBeTruthy();
@@ -192,7 +192,7 @@ describe('AiHubLayout rail navigation', () => {
     expect(rail.className).toContain('md:w-48');
 
     // Labels remain in the DOM but are CSS-hidden below md.
-    const label = screen.getByText('Gateway');
+    const label = screen.getByText('aiHub.tabs.providers');
     expect(label.className).toContain('hidden');
     expect(label.className).toContain('md:inline');
 

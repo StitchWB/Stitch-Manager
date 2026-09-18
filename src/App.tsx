@@ -69,7 +69,6 @@ const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Tools = lazy(() => import('./pages/Tools'));
 const Automation = lazy(() => import('./pages/Automation'));
 const Totp = lazy(() => import('./pages/Totp'));
-const AiGateway = lazy(() => import('./pages/AiGateway'));
 const AiHubLayout = lazy(() =>
   import('./components/ai-proxy/AiHubLayout').then(m => ({ default: m.AiHubLayout }))
 );
@@ -612,7 +611,7 @@ function App() {
               <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
               <Route path="/ai/chat" element={<Chat />} />
               <Route path="/ai/analytics" element={<AiAnalytics />} />
-              <Route path="/ai/gateway" element={<AiGateway />} />
+              <Route path="/ai/gateway" element={<Navigate to="/ai/providers" replace />} />
               <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
               <Route path="/ai/:section" element={<AiProviders />} />
               <Route path="/ai/notebooklm" element={<NotebookLM />} />

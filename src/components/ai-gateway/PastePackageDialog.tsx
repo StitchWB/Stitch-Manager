@@ -133,7 +133,7 @@ export function PastePackageDialog({ open, onClose }: PastePackageDialogProps) {
       handleClose();
       // Land the user where the created endpoints live — "where did it go"
       // is answered by navigation, not by a toast.
-      navigate('/ai/gateway');
+      navigate('/ai/providers');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setSaving(false);

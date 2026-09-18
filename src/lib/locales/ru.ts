@@ -1250,7 +1250,8 @@ holone: {
       resetsIn: "{days}д",
       status: "Статус",
       testConnection: "Проверить соединение",
-      today: "Сегодня"
+      today: "Сегодня",
+      toggleDetails: "Подробности"
     },
 tabs: {
       antigravity: "Antigravity",
@@ -4353,6 +4354,12 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     quotaExhausted: "Квота исчерпана",
     rateLimited: "Ограничение частоты",
     unknown: "Неизвестен",
+  },
+  accountPanel: {
+    credential: "Ключ",
+    endpoint: "Эндпоинт",
+    noLink: "Эндпоинт шлюза не найден",
+    noLinkDesc: "Аккаунт не связан с эндпоинтом AI Gateway. Перенесите легаси-данные или добавьте эндпоинт вручную ниже.",
   },
   },
   uiTexts: {

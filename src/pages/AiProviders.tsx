@@ -9,6 +9,8 @@ import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
+import { GatewaySections } from '@/components/ai-gateway/GatewaySections';
+import { GatewayHeaderActions } from '@/components/ai-gateway/GatewayHeaderActions';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
@@ -412,6 +414,7 @@ export default function AiProviders() {
       description: t('aiHub.sections.providers.subtitle'),
       actions: (
         <>
+          <GatewayHeaderActions />
           <Button
             variant="ghost"
             size="sm"
@@ -509,6 +512,8 @@ export default function AiProviders() {
                 />
 
                 <AiProvidersKeysSection providerFilter={providerFilter} />
+
+                <GatewaySections onPastePackage={() => setPasteOpen(true)} />
 
                 {selection.selectedCount > 0 && (
                   <FloatingActionBar

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { PlugZap, Trash2, PenSquare, ChevronRight } from 'lucide-react';
 import { ButtonBase, ConfirmActionButton, ProviderLogo, StatusBadge, UsageBar, Checkbox } from '@/components/ui';
 
+import { AccountGatewayPanel } from './AccountGatewayPanel';
 import type { AiProxyAccount } from '../../types/generated';
 import { cn } from '../../lib/utils';
 import { useAiProxyStore } from '../../stores/aiProxy';
@@ -85,6 +86,16 @@ export function AiProxyAccountsTable({
 }: AiProxyAccountsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('lastUsedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (key: string) => {
+    setExpandedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const openAiQuotaMap = useAiProxyStore(state => state.openAiAccountQuotas);
   const kiroQuotaMap = useAiProxyStore(state => state.kiroAccountQuotas);
@@ -229,12 +240,16 @@ export function AiProxyAccountsTable({
             );
           }
 
+          const rowKey = String(account.id ?? `${account.provider}:${account.name}`);
+          const expanded = expandedKeys.has(rowKey);
+
           return (
+            <React.Fragment key={rowKey}>
             <div
-              key={account.id ?? `${account.provider}:${account.name}`}
               className={cn(
                 'relative grid grid-cols-1 lg:grid-cols-[40px_34px_minmax(220px,1fr)_140px_220px_120px_120px] gap-3 px-4 py-3 border-b border-white/5 text-left',
-                'hover:bg-white/[0.03]'
+                'hover:bg-white/[0.03]',
+                expanded && 'bg-white/[0.02]'
               )}
             >
               <div className="relative z-20 flex items-center justify-center">
@@ -345,9 +360,23 @@ export function AiProxyAccountsTable({
                 >
                   <Trash2 size={16} />
                 </ConfirmActionButton>
-                <ChevronRight size={16} className="text-slate-600" />
+                <ButtonBase
+                  type="button"
+                  className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white"
+                  title={t('aiHub.table.toggleDetails')}
+                  aria-expanded={expanded}
+                  aria-label={t('aiHub.table.toggleDetails')}
+                  onClick={() => toggleExpanded(rowKey)}
+                >
+                  <ChevronRight
+                    size={16}
+                    className={cn('transition-transform duration-150', expanded && 'rotate-90')}
+                  />
+                </ButtonBase>
               </div>
             </div>
+            {expanded && <AccountGatewayPanel account={account} />}
+            </React.Fragment>
           );
         })}
 

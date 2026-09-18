@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAiGatewayStore } from '@/stores/aiGateway';
+import { CredentialStatusBadge } from '@/components/ai-gateway/CredentialStatusBadge';
 import type { Credential, ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
 import { testCredentialConnection } from '@/lib/backend/modules/aiGateway';
 import {
@@ -227,27 +228,6 @@ export function CredentialsList({ endpoint, onAddCredential, onEditCredential }:
     await applyShare(credential, toShare, toUnshare);
   }, [consentFor, consentAcked, shareDraft, computeShareDelta, applyShare]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge variant="success">{t('aiGateway.status.active')}</Badge>;
-      case 'cooldown':
-        return <Badge variant="warning">{t('aiGateway.status.cooldown')}</Badge>;
-      case 'rate_limited':
-        return <Badge variant="warning">{t('aiGateway.status.rateLimited')}</Badge>;
-      case 'quota_exhausted':
-        return <Badge variant="danger">{t('aiGateway.status.quotaExhausted')}</Badge>;
-      case 'auth_failed':
-        return <Badge variant="danger">{t('aiGateway.status.authFailed')}</Badge>;
-      case 'degraded':
-        return <Badge variant="warning">{t('aiGateway.status.degraded')}</Badge>;
-      case 'disabled':
-        return <Badge variant="default">{t('aiGateway.status.disabled')}</Badge>;
-      default:
-        return <Badge variant="outline">{t('aiGateway.status.unknown')}</Badge>;
-    }
-  };
-
   if (loading.credentials) {
     return <div className="p-4 text-center text-slate-400">{t('aiGateway.list.loadingCredentials')}</div>;
   }
@@ -302,7 +282,7 @@ export function CredentialsList({ endpoint, onAddCredential, onEditCredential }:
                     <h4 className="font-medium truncate">
                       {credential.label || credential.fingerprint.slice(0, 16)}
                     </h4>
-                    {getStatusBadge(credential.runtimeStatus)}
+                    <CredentialStatusBadge status={credential.runtimeStatus} />
                     {credential.enabled ? (
                       <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                     ) : (

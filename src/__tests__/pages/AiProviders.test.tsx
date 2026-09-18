@@ -51,6 +51,12 @@ jest.mock('../../components/ai-proxy/sections/HoloneSection', () => ({
   HoloneSection: () => null,
 }));
 
+// GatewaySections fetches endpoints/public models on mount via safeInvoke;
+// stub it to keep the page test focused on the accounts surface.
+jest.mock('../../components/ai-gateway/GatewaySections', () => ({
+  GatewaySections: () => null,
+}));
+
 const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
 
 const testAccount = {

@@ -1250,7 +1250,8 @@ export const en: Translations = {
       resetsIn: "{days}d",
       status: "Status",
       testConnection: "Test connection",
-      today: "Today"
+      today: "Today",
+      toggleDetails: "Details"
     },
     tabs: {
       antigravity: "Antigravity",
@@ -4357,6 +4358,12 @@ addMailboxFromSheets: "Import from Google Sheets",
     quotaExhausted: "Quota Exhausted",
     rateLimited: "Rate Limited",
     unknown: "Unknown",
+  },
+  accountPanel: {
+    credential: "Credential",
+    endpoint: "Endpoint",
+    noLink: "No gateway endpoint linked",
+    noLinkDesc: "This account is not linked to an AI Gateway endpoint. Migrate legacy data or add an endpoint below.",
   },
   },
   uiTexts: {

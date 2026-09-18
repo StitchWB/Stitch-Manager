@@ -32,7 +32,6 @@ import { cn } from '@/lib/utils';
 type AiTabId =
   | 'overview'
   | 'providers'
-  | 'gateway'
   | 'routing'
   | 'connections'
   | 'monitor'
@@ -81,7 +80,6 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     header: 'aiHub.groups.sources',
     tabs: [
       { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers', icon: Server },
-      { id: 'gateway', label: 'Gateway', to: '/ai/gateway', icon: Network },
       { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity', icon: Orbit },
     ],
   },
@@ -116,7 +114,7 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
 
 function activeTab(pathname: string): AiTabId {
   if (pathname === '/ai' || pathname === '/ai/overview') return 'overview';
-  if (pathname.startsWith('/ai/gateway')) return 'gateway';
+  if (pathname.startsWith('/ai/gateway')) return 'providers';
   if (pathname.startsWith('/ai/routing')) return 'routing';
   if (pathname.startsWith('/ai/integrations') || pathname.startsWith('/ai/opencode-config')) {
     return 'connections';
