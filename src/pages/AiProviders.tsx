@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Bug, MessageSquare, Plus, RefreshCw, Search, Zap } from 'lucide-react';
+import { Bug, ClipboardPaste, MessageSquare, Plus, RefreshCw, Search, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelection } from '../hooks/useSelection';
@@ -8,6 +8,7 @@ import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
+import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
@@ -99,6 +100,7 @@ export default function AiProviders() {
   const language = useAppStore(state => state.language);
   const { section: sectionParam } = useParams<{ section?: string }>();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AiProxyAccount | null>(null);
   const [drawerAccount, setDrawerAccount] = useState<AiProxyAccount | null>(null);
   const [isMappingsModalOpen, setIsMappingsModalOpen] = useState(false);
@@ -409,14 +411,24 @@ export default function AiProviders() {
       title: t('aiHub.sections.providers.title'),
       description: t('aiHub.sections.providers.subtitle'),
       actions: (
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleAddNew}
-          leftIcon={<Plus size={14} />}
-        >
-          {t('aiHub.actions.addAccount')}
-        </Button>
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPasteOpen(true)}
+            leftIcon={<ClipboardPaste size={14} />}
+          >
+            {t('aiGateway.paste.button')}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleAddNew}
+            leftIcon={<Plus size={14} />}
+          >
+            {t('aiHub.actions.addAccount')}
+          </Button>
+        </>
       ),
     };
   })();
@@ -691,6 +703,8 @@ export default function AiProviders() {
       <IdeConfigWizard isOpen={isIdeWizardOpen} onClose={() => setIsIdeWizardOpen(false)} />
 
       <ProxyDebugDrawer isOpen={showDebugDrawer} onClose={() => setShowDebugDrawer(false)} />
+
+      <PastePackageDialog open={pasteOpen} onClose={() => setPasteOpen(false)} />
     </div>
   );
 }
