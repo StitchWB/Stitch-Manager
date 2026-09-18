@@ -768,6 +768,10 @@ export const ru: Translations = {
       subtitle: "Сжатие токенов и оптимизация промптов",
       title: "Сжатие",
       tokensSaved: "Сохранено токенов",
+      toasts: {
+        configSaved: "Настройки сжатия сохранены",
+        configSaveFailed: "Не удалось сохранить настройки сжатия",
+      },
     },
     apiKeys: {
       actions: {

@@ -68,7 +68,7 @@ async def compression_stats() -> CompressionStatsResponse:
 
 @router.post("/config")
 async def compression_config_update(body: CompressionConfigUpdate):
-    """Update compression configuration."""
+    """Update compression configuration (persisted to settings)."""
     if body.caveman_level not in ("lite", "full", "ultra"):
         raise HTTPException(
             status_code=422,
@@ -83,6 +83,26 @@ async def compression_config_update(body: CompressionConfigUpdate):
     service.config.output_compression_enabled = body.output_compression_enabled
     service.config.preserve_system_prompt = body.preserve_system_prompt
     service.config.auto_trigger_threshold = body.auto_trigger_threshold
+
+    from stitch_backend.database import run_in_session
+    from stitch_backend.domains.settings.service import SettingsService
+
+    async def _persist(session):
+        await SettingsService(session).update(
+            {
+                "compressionEnabled": body.enabled,
+                "rtkEnabled": body.rtk_enabled,
+                "cavemanEnabled": body.caveman_enabled,
+                "cavemanLevel": body.caveman_level,
+                "inputCompressionEnabled": body.input_compression_enabled,
+                "outputCompressionEnabled": body.output_compression_enabled,
+                "preserveSystemPrompt": body.preserve_system_prompt,
+                "autoTriggerThreshold": body.auto_trigger_threshold,
+            }
+        )
+
+    await run_in_session(_persist)
+
     return {
         "enabled": service.config.enabled,
         "rtk_enabled": service.config.rtk_enabled,

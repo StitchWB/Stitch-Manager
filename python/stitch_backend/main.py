@@ -405,6 +405,37 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.warning("HoloNe config restore skipped: %s", _exc)
 
+    # Compression — restore persisted config into the cached singleton.
+    try:
+        from stitch_backend.database import get_session_factory as _gsf_comp
+        from stitch_backend.domains.ai_proxy.compression.service import (
+            get_compression_service,
+        )
+
+        _factory = _gsf_comp()
+        async with _factory() as _db:
+            from stitch_backend.domains.settings.service import SettingsService
+
+            _cs = await SettingsService(_db).get_all()
+        _csvc = get_compression_service()
+        _flag_map = {
+            "compressionEnabled": "enabled",
+            "rtkEnabled": "rtk_enabled",
+            "cavemanEnabled": "caveman_enabled",
+            "inputCompressionEnabled": "input_compression_enabled",
+            "outputCompressionEnabled": "output_compression_enabled",
+            "preserveSystemPrompt": "preserve_system_prompt",
+        }
+        for _key, _attr in _flag_map.items():
+            if _cs.get(_key) is not None:
+                setattr(_csvc.config, _attr, bool(_cs[_key]))
+        if _cs.get("cavemanLevel"):
+            _csvc.config.caveman_level = str(_cs["cavemanLevel"])
+        if _cs.get("autoTriggerThreshold") is not None:
+            _csvc.config.auto_trigger_threshold = int(_cs["autoTriggerThreshold"])
+    except Exception as _exc:
+        logger.warning("Compression config restore skipped: %s", _exc)
+
     # Start AI Gateway background workers
     try:
         from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker

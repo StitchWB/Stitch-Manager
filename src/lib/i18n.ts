@@ -735,6 +735,10 @@ export interface Translations {
       subtitle: string;
       title: string;
       tokensSaved: string;
+      toasts: {
+        configSaved: string;
+        configSaveFailed: string;
+      }
     }
     holone: {
       activeRules: string;

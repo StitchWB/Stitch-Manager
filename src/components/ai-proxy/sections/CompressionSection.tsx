@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
 import { t } from '@/lib/i18n';
-import { Button, GlassCard, Toggle, SegmentedControl, Input } from '@/components/ui';
+import { GlassCard, Toggle, SegmentedControl, Input } from '@/components/ui';
 import { Terminal, MessageSquare } from 'lucide-react';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -81,45 +82,71 @@ export function CompressionSection() {
     });
   }, [fetchAll]);
 
-  // ── Save ─────────────────────────────────────────────────────────────────
+  // ── Auto-save: every control applies immediately, reverts on failure ─────
 
-  const hasUnsavedChanges =
-    isLoaded &&
-    status !== null &&
-    (compressionEnabled !== status.compression_enabled ||
-      rtkEnabled !== status.rtk_enabled ||
-      cavemanEnabled !== status.caveman_enabled ||
-      cavemanLevel !== status.caveman_level ||
-      inputCompressionEnabled !== status.input_compression_enabled ||
-      outputCompressionEnabled !== status.output_compression_enabled ||
-      preserveSystemPrompt !== status.preserve_system_prompt ||
-      autoTriggerThreshold !== status.auto_trigger_threshold);
+  interface LocalConfig {
+    compressionEnabled: boolean;
+    rtkEnabled: boolean;
+    cavemanEnabled: boolean;
+    cavemanLevel: CavemanLevel;
+    inputCompressionEnabled: boolean;
+    outputCompressionEnabled: boolean;
+    preserveSystemPrompt: boolean;
+    autoTriggerThreshold: number;
+  }
 
-  const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/compression/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          compression_enabled: compressionEnabled,
-          rtk_enabled: rtkEnabled,
-          caveman_enabled: cavemanEnabled,
-          caveman_level: cavemanLevel,
-          input_compression_enabled: inputCompressionEnabled,
-          output_compression_enabled: outputCompressionEnabled,
-          preserve_system_prompt: preserveSystemPrompt,
-          auto_trigger_threshold: autoTriggerThreshold,
-        }),
-      });
-      if (!res.ok) throw new Error('config save failed');
-      await fetchAll();
-    } catch {
-      // ponytail: silently fail
-    } finally {
-      setIsSaving(false);
-    }
-  }, [compressionEnabled, rtkEnabled, cavemanEnabled, cavemanLevel, inputCompressionEnabled, outputCompressionEnabled, preserveSystemPrompt, autoTriggerThreshold, fetchAll]);
+  const applyConfig = useCallback(
+    async (patch: Partial<LocalConfig>) => {
+      const prev: LocalConfig = {
+        compressionEnabled, rtkEnabled, cavemanEnabled, cavemanLevel,
+        inputCompressionEnabled, outputCompressionEnabled, preserveSystemPrompt,
+        autoTriggerThreshold,
+      };
+      const nextState = { ...prev, ...patch };
+      setCompressionEnabled(nextState.compressionEnabled);
+      setRtkEnabled(nextState.rtkEnabled);
+      setCavemanEnabled(nextState.cavemanEnabled);
+      setCavemanLevel(nextState.cavemanLevel);
+      setInputCompressionEnabled(nextState.inputCompressionEnabled);
+      setOutputCompressionEnabled(nextState.outputCompressionEnabled);
+      setPreserveSystemPrompt(nextState.preserveSystemPrompt);
+      setAutoTriggerThreshold(nextState.autoTriggerThreshold);
+
+      setIsSaving(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/compression/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            compression_enabled: nextState.compressionEnabled,
+            rtk_enabled: nextState.rtkEnabled,
+            caveman_enabled: nextState.cavemanEnabled,
+            caveman_level: nextState.cavemanLevel,
+            input_compression_enabled: nextState.inputCompressionEnabled,
+            output_compression_enabled: nextState.outputCompressionEnabled,
+            preserve_system_prompt: nextState.preserveSystemPrompt,
+            auto_trigger_threshold: nextState.autoTriggerThreshold,
+          }),
+        });
+        if (!res.ok) throw new Error('config save failed');
+        toast.success(t('aiHub.compression.toasts.configSaved'));
+        await fetchAll();
+      } catch {
+        setCompressionEnabled(prev.compressionEnabled);
+        setRtkEnabled(prev.rtkEnabled);
+        setCavemanEnabled(prev.cavemanEnabled);
+        setCavemanLevel(prev.cavemanLevel);
+        setInputCompressionEnabled(prev.inputCompressionEnabled);
+        setOutputCompressionEnabled(prev.outputCompressionEnabled);
+        setPreserveSystemPrompt(prev.preserveSystemPrompt);
+        setAutoTriggerThreshold(prev.autoTriggerThreshold);
+        toast.error(t('aiHub.compression.toasts.configSaveFailed'));
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [compressionEnabled, rtkEnabled, cavemanEnabled, cavemanLevel, inputCompressionEnabled, outputCompressionEnabled, preserveSystemPrompt, autoTriggerThreshold, fetchAll]
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -156,7 +183,8 @@ export function CompressionSection() {
             </div>
             <Toggle
               checked={compressionEnabled}
-              onChange={setCompressionEnabled}
+              onChange={(v) => applyConfig({ compressionEnabled: v })}
+              disabled={isSaving}
               label={t('aiHub.compression.enabled')}
             />
           </div>
@@ -191,8 +219,8 @@ export function CompressionSection() {
             </div>
             <Toggle
               checked={rtkEnabled}
-              onChange={setRtkEnabled}
-              disabled={!compressionEnabled}
+              onChange={(v) => applyConfig({ rtkEnabled: v })}
+              disabled={!compressionEnabled || isSaving}
               label={t('aiHub.compression.rtkEnabled')}
             />
           </div>
@@ -222,7 +250,7 @@ export function CompressionSection() {
                         { value: 'ultra', label: t('aiHub.compression.levelUltra') },
                       ]}
                       value={cavemanLevel}
-                      onChange={(val) => setCavemanLevel(val as CavemanLevel)}
+                      onChange={(val) => applyConfig({ cavemanLevel: val as CavemanLevel })}
                       size="sm"
                     />
                   </div>
@@ -231,8 +259,8 @@ export function CompressionSection() {
             </div>
             <Toggle
               checked={cavemanEnabled}
-              onChange={setCavemanEnabled}
-              disabled={!compressionEnabled}
+              onChange={(v) => applyConfig({ cavemanEnabled: v })}
+              disabled={!compressionEnabled || isSaving}
               label={t('aiHub.compression.cavemanEnabled')}
             />
           </div>
@@ -253,7 +281,7 @@ export function CompressionSection() {
                 </span>
                 <Toggle
                   checked={inputCompressionEnabled}
-                  onChange={setInputCompressionEnabled}
+                  onChange={(v) => applyConfig({ inputCompressionEnabled: v })}
                   label={t('aiHub.compression.inputCompressionEnabled')}
                 />
               </div>
@@ -263,7 +291,7 @@ export function CompressionSection() {
                 </span>
                 <Toggle
                   checked={outputCompressionEnabled}
-                  onChange={setOutputCompressionEnabled}
+                  onChange={(v) => applyConfig({ outputCompressionEnabled: v })}
                   label={t('aiHub.compression.outputCompressionEnabled')}
                 />
               </div>
@@ -284,7 +312,7 @@ export function CompressionSection() {
               </div>
               <Toggle
                 checked={preserveSystemPrompt}
-                onChange={setPreserveSystemPrompt}
+                onChange={(v) => applyConfig({ preserveSystemPrompt: v })}
                 label={t('aiHub.compression.preserveSystemPromptEnabled')}
               />
             </div>
@@ -306,6 +334,7 @@ export function CompressionSection() {
                 step="100"
                 value={autoTriggerThreshold}
                 onChange={(e) => setAutoTriggerThreshold(parseInt(e.target.value, 10) || 0)}
+                onBlur={() => applyConfig({ autoTriggerThreshold })}
                 className="w-24 px-2 py-1 text-xs text-right"
               />
             </div>
@@ -319,22 +348,6 @@ export function CompressionSection() {
               {t('aiHub.compression.notConfigured')}
             </p>
           </GlassCard>
-        )}
-
-        {/* ── Save Bar ─────────────────────────────────────────────────── */}
-        {hasUnsavedChanges && (
-          <div className="sticky bottom-3">
-            <GlassCard className="p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-300">
-                  {t('aiHub.holone.unsavedChanges')}
-                </span>
-                <Button variant="primary" size="sm" onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? t('aiHub.actions.saving') : t('aiHub.holone.saveChanges')}
-                </Button>
-              </div>
-            </GlassCard>
-          </div>
         )}
 
       </div>

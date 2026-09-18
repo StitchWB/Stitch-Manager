@@ -42,6 +42,8 @@ _INT_KEYS = {
     "delayBetweenAccounts", "checkCreditsIntervalSeconds",
     "tokenRefreshCheckInterval", "tokenRefreshBuffer", "minActiveKiro",
     "minActiveWindsurf", "minActiveTrae",
+    # Compression layer (persisted; restored at startup).
+    "autoTriggerThreshold",
 }
 _BOOL_KEYS = {
     "proxyEnabled", "proxyRotationEnabled", "addyioEnabled", "addyioAutoDelete",
@@ -53,6 +55,9 @@ _BOOL_KEYS = {
     "auth.enforce_login",
     # HoloNe security toggle (persisted; restored into the service singleton).
     "holone_enabled",
+    # Compression layer toggles (persisted; restored at startup).
+    "compressionEnabled", "rtkEnabled", "cavemanEnabled",
+    "inputCompressionEnabled", "outputCompressionEnabled", "preserveSystemPrompt",
 }
 _FLOAT_KEYS = {"uiScale", "speedMultiplier"}
 _JSON_KEYS = {"customIdePaths"}

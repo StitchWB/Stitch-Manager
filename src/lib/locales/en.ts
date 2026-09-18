@@ -768,6 +768,10 @@ export const en: Translations = {
       subtitle: "Token compression & prompt optimization",
       title: "Compression",
       tokensSaved: "Tokens Saved",
+      toasts: {
+        configSaved: "Compression settings saved",
+        configSaveFailed: "Failed to save compression settings",
+      },
     },
     apiKeys: {
       actions: {
