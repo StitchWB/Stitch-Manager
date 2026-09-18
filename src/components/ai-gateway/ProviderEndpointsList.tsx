@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { t } from '@/lib/i18n';
-import { Plus, Trash2, Edit2, Server, CheckCircle2, XCircle, RotateCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, Server, CheckCircle2, XCircle, RotateCw, ClipboardPaste } from 'lucide-react';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
 import { Button } from '@/components/ui/Button';
@@ -10,12 +10,14 @@ interface ProviderEndpointsListProps {
   onSelectEndpoint: (endpoint: ProviderEndpoint) => void;
   onAddEndpoint: () => void;
   onEditEndpoint: (endpoint: ProviderEndpoint) => void;
+  onPastePackage: () => void;
 }
 
 export function ProviderEndpointsList({
   onSelectEndpoint,
   onAddEndpoint,
   onEditEndpoint,
+  onPastePackage,
 }: ProviderEndpointsListProps) {
   const { endpoints, loading, errors, fetchEndpoints, deleteEndpoint } = useAiGatewayStore();
 
@@ -44,7 +46,10 @@ export function ProviderEndpointsList({
         <Server className="mx-auto h-12 w-12 text-slate-400 mb-4" />
         <h3 className="text-lg font-semibold mb-2">{t('aiGateway.list.noEndpoints')}</h3>
         <p className="text-slate-400 mb-4">{t('aiGateway.list.noEndpointsDesc')}</p>
-        <Button onClick={onAddEndpoint}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.list.addEndpoint')}</Button>
+        <div className="flex items-center justify-center gap-2">
+          <Button onClick={onAddEndpoint}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.list.addEndpoint')}</Button>
+          <Button variant="outline" onClick={onPastePackage}><ClipboardPaste className="h-4 w-4 mr-2" />{t('aiGateway.paste.button')}</Button>
+        </div>
       </div>
     );
   }
@@ -53,7 +58,10 @@ export function ProviderEndpointsList({
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold">{t('aiGateway.list.endpointsTitle')}</h2>
-        <Button size="sm" onClick={onAddEndpoint}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.list.addEndpointShort')}</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={onPastePackage}><ClipboardPaste className="h-4 w-4 mr-2" />{t('aiGateway.paste.button')}</Button>
+          <Button size="sm" onClick={onAddEndpoint}><Plus className="h-4 w-4 mr-2" />{t('aiGateway.list.addEndpointShort')}</Button>
+        </div>
       </div>
 
       {endpoints.map(endpoint => (

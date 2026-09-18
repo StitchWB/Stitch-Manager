@@ -4622,6 +4622,21 @@ columnHeader: string;
     targetsTitle: string;
     upstreamModelsTitle: string;
   };
+  paste: {
+    button: string;
+    title: string;
+    textareaLabel: string;
+    textareaPlaceholder: string;
+    previewTitle: string;
+    nothingRecognized: string;
+    apiKey: string;
+    noKeyWarning: string;
+    credentialLabel: string;
+    modelsLabel: string;
+    confirm: string;
+    creating: string;
+    success: string;
+  };
   status: {
     active: string;
     authFailed: string;

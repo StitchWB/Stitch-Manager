@@ -11,6 +11,7 @@ import { PublicModelsList } from '@/components/ai-gateway/PublicModelsList';
 import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
 import { RouteTargetsList } from '@/components/ai-gateway/RouteTargetsList';
 import { RouteTargetForm } from '@/components/ai-gateway/RouteTargetForm';
+import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
 import { Button, ConfirmActionButton } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { appToast } from '@/lib/observability/toast';
@@ -53,6 +54,9 @@ export default function AiGateway() {
 
   // OpenCode import state
   const [importing, setImporting] = useState(false);
+
+  // Paste-package dialog state
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   const handleImportOpencode = async () => {
     setImporting(true);
@@ -217,6 +221,7 @@ export default function AiGateway() {
                   onSelectEndpoint={handleSelectEndpoint}
                   onAddEndpoint={handleAddEndpoint}
                   onEditEndpoint={handleEditEndpoint}
+                  onPastePackage={() => setPasteOpen(true)}
                 />
               </div>
 
@@ -319,6 +324,8 @@ export default function AiGateway() {
           )}
 
           {/* Forms */}
+          <PastePackageDialog open={pasteOpen} onClose={() => setPasteOpen(false)} />
+
           <ProviderEndpointForm
             key={`endpoint-${endpointDialog.editingItem?.id ?? 'new'}`}
             endpoint={endpointDialog.editingItem}

@@ -335,7 +335,8 @@ export function CompressionSection() {
                 value={autoTriggerThreshold}
                 onChange={(e) => setAutoTriggerThreshold(parseInt(e.target.value, 10) || 0)}
                 onBlur={() => applyConfig({ autoTriggerThreshold })}
-                className="w-24 px-2 py-1 text-xs text-right"
+                containerClassName="w-24 shrink-0"
+                className="px-2 py-1 text-xs text-right"
               />
             </div>
           </GlassCard>
