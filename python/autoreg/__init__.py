@@ -24,19 +24,38 @@ Kiro Batch Login - Autoreg Module
 
 __version__ = '2.0.0'
 
-# Lazy imports
+# Lazy singletons: state written to a service must survive across calls
+# (gate: .ast-grep/rules/no-fresh-instance-getter.yml).
+_TOKEN_SERVICE = None
+_QUOTA_SERVICE = None
+_MACHINE_ID_SERVICE = None
+_KIRO_SERVICE = None
+
+
 def get_token_service():
-    from .services.token_service import TokenService
-    return TokenService()
+    global _TOKEN_SERVICE
+    if _TOKEN_SERVICE is None:
+        from .services.token_service import TokenService
+        _TOKEN_SERVICE = TokenService()
+    return _TOKEN_SERVICE
 
 def get_quota_service():
-    from .services.quota_service import QuotaService
-    return QuotaService()
+    global _QUOTA_SERVICE
+    if _QUOTA_SERVICE is None:
+        from .services.quota_service import QuotaService
+        _QUOTA_SERVICE = QuotaService()
+    return _QUOTA_SERVICE
 
 def get_machine_id_service():
-    from .services.machine_id_service import MachineIdService
-    return MachineIdService()
+    global _MACHINE_ID_SERVICE
+    if _MACHINE_ID_SERVICE is None:
+        from .services.machine_id_service import MachineIdService
+        _MACHINE_ID_SERVICE = MachineIdService()
+    return _MACHINE_ID_SERVICE
 
 def get_kiro_service():
-    from .services.kiro_service import KiroService
-    return KiroService()
+    global _KIRO_SERVICE
+    if _KIRO_SERVICE is None:
+        from .services.kiro_service import KiroService
+        _KIRO_SERVICE = KiroService()
+    return _KIRO_SERVICE
