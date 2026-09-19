@@ -93,6 +93,7 @@ async def bootstrap() -> None:
     import stitch_backend.domains.plugin_distribution.marketplace_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.source_commands  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.submission_commands  # noqa: F401
     import stitch_backend.domains.profiles.commands  # noqa: F401
     import stitch_backend.domains.prompts.commands  # noqa: F401
     import stitch_backend.domains.proxy_library.commands  # noqa: F401

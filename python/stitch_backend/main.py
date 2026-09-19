@@ -224,6 +224,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:
         logger.warning("Plugin distribution startup skipped: %s", _exc)
 
+    # Partner channels: seed the server catalog from bundled friends.json
+    # (idempotent by url; afterwards the file is seed-only and admin CRUD
+    # on the server is the source of truth).
+    try:
+        from stitch_backend.domains.community.partner_service import (
+            seed_partner_channels,
+        )
+        await seed_partner_channels()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Partner channel seed skipped: %s", _exc)
+
     # Create scheduler tables (raw SQL, not ORM models)
     from stitch_backend.database import get_session_factory
     from stitch_backend.domains.scheduler.service import ensure_tables as _sched_tables
@@ -266,6 +277,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.plugin_distribution.marketplace_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.source_commands  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.submission_commands  # noqa: F401
     import stitch_backend.domains.plugin_runtime.sandbox_commands  # noqa: F401
 
     # Dual-format routing + migrate_totp_to_plugin for the stitch-totp

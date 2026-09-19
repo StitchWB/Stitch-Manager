@@ -36,6 +36,7 @@ from .community import (
     _community_root,
     fetch_catalog,
     install_community,
+    install_server_community,
     list_installed_community,
 )
 from .entitlements import (
@@ -75,6 +76,63 @@ def _safe_semver(version: str) -> tuple[int, int, int]:
         return parse_semver(version)
     except ValueError:
         return (0, 0, 0)
+
+
+def _badges_of(entry: dict[str, Any]) -> list[str]:
+    """Badges list from a catalog/manifest entry ([] when absent — Feature 2)."""
+    raw = entry.get("badges")
+    if not isinstance(raw, list):
+        return []
+    return [str(b) for b in raw]
+
+
+def _is_community_approved(entry: dict[str, Any]) -> bool:
+    """True for server-catalog entries merged from approved submissions.
+
+    They carry ``source_kind == 'community_approved'`` and/or a release
+    ``source`` pointing at the server's Bearer-gated ``/community-pkg/``.
+    """
+    if entry.get("source_kind") == "community_approved":
+        return True
+    src = entry.get("source")
+    return (
+        isinstance(src, dict)
+        and src.get("type") == "release"
+        and "/community-pkg/" in str(src.get("url", ""))
+    )
+
+
+def _community_item(
+    entry: dict[str, Any], installed_community: dict[tuple[str, str], dict]
+) -> dict[str, Any] | None:
+    """Build a marketplace item from a server ``/catalog`` community entry.
+
+    Returns ``None`` when the entry is not community-approved or malformed.
+    Approved community plugins are NOT in ``/manifest`` (unsigned, served via
+    ``/community-pkg``), so both the activated and unactivated marketplace
+    paths merge them from the public ``/catalog`` feed through this helper.
+    """
+    if not isinstance(entry, dict) or not _is_community_approved(entry):
+        return None
+    plugin_id = str(entry.get("id", ""))
+    version = str(entry.get("version", ""))
+    if not plugin_id or not version:
+        return None
+    is_installed = (plugin_id, version) in installed_community
+    return {
+        "id": plugin_id,
+        "name": str(entry.get("name") or plugin_id),
+        "description": entry.get("description"),
+        "author": entry.get("author"),
+        "version": version,
+        "source": "community",
+        "entitled": True,
+        "installed": is_installed,
+        "installed_version": version if is_installed else None,
+        "can_download": True,
+        "required_tier": None,
+        "badges": _badges_of(entry),
+    }
 
 
 # ── Short-TTL cache for upstream feeds (marketplace perf) ────────────────────
@@ -154,6 +212,12 @@ async def cmd_get_marketplace(params: dict) -> dict:
     state = activation.load()
     activated = state is not None
 
+    # Local community installs (id, version) — consulted by every loop for
+    # community-source items, including server-approved ones (Feature 2).
+    installed_community = {
+        (p["id"], p["version"]): p for p in list_installed_community()
+    }
+
     # Dual-path entitlement resolution.
     use_grants = _caller_uses_grants(params)
     if use_grants:
@@ -163,10 +227,15 @@ async def cmd_get_marketplace(params: dict) -> dict:
             caller_user_id, caller_role
         )
 
-    # Fetch the two upstream feeds concurrently (cached, short timeout) so a
-    # slow upstream degrades fast instead of blocking the marketplace page.
+    # Fetch upstream feeds concurrently (cached, short timeout) so a slow
+    # upstream degrades fast instead of blocking the marketplace page.
+    # ``catalog_task`` = GitHub community catalog; ``server_catalog_task`` =
+    # the distribution server's public /catalog (official metadata + Feature-2
+    # community_approved entries carrying badges + a /community-pkg source).
     catalog_task = asyncio.create_task(_fetch_catalog_cached())
+    server_catalog_task = asyncio.create_task(_fetch_public_catalog_cached(activation))
 
+    # ── Official plugins ──────────────────────────────────────────────────
     if state is not None and not state.degraded:
         try:
             manifest = await _fetch_manifest_cached(activation, state.token)
@@ -183,10 +252,15 @@ async def cmd_get_marketplace(params: dict) -> dict:
                 version = str(entry.get("version", ""))
                 if not plugin_id or not version:
                     continue
-                if use_grants:
-                    entitled = is_entitled_to(plugin_id, grant_entitlements)
-                else:
-                    entitled = _is_entitled(plugin_id, state.entitlements)
+                # community_approved entries are merged from the server
+                # /catalog below — they are not in the signed /manifest.
+                if _is_community_approved(entry):
+                    continue
+                entitled = (
+                    is_entitled_to(plugin_id, grant_entitlements)
+                    if use_grants
+                    else _is_entitled(plugin_id, state.entitlements)
+                )
                 installed_versions = list_installed_versions(plugin_id)
                 installed = bool(installed_versions)
                 installed_version = (
@@ -207,6 +281,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "installed_version": installed_version,
                         "can_download": entitled,
                         "required_tier": required_tiers.get(plugin_id),
+                        "badges": _badges_of(entry),
                     }
                 )
         except Exception as exc:  # noqa: BLE001 — marketplace must not crash
@@ -216,7 +291,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
         # No activation: official plugins stay VISIBLE but locked — the
         # marketplace is the funnel; downloads require activation.
         try:
-            public_catalog = await _fetch_public_catalog_cached(activation)
+            public_catalog = await server_catalog_task
             public_ids = [
                 str(e.get("id", ""))
                 for e in public_catalog.get("plugins", [])
@@ -228,6 +303,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
                 version = str(entry.get("version", ""))
                 if not plugin_id or not version:
                     continue
+                if _is_community_approved(entry):
+                    continue  # merged from the server /catalog below
                 installed_versions = list_installed_versions(plugin_id)
                 items.append(
                     {
@@ -246,16 +323,27 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         ),
                         "can_download": False,
                         "required_tier": public_tiers.get(plugin_id),
+                        "badges": _badges_of(entry),
                     }
                 )
         except Exception as exc:  # noqa: BLE001 — marketplace must not crash
             logger.warning("Marketplace: public catalog fetch failed: %s", exc)
 
+    # ── Feature 2: server-approved community plugins ──────────────────────
+    # Approved submissions live only in the server /catalog (unsigned, served
+    # via the Bearer-gated /community-pkg). Merge them for BOTH activated and
+    # unactivated callers; the download itself still requires a token (OC5).
+    try:
+        server_catalog = await server_catalog_task
+        for entry in server_catalog.get("plugins", []):
+            item = _community_item(entry, installed_community)
+            if item is not None:
+                items.append(item)
+    except Exception as exc:  # noqa: BLE001 — marketplace must not crash
+        logger.warning("Marketplace: server community merge failed: %s", exc)
+
     try:
         catalog = await catalog_task
-        installed_community = {
-            (p["id"], p["version"]): p for p in list_installed_community()
-        }
         for entry in catalog.get("plugins", []):
             if not isinstance(entry, dict):
                 continue
@@ -277,6 +365,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     "installed": is_installed,
                     "installed_version": version if is_installed else None,
                     "can_download": True,
+                    "badges": _badges_of(entry),
                 }
             )
     except Exception as exc:  # noqa: BLE001 — marketplace must not crash
@@ -368,7 +457,13 @@ async def _install_official(plugin_id: str, params: dict | None = None) -> dict[
 
 
 async def _install_community_latest(plugin_id: str) -> dict[str, Any]:
-    """Install the latest community version from the catalog."""
+    """Install the latest community version from the catalog.
+
+    Falls back to the distribution server's approved-community listing
+    (Feature 2) when the id is not in the GitHub catalog; those entries
+    install via ``sources.install_from_source`` release mode with the
+    activation Bearer token attached to the ``/community-pkg/`` download.
+    """
     catalog = fetch_catalog()
     versions = [
         str(e.get("version", ""))
@@ -376,7 +471,7 @@ async def _install_community_latest(plugin_id: str) -> dict[str, Any]:
         if isinstance(e, dict) and str(e.get("id", "")) == plugin_id
     ]
     if not versions:
-        return {"success": False, "error": f"not in catalog: {plugin_id}"}
+        return await install_server_community(plugin_id)
     latest = max(versions, key=lambda v: _safe_semver(v))
     return await install_community(plugin_id, latest)
 

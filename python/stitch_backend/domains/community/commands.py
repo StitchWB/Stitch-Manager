@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
 
-from .service import load_friends
+from .partner_service import load_friends
 
 
 @register_command("get_friends", readonly=True)
 async def cmd_get_friends(params: dict) -> dict:
     """Return the community friends/channels directory."""
-    return {"items": load_friends()}
+    return {"items": await load_friends()}

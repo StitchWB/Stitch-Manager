@@ -60,6 +60,10 @@ class ActivationState:
     # TG display name (handle/first name) recorded at issuance — shown instead
     # of the tg_<id> fallback.
     tg_username: str | None = None
+    # Partner-channel attribution (Feature 1): set when the code came from a
+    # partner invite; invited_by_tg_id is the channel owner's TG id.
+    partner_channel_id: str | None = None
+    invited_by_tg_id: int | None = None
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, object]) -> ActivationState:
@@ -79,6 +83,10 @@ class ActivationState:
             tier=str(raw.get("tier")) if raw.get("tier") else None,
             tg_user_id=_opt_int(raw.get("tg_user_id")),
             tg_username=str(raw["tg_username"]) if raw.get("tg_username") else None,
+            partner_channel_id=(
+                str(raw["partner_channel_id"]) if raw.get("partner_channel_id") else None
+            ),
+            invited_by_tg_id=_opt_int(raw.get("invited_by_tg_id")),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -134,6 +142,10 @@ class ActivationService:
             tier=body.get("tier") or None,
             tg_user_id=_opt_int(body.get("tg_user_id")),
             tg_username=str(body["tg_username"]) if body.get("tg_username") else None,
+            partner_channel_id=(
+                str(body["partner_channel_id"]) if body.get("partner_channel_id") else None
+            ),
+            invited_by_tg_id=_opt_int(body.get("invited_by_tg_id")),
         )
         self._save(state)
         self._invalidate_entitlements_cache()

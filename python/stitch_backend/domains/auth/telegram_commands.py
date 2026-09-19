@@ -32,6 +32,7 @@ from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.auth import service as auth_service
+from stitch_backend.domains.community.partner_service import upsert_partner_member
 from stitch_backend.domains.plugin_distribution.activation import (
     ActivationService,
     derive_hwid,
@@ -207,6 +208,16 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, 
             )
         else:
             user = await _ensure_telegram_user(db)
+        # Partner invite (Feature 1): record the (channel, user) membership;
+        # the role itself is applied by the promote-only tier sync afterwards.
+        if state.partner_channel_id:
+            await upsert_partner_member(
+                db,
+                channel_id=state.partner_channel_id,
+                user_id=user.id,
+                invited_by_tg_id=state.invited_by_tg_id,
+                granted_role=state.tier or "user",
+            )
         raw_token, expires_at = await auth_service.create_session(db, user.id)
         return user, raw_token, expires_at
 

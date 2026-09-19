@@ -39,8 +39,10 @@ import { Input } from '../components/ui/Input';
 import { Toggle } from '../components/ui/Toggle';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
 import { Checkbox } from '../components/ui/Checkbox';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { UserPluginGrants } from '../components/admin/UserPluginGrants';
 import { GroupPluginGrants } from '../components/admin/GroupPluginGrants';
+import { SubmissionsSection } from '../components/plugins/SubmissionsSection';
 import { safeInvoke } from '@/lib/backend/core';
 import {
   fetchServicePlugins,
@@ -68,6 +70,7 @@ export default function Plugins() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [pageTab, setPageTab] = useState<'access' | 'submissions'>('access');
 
   // Per-user section state
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -288,6 +291,29 @@ export default function Plugins() {
           </div>
         }
       />
+      {/* Page tabs: access management vs submissions moderation */}
+      <div className="px-6 pt-4">
+        <div className="max-w-[1200px] mx-auto">
+          <SegmentedControl
+            options={[
+              { label: t('admin.plugins.tabAccess'), value: 'access' },
+              { label: t('admin.plugins.submissions.tab'), value: 'submissions' },
+            ]}
+            value={pageTab}
+            onChange={v => setPageTab(v as 'access' | 'submissions')}
+            size="sm"
+            stretch={false}
+          />
+        </div>
+      </div>
+
+      {pageTab === 'submissions' ? (
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-[1200px] mx-auto">
+            <SubmissionsSection />
+          </div>
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-[1200px] mx-auto flex flex-col gap-6">
           {/* Access by role matrix */}
@@ -478,6 +504,7 @@ export default function Plugins() {
           <SandboxSection />
         </div>
       </div>
+      )}
       <InstallFromSourceModal
         isOpen={installModalOpen}
         onClose={() => setInstallModalOpen(false)}

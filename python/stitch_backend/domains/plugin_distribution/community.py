@@ -26,9 +26,10 @@ from typing import Any
 import httpx
 
 from autoreg.plugin.install import safe_extract_zip
-from autoreg.plugin.manifest import validate_manifest
+from autoreg.plugin.manifest import parse_semver, validate_manifest
 
-from .config import data_dir
+from .activation import ActivationService
+from .config import data_dir, server_url
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +210,28 @@ def _find_catalog_entry(
     return None
 
 
+def _community_pkg_auth_token(url: str) -> str | None:
+    """Dist Bearer token for downloads from OUR server's ``/community-pkg/``.
+
+    Returns None for any other URL so the activation token is never leaked
+    to third-party hosts, and None when not activated (the download will
+    fail upstream with 401).
+    """
+    base = server_url()
+    if not base or not url.startswith(f"{base}/community-pkg/"):
+        return None
+    state = ActivationService().load()
+    return state.token if state is not None else None
+
+
+def _safe_semver(version: str) -> tuple[int, int, int]:
+    """Parse semver, returning (0,0,0) on failure (sorts oldest)."""
+    try:
+        return parse_semver(version)
+    except ValueError:
+        return (0, 0, 0)
+
+
 # ── Source-index (v2 catalog entries) ─────────────────────────────────────────
 #
 # A catalog entry MAY carry a ``source`` field pointing at a git repo or a
@@ -348,6 +371,7 @@ async def install_community_plugin(
             type="release",
             url=parsed["url"],
             expected_sha256=parsed["sha256"],
+            auth_token=_community_pkg_auth_token(parsed["url"]),
         )
         pin_url = parsed["url"]
 
@@ -387,6 +411,138 @@ async def install_community_plugin(
             return {"success": False, "error": msg}
 
     return result
+
+
+async def fetch_server_catalog() -> dict[str, Any]:
+    """GET the distribution server's public ``/catalog``; never raises.
+
+    The server merges approved community submissions there (Feature 2) with
+    a release ``source`` pointing at ``/community-pkg/{id}/{version}``.
+    """
+    from .sync import PluginSyncService
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            sync = PluginSyncService(ActivationService(), client=client)
+            return await sync.fetch_public_catalog()
+    except Exception as exc:  # noqa: BLE001 — catalog failures degrade to empty
+        logger.warning("Server catalog fetch failed: %s", exc)
+        return {"plugins": []}
+
+
+async def install_server_community(
+    plugin_id: str,
+    version: str | None = None,
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Install a server-approved community plugin (Feature 2).
+
+    Looks the entry up in the distribution server's ``/catalog``, builds the
+    release :class:`PluginSourceSpec` with the activation Bearer token
+    attached (``/community-pkg/`` requires it, OC5), and runs the same TOFU
+    + install_from_source pipeline as :func:`install_community_plugin`.
+
+    ``version=None`` picks the latest approved version by semver (OC9).
+    """
+    catalog = await fetch_server_catalog()
+    if version is None:
+        versions = [
+            str(e.get("version", ""))
+            for e in catalog.get("plugins", [])
+            if isinstance(e, dict) and str(e.get("id", "")) == plugin_id
+        ]
+        if not versions:
+            return {"success": False, "error": f"not in server catalog: {plugin_id}"}
+        version = max(versions, key=_safe_semver)
+    entry = _find_catalog_entry(catalog, plugin_id, version)
+    if entry is None:
+        return {"success": False, "error": f"not in server catalog: {plugin_id}@{version}"}
+    parsed = _parse_source(entry)
+    if parsed["kind"] != "release":
+        return {
+            "success": False,
+            "error": f"server catalog entry has no release source: {plugin_id}@{version}",
+        }
+
+    from .pins import check_and_record
+
+    expected_sha = parsed["sha256"]
+    url = parsed["url"]
+    token = _community_pkg_auth_token(url)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="stitch-server-community-"))
+    try:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(url, headers=headers)
+                resp.raise_for_status()
+                data = resp.content
+        except httpx.HTTPError as exc:
+            return {"success": False, "error": f"download failed: {exc}"}
+
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                safe_extract_zip(zf, tmp_dir)
+        except (zipfile.BadZipFile, OSError, ValueError) as exc:
+            return {"success": False, "error": f"zip extract failed: {exc}"}
+
+        src_pkg = _find_package_in_extract(tmp_dir)
+        if src_pkg is None:
+            return {"success": False, "error": "package missing plugin.json"}
+        try:
+            validate_manifest(
+                json.loads((src_pkg / "plugin.json").read_text(encoding="utf-8"))
+            )
+        except Exception as exc:  # noqa: BLE001 — manifest parse
+            return {"success": False, "error": f"manifest invalid: {exc}"}
+
+        # Integrity: the catalog sha256 is the canonical package hash (same
+        # algorithm the server computed at approve), verified post-extract —
+        # NOT sha256 of the raw archive bytes.
+        actual_sha = _package_sha256(src_pkg)
+        if actual_sha != expected_sha:
+            return {
+                "success": False,
+                "error": f"sha256 mismatch: expected {expected_sha}, got {actual_sha}",
+                "reason": "checksum_mismatch",
+            }
+
+        # TOFU gate against the verified canonical hash before installing.
+        ok, msg = check_and_record(plugin_id, new_sha=actual_sha, url=url, force=force)
+        if not ok:
+            return {"success": False, "error": msg}
+
+        target = _package_dir(plugin_id, version)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        staging = target.parent / f".{version}.tmp.{os.getpid()}"
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        shutil.copytree(src_pkg, staging)
+        try:
+            _atomic_replace_dir(staging, target)
+        except OSError as exc:
+            return {"success": False, "error": f"install rename failed: {exc}"}
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    logger.info("Server community plugin installed: %s@%s", plugin_id, version)
+    return {"success": True, "plugin_id": plugin_id, "version": version}
+
+
+def _find_package_in_extract(root: Path) -> Path | None:
+    """Locate the package dir (containing plugin.json) in an extracted zip.
+
+    ``/community-pkg`` serves the package contents at the archive root, but a
+    single top-level wrapper dir is tolerated (folder-zipped packages).
+    """
+    if (root / "plugin.json").is_file():
+        return root
+    entries = [e for e in root.iterdir() if e.is_dir() and not e.name.startswith(".")]
+    if len(entries) == 1 and (entries[0] / "plugin.json").is_file():
+        return entries[0]
+    return None
 
 
 def _remove_local_install(plugin_id: str) -> None:

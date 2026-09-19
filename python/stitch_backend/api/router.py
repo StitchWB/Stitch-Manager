@@ -13,6 +13,8 @@ from stitch_backend.domains.ai_proxy.metrics_api import router as metrics_router
 from stitch_backend.domains.api_keys.router import router as api_keys_router
 from stitch_backend.domains.auth.router import router as auth_router
 from stitch_backend.domains.auth.tg_set_password import router as tg_set_password_router
+from stitch_backend.domains.community.partner_router import admin_router as partners_admin_router
+from stitch_backend.domains.community.partner_router import router as partners_router
 from stitch_backend.domains.plugin_distribution.admin_router import router as dist_admin_router
 from stitch_backend.domains.profiles.router import profiles_router
 
@@ -31,6 +33,8 @@ api_router.include_router(metrics_router)
 api_router.include_router(holone_router)
 api_router.include_router(compression_router)
 api_router.include_router(dist_admin_router)
+api_router.include_router(partners_router)
+api_router.include_router(partners_admin_router)
 
 # WebSocket routes (mounted at /api root since the path is already /events)
 api_router.include_router(events_router)

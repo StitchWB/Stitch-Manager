@@ -1,8 +1,9 @@
-"""Community service — friends loader.
+"""Community service — bundled friends loader.
 
-Stateless: friends are read from a bundled JSON file (loaded once, cached
-in memory).  The AiApiRadar proxy (offers/stats + TTL cache + startup
-warmup) lives in the ``stitch-radar`` service plugin.
+The bundled ``friends.json`` is read once and cached for the process
+lifetime.  It serves two purposes: the offline fallback for the friends
+directory (the live source is the distribution server's partner catalog,
+see :mod:`.partner_service`) and the seed source for the startup migration.
 """
 
 from __future__ import annotations
@@ -17,16 +18,13 @@ from .models import FriendItem
 
 logger = logging.getLogger(__name__)
 
-# ── Friends loader ─────────────────────────────────────────────────────────────
-
 _FRIENDS_PATH = Path(__file__).resolve().parent / "friends.json"
 _friends_cache: list[dict] | None = None
 
 
-def load_friends() -> list[dict]:
+def load_bundled_friends() -> list[dict]:
     """Load and validate ``friends.json`` once; return list of plain dicts.
 
-    The file is read once on first call and cached for the process lifetime.
     Each entry is validated through :class:`FriendItem` so malformed keys
     are caught early rather than leaking to the frontend.
     """

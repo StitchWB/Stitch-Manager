@@ -27,6 +27,8 @@ export interface FriendItem {
   url: string;
   description?: string | null;
   badge?: FriendBadge;
+  tg_chat_id?: number | null;
+  member_count?: number | null;
 }
 
 export interface FriendsResponse {

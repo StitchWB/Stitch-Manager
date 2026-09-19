@@ -28,6 +28,12 @@ export interface MarketplaceItem {
   installed_version: string | null;
   can_download: boolean;
   required_tier?: string;
+  /**
+   * Badge chips: 'recommended' | 'verified' | 'works' | 'not_works'.
+   * 'verified' is computed server-side from the offline attestation.
+   * Optional for older backends that predate the badges field.
+   */
+  badges?: string[];
 }
 
 export interface GetMarketplaceResponse {

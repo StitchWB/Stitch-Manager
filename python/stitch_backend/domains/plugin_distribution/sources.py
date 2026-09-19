@@ -59,6 +59,9 @@ class PluginSourceSpec:
     release: tag name (release mode, informational).
     expected_sha256: required for release mode (checksum verify before
         extract).  Optional for git (commit SHA is pinned post-clone).
+    auth_token: optional Bearer token sent on the release download.  Callers
+        must only set it for first-party URLs (e.g. the distribution
+        server's ``/community-pkg/``) — it is attached verbatim.
     """
 
     type: str
@@ -66,6 +69,7 @@ class PluginSourceSpec:
     ref: str | None = None
     release: str | None = None
     expected_sha256: str | None = None
+    auth_token: str | None = None
 
 
 class SourceError(Exception):
@@ -203,7 +207,7 @@ async def _fetch_release(spec: PluginSourceSpec, dest_dir: Path) -> Path:
     if not spec.url:
         raise SourceError("no_url", "release source requires url")
 
-    data = await _download_or_read(spec.url)
+    data = await _download_or_read(spec.url, auth_token=spec.auth_token)
 
     actual_sha = hashlib.sha256(data).hexdigest()
     if spec.expected_sha256 and actual_sha != spec.expected_sha256:
@@ -234,12 +238,15 @@ def _local_sources_allowed() -> bool:
     return os.environ.get("STITCH_ALLOW_LOCAL_SOURCES", "").strip() in ("1", "true")
 
 
-async def _download_or_read(url: str) -> bytes:
+async def _download_or_read(url: str, auth_token: str | None = None) -> bytes:
     """Download from an HTTP(S) URL; local file paths only in dev/test.
 
     ``file://`` / bare local paths are refused unless
     ``STITCH_ALLOW_LOCAL_SOURCES`` is set, so a poisoned catalog entry cannot
     read arbitrary local files in production.
+
+    ``auth_token`` is sent as ``Authorization: Bearer`` when set (the
+    distribution server's ``/community-pkg/`` downloads require it, OC5).
     """
     is_local = url.startswith("file://") or (
         not url.startswith(("http://", "https://"))
@@ -250,8 +257,9 @@ async def _download_or_read(url: str) -> bytes:
         if not _local_sources_allowed():
             raise ValueError(f"local source URLs are disabled: {url}")
         return Path(url[7:] if url.startswith("file://") else url).read_bytes()
+    headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-        resp = await client.get(url)
+        resp = await client.get(url, headers=headers)
         resp.raise_for_status()
         return resp.content
 

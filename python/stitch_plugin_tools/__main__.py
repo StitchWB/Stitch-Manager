@@ -1,6 +1,6 @@
 """``python -m stitch_plugin_tools`` entry point.
 
-Seventeen subcommands:
+Eighteen subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify <package_dir> --pubkey <public.key>  verify a plugin package
@@ -18,6 +18,7 @@ Seventeen subcommands:
     codes {issue|list}                          issue and list activation codes (admin)
     install-from <url> [--ref|--release] [--sha256] [--trust]  fetch+install from git/release
     catalog-lint <catalog.json>                 validate a community catalog offline (CI)
+    attest --server … --submission ID …         offline-sign an approved submission attestation
 
 The signing key is OFFLINE — the developer stores it on media not reachable
 from the build / runtime.  ``keygen`` writes the private key with
@@ -916,6 +917,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_catalog_lint.set_defaults(func=_cmd_catalog_lint)
 
+    # ── attest ───────────────────────────────────────────────────────────
+    p_attest = sub.add_parser(
+        "attest",
+        help="offline-sign an approved submission attestation (admin)",
+    )
+    p_attest.add_argument(
+        "--server", default=None, help="server base URL (or STITCH_PUBLISH_URL)"
+    )
+    p_attest.add_argument(
+        "--submission", type=int, required=True, help="submission id"
+    )
+    p_attest.add_argument(
+        "--reviewer", required=True, help="reviewer name recorded in the attestation"
+    )
+    p_attest.add_argument(
+        "--admin-key-env",
+        default=ENV_ADMIN_KEY,
+        help="env var holding the admin key (default: STITCH_ADMIN_KEY)",
+    )
+    p_attest.set_defaults(func=_cmd_attest)
+
     return parser
 
 
@@ -958,6 +980,20 @@ def _cmd_catalog_lint(args: argparse.Namespace) -> int:
     from stitch_plugin_tools.catalog_lint import lint_catalog
 
     return lint_catalog(args.catalog)
+
+
+# ── attest ────────────────────────────────────────────────────────────────
+
+
+def _cmd_attest(args: argparse.Namespace) -> int:
+    from stitch_plugin_tools.attest import run_attest
+
+    return run_attest(
+        server=args.server,
+        submission=args.submission,
+        reviewer=args.reviewer,
+        admin_key_env=args.admin_key_env,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
