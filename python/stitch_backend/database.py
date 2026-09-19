@@ -239,7 +239,6 @@ async def create_all_tables() -> None:
         import stitch_backend.domains.ai_gateway.models  # noqa: F401
         import stitch_backend.domains.auth.models  # noqa: F401
         import stitch_backend.domains.composed_flows.models  # noqa: F401
-        import stitch_backend.domains.email_counter.models  # noqa: F401
         import stitch_backend.domains.email_inbox.models  # noqa: F401
         import stitch_backend.domains.groups.models  # noqa: F401
         import stitch_backend.domains.icloud_email_pool.models  # noqa: F401

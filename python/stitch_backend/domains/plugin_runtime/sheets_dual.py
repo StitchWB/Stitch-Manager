@@ -1,17 +1,15 @@
-"""Dual-format routing for built-in google_sheets_* commands (plan todo 21).
+"""Dual-format routing for google_sheets_* commands.
 
-When a healthy ``stitch-sheets`` plugin host is registered, the
-dispatcher routes ``google_sheets_*`` commands to the plugin (stripping
-the ``google_sheets_`` prefix) BEFORE falling through to the built-in
-command-registry handler.  This avoids flag-day: the built-in domain
-stays registered, and the plugin takes over only when installed and
-healthy.
+``google_sheets_*`` CRUD commands are served by the ``stitch-sheets``
+plugin (stripping the ``google_sheets_`` prefix).  The dispatcher calls
+:func:`try_sheets_dual_route` before the command-registry lookup:
 
-Pattern: the dispatcher routes ``google_sheets_*`` commands to the
-plugin before falling through to the built-in handler (see
-:mod:`totp_dual` for the wrapped-handler variant).  No names are
-re-registered in ``command_registry`` — the indirection lives in the
-dispatcher, so no overwrite-warning spam.
+- name not in :data:`SHEETS_DUAL` → :data:`_FALLTHROUGH` (not ours);
+- plugin host absent/unhealthy → structured 400 (no built-in fallback —
+  the built-in google_sheets CRUD was removed in the plugin migration);
+- plugin call error → structured 400/504 (see :mod:`dual_error`).
+
+The ``google_oauth_*`` commands are core-only and never reach this router.
 """
 
 from __future__ import annotations
@@ -19,18 +17,23 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from stitch_backend.domains.plugin_runtime.dual_error import (
+    raise_plugin_call_failed,
+    raise_plugin_unavailable,
+)
+
 logger = logging.getLogger(__name__)
 
 #: Plugin id that serves sheets commands when installed.
 SHEETS_PLUGIN_ID = "stitch-sheets"
 
 #: Module-level sentinel returned by :func:`try_sheets_dual_route` to signal
-#: the dispatcher to fall through to the built-in handler.  Using a unique
-#: sentinel (not ``None``) lets a plugin legitimately return ``None`` as a
-#: command result without being mistaken for fallthrough.
+#: the dispatcher to continue to the command-registry lookup (the command
+#: is not one of ours).  Using a unique sentinel (not ``None``) lets a
+#: plugin legitimately return ``None`` as a command result.
 _FALLTHROUGH: Any = object()
 
-#: Built-in command names that have a dual-format plugin counterpart.
+#: Command names served by the stitch-sheets plugin.
 #: Maps the built-in name (with ``google_sheets_`` prefix) to the plugin
 #: command name (without the prefix).
 SHEETS_DUAL: dict[str, str] = {
@@ -58,20 +61,8 @@ def _plugin_healthy(host: Any) -> bool:
 async def try_sheets_dual_route(
     name: str, body: dict[str, Any]
 ) -> Any:
-    """Route a ``google_sheets_*`` command to the plugin if healthy.
-
-    Returns the plugin result if routed (including ``None``), or
-    :data:`_FALLTHROUGH` to signal the dispatcher to fall through to the
-    built-in handler unchanged.
-
-    Fall-through conditions (all return :data:`_FALLTHROUGH`):
-      - ``name`` is not in :data:`SHEETS_DUAL`
-      - no ``stitch-sheets`` host in the registry
-      - host is stopping or child process is dead
-      - host died during the call (``PluginNotRunning``)
-      - plugin call timed out (``PluginCallTimeout``)
-      - plugin returned a JSON-RPC error (``RpcCallError``)
-    """
+    """Route a ``google_sheets_*`` command to the plugin; clean error when
+    unavailable."""
     plugin_cmd = SHEETS_DUAL.get(name)
     if plugin_cmd is None:
         return _FALLTHROUGH
@@ -85,21 +76,16 @@ async def try_sheets_dual_route(
 
     host = get_host(SHEETS_PLUGIN_ID)
     if host is None or not _plugin_healthy(host):
-        return _FALLTHROUGH
+        raise_plugin_unavailable(SHEETS_PLUGIN_ID, name)
 
     # Strip internal dispatcher keys before forwarding to the plugin.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
 
     try:
         return await host.call(plugin_cmd, params)
-    except (PluginNotRunning, PluginCallTimeout, RpcCallError):
-        logger.warning(
-            "sheets dual-format: plugin error during '%s', "
-            "falling back to built-in",
-            name,
-            exc_info=True,
-        )
-        return _FALLTHROUGH
+    except (PluginNotRunning, PluginCallTimeout, RpcCallError) as exc:
+        logger.warning("sheets dual: plugin error during '%s'", name, exc_info=True)
+        raise_plugin_call_failed(SHEETS_PLUGIN_ID, name, exc)
 
 
 __all__ = [

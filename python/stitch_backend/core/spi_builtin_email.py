@@ -1,14 +1,14 @@
-"""Built-in SPI implementations for email verification and mail inbox.
+"""Built-in SPI implementation for email verification.
 
 This module is the ONLY place in core/ (besides the SPI registry itself)
-that imports from ``domains.email`` and ``domains.email_inbox``.  The
-grep-blocker test (``test_mail_spi_boundary.py``) enforces this boundary
-— no other module in ``stitch_backend/`` or ``autoreg/`` may import from
-``domains.email*`` directly.
+that imports from ``domains.email``.  The grep-blocker test
+(``test_mail_spi_boundary.py``) enforces this boundary — no other module
+in ``stitch_backend/`` or ``autoreg/`` may import from ``domains.email*``
+directly.
 
-Registered at import time via ``spi.register_impl()`` as built-in
-fallbacks.  Service-plugins override them by registering with
-``source="plugin"``.
+Registered at import time via ``spi.register_impl()``.  Service-plugins
+override by registering with ``source="plugin"``.  There is no built-in
+``MailInboxSPI`` impl — the stitch-mail plugin is the only provider.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import email as email_mod
 import logging
 import re
 import time
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -209,78 +208,24 @@ class _BuiltinEmailVerification:
         pass  # EmailService is created per-call; nothing to close here.
 
 
-# ── Built-in MailInboxSPI ─────────────────────────────────────────────────────
-
-
-class _BuiltinMailInbox:
-    """Built-in ``MailInboxSPI`` — wraps ``email_inbox`` service functions."""
-
-    async def list_profiles(
-        self, owner_id: int | None = None,
-    ) -> list[dict[str, Any]]:
-        from stitch_backend.database import run_in_read_session  # noqa: PLC0415
-        from stitch_backend.domains.email_inbox import service  # noqa: PLC0415
-
-        async def _op(db: Any) -> list[dict[str, Any]]:
-            return await service.list_profiles(db, owner_id=owner_id)
-
-        return await run_in_read_session(_op)
-
-    async def wait_otp(
-        self,
-        email: str,
-        subject_filter: str = "",
-        code_pattern: str | None = None,
-        timeout: float = 120.0,
-    ) -> str:
-        from stitch_backend.domains.email.service import EmailService  # noqa: PLC0415
-
-        svc = EmailService()
-        try:
-            return await svc.wait_for_verification_code(
-                email=email,
-                subject_filter=subject_filter,
-                code_pattern=code_pattern,
-                timeout=timeout,
-            )
-        finally:
-            await svc.close()
-
-    async def sync(self, profile_id: str) -> dict[str, Any]:
-        from stitch_backend.database import run_in_session  # noqa: PLC0415
-        from stitch_backend.domains.email_inbox import service  # noqa: PLC0415
-
-        async def _op(db: Any) -> dict[str, Any]:
-            return await service.upsert_sync_state(db, {
-                "profileId": profile_id,
-                "status": "synced",
-                "lastSyncAt": datetime.now(UTC).isoformat(),
-            })
-
-        return await run_in_session(_op)
-
-    async def close(self) -> None:
-        pass
-
-
 # ── Registration ─────────────────────────────────────────────────────────────
 
 
 def _register_builtins() -> None:
-    """Register built-in EmailVerificationProvider and MailInboxSPI."""
+    """Register the built-in EmailVerificationProvider.
+
+    No built-in MailInboxSPI: the stitch-mail plugin is the only provider
+    (the core ``email_inbox`` service was removed in the plugin
+    migration), so ``resolve(SPI_MAIL_INBOX)`` raises
+    :class:`SpiNotRegistered` when the plugin is absent.
+    """
     from stitch_backend.core.spi import (  # noqa: PLC0415
         SPI_EMAIL_VERIFICATION,
-        SPI_MAIL_INBOX,
         register_impl,
     )
     register_impl(
         SPI_EMAIL_VERIFICATION,
         _BuiltinEmailVerification(),
-        source="builtin",
-    )
-    register_impl(
-        SPI_MAIL_INBOX,
-        _BuiltinMailInbox(),
         source="builtin",
     )
 

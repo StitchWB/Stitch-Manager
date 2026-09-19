@@ -28,10 +28,9 @@ from typing import TYPE_CHECKING
 
 # Import spi_builtin_oauth so the built-in OAuthProvider SPI is registered
 # at startup (before any service-plugin that may call engine.oauth.* starts).
-# Import spi_builtin_email so the built-in MailInboxSPI and
-# EmailVerificationProvider are registered before the stitch-mail plugin
-# starts — the plugin overrides them, and when it dies the SPI registry
-# must fall back to the built-in impls.
+# Import spi_builtin_email so the built-in EmailVerificationProvider is
+# registered before the stitch-mail plugin starts.  (There is no built-in
+# MailInboxSPI — the plugin is the only provider.)
 import stitch_backend.core.spi_builtin_email  # noqa: F401
 import stitch_backend.core.spi_builtin_oauth  # noqa: F401
 from autoreg.plugin import crypto

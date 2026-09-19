@@ -1,6 +1,5 @@
-"""Community domain — friends directory + AiApiRadar offers/stats proxy.
+"""Community domain — friends directory.
 
-Stateless: no DB tables.  Friends are loaded from a bundled JSON file;
-radar offers/stats are proxied from the AiApiRadar API with a short
-in-memory TTL cache.
+Stateless: no DB tables.  Friends are loaded from a bundled JSON file.
+The AiApiRadar offers/stats proxy lives in the ``stitch-radar`` plugin.
 """

@@ -1244,9 +1244,7 @@ async def cmd_import_opencode_providers(params: dict) -> dict:
         parse_opencode_providers,
         read_opencode_auth,
     )
-    from stitch_backend.domains.opencode_config.service import (
-        OpenCodeConfigService,
-    )
+    from stitch_backend.domains.plugin_runtime.bridge import call_plugin_command
 
     uid = _caller_uid(params)
     group_id = params.get("groupId")
@@ -1271,7 +1269,14 @@ async def cmd_import_opencode_providers(params: dict) -> dict:
 
         await run_in_read_session(_check)
 
-    config = await OpenCodeConfigService().read_opencode_config()
+    # The opencode config is owned by the stitch-opencode plugin.  The
+    # bridge raises HTTPException (404 absent / 403 not entitled / 504
+    # timeout / 400 call error) — a clean structured error, no fallback.
+    config = await call_plugin_command(
+        "plugin.stitch-opencode.get_opencode_config", params
+    )
+    if not isinstance(config, dict):
+        raise StitchError("stitch-opencode returned an invalid opencode config")
     auth = await read_opencode_auth()
     providers, skipped = parse_opencode_providers(config, auth)
     if only:

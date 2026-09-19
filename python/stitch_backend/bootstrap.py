@@ -58,8 +58,9 @@ async def bootstrap() -> None:
         await _sched_tables(_db)
 
     # ── SPI built-ins ────────────────────────────────────────────────────────
-    # Register built-in EmailVerificationProvider + MailInboxSPI before any
-    # command module that might resolve them.
+    # Register the built-in EmailVerificationProvider before any command
+    # module that might resolve it.  (No built-in MailInboxSPI — the
+    # stitch-mail plugin is the only provider.)
     import stitch_backend.core.spi_builtin_email  # noqa: F401
 
     # ── Command modules ──────────────────────────────────────────────────────
@@ -75,12 +76,8 @@ async def bootstrap() -> None:
     import stitch_backend.domains.aws_accounts.commands  # noqa: F401
     import stitch_backend.domains.background_manager.commands  # noqa: F401
     import stitch_backend.domains.browser.commands  # noqa: F401
-    import stitch_backend.domains.cards.commands  # noqa: F401
     import stitch_backend.domains.composed_flows.commands  # noqa: F401
     import stitch_backend.domains.email.commands  # noqa: F401
-    import stitch_backend.domains.email_counter.commands  # noqa: F401
-    import stitch_backend.domains.email_inbox.commands  # noqa: F401
-    import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
     import stitch_backend.domains.key_health.commands  # noqa: F401
@@ -89,7 +86,6 @@ async def bootstrap() -> None:
     import stitch_backend.domains.logging.commands  # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands  # noqa: F401
     import stitch_backend.domains.oauth.commands  # noqa: F401
-    import stitch_backend.domains.opencode_config.commands  # noqa: F401
     import stitch_backend.domains.patcher.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.community_commands  # noqa: F401

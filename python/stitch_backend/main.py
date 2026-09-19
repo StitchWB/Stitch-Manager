@@ -245,13 +245,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.aws_accounts.commands  # noqa: F401
     import stitch_backend.domains.background_manager.commands  # noqa: F401
     import stitch_backend.domains.browser.commands  # noqa: F401
-    import stitch_backend.domains.cards.commands  # noqa: F401
     import stitch_backend.domains.community.commands  # noqa: F401
     import stitch_backend.domains.composed_flows.commands  # noqa: F401
     import stitch_backend.domains.email.commands  # noqa: F401
-    import stitch_backend.domains.email_counter.commands  # noqa: F401
-    import stitch_backend.domains.email_inbox.commands  # noqa: F401
-    import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.groups.commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401
@@ -262,7 +258,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.logging.commands  # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands  # noqa: F401
     import stitch_backend.domains.oauth.commands  # noqa: F401
-    import stitch_backend.domains.opencode_config.commands  # noqa: F401
     import stitch_backend.domains.patcher.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.community_commands  # noqa: F401
@@ -513,15 +508,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("KeyHealth worker started")
     except Exception as _exc:
         logger.warning("KeyHealth worker init skipped: %s", _exc)
-
-    # Warm the AiApiRadar cache so the first user-facing radar request
-    # doesn't wait ~4s on the upstream.  Fire-and-forget; failures only log.
-    try:
-        from stitch_backend.domains.community.service import warm_radar_cache
-        await warm_radar_cache()
-        logger.info("AiApiRadar cache warmup scheduled")
-    except Exception as _exc:
-        logger.warning("AiApiRadar cache warmup skipped: %s", _exc)
 
     # Emit a startup event for any domain listeners
     from stitch_backend.core.event_bus import event_bus
