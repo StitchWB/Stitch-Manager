@@ -1,7 +1,7 @@
 """SidecarSupervisor — unified lifecycle for local helper subprocesses.
 
 Owns start / stop / status / stop_all for every registered sidecar. Domains
-(freemodel_bridge, turnstile_solver, ...) keep their own commands and domain
+(turnstile_solver, plugin hosts, ...) keep their own commands and domain
 logic; only the process management lives here. Replaces the near-duplicated
 module-level singleton lifecycle code that each service previously carried.
 

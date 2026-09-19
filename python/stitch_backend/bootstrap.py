@@ -80,7 +80,6 @@ async def bootstrap() -> None:
     import stitch_backend.domains.email.commands  # noqa: F401
     import stitch_backend.domains.email_counter.commands  # noqa: F401
     import stitch_backend.domains.email_inbox.commands  # noqa: F401
-    import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.icloud_email_pool.commands  # noqa: F401

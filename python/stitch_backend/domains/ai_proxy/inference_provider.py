@@ -87,8 +87,10 @@ class SidecarInferenceProvider(InferenceProvider):
     """Provider whose models come from a local sidecar's ``/v1/models``.
 
     Knows ONLY the sidecar's endpoint (resolved through the
-    :class:`SidecarSupervisor`) — it never touches process details. When the
-    sidecar is not running, :meth:`list_models` returns ``[]``.
+    :class:`SidecarSupervisor`, or through ``endpoint_fallback`` when the
+    sidecar is managed outside the supervisor — e.g. by a service plugin)
+    — it never touches process details. When the sidecar is not running,
+    :meth:`list_models` returns ``[]``.
     """
 
     def __init__(
@@ -96,15 +98,20 @@ class SidecarInferenceProvider(InferenceProvider):
         provider_id: str,
         sidecar_name: str,
         fetch_fn: EndpointFetcher | None = None,
+        endpoint_fallback: Callable[[], str | None] | None = None,
     ) -> None:
         self.provider_id = provider_id
         self._sidecar_name = sidecar_name
         self._fetch_fn = fetch_fn
+        self._endpoint_fallback = endpoint_fallback
 
     def _endpoint(self) -> str | None:
         from stitch_backend.domains.sidecar import get_supervisor
 
-        return get_supervisor().get_endpoint(self._sidecar_name)
+        endpoint = get_supervisor().get_endpoint(self._sidecar_name)
+        if endpoint is None and self._endpoint_fallback is not None:
+            endpoint = self._endpoint_fallback()
+        return endpoint
 
     def available(self) -> bool:
         return self._endpoint() is not None
@@ -223,6 +230,7 @@ def build_inference_provider_registry(
     key_fetchers: dict[str, KeysFetcher],
     kiro_fetcher: AccountsFetcher | None = None,
     freemodel_sidecar: str | None = None,
+    freemodel_endpoint_fallback: Callable[[], str | None] | None = None,
     web_gemini_fetcher: Callable[[], Awaitable[list[ModelDict]]] | None = None,
     web_deepseek_fetcher: Callable[[], Awaitable[list[ModelDict]]] | None = None,
     web_qwen_fetcher: Callable[[], Awaitable[list[ModelDict]]] | None = None,
@@ -257,10 +265,17 @@ def build_inference_provider_registry(
             ),
         )
 
-    # Sidecar-backed: FreeModel bridge (endpoint resolved via the supervisor;
-    # returns [] when the bridge is not running).
+    # Sidecar-backed: FreeModel bridge (endpoint resolved via the supervisor,
+    # falling back to the plugin-managed bridge state; returns [] when the
+    # bridge is not running).
     if freemodel_sidecar:
-        registry.register(SidecarInferenceProvider("freemodel", freemodel_sidecar))
+        registry.register(
+            SidecarInferenceProvider(
+                "freemodel",
+                freemodel_sidecar,
+                endpoint_fallback=freemodel_endpoint_fallback,
+            )
+        )
 
     # In-process web adapter: Gemini web (fetcher closes over preloaded
     # accounts/settings; registered only when the provider is enabled).

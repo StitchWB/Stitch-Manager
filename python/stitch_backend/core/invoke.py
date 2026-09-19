@@ -60,8 +60,6 @@ WRITE_COMMANDS: set[str] = {
     "mark_composed_flow_ran",
     "update_proxy_settings",
     "create_ai_proxy_account",
-    "start_freemodel_bridge",
-    "stop_freemodel_bridge",
     "start_turnstile_solver",
     "stop_turnstile_solver",
     "start_replenishment",

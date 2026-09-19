@@ -251,7 +251,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import stitch_backend.domains.email.commands  # noqa: F401
     import stitch_backend.domains.email_counter.commands  # noqa: F401
     import stitch_backend.domains.email_inbox.commands  # noqa: F401
-    import stitch_backend.domains.freemodel_bridge.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.commands  # noqa: F401
     import stitch_backend.domains.google_sheets.oauth_commands  # noqa: F401
     import stitch_backend.domains.groups.commands  # noqa: F401
@@ -307,16 +306,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.debug("Registered commands: %s", commands)
 
     # Register sidecar subprocess specs with the supervisor so stop_all() on
-    # shutdown knows about every sidecar (freemodel bridge, turnstile solver).
+    # shutdown knows about every sidecar (turnstile solver).
     try:
-        from stitch_backend.domains.freemodel_bridge.service import (
-            register_sidecar as _register_freemodel,
-        )
         from stitch_backend.domains.turnstile_solver.service import (
             register_sidecar as _register_turnstile,
         )
 
-        _register_freemodel()
         _register_turnstile()
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Sidecar registration skipped: %s", _exc)
@@ -547,9 +542,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Replenishment stop failed: %s", _exc)
 
-    # Stop all sidecar subprocesses (turnstile solver, freemodel bridge, ...).
-    # stop_all() also fixes the prior bug where the FreeModel bridge was never
-    # stopped on shutdown (orphaned subprocess on app exit).
+    # Stop all sidecar subprocesses (turnstile solver, plugin children, ...).
     # Service-plugin hosts are stopped FIRST (pre-sets _stopping so the crash
     # monitor does not race the supervisor's kill-tree), then the supervisor
     # kills every sidecar process (including plugin children).

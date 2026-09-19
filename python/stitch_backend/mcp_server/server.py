@@ -84,10 +84,6 @@ CORE_TOOLS = [
     "get_ai_proxy_accounts",
     "create_ai_proxy_account",
     "test_provider_connection",
-    # FreeModel (3)
-    "start_freemodel_bridge",
-    "stop_freemodel_bridge",
-    "get_freemodel_bridge_status",
     # Turnstile solver (3)
     "start_turnstile_solver",
     "stop_turnstile_solver",

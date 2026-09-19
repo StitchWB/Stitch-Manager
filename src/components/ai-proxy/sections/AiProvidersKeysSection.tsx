@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Plus, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -9,6 +9,11 @@ import * as apiKeys from '@/lib/backend/modules/apiKeys';
 import { testOpenCodeApi } from '@/lib/backend/modules/opencodeConfig';
 import type { BulkTestKeyResult } from '@/lib/backend/modules/opencodeConfig';
 import { getAiProxyAccounts } from '@/lib/backend/modules/aiProxy';
+import {
+  fetchServicePlugins,
+  getServicePlugins,
+  subscribeServicePlugins,
+} from '@/lib/backend/modules/servicePlugins';
 import type { ApiKeyEntry, KeyFilter } from '@/types/apiKeys';
 import type { AiProxyAccount } from '@/types/generated';
 import { Button, GlassCard, Modal, Input, MetricStrip } from '@/components/ui';
@@ -60,6 +65,17 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [newPrefix, setNewPrefix] = useState('');
   const [aiProxyAccounts, setAiProxyAccounts] = useState<AiProxyAccount[]>([]);
+
+  const servicePlugins = useSyncExternalStore(
+    subscribeServicePlugins,
+    getServicePlugins,
+    getServicePlugins,
+  );
+  const hasFreemodelPlugin = servicePlugins.some(p => p.id === 'stitch-freemodel');
+
+  useEffect(() => {
+    void fetchServicePlugins();
+  }, []);
 
   const loadKeys = useCallback(async () => {
     if (providerFilter === 'all' || providerFilter === 'custom') {
@@ -296,7 +312,8 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   }
 
   if (providerFilter === 'freemodel') {
-    return <FreeModelBridgeSection />;
+    // The bridge is served by the stitch-freemodel plugin — no plugin, no UI.
+    return hasFreemodelPlugin ? <FreeModelBridgeSection /> : null;
   }
 
   if (providerFilter === 'custom') {

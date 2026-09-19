@@ -468,11 +468,14 @@ def build_inference_providers(
     """
     from functools import partial
 
+    from stitch_backend.domains.ai_proxy.freemodel_sidecar import (
+        SIDECAR_NAME as _FM_SIDECAR,
+    )
+    from stitch_backend.domains.ai_proxy.freemodel_sidecar import (
+        resolve_endpoint as _fm_resolve_endpoint,
+    )
     from stitch_backend.domains.ai_proxy.inference_provider import (
         build_inference_provider_registry,
-    )
-    from stitch_backend.domains.freemodel_bridge.service import (
-        SIDECAR_NAME as _FM_SIDECAR,
     )
 
     key_fetchers: dict[str, Any] = {}
@@ -542,6 +545,7 @@ def build_inference_providers(
         key_fetchers=key_fetchers,
         kiro_fetcher=_fetch_kiro_models,
         freemodel_sidecar=_FM_SIDECAR,
+        freemodel_endpoint_fallback=_fm_resolve_endpoint,
         web_gemini_fetcher=web_gemini_fetcher,
         web_deepseek_fetcher=web_deepseek_fetcher,
         web_qwen_fetcher=web_qwen_fetcher,
