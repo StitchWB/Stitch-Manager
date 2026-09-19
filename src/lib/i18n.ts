@@ -4659,6 +4659,24 @@ columnHeader: string;
     noLink: string;
     noLinkDesc: string;
   };
+  cards: {
+    sectionTitle: string;
+    unlinkedTitle: string;
+    accountsEmpty: string;
+    accountsEmptyDesc: string;
+    accountsCount: string;
+    modelsCount: string;
+    showAllModels: string;
+    hideModels: string;
+    editEndpoint: string;
+    deleteEndpoint: string;
+    deleteEndpointConfirm: string;
+    endpointDeleted: string;
+    discoveredModels: string;
+  };
+  publicModels: {
+    description: string;
+  };
   }
 uiTexts: {
     auto: string;

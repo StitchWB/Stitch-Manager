@@ -2,14 +2,13 @@ import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } fro
 import { Bug, ClipboardPaste, MessageSquare, Plus, RefreshCw, Search, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useSelection } from '../hooks/useSelection';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
-import { GatewaySections } from '@/components/ai-gateway/GatewaySections';
+import { PublicModelsSection } from '@/components/ai-gateway/PublicModelsSection';
 import { GatewayHeaderActions } from '@/components/ai-gateway/GatewayHeaderActions';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
@@ -20,7 +19,7 @@ import { CompressionSection } from '../components/ai-proxy/sections/CompressionS
 import { HoloneSection } from '../components/ai-proxy/sections/HoloneSection';
 import { RoutingGraphBoard } from '../components/ai-proxy/sections/RoutingGraphBoard';
 import { MappingsEditor } from '../components/ai-proxy/sections/MappingsEditor';
-import { AiProxyAccountsTable } from '../components/ai-proxy/AiProxyAccountsTable';
+import { ProviderCardsSection } from '../components/ai-proxy/ProviderCardsSection';
 import { AiProxyAccountDrawer } from '../components/ai-proxy/AiProxyAccountDrawer';
 import { AiTransferModal } from '../components/ai-proxy/modals/AiTransferModal';
 import { AiMappingsModal } from '../components/ai-proxy/modals/AiMappingsModal';
@@ -37,7 +36,6 @@ import {
   OverflowMenu,
   PageHeader,
   Tooltip,
-  FloatingActionBar,
 } from '@/components/ui';
 import { getBackgroundManagerConfig } from '../lib/backend/modules/backgroundManager';
 import { t } from '../lib/i18n';
@@ -119,7 +117,6 @@ export default function AiProviders() {
   const [cavemanLevel, setCavemanLevel] = useState<'lite' | 'full' | 'ultra'>('full');
   const [compressionEnabled, setCompressionEnabled] = useState(false);
   const controller = useAiProvidersController();
-  const selection = useSelection();
 
   const {
     accounts,
@@ -492,51 +489,26 @@ export default function AiProviders() {
                   />
                 </div>
 
-                <AiProxyAccountsTable
+                <ProviderCardsSection
                   accounts={filteredAccounts}
                   loading={loading}
+                  providerFilter={providerFilter}
+                  searchQuery={searchQuery}
                   connectionState={connectionState}
-                  selectedIds={selection.selectedIds}
-                  onSelect={selection.select}
-                  onDeselect={selection.deselect}
-                  onSelectAll={() => selection.selectAll(filteredAccounts.map(a => a.id).filter((id): id is number => id !== null))}
-                  onDeselectAll={selection.deselectAll}
-                  onRowClick={handleOpenDrawer}
-                  onEdit={handleEdit}
-                  onDelete={id => {
+                  onAccountClick={handleOpenDrawer}
+                  onEditAccount={handleEdit}
+                  onDeleteAccount={id => {
                     void handleDelete(id);
                   }}
                   onTestConnection={account => {
                     void handleTestConnection(account);
                   }}
+                  onPastePackage={() => setPasteOpen(true)}
                 />
 
                 <AiProvidersKeysSection providerFilter={providerFilter} />
 
-                <GatewaySections onPastePackage={() => setPasteOpen(true)} />
-
-                {selection.selectedCount > 0 && (
-                  <FloatingActionBar
-                    selectedCount={selection.selectedCount}
-                    onDelete={async () => {
-                      try {
-                        const ids = Array.from(selection.selectedIds);
-                        await Promise.all(ids.map(id => controller.handleDelete(id)));
-                        toast.success(t('aiHub.controller.toasts.bulkDeleted', { count: ids.length }));
-                        selection.clear();
-                      } catch {
-                        toast.error(t('aiHub.controller.errors.bulkDeleteFailed'));
-                      }
-                    }}
-                    onExport={() => {
-                      toast.info(t('aiHub.controller.toasts.exportNotImplemented'));
-                    }}
-                    onRefreshAll={() => {
-                      void controller.fetchAccounts();
-                    }}
-                    onClear={selection.clear}
-                  />
-                )}
+                <PublicModelsSection />
               </>
             )}
 

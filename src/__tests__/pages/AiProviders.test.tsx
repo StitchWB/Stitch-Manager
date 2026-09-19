@@ -51,10 +51,37 @@ jest.mock('../../components/ai-proxy/sections/HoloneSection', () => ({
   HoloneSection: () => null,
 }));
 
-// GatewaySections fetches endpoints/public models on mount via safeInvoke;
-// stub it to keep the page test focused on the accounts surface.
-jest.mock('../../components/ai-gateway/GatewaySections', () => ({
-  GatewaySections: () => null,
+// Provider cards + public models fetch gateway catalog data on mount;
+// stub the aiGateway backend module so lists resolve to empty arrays and
+// the page test stays focused on the accounts surface.
+jest.mock('../../lib/backend/modules/aiGateway', () => ({
+  listProviderEndpoints: jest.fn(async () => []),
+  listCredentials: jest.fn(async () => []),
+  listUpstreamModels: jest.fn(async () => []),
+  listPublicModels: jest.fn(async () => []),
+  listCredentialModelAccess: jest.fn(async () => []),
+  listRouteTargetsForPublicModel: jest.fn(async () => []),
+  discoverModelsForEndpoint: jest.fn(async () => ({ models_count: 0 })),
+  migrateLegacyData: jest.fn(async () => ({ endpoints_created: 0, credentials_created: 0 })),
+  importOpencodeProviders: jest.fn(async () => ({
+    imported: [],
+    skipped: [],
+    models: [],
+    public_models: [],
+    shared_to_group: null,
+  })),
+  testCredentialConnection: jest.fn(async () => ({ success: true })),
+  proxyKeysList: jest.fn(async () => ({
+    baseUrl: '',
+    keys: [],
+    pool: { personal: 0, legacy: 0, groups: [] },
+  })),
+  proxyKeysCreate: jest.fn(async () => ({ key: 'k', id: 'id' })),
+  proxyKeysRevoke: jest.fn(async () => ({ success: true })),
+}));
+
+jest.mock('../../components/ai-gateway/PublicModelsSection', () => ({
+  PublicModelsSection: () => null,
 }));
 
 const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
@@ -111,7 +138,7 @@ describe('AiProviders page', () => {
   it('loads accounts and supports connection test on providers section', async () => {
     const user = userEvent.setup();
 
-    // Default section is 'providers' — shows the accounts table.
+    // Default section is 'providers' — accounts render inside provider cards.
     render(
       <MemoryRouter initialEntries={['/ai/providers']}>
         <Routes>
@@ -123,7 +150,6 @@ describe('AiProviders page', () => {
     // Wait for the account name to appear (async load).
     await screen.findByText('OpenAI Main');
 
-    // Click the Test connection button in the row.
     const testButton = screen.getByTitle('Test connection');
     await user.click(testButton);
 
