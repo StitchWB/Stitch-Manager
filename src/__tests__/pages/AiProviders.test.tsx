@@ -158,6 +158,30 @@ describe('AiProviders page', () => {
     });
   });
 
+  it('renders the consolidated toolbar, overflow actions and offline banner on providers section', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/providers']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('OpenAI Main');
+
+    expect(screen.getByPlaceholderText('Provider, account, or model…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add Endpoint' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add Account' })).toBeTruthy();
+    expect(screen.getByLabelText('More')).toBeTruthy();
+
+    // Secondary actions live behind the overflow menu, not in the header.
+    expect(screen.queryByRole('button', { name: 'Import from OpenCode' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Paste Package' })).toBeNull();
+
+    // Backend unreachable in jsdom → proxy store status stays null → banner shows.
+    expect(await screen.findByText('Server offline — data may be stale')).toBeTruthy();
+  });
+
   it('saves model mappings on routing section', async () => {
     const user = userEvent.setup();
 

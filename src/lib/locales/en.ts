@@ -984,7 +984,7 @@ export const en: Translations = {
     },
     labels: {
       providers: "Providers",
-      providersHint: "Filter by provider or view quotas below."
+      providersHint: "Counts are accounts."
     },
     modals: {
       csvNoSecrets: "CSV export never includes secrets.",
@@ -1180,7 +1180,7 @@ export const en: Translations = {
       exponentialBackoffHint: "Double cooldown duration on each failure"
     },
     search: {
-      placeholder: "Search accounts..."
+      placeholder: "Provider, account, or model…"
     },
     sections: {
       antigravity: {
@@ -1281,7 +1281,8 @@ export const en: Translations = {
     },
     warnings: {
       copySensitiveConfirm: "Copy {label} to clipboard? This is sensitive and may be visible to other apps.",
-      includeSecretsConfirm: "Including secrets will export tokens/keys in plaintext. Continue?"
+      includeSecretsConfirm: "Including secrets will export tokens/keys in plaintext. Continue?",
+      serverOffline: "Server offline — data may be stale"
     },
     wizard: {
       actions: {
@@ -4366,7 +4367,6 @@ addMailboxFromSheets: "Import from Google Sheets",
     noLinkDesc: "This account is not linked to an AI Gateway endpoint. Migrate legacy data or add an endpoint below.",
   },
   cards: {
-    sectionTitle: "Providers",
     unlinkedTitle: "Not linked to an endpoint",
     accountsEmpty: "No accounts",
     accountsEmptyDesc: "Add an account using the button in the page header",
@@ -4379,6 +4379,9 @@ addMailboxFromSheets: "Import from Google Sheets",
     deleteEndpointConfirm: "Delete this endpoint? Linked models will be detached.",
     endpointDeleted: "Endpoint deleted",
     discoveredModels: "Discovered {count} models",
+    inactiveEndpoints: "Inactive endpoints ({count})",
+    urlNotConfigured: "URL not configured",
+    legacyAccountName: "{provider} (legacy)",
   },
   publicModels: {
     description: "Public model aliases exposed to proxy clients",

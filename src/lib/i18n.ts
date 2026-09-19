@@ -1288,6 +1288,7 @@ export interface Translations {
     warnings: {
       copySensitiveConfirm: string;
       includeSecretsConfirm: string;
+      serverOffline: string;
     }
     wizard: {
       actions: {
@@ -4660,7 +4661,6 @@ columnHeader: string;
     noLinkDesc: string;
   };
   cards: {
-    sectionTitle: string;
     unlinkedTitle: string;
     accountsEmpty: string;
     accountsEmptyDesc: string;
@@ -4673,6 +4673,9 @@ columnHeader: string;
     deleteEndpointConfirm: string;
     endpointDeleted: string;
     discoveredModels: string;
+    inactiveEndpoints: string;
+    urlNotConfigured: string;
+    legacyAccountName: string;
   };
   publicModels: {
     description: string;

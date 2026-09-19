@@ -23,6 +23,7 @@ export function AiProvidersSidebar({
 }: AiProvidersSidebarProps) {
   const providerButtons = AI_PROXY_PROVIDER_FILTERS.map(provider => {
     const active = providerFilter === provider.id;
+    const dimmed = !active && (providerCounts[provider.id] ?? 0) === 0;
     return (
       <ButtonBase
         key={provider.id}
@@ -33,7 +34,9 @@ export function AiProvidersSidebar({
           'relative flex items-center gap-2.5 rounded-md text-xs font-medium transition-colors',
           active
             ? 'bg-indigo-500/12 text-white ring-1 ring-inset ring-indigo-400/20'
-            : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'
+            : dimmed
+              ? 'text-slate-700 hover:bg-white/[0.04] hover:text-slate-500'
+              : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'
         )}
       >
         <span className={cn('shrink-0', active ? 'text-indigo-300' : 'text-slate-600')}>

@@ -2,7 +2,12 @@
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ProviderCard } from '@/components/ai-proxy/ProviderCard';
+import {
+  ProviderCard,
+  accountDisplayName,
+  endpointStatusDot,
+  modelChipLabel,
+} from '@/components/ai-proxy/ProviderCard';
 import type { ProviderEndpoint, UpstreamModel } from '@/lib/backend/modules/aiGateway';
 import type { AiProxyAccount } from '@/types/generated';
 
@@ -20,7 +25,11 @@ jest.mock('@/components/ui', () => ({
   GlassCard: ({ children, className }: any) => (
     <div className={className}>{children}</div>
   ),
-  Badge: ({ children, variant }: any) => <span data-variant={variant}>{children}</span>,
+  Badge: ({ children, variant, ...rest }: any) => (
+    <span data-variant={variant} {...rest}>
+      {children}
+    </span>
+  ),
   ButtonBase: ({ children, ...rest }: any) => <button {...rest}>{children}</button>,
   ConfirmActionButton: ({ children, onConfirm, title, disabled }: any) => (
     <button title={title} disabled={disabled} onClick={onConfirm}>
@@ -173,5 +182,72 @@ describe('ProviderCard', () => {
 
     fireEvent.click(screen.getByTitle('aiGateway.cards.deleteEndpoint'));
     expect(props.onDeleteEndpoint).toHaveBeenCalledWith(endpoint);
+  });
+
+  it('renders short model chip labels with the full upstream id as tooltip', () => {
+    const models = [makeModel('m1', 'accounts/fireworks/models/glm-5p2')];
+    render(<ProviderCard endpoint={endpoint} accounts={[]} models={models} {...props} />);
+
+    const chip = screen.getByText('glm-5p2');
+    expect(chip.getAttribute('title')).toBe('accounts/fireworks/models/glm-5p2');
+    expect(modelChipLabel(models[0])).toBe('glm-5p2');
+    expect(modelChipLabel({ ...models[0], upstreamModelId: 'gpt-4o' })).toBe('gpt-4o');
+  });
+
+  it('prefers displayName for model chips', () => {
+    const model: UpstreamModel = {
+      ...makeModel('m1', 'accounts/x/models/y'),
+      displayName: 'GLM 5',
+    };
+    render(<ProviderCard endpoint={endpoint} accounts={[]} models={[model]} {...props} />);
+
+    expect(screen.getByText('GLM 5')).toBeTruthy();
+    expect(screen.queryByText('y')).toBeNull();
+  });
+
+  it('maps legacy migration account names with the real name as tooltip', () => {
+    const account = makeAccount(9, 'migrated from api_keys: gemini', 'gemini');
+    render(<ProviderCard endpoint={endpoint} accounts={[account]} models={[]} {...props} />);
+
+    expect(screen.queryByText('migrated from api_keys: gemini')).toBeNull();
+    const rendered = screen.getByText('aiGateway.cards.legacyAccountName');
+    expect(rendered.getAttribute('title')).toBe('migrated from api_keys: gemini');
+
+    expect(accountDisplayName(account).title).toBe('migrated from api_keys: gemini');
+    expect(accountDisplayName(makeAccount(10, 'Normal Name')).title).toBeUndefined();
+    expect(accountDisplayName(makeAccount(10, 'Normal Name')).text).toBe('Normal Name');
+  });
+
+  it('shows a warning badge instead of a .invalid placeholder URL', () => {
+    const placeholderEndpoint: ProviderEndpoint = {
+      ...endpoint,
+      baseUrl: 'https://llm.gateway.invalid/v1',
+    };
+    render(
+      <ProviderCard endpoint={placeholderEndpoint} accounts={[]} models={[]} {...props} />
+    );
+
+    expect(screen.getByText('aiGateway.cards.urlNotConfigured')).toBeTruthy();
+    expect(screen.queryByText('https://llm.gateway.invalid/v1')).toBeNull();
+  });
+
+  it('applies the four-state status dot semantics', () => {
+    expect(endpointStatusDot({ ...endpoint, circuitState: 'open' }, 2).className).toContain(
+      'bg-amber-400'
+    );
+    expect(endpointStatusDot({ ...endpoint, enabled: false }, 2).className).toContain(
+      'bg-red-400'
+    );
+    expect(endpointStatusDot(endpoint, 2).className).toContain('bg-emerald-400');
+
+    const hollow = endpointStatusDot(endpoint, 0);
+    expect(hollow.className).toContain('ring-slate-500');
+    expect(hollow.className).not.toContain('bg-emerald-400');
+  });
+
+  it('labels the hollow dot for an enabled endpoint without accounts', () => {
+    render(<ProviderCard endpoint={endpoint} accounts={[]} models={[]} {...props} />);
+
+    expect(screen.getByLabelText('aiGateway.cards.accountsEmpty')).toBeTruthy();
   });
 });

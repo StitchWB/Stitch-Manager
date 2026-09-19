@@ -1,15 +1,29 @@
 import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Bug, ClipboardPaste, MessageSquare, Plus, RefreshCw, Search, Zap } from 'lucide-react';
+import {
+  AlertTriangle,
+  Bug,
+  ClipboardPaste,
+  Database,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Search,
+  Zap,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
+import { appToast } from '@/lib/observability/toast';
 
 import Header from '../components/layout/Header';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
 import { PublicModelsSection } from '@/components/ai-gateway/PublicModelsSection';
-import { GatewayHeaderActions } from '@/components/ai-gateway/GatewayHeaderActions';
+import { ProviderEndpointForm } from '@/components/ai-gateway/ProviderEndpointForm';
+import { importOpencodeProviders } from '@/lib/backend/modules/aiGateway';
+import { useAiGatewayStore } from '@/stores/aiGateway';
+import { useAiProxyStore } from '../stores/aiProxy';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
 import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
@@ -116,6 +130,13 @@ export default function AiProviders() {
   const [cavemanEnabled, setCavemanEnabled] = useState(false);
   const [cavemanLevel, setCavemanLevel] = useState<'lite' | 'full' | 'ultra'>('full');
   const [compressionEnabled, setCompressionEnabled] = useState(false);
+  const [addEndpointOpen, setAddEndpointOpen] = useState(false);
+  const [gatewayActionBusy, setGatewayActionBusy] = useState(false);
+  const migrateLegacyData = useAiGatewayStore(s => s.migrateLegacyData);
+  const fetchEndpoints = useAiGatewayStore(s => s.fetchEndpoints);
+  const fetchPublicModels = useAiGatewayStore(s => s.fetchPublicModels);
+  const proxyStoreStatus = useAiProxyStore(s => s.status);
+  const serverOffline = !(proxyStoreStatus?.running ?? false);
   const controller = useAiProvidersController();
 
   const {
@@ -230,6 +251,45 @@ export default function AiProviders() {
     await fetchAccounts();
     handleModalClose();
   }, [fetchAccounts, handleModalClose]);
+
+  const handleImportOpencode = useCallback(async () => {
+    setGatewayActionBusy(true);
+    try {
+      const report = await importOpencodeProviders();
+      if (report.imported.length === 0) {
+        appToast.info(t('aiGateway.importOpencodeEmpty'), 'ai-gateway');
+      } else {
+        appToast.success(
+          t('aiGateway.importOpencodeResult', {
+            providers: report.imported.length,
+            models: report.models.length,
+          }),
+          'ai-gateway'
+        );
+      }
+      await Promise.all([fetchEndpoints(), fetchPublicModels()]);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : 'Import failed', 'ai-gateway');
+    } finally {
+      setGatewayActionBusy(false);
+    }
+  }, [fetchEndpoints, fetchPublicModels]);
+
+  const handleMigrateLegacy = useCallback(async () => {
+    setGatewayActionBusy(true);
+    try {
+      const result = await migrateLegacyData();
+      appToast.success(
+        `Migrated ${result.endpoints_created} endpoints, ${result.credentials_created} credentials`,
+        'ai-gateway'
+      );
+      await Promise.all([fetchEndpoints(), fetchPublicModels()]);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : 'Migration failed', 'ai-gateway');
+    } finally {
+      setGatewayActionBusy(false);
+    }
+  }, [migrateLegacyData, fetchEndpoints, fetchPublicModels]);
 
   const aiSection = useMemo<AiSection>(() => resolveSection(sectionParam), [sectionParam]);
   const { setLastAiSection } = useUIPreferencesStore();
@@ -411,15 +471,6 @@ export default function AiProviders() {
       description: t('aiHub.sections.providers.subtitle'),
       actions: (
         <>
-          <GatewayHeaderActions />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setPasteOpen(true)}
-            leftIcon={<ClipboardPaste size={14} />}
-          >
-            {t('aiGateway.paste.button')}
-          </Button>
           <Button
             variant="primary"
             size="sm"
@@ -428,6 +479,31 @@ export default function AiProviders() {
           >
             {t('aiHub.actions.addAccount')}
           </Button>
+          <OverflowMenu
+            triggerLabel={t('common.more')}
+            items={[
+              {
+                id: 'import-opencode',
+                label: t('aiGateway.importOpencode'),
+                icon: <Zap size={14} />,
+                onSelect: () => void handleImportOpencode(),
+                disabled: gatewayActionBusy,
+              },
+              {
+                id: 'migrate-legacy',
+                label: t('aiGateway.migrate'),
+                icon: <Database size={14} />,
+                onSelect: () => void handleMigrateLegacy(),
+                disabled: gatewayActionBusy,
+              },
+              {
+                id: 'paste-package',
+                label: t('aiGateway.paste.button'),
+                icon: <ClipboardPaste size={14} />,
+                onSelect: () => setPasteOpen(true),
+              },
+            ]}
+          />
         </>
       ),
     };
@@ -466,6 +542,16 @@ export default function AiProviders() {
             {/* === PROVIDERS TAB === */}
             {aiSection === 'providers' && (
               <>
+                {serverOffline && (
+                  <div
+                    role="status"
+                    className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs font-medium text-amber-300"
+                  >
+                    <AlertTriangle size={14} className="shrink-0" />
+                    {t('aiHub.warnings.serverOffline')}
+                  </div>
+                )}
+
                 <ProxyStatusBar
                   proxyStatus={proxyStatus}
                   proxySettings={proxySettings}
@@ -485,12 +571,20 @@ export default function AiProviders() {
                     onChange={e => setSearchQuery(e.target.value)}
                     placeholder={t('aiHub.search.placeholder')}
                     leftIcon={<Search className="w-4 h-4" />}
-                    containerClassName="flex-1 max-w-md min-w-0"
+                    containerClassName="flex-1 min-w-0"
                   />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    leftIcon={<Plus size={14} />}
+                    onClick={() => setAddEndpointOpen(true)}
+                  >
+                    {t('aiGateway.list.addEndpointShort')}
+                  </Button>
                 </div>
 
                 <ProviderCardsSection
-                  accounts={filteredAccounts}
+                  accounts={accounts}
                   loading={loading}
                   providerFilter={providerFilter}
                   searchQuery={searchQuery}
@@ -682,6 +776,12 @@ export default function AiProviders() {
       <ProxyDebugDrawer isOpen={showDebugDrawer} onClose={() => setShowDebugDrawer(false)} />
 
       <PastePackageDialog open={pasteOpen} onClose={() => setPasteOpen(false)} />
+
+      <ProviderEndpointForm
+        endpoint={null}
+        open={addEndpointOpen}
+        onClose={() => setAddEndpointOpen(false)}
+      />
     </div>
   );
 }

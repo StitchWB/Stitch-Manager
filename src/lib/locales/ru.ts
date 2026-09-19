@@ -984,7 +984,7 @@ export const ru: Translations = {
     },
     labels: {
       providers: "Провайдеры",
-      providersHint: "Фильтруйте по провайдеру или смотрите квоты ниже."
+      providersHint: "Счётчики — число аккаунтов."
     },
     modals: {
       csvNoSecrets: "CSV экспорт никогда не включает секреты.",
@@ -1180,7 +1180,7 @@ export const ru: Translations = {
       exponentialBackoffHint: "Удваивать длительность охлаждения при каждом сбое"
     },
     search: {
-      placeholder: "Поиск аккаунтов..."
+      placeholder: "Провайдер, аккаунт или модель…"
     },
     sections: {
       antigravity: {
@@ -1281,7 +1281,8 @@ tabs: {
     },
     warnings: {
       copySensitiveConfirm: "Скопировать {label} в буфер? Это чувствительные данные и они могут быть видны другим приложениям.",
-      includeSecretsConfirm: "Включение секретов экспортирует токены/ключи в открытом виде. Продолжить?"
+      includeSecretsConfirm: "Включение секретов экспортирует токены/ключи в открытом виде. Продолжить?",
+      serverOffline: "Сервер оффлайн — данные могут быть устаревшими"
     },
     wizard: {
       actions: {
@@ -4362,7 +4363,6 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     noLinkDesc: "Аккаунт не связан с эндпоинтом AI Gateway. Перенесите легаси-данные или добавьте эндпоинт вручную ниже.",
   },
   cards: {
-    sectionTitle: "Провайдеры",
     unlinkedTitle: "Не привязаны к эндпоинту",
     accountsEmpty: "Нет аккаунтов",
     accountsEmptyDesc: "Добавьте аккаунт через кнопку в шапке страницы",
@@ -4375,6 +4375,9 @@ addMailboxFromSheets: "Импорт из Google Sheets",
     deleteEndpointConfirm: "Удалить этот эндпоинт? Привязанные модели будут отсоединены.",
     endpointDeleted: "Эндпоинт удалён",
     discoveredModels: "Обнаружено моделей: {count}",
+    inactiveEndpoints: "Неактивные эндпоинты ({count})",
+    urlNotConfigured: "URL не настроен",
+    legacyAccountName: "{provider} (legacy)",
   },
   publicModels: {
     description: "Публичные алиасы моделей, доступные клиентам прокси",

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertCircle, PenSquare, PlugZap, Search, Server, Trash2 } from 'lucide-react';
+import { AlertCircle, PenSquare, PlugZap, Server, Trash2, Wand2 } from 'lucide-react';
 import {
   Badge,
   ButtonBase,
@@ -16,7 +16,7 @@ import type { ConnectionStateMap } from './sections/types';
 
 const MODEL_CHIP_LIMIT = 12;
 
-const ADAPTER_PROVIDER_LOGO: Record<string, string> = {
+export const ADAPTER_PROVIDER_LOGO: Record<string, string> = {
   openai_compatible: 'openai',
   anthropic: 'anthropic',
   gemini: 'gemini',
@@ -46,6 +46,48 @@ function accountStatus(
   return 'active';
 }
 
+export function endpointStatusDot(
+  endpoint: ProviderEndpoint,
+  accountCount: number
+): { className: string; label: string } {
+  if (endpoint.circuitState === 'open') {
+    return { className: 'animate-pulse bg-amber-400', label: t('aiGateway.status.degraded') };
+  }
+  if (!endpoint.enabled) {
+    return { className: 'bg-red-400', label: t('aiGateway.disabled') };
+  }
+  if (accountCount > 0) {
+    return { className: 'bg-emerald-400', label: t('aiGateway.enabled') };
+  }
+  return {
+    className: 'bg-transparent ring-1 ring-inset ring-slate-500',
+    label: t('aiGateway.cards.accountsEmpty'),
+  };
+}
+
+const LEGACY_ACCOUNT_NAME = /^migrated from api_keys:\s*(.+)$/i;
+
+export function accountDisplayName(account: AiProxyAccount): { text: string; title?: string } {
+  const match = LEGACY_ACCOUNT_NAME.exec(account.name);
+  if (match) {
+    return {
+      text: t('aiGateway.cards.legacyAccountName', { provider: match[1] }),
+      title: account.name,
+    };
+  }
+  return { text: account.name };
+}
+
+export function modelChipLabel(model: UpstreamModel): string {
+  if (model.displayName) return model.displayName;
+  const lastSlash = model.upstreamModelId.lastIndexOf('/');
+  return lastSlash >= 0 ? model.upstreamModelId.slice(lastSlash + 1) : model.upstreamModelId;
+}
+
+export function isPlaceholderBaseUrl(baseUrl: string): boolean {
+  return baseUrl.includes('.invalid');
+}
+
 export function ProviderCard({
   endpoint,
   accounts,
@@ -66,7 +108,7 @@ export function ProviderCard({
   const visibleModels = modelsExpanded
     ? enabledModels
     : enabledModels.slice(0, MODEL_CHIP_LIMIT);
-  const circuitOpen = endpoint?.circuitState === 'open';
+  const statusDot = endpoint ? endpointStatusDot(endpoint, accounts.length) : null;
 
   return (
     <div data-testid={`provider-card-${endpoint?.id ?? 'unlinked'}`}>
@@ -75,21 +117,8 @@ export function ProviderCard({
         {endpoint ? (
           <>
             <span
-              className={cn(
-                'h-2 w-2 shrink-0 rounded-full',
-                circuitOpen
-                  ? 'animate-pulse bg-amber-400'
-                  : endpoint.enabled
-                    ? 'bg-emerald-400'
-                    : 'bg-red-400'
-              )}
-              aria-label={
-                circuitOpen
-                  ? t('aiGateway.status.degraded')
-                  : endpoint.enabled
-                    ? t('aiGateway.enabled')
-                    : t('aiGateway.disabled')
-              }
+              className={cn('h-2 w-2 shrink-0 rounded-full', statusDot?.className)}
+              aria-label={statusDot?.label}
             />
             <span className="shrink-0 text-slate-400">
               <ProviderLogo
@@ -106,12 +135,22 @@ export function ProviderCard({
                   {endpoint.adapterType}
                 </Badge>
               </div>
-              <div
-                className="truncate font-mono text-[11px] text-slate-500"
-                title={endpoint.baseUrl}
-              >
-                {endpoint.baseUrl}
-              </div>
+              {isPlaceholderBaseUrl(endpoint.baseUrl) ? (
+                <Badge
+                  variant="warning"
+                  size="sm"
+                  className="mt-0.5 normal-case tracking-normal"
+                >
+                  {t('aiGateway.cards.urlNotConfigured')}
+                </Badge>
+              ) : (
+                <div
+                  className="truncate font-mono text-[11px] text-slate-500"
+                  title={endpoint.baseUrl}
+                >
+                  {endpoint.baseUrl}
+                </div>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {onDiscoverModels && (
@@ -121,7 +160,7 @@ export function ProviderCard({
                   title={t('aiGateway.discoverModels')}
                   onClick={() => onDiscoverModels(endpoint)}
                 >
-                  <Search size={15} className={cn(discovering && 'animate-pulse')} />
+                  <Wand2 size={15} className={cn(discovering && 'animate-pulse')} />
                 </ButtonBase>
               )}
               {onEditEndpoint && (
@@ -169,10 +208,11 @@ export function ProviderCard({
       <div className="divide-y divide-white/[0.04]">
         {accounts.map(account => {
           const conn = account.id ? connectionState[account.id] : undefined;
+          const displayName = accountDisplayName(account);
           return (
             <div
               key={account.id ?? `${account.provider}:${account.name}`}
-              className="relative flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.03]"
+              className="group relative flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.03]"
             >
               <ButtonBase
                 type="button"
@@ -184,8 +224,8 @@ export function ProviderCard({
                 <ProviderLogo provider={account.provider} size={16} />
               </span>
               <div className="relative z-0 min-w-0 flex-1">
-                <div className="truncate text-xs font-semibold text-white">
-                  {account.name}
+                <div className="truncate text-xs font-semibold text-white" title={displayName.title}>
+                  {displayName.text}
                 </div>
                 <div className="text-[10px] tabular-nums text-slate-500">
                   {t('aiHub.table.requestsLine', {
@@ -197,7 +237,7 @@ export function ProviderCard({
               <div className="relative z-0 shrink-0">
                 <StatusBadge status={accountStatus(account, conn)} withDot size="sm" />
               </div>
-              <div className="relative z-20 flex shrink-0 items-center gap-1">
+              <div className="relative z-20 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                 <ButtonBase
                   type="button"
                   className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-white"
@@ -270,9 +310,10 @@ export function ProviderCard({
                   key={model.id}
                   variant="default"
                   size="sm"
-                  className="normal-case tracking-normal"
+                  className="normal-case tracking-normal border-white/15 text-slate-300"
+                  title={model.upstreamModelId}
                 >
-                  {model.displayName || model.upstreamModelId}
+                  {modelChipLabel(model)}
                 </Badge>
               ))}
             </div>
