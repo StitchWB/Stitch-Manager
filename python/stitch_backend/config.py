@@ -126,7 +126,7 @@ class Settings(BaseSettings):
     # ── AiApiRadar proxy ─────────────────────────────────────────────────────
     # Base URL for the AiApiRadar community API (offers + stats).  Overridable
     # via the AIRADAR_API_URL env var.
-    airadadar_api_url: str = "https://api.aiapiradar.cf.whitebite.ru"
+    airadadar_api_url: str = "https://aiapiradar.whitebite.ru"
     # Admin token for AiApiRadar's admin-gated endpoints (found keys).
     airadar_admin_token: str = ""
     # Base URL for the found-keys endpoints; the secret endpoint lives on the
