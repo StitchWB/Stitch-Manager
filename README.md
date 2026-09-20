@@ -275,20 +275,29 @@ Get the latest release for your platform:
 git clone https://github.com/StitchWB/Stitch-Manager.git
 cd Stitch-Manager
 
-# Install dependencies
-npm install
+# Install dependencies (recommended - all-in-one)
+python scripts/bootstrap.py
 
-# Development
-npm run dev
+# OR install manually:
+npm install                                    # Frontend dependencies
+pip install -r python/requirements-dev.txt    # Python dev dependencies
+# Note: use 'uv pip install' instead of 'pip install' for 10x faster installation
 
-# Build
-npm run build
+# Development mode (auto-installs missing Python deps)
+.\start-dev.ps1
+
+# Production mode
+.\start.ps1
 ```
 
 **Requirements:**
 
 - Node.js 18+ (for the frontend build)
 - Python 3.11+ (backend + auto-registration)
+- Git (for cloning)
+
+**Optional (recommended):**
+- [uv](https://docs.astral.sh/uv/) — 10x faster Python package installer
 
 ---
 
