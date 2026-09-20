@@ -659,50 +659,6 @@ export interface Translations {
       weeklyErrors: string;
       weeklyRequests: string;
     }
-    antigravity: {
-      actions: {
-        checkStatus: string;
-        checking: string;
-        copyAuthUrl: string;
-        loginOAuth: string;
-        openUrl: string;
-        refresh: string;
-      }
-      empty: {
-        noCredentialsDescription: string;
-        noCredentialsTitle: string;
-      }
-      errors: {
-        oauthPollFailed: string;
-        scanAuthFilesFailed: string;
-        startLoginFailed: string;
-      }
-      list: {
-        detectedTitle: string;
-        expiresLabel: string;
-        expiryStatus: {
-          expired: string;
-          expiring: string;
-          valid: string;
-        }
-        unknownExpiry: string;
-      }
-      modal: {
-        authUrlLabel: string;
-        copyAuthUrlTooltip: string;
-        oauthInstructions: string;
-        oauthTitle: string;
-      }
-      status: {
-        credentials: string;
-        credentialsWithExpired: string;
-      }
-      toasts: {
-        loginCompletedRefreshing: string;
-        oauthFailedGeneric: string;
-        oauthTimedOut: string;
-      }
-    }
     compression: {
       advancedSettings: string;
       autoTriggerThreshold: string;
@@ -1027,6 +983,20 @@ export interface Translations {
       sign_in_with_your_aws_builder_id: string;
       waiting_for_authorization: string;
     }
+    oauthWizard: {
+      authUrlLabel: string;
+      copyUrl: string;
+      failed: string;
+      notConfigured: string;
+      openAgain: string;
+      retry: string;
+      start: string;
+      starting: string;
+      success: string;
+      timedOut: string;
+      title: string;
+      waiting: string;
+    }
     proxy: {
       activePortLabel: string;
       autoStart: string;
@@ -1189,10 +1159,6 @@ export interface Translations {
       placeholder: string;
     }
     sections: {
-      antigravity: {
-        subtitle: string;
-        title: string;
-      }
       apiKeys: {
         subtitle: string;
         title: string;
@@ -1260,7 +1226,6 @@ export interface Translations {
       toggleDetails: string;
     }
     tabs: {
-      antigravity: string;
       compression: string;
       tools: string;
       holone: string;

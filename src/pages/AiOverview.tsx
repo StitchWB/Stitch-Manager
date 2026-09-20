@@ -62,7 +62,7 @@ export default function AiOverview() {
         {
           title: 'Antigravity',
           description: isRu ? 'Google OAuth и локальные credentials' : 'Google OAuth and local credentials',
-          to: '/ai/antigravity',
+          to: '/ai/plugin/stitch-antigravity',
           icon: Orbit,
           tone: 'text-amber-300 bg-amber-500/10',
         },

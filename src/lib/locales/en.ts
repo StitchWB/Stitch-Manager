@@ -653,50 +653,6 @@ export const en: Translations = {
       weeklyErrors: "7d errors",
       weeklyRequests: "7d requests"
     },
-    antigravity: {
-      actions: {
-        checkStatus: "Check status",
-        checking: "Checking…",
-        copyAuthUrl: "Copy auth URL",
-        loginOAuth: "Login (OAuth)",
-        openUrl: "Open URL",
-        refresh: "Refresh"
-      },
-      empty: {
-        noCredentialsDescription: "Login via OAuth to generate an auth file, or refresh if you already logged in via browser.",
-        noCredentialsTitle: "No Antigravity credentials found"
-      },
-      errors: {
-        oauthPollFailed: "OAuth poll failed: {msg}",
-        scanAuthFilesFailed: "Failed to scan auth files: {msg}",
-        startLoginFailed: "Failed to start login: {msg}"
-      },
-      list: {
-        detectedTitle: "Detected Antigravity auth files",
-        expiresLabel: "Expires",
-        expiryStatus: {
-          expired: "Expired",
-          expiring: "Expires soon",
-          valid: "Valid"
-        },
-        unknownExpiry: "Unknown"
-      },
-      modal: {
-        authUrlLabel: "Auth URL",
-        copyAuthUrlTooltip: "Copy auth URL to clipboard",
-        oauthInstructions: "Complete the login in your browser. Then click “Check status” until it completes.",
-        oauthTitle: "Antigravity OAuth"
-      },
-      status: {
-        credentials: "{count} credential(s)",
-        credentialsWithExpired: "{count} credential(s) · {expired} expired"
-      },
-      toasts: {
-        loginCompletedRefreshing: "Login completed. Refreshing auth files...",
-        oauthFailedGeneric: "OAuth failed",
-        oauthTimedOut: "OAuth timed out"
-      }
-    },
     holone: {
       activeRules: "Active Rules",
       block: "Block",
@@ -1021,6 +977,20 @@ export const en: Translations = {
       sign_in_with_your_aws_builder_id: "Sign in with your aws builder id",
       waiting_for_authorization: "Waiting for authorization"
     },
+    oauthWizard: {
+      authUrlLabel: "Authorization URL",
+      copyUrl: "Copy URL",
+      failed: "Sign-in failed: {msg}",
+      notConfigured: "OAuth is not configured for {provider}. Place the client credentials in the plugin's oauth_config.json.",
+      openAgain: "Open sign-in page",
+      retry: "Try again",
+      start: "Sign in with {oauthProvider}",
+      starting: "Starting…",
+      success: "Sign-in completed.",
+      timedOut: "Sign-in timed out.",
+      title: "{provider} sign-in",
+      waiting: "Waiting for authorization — complete the sign-in in your browser."
+    },
     proxy: {
       activePortLabel: "Active port",
       autoStart: "Auto start",
@@ -1183,10 +1153,6 @@ export const en: Translations = {
       placeholder: "Provider, account, or model…"
     },
     sections: {
-      antigravity: {
-        subtitle: "Manage Antigravity authentication and OAuth state.",
-        title: "Antigravity"
-      },
       apiKeys: {
         subtitle: "Manage provider API keys and create accounts from keys.",
         title: "API Keys"
@@ -1254,7 +1220,6 @@ export const en: Translations = {
       toggleDetails: "Details"
     },
     tabs: {
-      antigravity: "Antigravity",
       compression: "Compression",
       holone: "HoloNe Security",
       tools: "Tools",

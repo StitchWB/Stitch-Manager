@@ -37,7 +37,6 @@ type AiTabId =
   | 'monitor'
   | 'chat'
   | 'tools'
-  | 'antigravity'
   | 'notebooklm';
 
 interface AiTabChild {
@@ -80,7 +79,6 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     header: 'aiHub.groups.sources',
     tabs: [
       { id: 'providers', label: 'aiHub.tabs.providers', to: '/ai/providers', icon: Server },
-      { id: 'antigravity', label: 'aiHub.tabs.antigravity', to: '/ai/antigravity', icon: Orbit },
     ],
   },
   {
@@ -121,7 +119,6 @@ function activeTab(pathname: string): AiTabId {
   }
   if (pathname.startsWith('/ai/monitor') || pathname.startsWith('/ai/analytics')) return 'monitor';
   if (pathname.startsWith('/ai/chat')) return 'chat';
-  if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
   if (pathname.startsWith('/ai/tools') || pathname.startsWith('/ai/holone')) return 'tools';
   if (pathname.startsWith('/ai/notebooklm')) return 'notebooklm';
   // Redirect old api-keys route to providers

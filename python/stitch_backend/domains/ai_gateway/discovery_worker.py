@@ -86,8 +86,8 @@ class DiscoveryWorker:
                 await cls._discover_all()
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                logger.exception("DiscoveryWorker loop error — will retry")
+            except Exception as _exc:
+                logger.warning("DiscoveryWorker loop error — will retry: %s", _exc)
 
     # ── Core discovery logic ─────────────────────────────────────────────────
 
@@ -122,18 +122,20 @@ class DiscoveryWorker:
                         "DiscoveryWorker: no models returned for endpoint %s",
                         probe["endpoint_id"],
                     )
-            except Exception:
-                logger.exception(
-                    "DiscoveryWorker: failed for endpoint %s (%s)",
-                    probe["endpoint_id"], probe["endpoint_name"],
+            except Exception as _exc:
+                logger.warning(
+                    "DiscoveryWorker: failed for endpoint %s (%s): %s",
+                    probe["endpoint_id"],
+                    probe["endpoint_name"],
+                    _exc,
                 )
 
         # 3. Batch-persist all discoveries in one short WRITE session.
         if results:
             try:
                 await cls._persist_discoveries(results)
-            except Exception:
-                logger.exception("DiscoveryWorker: failed to batch persist results")
+            except Exception as _exc:
+                logger.warning("DiscoveryWorker: failed to batch persist results: %s", _exc)
 
         elapsed = time.monotonic() - start
         logger.info("DiscoveryWorker: pass complete in %.1fs", elapsed)
@@ -272,10 +274,12 @@ class DiscoveryWorker:
                         )
 
                         await session.flush()
-                except Exception:
-                    logger.exception(
-                        "DiscoveryWorker: failed for endpoint %s (%s)",
-                        probe["endpoint_id"], probe["endpoint_name"],
+                except Exception as _exc:
+                    logger.warning(
+                        "DiscoveryWorker: failed for endpoint %s (%s): %s",
+                        probe["endpoint_id"],
+                        probe["endpoint_name"],
+                        _exc,
                     )
                     # savepoint auto-rolled back; outer transaction continues
 

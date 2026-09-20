@@ -520,7 +520,7 @@ class AuthFile:
 class AuthFileScanner:
     """Scan standard locations for auth JSON files."""
 
-    _PROVIDERS = ("openai", "gemini", "anthropic", "antigravity", "kiro", "fireworks")
+    _PROVIDERS = ("openai", "gemini", "anthropic", "kiro", "fireworks")
 
     @classmethod
     def scan_all(cls) -> list[AuthFile]:

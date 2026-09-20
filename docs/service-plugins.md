@@ -573,8 +573,9 @@ The dev loop uses `plugins-local/` — a directory of unsigned packages
 that the host discovers when `STITCH_DEV_MODE=1`.
 
 The official service plugins live in their own **public repos**
-(`StitchWB/stitch-cards`, `stitch-mail`, `stitch-notebooklm`,
-`stitch-opencode`, `stitch-radar`, `stitch-sheets`, `stitch-totp`) — that is
+(`StitchWB/stitch-antigravity`, `stitch-cards`, `stitch-freemodel`,
+`stitch-mail`, `stitch-notebooklm`, `stitch-opencode`, `stitch-radar`,
+`stitch-sheets`, `stitch-totp`) — that is
 their source of truth and where external PRs land. The hub keeps a mirror in
 `plugins-src/`, refreshed one-way (public → hub) by
 `scripts/sync_service_plugins.py` / `sync-service-plugins.yml`. Each plugin

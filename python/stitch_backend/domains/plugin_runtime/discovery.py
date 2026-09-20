@@ -213,6 +213,15 @@ async def _start_one(
         )
         child_env.update(freemodel_child_env())
 
+    # The antigravity plugin scans auth files under the real user home,
+    # invisible under the child's sandbox-scoped USERPROFILE — resolve the
+    # dirs here, in the core process.
+    if manifest.id == "stitch-antigravity":
+        from stitch_backend.domains.ai_proxy.antigravity_sidecar import (
+            antigravity_child_env,
+        )
+        child_env.update(antigravity_child_env())
+
     host = ServicePluginHost(
         plugin_id=manifest.id,
         entry_module=entry_module,

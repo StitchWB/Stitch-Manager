@@ -140,7 +140,9 @@ describe('AiHubLayout rail navigation', () => {
     // t is identity → keyed labels render as their keys.
     expect(screen.getByText('aiHub.tabs.providers')).toBeTruthy();
     expect(screen.queryByText('Gateway')).toBeNull();
-    expect(screen.getByText('aiHub.tabs.antigravity')).toBeTruthy();
+    // The antigravity tab is plugin-contributed (stitch-antigravity), not a
+    // builtin rail item.
+    expect(screen.queryByText('aiHub.tabs.antigravity')).toBeNull();
     expect(screen.getByText('aiHub.tabs.routing')).toBeTruthy();
     expect(screen.getByText('Connections')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.monitor')).toBeTruthy();
@@ -180,6 +182,42 @@ describe('AiHubLayout rail navigation', () => {
 
     await waitFor(() => {
       expect(navigatedPath).toBe('/ai/plugin/echo');
+    });
+  });
+
+  it('(c2) renders the stitch-antigravity plugin tab and navigates to its plugin page', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      {
+        id: 'stitch-antigravity',
+        version: '0.1.0',
+        status: {
+          status: 'running',
+          port: null,
+          pid: 42,
+          uptimeSeconds: 5,
+          error: null,
+          plugin_id: 'stitch-antigravity',
+          restarts: 0,
+          stopping: false,
+        },
+        ui: {
+          kind: 'declarative',
+          tabs: [{ id: 'antigravity', label: 'stitch-antigravity.tab', icon: 'Orbit' }],
+        },
+      },
+    ] satisfies ServicePluginInfo[]);
+
+    renderAt('/ai');
+
+    const tab = await screen.findByTestId('ai-hub-rail-item-plugin:stitch-antigravity:antigravity');
+    expect(screen.getByTestId('ai-hub-group-plugins')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(tab);
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/plugin/stitch-antigravity');
     });
   });
 

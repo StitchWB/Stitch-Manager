@@ -653,50 +653,6 @@ export const ru: Translations = {
       weeklyErrors: "Ошибки за 7 дней",
       weeklyRequests: "Запросы за 7 дней"
     },
-    antigravity: {
-      actions: {
-        checkStatus: "Проверить статус",
-        checking: "Проверяем…",
-        copyAuthUrl: "Скопировать auth URL",
-        loginOAuth: "Войти (OAuth)",
-        openUrl: "Открыть URL",
-        refresh: "Обновить"
-      },
-      empty: {
-        noCredentialsDescription: "Войдите через OAuth, чтобы создать auth-файл, или нажмите «Обновить», если вы уже логинились в браузере.",
-        noCredentialsTitle: "Не найдены креды Antigravity"
-      },
-      errors: {
-        oauthPollFailed: "Ошибка проверки OAuth статуса: {msg}",
-        scanAuthFilesFailed: "Не удалось просканировать auth файлы: {msg}",
-        startLoginFailed: "Не удалось начать вход: {msg}"
-      },
-      list: {
-        detectedTitle: "Найденные auth файлы Antigravity",
-        expiresLabel: "Истекает",
-        expiryStatus: {
-          expired: "Истёк",
-          expiring: "Скоро истечёт",
-          valid: "Действителен"
-        },
-        unknownExpiry: "Неизвестно"
-      },
-      modal: {
-        authUrlLabel: "URL авторизации",
-        copyAuthUrlTooltip: "Скопировать auth URL в буфер обмена",
-        oauthInstructions: "Завершите вход в браузере. Затем нажимайте «Проверить статус», пока не завершится.",
-        oauthTitle: "Antigravity OAuth"
-      },
-      status: {
-        credentials: "Кредов: {count}",
-        credentialsWithExpired: "Кредов: {count} · истекло: {expired}"
-      },
-      toasts: {
-        loginCompletedRefreshing: "Вход завершён. Обновляем auth файлы…",
-        oauthFailedGeneric: "OAuth завершился с ошибкой",
-        oauthTimedOut: "OAuth не завершился вовремя"
-      }
-    },
     holone: {
       activeRules: "Активных правил",
       block: "Блокировка",
@@ -1021,6 +977,20 @@ export const ru: Translations = {
       sign_in_with_your_aws_builder_id: "Войдите через AWS Builder ID",
       waiting_for_authorization: "Ожидание авторизации"
     },
+    oauthWizard: {
+      authUrlLabel: "URL авторизации",
+      copyUrl: "Скопировать URL",
+      failed: "Вход не удался: {msg}",
+      notConfigured: "OAuth не настроен для {provider}. Поместите client credentials в oauth_config.json плагина.",
+      openAgain: "Открыть страницу входа",
+      retry: "Повторить",
+      start: "Войти через {oauthProvider}",
+      starting: "Запуск…",
+      success: "Вход завершён.",
+      timedOut: "Вход не завершился вовремя.",
+      title: "Вход в {provider}",
+      waiting: "Ожидание авторизации — завершите вход в браузере."
+    },
     proxy: {
       activePortLabel: "Активный порт",
       autoStart: "Авто-старт",
@@ -1183,10 +1153,6 @@ export const ru: Translations = {
       placeholder: "Провайдер, аккаунт или модель…"
     },
     sections: {
-      antigravity: {
-        subtitle: "Управление авторизацией Antigravity и состоянием OAuth.",
-        title: "Antigravity"
-      },
       apiKeys: {
         subtitle: "Управление ключами провайдеров и создание аккаунтов из ключей.",
         title: "API ключи"
@@ -1254,7 +1220,6 @@ holone: {
       toggleDetails: "Подробности"
     },
 tabs: {
-      antigravity: "Antigravity",
       compression: "Сжатие",
       holone: "HoloNe Security",
       tools: "Инструменты",
