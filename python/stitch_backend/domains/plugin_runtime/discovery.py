@@ -205,6 +205,14 @@ async def _start_one(
     ):
         child_env["TOKEN_ENCRYPTION_KEY"] = tok
 
+    # The freemodel bridge needs the claude CLI, invisible under the
+    # supervisor's stripped PATH — resolve it here, in the core process.
+    if manifest.id == "stitch-freemodel":
+        from stitch_backend.domains.ai_proxy.freemodel_sidecar import (
+            freemodel_child_env,
+        )
+        child_env.update(freemodel_child_env())
+
     host = ServicePluginHost(
         plugin_id=manifest.id,
         entry_module=entry_module,
