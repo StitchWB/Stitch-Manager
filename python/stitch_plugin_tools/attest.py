@@ -3,9 +3,10 @@
 The catalog signing key NEVER touches the server: this command runs on the
 reviewer's offline machine, fetches the approved submission's sha256 via the
 admin API, signs ``{reviewer}|{reviewed_at}|{sha256}`` with the ed25519
-private key from ``STITCH_CATALOG_PRIVKEY`` (base64 raw 32-byte), and uploads
-only the resulting attestation blob. The server verifies it against its
-configured ``STITCH_CATALOG_PUBKEY`` (PUT /admin/submissions/{id}/attest).
+private key from ``STITCH_CATALOG_PRIVKEY`` (PEM file path, inline PEM, or
+base64 raw 32-byte), and uploads only the resulting attestation blob. The
+server verifies it against its configured ``STITCH_CATALOG_PUBKEY``
+(PUT /admin/submissions/{id}/attest).
 """
 
 from __future__ import annotations
@@ -41,18 +42,45 @@ def resolve_attest_config(server: str | None, admin_key_env: str) -> tuple[str, 
 def load_catalog_privkey() -> Ed25519PrivateKey:
     """Load the catalog signing key from STITCH_CATALOG_PRIVKEY.
 
-    Format mirrors ``autoreg.plugin.crypto.load_public_key``: base64 of the
-    raw 32-byte ed25519 key. Raises ValueError when missing or malformed.
+    Accepted formats (keygen writes PEM, older docs describe base64 raw):
+      - path to a PEM file (``keys/private.key`` from ``keygen --out keys/``)
+      - inline PEM text (``-----BEGIN`` marker; newlines may be folded)
+      - base64 of the raw 32-byte ed25519 private scalar
+
+    Raises ValueError when missing or in none of these formats.
     """
-    raw_b64 = os.environ.get(ENV_CATALOG_PRIVKEY, "").strip()
-    if not raw_b64:
+    from pathlib import Path
+
+    raw_val = os.environ.get(ENV_CATALOG_PRIVKEY, "").strip()
+    if not raw_val:
         raise ValueError(f"no catalog signing key ({ENV_CATALOG_PRIVKEY} env var)")
+
+    if "BEGIN" in raw_val:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+        try:
+            key = load_pem_private_key(raw_val.encode(), password=None)
+        except ValueError as exc:
+            raise ValueError(f"{ENV_CATALOG_PRIVKEY} contains a malformed PEM key") from exc
+        if not isinstance(key, Ed25519PrivateKey):
+            raise ValueError(f"{ENV_CATALOG_PRIVKEY} PEM key is not ed25519")
+        return key
+
+    path = Path(raw_val)
+    if path.is_file():
+        from autoreg.plugin.crypto import load_private_key
+
+        try:
+            return load_private_key(path.read_bytes())
+        except ValueError as exc:
+            raise ValueError(f"{ENV_CATALOG_PRIVKEY} file is not a valid PEM key: {path}") from exc
+
     try:
-        raw = base64.b64decode(raw_b64)
+        raw = base64.b64decode(raw_val)
         return Ed25519PrivateKey.from_private_bytes(raw)
     except ValueError as exc:
         raise ValueError(
-            f"{ENV_CATALOG_PRIVKEY} is not a base64 raw 32-byte ed25519 key"
+            f"{ENV_CATALOG_PRIVKEY} is not a PEM path, PEM text, or base64 raw 32-byte key"
         ) from exc
 
 

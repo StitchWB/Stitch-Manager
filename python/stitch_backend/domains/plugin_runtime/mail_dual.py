@@ -2,8 +2,11 @@
 
 ``email_generate_from_settings*`` / ``email_test_strategies`` /
 ``email_inbox_*`` commands are served by the ``stitch-mail`` plugin
-(stripping the ``email_`` / ``email_inbox_`` prefix).  The dispatcher calls
-:func:`try_mail_dual_route` before the command-registry lookup:
+(stripping the ``email_`` / ``email_inbox_`` prefix), as are the bare
+``get_email_counter`` / ``set_email_counter`` /
+``claim_email_inbox_profile`` commands (served unchanged).  The
+dispatcher calls :func:`try_mail_dual_route` before the
+command-registry lookup:
 
 - name not in :data:`MAIL_DUAL` → :data:`_FALLTHROUGH` (not ours);
 - plugin host absent/unhealthy → structured 400 (no built-in fallback —
@@ -41,7 +44,9 @@ _FALLTHROUGH: Any = object()
 
 #: Command names served by the stitch-mail plugin.
 #: Maps the built-in name (with ``email_`` / ``email_inbox_`` prefix) to
-#: the plugin command name (without the prefix).  Mirrors the manifest
+#: the plugin command name (without the prefix); the trailing bare names
+#: (``get_email_counter`` / ``set_email_counter`` /
+#: ``claim_email_inbox_profile``) map unchanged.  Mirrors the manifest
 #: commands list in ``plugins-src/stitch-mail/plugin.json`` exactly.
 MAIL_DUAL: dict[str, str] = {
     # email_* (generate / test strategies)
@@ -68,6 +73,11 @@ MAIL_DUAL: dict[str, str] = {
     "email_inbox_connect_profile": "connect_profile",
     "email_inbox_get_sync_state": "get_sync_state",
     "email_inbox_upsert_sync_state": "upsert_sync_state",
+    # bare names (no prefix to strip — the built-ins behind them were
+    # removed in the plugin migration)
+    "get_email_counter": "get_email_counter",
+    "set_email_counter": "set_email_counter",
+    "claim_email_inbox_profile": "claim_email_inbox_profile",
 }
 
 

@@ -46,22 +46,27 @@ admin_router = APIRouter(
 
 
 def _map_upstream_status(exc: httpx.HTTPStatusError) -> HTTPException:
-    """Map an upstream non-2xx to a proxy error, passing 4xx details through."""
+    """Map an upstream non-2xx to a proxy error with a FIXED detail.
+
+    Raw upstream detail is never forwarded to the browser (no internal-state
+    leakage) — same pattern as
+    :func:`plugin_distribution.admin_router._map_upstream_error`.
+    """
     upstream = exc.response.status_code
     if upstream == 401:
         return HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Distribution server rejected the admin key",
         )
-    if 400 <= upstream < 500:
-        detail: Any = None
-        try:
-            detail = exc.response.json().get("detail")
-        except ValueError:
-            pass
+    if upstream == status.HTTP_404_NOT_FOUND:
         return HTTPException(
-            status_code=upstream,
-            detail=detail or f"Distribution server error: {upstream}",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Partner channel not found",
+        )
+    if upstream == status.HTTP_409_CONFLICT:
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Partner channel conflict",
         )
     return HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,

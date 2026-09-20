@@ -145,6 +145,12 @@ function PartnerChannelFormModal({ channel, onClose, onSaved }: FormModalProps) 
       parsedTgChatId = n;
     }
 
+    const ownerTrim = owner.trim().replace(/^@/, '');
+    if (ownerTrim && !/^\d+$/.test(ownerTrim)) {
+      setFormError('friends.admin.errorOwnerNumeric');
+      return;
+    }
+
     let parsedMaxMembers: number | null = null;
     if (maxMembers.trim()) {
       const n = Number(maxMembers.trim());
@@ -162,7 +168,7 @@ function PartnerChannelFormModal({ channel, onClose, onSaved }: FormModalProps) 
       type,
       badge,
       tg_chat_id: parsedTgChatId,
-      owner_telegram_id: owner.trim() || null,
+      owner_telegram_id: ownerTrim || null,
       allowed_grant_roles: roles,
       max_members: parsedMaxMembers,
       active,

@@ -18,6 +18,7 @@ import logging
 import os
 import time
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import ValidationError
@@ -97,6 +98,11 @@ async def load_friends() -> list[dict[str, Any]]:
     return load_bundled_friends()
 
 
+def _seedable_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.scheme == "https" and bool(parsed.netloc)
+
+
 async def seed_partner_channels() -> None:
     """Push bundled ``friends.json`` entries to the server (idempotent by url).
 
@@ -128,13 +134,17 @@ async def seed_partner_channels() -> None:
                 if isinstance(ch, dict)
             }
             for entry in entries:
-                if entry["url"] in existing:
+                url = entry["url"]
+                if not _seedable_url(url):
+                    logger.warning("Partner seed: skipping invalid url %r", url)
+                    continue
+                if url in existing:
                     continue
                 resp = await client.post(
                     f"{base}/admin/partner-channels",
                     json={
                         "title": entry["title"],
-                        "url": entry["url"],
+                        "url": url,
                         "description": entry.get("description"),
                         "badge": entry.get("badge") or "friend",
                         "type": entry.get("type") or "telegram",

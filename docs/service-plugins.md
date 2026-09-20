@@ -1004,16 +1004,53 @@ Exit 0 on success, 1 on any error.  A per-entry report is printed.
 
 ### Community submission (`submit_for_review`)
 
-Community plugins are submitted via a GitHub PR to the catalog repo.
-The `submit_for_review` command forks the catalog, pushes the
-package files, and opens a PR.
+Community plugins are submitted by uploading a signed package to the
+server.  The author runs `stitch_plugin_tools publish <pkg>/` (which
+signs, zips, and POSTs to `/admin/publish`) or uses the dedicated
+submission endpoint:
 
-> **Note:** `submit_for_review` currently handles v1 data-plugin
-> file lists (`plugin.json`, `scenario.json`, `selectors.json`,
-> `profile.json`). Service plugins ship a whole package directory
-> (Python code + manifest). Extension of `submit_for_review` to
-> handle service-plugin packages is tracked as a separate task
-> (plan todo 22).
+```bash
+# 1. Sign the package (one-time):
+python -m stitch_plugin_tools sign my-plugin/ --key keys/private.key
+
+# 2. Submit for review — POST /plugins/submit (requires auth):
+curl -X POST https://stitch.example.com/plugins/submit \
+     -H "Authorization: Bearer <token>" \
+     -F "package=@my-plugin.zip"
+```
+
+The server stores the submission in `plugin_submissions` with status
+`pending`.  An admin reviews it on the admin UI or via the API:
+
+| Action | Endpoint | Effect |
+|--------|----------|--------|
+| Approve | `PUT /admin/submissions/{id}/approve` | Materialises the plugin into `plugins/`; visible to installers |
+| Reject | `POST /admin/submissions/{id}/reject` | Sets `review_status = rejected` with a reason |
+| Delist | `POST /admin/submissions/{id}/delist` | Hides an approved submission without deleting it |
+
+#### Offline attestation
+
+After approval, the reviewer signs an attestation blob on their offline
+machine using `stitch_plugin_tools attest`:
+
+```bash
+export STITCH_CATALOG_PRIVKEY=<base64 raw 32-byte ed25519 private key>
+export STITCH_PUBLISH_URL=https://stitch.example.com
+export STITCH_ADMIN_KEY=<admin-key>
+
+python -m stitch_plugin_tools attest \
+    --server $STITCH_PUBLISH_URL \
+    --submission 42 \
+    --reviewer alice
+```
+
+The command fetches the approved submission's sha256 from
+`GET /admin/submissions/{id}`, signs
+`{reviewer}|{reviewed_at}|{sha256}` with the ed25519 key from
+`STITCH_CATALOG_PRIVKEY` (base64 raw 32-byte), and uploads the
+attestation via `PUT /admin/submissions/{id}/attest`.  The server
+verifies it against its configured `STITCH_CATALOG_PUBKEY`.  A verified
+attestation gives the plugin the `'verified'` badge in the catalog.
 
 ### Signature verification
 
@@ -1134,20 +1171,23 @@ the client's `extractall` + `install_package` expects.
 In v2, the **frontend** owns the mail sync loop. The `stores/mail.ts`
 polling driver (`pollIntervalMs`) calls `email_inbox_*` commands on
 each tick. When the `stitch-mail` service plugin is installed and
-healthy, the dual-format proxy (§2, `mail_dual.py`) routes those
+healthy, the dual-format proxy (`mail_dual.py`) routes those
 commands to the plugin subprocess; when the plugin is absent or dead,
-the same commands fall through to the built-in handler unchanged.
+the dual router raises a structured HTTP error via
+`plugin_runtime/dual_error.py` (`raise_plugin_unavailable` → 400,
+`raise_plugin_call_failed` → 504 on timeout / 400 otherwise).  There
+is **no built-in fallback** — the caller receives the same error shape
+as any command failure (`{"detail": ...}`).
 
 There is **no internal plugin sync loop** in v2 — the plugin process
 serves sync ticks only when the frontend polls. This avoids
 double-sync (FE polling + internal loop both writing sync state) and
 keeps the plugin stateless between ticks.
 
-The host watchdog (todo 3) restarts the plugin once on crash; the
-next FE poll tick is served by the restarted plugin. If the plugin
-exhausts its restart-once quota, subsequent ticks fall back to the
-built-in handler — the frontend never crashes and never sees a
-double-write (the dual-format route is either/or by design).
+The host watchdog restarts the plugin once on crash; the next FE poll
+tick is served by the restarted plugin.  If the plugin exhausts its
+restart-once quota, the dual router raises `raise_plugin_unavailable`
+(400) — no silent fallback.
 
 A plugin-internal sync loop (plugin polls its own IMAP on a timer,
 independent of the frontend) is **v3 backlog**. When implemented, the

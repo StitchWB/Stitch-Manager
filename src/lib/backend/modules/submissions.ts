@@ -176,9 +176,20 @@ export async function listSubmissions(params: ListSubmissionsParams = {}): Promi
   return safeInvoke<SubmissionListResult>('list_submissions', { ...params }, { noCache: true });
 }
 
-/** GET /admin/submissions/{id} — full detail incl. manifest + gate_report. */
+/** GET /admin/submissions/{id} — full detail incl. manifest + gate_report.
+ *
+ * The backend passes the server's SubmissionDetail through flat
+ * (`{success, id, plugin_id, ...}`); normalize it into `{success,
+ * submission}` for consumers.
+ */
 export async function getSubmission(id: number): Promise<SubmissionDetailResult> {
-  return safeInvoke<SubmissionDetailResult>('get_submission', { id }, { noCache: true });
+  const raw = await safeInvoke<SubmissionDetailResult & Partial<PluginSubmissionDetail>>(
+    'get_submission', { id }, { noCache: true },
+  );
+  if (raw.submission) return raw;
+  if (!raw.success || typeof raw.id !== 'number') return raw;
+  const { success, error, submission: _ignored, ...detail } = raw;
+  return { success, error, submission: detail as PluginSubmissionDetail };
 }
 
 /** Re-run all gates on the materialized package and publish it. */

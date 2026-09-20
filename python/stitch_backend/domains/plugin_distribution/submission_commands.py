@@ -3,8 +3,9 @@
 User-facing (dist Bearer token from ``.activation``):
   - ``submit_plugin``   — forward a release-spec JSON or a local zip (≤5MB,
     enforced client-side too) to ``POST /plugins/submit``.
-  - ``my_submissions``  — the server exposes no per-user list; the queue is
-    admin-keyed, so this is gated to admin callers (``_caller_role``).
+  - ``my_submissions``  — admins get the full queue (``X-Admin-Key``);
+    everyone else gets their own submissions via the Bearer-scoped
+    ``GET /my-submissions`` (server-side per-token filter).
 
 Admin moderation (``admin_only`` at the dispatcher, ``X-Admin-Key`` upstream):
   - ``list_submissions`` / ``get_submission`` / ``approve_submission`` /
@@ -284,15 +285,23 @@ async def cmd_submit_plugin(params: dict) -> dict:
 
 @register_command("my_submissions", readonly=True)
 async def cmd_my_submissions(params: dict) -> dict:
-    """List the submissions queue (admin-keyed upstream → admin callers only).
+    """List submissions visible to the caller.
 
-    LIMITATION: the server has no per-user submissions endpoint, so a
-    non-admin caller gets an error; the local record written by
-    ``submit_plugin`` is the per-install history (Phase E consumes it).
+    Admins get the full moderation queue (X-Admin-Key proxy). Everyone else
+    gets their OWN submissions via the Bearer-scoped ``/my-submissions``
+    server endpoint (per-token identity filter).
     """
-    if params.get("_caller_role") != "admin":
-        return {"success": False, "error": "admin only"}
-    return await _admin_proxy("GET", "/admin/submissions")
+    if params.get("_caller_role") == "admin":
+        return await _admin_proxy("GET", "/admin/submissions")
+    pre = _standalone_error()
+    if pre is not None:
+        return pre
+    token = _dist_token()
+    if token is None:
+        return {"success": False, "error": "activation required"}
+    return await _proxy_request(
+        "GET", "/my-submissions", headers={"Authorization": f"Bearer {token}"}
+    )
 
 
 # ── Admin moderation proxies ──────────────────────────────────────────────────

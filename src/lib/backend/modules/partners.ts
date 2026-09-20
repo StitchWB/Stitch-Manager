@@ -135,7 +135,12 @@ function normalizeChannel(raw: Record<string, unknown>): PartnerChannel {
     max_members: typeof raw.max_members === 'number' ? raw.max_members : null,
     active: raw.active !== false,
     created_at: typeof raw.created_at === 'string' ? raw.created_at : undefined,
-    member_count: typeof raw.member_count === 'number' ? raw.member_count : undefined,
+    member_count:
+      typeof raw.member_count === 'number'
+        ? raw.member_count
+        : typeof raw.members_used === 'number'
+          ? raw.members_used
+          : undefined,
   };
 }
 
@@ -162,15 +167,34 @@ function extractChannel(data: unknown): Record<string, unknown> | null {
   return null;
 }
 
+/**
+ * Map the UI form onto the server's request schema: the server binds the
+ * owner by numeric Telegram id (``owner_tg_id``), used for the bot's
+ * getChatMember liveness check — @usernames are not resolvable there.
+ * @throws {Error} when owner is non-empty and non-numeric.
+ */
+function buildPayload(form: PartnerChannelForm): Record<string, unknown> {
+  const { owner_telegram_id, ...rest } = form;
+  let ownerTgId: number | null = null;
+  const owner = (owner_telegram_id ?? '').trim().replace(/^@/, '');
+  if (owner) {
+    if (!/^\d+$/.test(owner)) {
+      throw makeError('Owner must be a numeric Telegram id', 422);
+    }
+    ownerTgId = Number(owner);
+  }
+  return { ...rest, owner_tg_id: ownerTgId };
+}
+
 // ── Public API (admin) ───────────────────────────────────────────────────────
 
 /**
- * GET /api/partners — list partner channels (admin only).
+ * GET /api/partners/channels — list partner channels (admin only).
  * @throws {Error} with `status` property = 401/403 on auth/permission failure,
  *   502/503 on upstream errors.
  */
 export async function listPartnerChannels(): Promise<PartnerChannel[]> {
-  const response = await fetch(`${getApiBaseUrl()}/api/partners`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/partners/channels`, {
     method: 'GET',
     credentials: 'include',
     headers: { Accept: 'application/json' },
@@ -187,16 +211,16 @@ export async function listPartnerChannels(): Promise<PartnerChannel[]> {
 }
 
 /**
- * POST /api/partners — create a partner channel (admin only).
+ * POST /api/partners/channels — create a partner channel (admin only).
  * @throws {Error} with `status` property = 422 when allowed_grant_roles
  *   contains 'admin' (server hard cap), 401/403 on auth/permission failure.
  */
 export async function createPartnerChannel(form: PartnerChannelForm): Promise<PartnerChannel> {
-  const response = await fetch(`${getApiBaseUrl()}/api/partners`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/partners/channels`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(form),
+    body: JSON.stringify(buildPayload(form)),
   });
 
   const data = await parseJson(response);
@@ -212,7 +236,7 @@ export async function createPartnerChannel(form: PartnerChannelForm): Promise<Pa
 }
 
 /**
- * PUT /api/partners/{id} — update a partner channel (admin only).
+ * PUT /api/partners/channels/{id} — update a partner channel (admin only).
  * @throws {Error} with `status` property = 404 unknown channel, 422 role cap
  *   violation, 401/403 on auth/permission failure.
  */
@@ -220,12 +244,15 @@ export async function updatePartnerChannel(
   id: string,
   form: PartnerChannelForm,
 ): Promise<PartnerChannel> {
-  const response = await fetch(`${getApiBaseUrl()}/api/partners/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(form),
-  });
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/partners/channels/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(buildPayload(form)),
+    },
+  );
 
   const data = await parseJson(response);
 
@@ -240,16 +267,19 @@ export async function updatePartnerChannel(
 }
 
 /**
- * DELETE /api/partners/{id} — delete a partner channel (admin only).
+ * DELETE /api/partners/channels/{id} — delete a partner channel (admin only).
  * @throws {Error} with `status` property = 404 unknown channel, 401/403 on
  *   auth/permission failure.
  */
 export async function deletePartnerChannel(id: string): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/api/partners/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/partners/channels/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    },
+  );
 
   if (!response.ok) {
     const data = await parseJson(response);

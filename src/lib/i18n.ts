@@ -3894,6 +3894,7 @@ export interface Translations {
       cancel: string;
       errorValidation: string;
       errorTgChatId: string;
+      errorOwnerNumeric: string;
       errorMaxMembers: string;
       errorRoles: string;
     }

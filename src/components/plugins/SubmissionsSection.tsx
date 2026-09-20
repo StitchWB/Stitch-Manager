@@ -645,6 +645,9 @@ export function SubmissionsSection() {
   );
 
   return (
+    <>
+    {/* backdrop-filter creates a containing block for fixed descendants —
+        the dialogs below must stay OUTSIDE this div to overlay the viewport */}
     <div className="rounded-xl border border-white/[0.06] bg-black/40 backdrop-blur-sm overflow-hidden">
       <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
@@ -751,6 +754,7 @@ export function SubmissionsSection() {
           </TableBody>
         </Table>
       )}
+    </div>
 
       {detailOpen && (
         <SubmissionDetailModal
@@ -816,6 +820,6 @@ export function SubmissionsSection() {
         />
       </ActionDialog>
 
-    </div>
+    </>
   );
 }
