@@ -32,11 +32,15 @@ from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.auth import service as auth_service
+from stitch_backend.domains.auth.roles import ROLE_LEVELS, role_level
 from stitch_backend.domains.community.partner_service import upsert_partner_member
 from stitch_backend.domains.plugin_distribution.activation import (
     ActivationService,
+    ActivationState,
+    _opt_int,
     derive_hwid,
 )
+from stitch_backend.domains.plugin_distribution.config import server_url
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -179,6 +183,50 @@ async def _bootstrap_role(db: AsyncSession) -> str:
     return "admin" if await auth_service.count_users(db) == 0 else _TELEGRAM_ROLE
 
 
+async def _exchange_activation_state(
+    state: ActivationState,
+) -> tuple[User, list[str], str, Any, bool, str | None]:
+    """Turn an activation state into a local user + session.
+
+    Shared core of :func:`exchange_telegram_code` and
+    :func:`exchange_telegram_deeplink`: per-TG-user binding, partner
+    membership, session creation.  Returns ``(user, entitlements,
+    raw_token, expires_at, tg_admin, tier)``.
+    """
+    tg_admin = state.tg_admin
+    tier = state.tier
+
+    async def _op(db: AsyncSession) -> tuple[User, str, Any]:
+        # Per-TG-user binding when the activation carries the issuing tg_id
+        # (security CRIT fix): each Telegram account gets its own local user.
+        # Legacy codes without tg_id fall back to the shared "telegram" user.
+        if state.tg_user_id is not None:
+            user = await ensure_oidc_user(
+                db, state.tg_user_id, getattr(state, "tg_username", None)
+            )
+        else:
+            user = await _ensure_telegram_user(db)
+        # Partner invite (Feature 1): record the (channel, user) membership
+        # with the effective role (max of current role and code tier); the
+        # role itself is applied by the promote-only tier sync afterwards.
+        if state.partner_channel_id:
+            granted = state.tier or "user"
+            if granted in ROLE_LEVELS and role_level(user.role) > role_level(granted):
+                granted = user.role
+            await upsert_partner_member(
+                db,
+                channel_id=state.partner_channel_id,
+                user_id=user.id,
+                invited_by_tg_id=state.invited_by_tg_id,
+                granted_role=granted,
+            )
+        raw_token, expires_at = await auth_service.create_session(db, user.id)
+        return user, raw_token, expires_at
+
+    user, raw_token, expires_at = await run_in_session(_op)
+    return user, list(state.entitlements), raw_token, expires_at, tg_admin, tier
+
+
 async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, bool, str | None]:
     """Activate a one-time code and create a local session.
 
@@ -195,34 +243,52 @@ async def exchange_telegram_code(code: str) -> tuple[User, list[str], str, Any, 
     hwid = derive_hwid()
     activation = ActivationService()
     state = await activation.activate(code, hwid)
-    tg_admin = state.tg_admin
-    tier = state.tier
+    return await _exchange_activation_state(state)
 
-    async def _op(db: AsyncSession) -> tuple[User, str, Any]:
-        # Per-TG-user binding when the activation carries the issuing tg_id
-        # (security CRIT fix): each Telegram account gets its own local user.
-        # Legacy codes without tg_id fall back to the shared "telegram" user.
-        if state.tg_user_id is not None:
-            user = await ensure_oidc_user(
-                db, state.tg_user_id, getattr(state, "tg_username", None)
-            )
-        else:
-            user = await _ensure_telegram_user(db)
-        # Partner invite (Feature 1): record the (channel, user) membership;
-        # the role itself is applied by the promote-only tier sync afterwards.
-        if state.partner_channel_id:
-            await upsert_partner_member(
-                db,
-                channel_id=state.partner_channel_id,
-                user_id=user.id,
-                invited_by_tg_id=state.invited_by_tg_id,
-                granted_role=state.tier or "user",
-            )
-        raw_token, expires_at = await auth_service.create_session(db, user.id)
-        return user, raw_token, expires_at
 
-    user, raw_token, expires_at = await run_in_session(_op)
-    return user, list(state.entitlements), raw_token, expires_at, tg_admin, tier
+async def exchange_telegram_deeplink(
+    token: str,
+) -> tuple[User, list[str], str, Any, bool, str | None]:
+    """Exchange a deep-link token for a local session (auto-login flow).
+
+    Deep-link twin of :func:`exchange_telegram_code`: the bot binds the
+    issued one-time code to the token upstream
+    (``t.me/<bot>?start=login_<token>``) and the app exchanges the token
+    here — no manual code entry.  POSTs ``{token, hwid}`` to the
+    distribution server's ``/deeplink/exchange`` and maps the
+    ActivateResponse-shaped body into an :class:`ActivationState` (same
+    construction as :meth:`ActivationService.activate`).
+
+    Unlike ``activate`` the state is NOT persisted: this is a login
+    exchange, not a device activation.
+
+    Raises ``httpx.HTTPStatusError`` on upstream non-200 and
+    ``httpx.HTTPError`` on transport failure — the
+    ``/api/auth/deeplink/login`` route maps them to 401/429/502/503.
+    """
+    hwid = derive_hwid()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{server_url()}/deeplink/exchange",
+            json={"token": token, "hwid": hwid},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    state = ActivationState(
+        token=body["token"],
+        pubkey=body["pubkey"],
+        entitlements=list(body.get("entitlements", [])),
+        server_url=server_url(),
+        tg_admin=bool(body.get("tg_admin", False)),
+        tier=body.get("tier") or None,
+        tg_user_id=_opt_int(body.get("tg_user_id")),
+        tg_username=str(body["tg_username"]) if body.get("tg_username") else None,
+        partner_channel_id=(
+            str(body["partner_channel_id"]) if body.get("partner_channel_id") else None
+        ),
+        invited_by_tg_id=_opt_int(body.get("invited_by_tg_id")),
+    )
+    return await _exchange_activation_state(state)
 
 
 async def _sync_role_and_tier(user: User, tg_admin: bool, tier: str | None) -> User:

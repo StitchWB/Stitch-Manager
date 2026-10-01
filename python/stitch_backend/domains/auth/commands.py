@@ -13,8 +13,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 
-from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_read_session
+from stitch_backend.core.command_decorator import command
 from stitch_backend.domains.auth import service as auth_service
 from stitch_backend.domains.auth.permissions import get_matrix
 
@@ -24,8 +23,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@register_command("admin_user_overview", readonly=True, admin_only=True)
-async def cmd_admin_user_overview(params: dict) -> dict:
+@command("admin_user_overview", readonly=True, admin_only=True)
+async def cmd_admin_user_overview(db: AsyncSession, params: dict) -> dict:
     """Aggregate everything about a target user for an admin detail dashboard.
 
     Params: ``{userId: int}``.
@@ -59,52 +58,43 @@ async def cmd_admin_user_overview(params: dict) -> dict:
             detail="userId must be an integer",
         ) from None
 
-    async def _overview(db: AsyncSession) -> dict:
-        # ── User ──────────────────────────────────────────────────────
-        user = await auth_service.get_user(db, user_id)
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User not found: {user_id}",
-            )
-
-        # ── Permissions (effective for the user's role) ───────────────
-        # get_matrix applies the admin hard rule (admin -> all True) and
-        # merges stored overrides with defaults.  We filter for True values
-        # to get the effective permission key set.
-        matrix = await get_matrix(db)
-        perms = sorted(
-            k for k, v in matrix.get(user.role, {}).items() if v
+    # ── User ──────────────────────────────────────────────────────
+    user = await auth_service.get_user(db, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User not found: {user_id}",
         )
-
-        # ── Groups ─────────────────────────────────────────────────────
-        groups = await _get_groups(db, user_id, user.username)
-
-        # ── Plugins ────────────────────────────────────────────────────
-        plugins = await _get_plugins(db, user_id, user.role)
-
-        # ── Keys (counts only -- never return secrets) ─────────────────
-        keys = await _get_keys_counts(db, user_id)
-
-        # ── Usage (best-effort; 0 if unavailable) ────────────────────
-        usage = await _get_usage_today(db, user_id)
-
-        return {
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "role": user.role,
-                "telegram_id": user.telegram_id,
-                "created_at": user.created_at.isoformat(),
-            },
-            "permissions": perms,
-            "groups": groups,
-            "plugins": plugins,
-            "keys": keys,
-            "usage": usage,
-        }
-
-    return await run_in_read_session(_overview)
+    # ── Permissions (effective for the user's role) ───────────────
+    # get_matrix applies the admin hard rule (admin -> all True) and
+    # merges stored overrides with defaults.  We filter for True values
+    # to get the effective permission key set.
+    matrix = await get_matrix(db)
+    perms = sorted(
+        k for k, v in matrix.get(user.role, {}).items() if v
+    )
+    # ── Groups ─────────────────────────────────────────────────────
+    groups = await _get_groups(db, user_id, user.username)
+    # ── Plugins ────────────────────────────────────────────────────
+    plugins = await _get_plugins(db, user_id, user.role)
+    # ── Keys (counts only -- never return secrets) ─────────────────
+    keys = await _get_keys_counts(db, user_id)
+    # ── Usage (best-effort; 0 if unavailable) ────────────────────
+    usage = await _get_usage_today(db, user_id)
+    return {
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "telegram_id": user.telegram_id,
+            "created_at": user.created_at.isoformat(),
+        },
+        "permissions": perms,
+        "groups": groups,
+        "plugins": plugins,
+        "keys": keys,
+        "usage": usage,
+    }
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@
 
 import { Code2, Wind, MousePointer2, Sparkles, Settings as SettingsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { formatDateTime } from './utils';
 
 /**
  * Format ISO date string to localized date/time
@@ -15,7 +16,7 @@ export function formatDate(dateStr?: string | null): string {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return '—';
     
-    return date.toLocaleString('ru-RU', {
+    return formatDateTime(date, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',

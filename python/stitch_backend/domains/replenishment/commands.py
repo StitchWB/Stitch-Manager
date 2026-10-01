@@ -12,9 +12,13 @@ Commands:
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_read_session
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +63,15 @@ async def cmd_trigger(params: dict) -> dict:
 @register_command("get_replenishment_settings")
 async def cmd_get_settings(params: dict) -> dict:
     """Read replenishment thresholds from settings."""
-    from stitch_backend.domains.replenishment.service import get_replenishment_service
+    from stitch_backend.domains.replenishment.service import (
+        effective_fleet_targets,
+        get_replenishment_service,
+    )
     svc = get_replenishment_service()
     settings = await svc._load_settings()
     return {
         "autoReplenishEnabled": settings.auto_replenish_enabled,
+        "fleetTargets": effective_fleet_targets(settings),
         "minActiveKiro": settings.min_active_kiro,
         "minActiveWindsurf": settings.min_active_windsurf,
         "minActiveTrae": settings.min_active_trae,
@@ -73,22 +81,19 @@ async def cmd_get_settings(params: dict) -> dict:
     }
 
 
-@register_command("get_active_account_counts", readonly=True)
-async def cmd_get_counts(params: dict) -> list:
+@command("get_active_account_counts", readonly=True)
+async def cmd_get_counts(db: AsyncSession, params: dict) -> list:
     """Count active accounts grouped by provider."""
     from sqlalchemy import text
 
-    async def _op(session):
-        rows = (await session.execute(text(
-            "SELECT LOWER(provider) AS provider, COUNT(*) AS count "
-            "FROM accounts "
-            "WHERE status IN ('active', 'valid', 'online') "
-            "GROUP BY LOWER(provider)"
-        ))).fetchall()
+    rows = (await db.execute(text(
+        "SELECT LOWER(provider) AS provider, COUNT(*) AS count "
+        "FROM accounts "
+        "WHERE status IN ('active', 'valid', 'online') "
+        "GROUP BY LOWER(provider)"
+    ))).fetchall()
 
-        return [
-            {"provider": row[0], "count": row[1]}
-            for row in rows
-        ]
-
-    return await run_in_read_session(_op)
+    return [
+        {"provider": row[0], "count": row[1]}
+        for row in rows
+    ]

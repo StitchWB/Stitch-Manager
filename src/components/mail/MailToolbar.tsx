@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Clock3, Link2, PlugZap, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { Badge, Button, Checkbox, Input } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 import type { MailQueryFilters } from '@/stores/mail';
 
 interface MailToolbarProps {
@@ -21,7 +22,7 @@ interface MailToolbarProps {
 
 function formatLastSync(value: number | null): string | null {
   if (!value) return null;
-  return new Date(value).toLocaleTimeString();
+  return formatTime(value);
 }
 
 export function MailToolbar({

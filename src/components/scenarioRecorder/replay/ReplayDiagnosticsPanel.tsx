@@ -1,5 +1,6 @@
 import { Button, Textarea } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 import type { ScenarioReplayStatus } from '@/lib/scenarioRecorder/useScenarioReplay';
 import type { ScenarioRunnerMode } from '@/lib/scenarioRecorder/types';
 
@@ -215,7 +216,7 @@ export function ReplayDiagnosticsPanel({
             timelineEntries.slice(0, 80).map((entry, idx) => (
               <div key={`${entry.ts}-${idx}`} className="text-[11px] font-mono text-slate-200">
                 <span className="text-slate-500 mr-2">
-                  {new Date(entry.ts).toLocaleTimeString('en-US', {
+                  {formatTime(entry.ts, {
                     hour12: false,
                     hour: '2-digit',
                     minute: '2-digit',

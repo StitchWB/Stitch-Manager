@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import { useRegistrationStore } from '../../../stores/registration';
-import { useAppStore } from '../../../stores/app';
 import { stopRegistration } from '../../../lib/backend';
 import { testInboxConnection } from '../../../lib/backend/modules/registration';
 import { runRegistration, cancelActiveRegistrationJob } from '../services';
@@ -32,7 +32,6 @@ export const useRegistrationFlow = ({
   launchContext,
   pipelineStepOverrides,
 }: UseRegistrationFlowProps) => {
-  const { addNotification } = useAppStore();
   const { addLog, addHistoryEntry, setActiveThreads, setIsStopping } = useRegistrationStore();
   const cancelledRef = useRef(false);
 
@@ -63,10 +62,8 @@ export const useRegistrationFlow = ({
     ];
     if (!supportedProviders.includes(config.provider)) {
       const provider = String(config.provider);
-      addNotification({
-        type: 'error',
-        title: 'Provider not supported',
-        message: `AutoReg is not implemented for provider: ${provider}`,
+      toast.error('Provider not supported', {
+        description: `AutoReg is not implemented for provider: ${provider}`,
       });
       addLog({
         level: 'error',
@@ -76,29 +73,23 @@ export const useRegistrationFlow = ({
     }
 
     if (!canStart) {
-      addNotification({
-        type: 'error',
-        title: 'Configuration Required',
-        message: 'Please configure IMAP settings',
+      toast.error('Configuration Required', {
+        description: 'Please configure IMAP settings',
       });
       return;
     }
 
     // Additional validation for alias services
     if (config.imap.addyioEnabled && !config.imap.addyioApiToken) {
-      addNotification({
-        type: 'error',
-        title: 'Addy.io Token Required',
-        message: 'Please enter your Addy.io API token in the Identity tab',
+      toast.error('Addy.io Token Required', {
+        description: 'Please enter your Addy.io API token in the Identity tab',
       });
       return;
     }
 
     if (config.imap.thirtyThreeMailEnabled && !config.imap.thirtyThreeMailUsername) {
-      addNotification({
-        type: 'error',
-        title: '33mail Username Required',
-        message: 'Please enter your 33mail username in the Identity tab',
+      toast.error('33mail Username Required', {
+        description: 'Please enter your 33mail username in the Identity tab',
       });
       return;
     }
@@ -129,14 +120,12 @@ export const useRegistrationFlow = ({
       // Summary notification
       const summaryText = `✓ ${summary.successCount} created, ⊘ ${summary.skipCount} skipped, ✗ ${summary.failCount} failed`;
       addLog({ level: 'info', message: `Registration complete: ${summaryText}` });
-      addNotification({
-        type: summary.successCount > 0 ? 'success' : summary.failCount > 0 ? 'error' : 'info',
-        title: 'Registration Complete',
-        message: summaryText,
-      });
+      const summaryToast =
+        summary.successCount > 0 ? toast.success : summary.failCount > 0 ? toast.error : toast.info;
+      summaryToast('Registration Complete', { description: summaryText });
     } catch (error) {
       addLog({ level: 'error', message: `Fatal error: ${String(error)}` });
-      addNotification({ type: 'error', title: 'Error', message: String(error) });
+      toast.error('Error', { description: String(error) });
     } finally {
       handleSetActiveThreads(0);
     }
@@ -146,7 +135,6 @@ export const useRegistrationFlow = ({
     useRegistrationV2,
     canStart,
     addLog,
-    addNotification,
     addHistoryEntry,
     handleSetActiveThreads,
     launchContext,
@@ -189,13 +177,13 @@ export const useRegistrationFlow = ({
             }
       );
       addLog({ level: 'success', message: `Inbox: ${result}` });
-      addNotification({ type: 'success', title: 'Inbox OK', message: 'Connection successful' });
+      toast.success('Inbox OK', { description: 'Connection successful' });
       return true;
     } catch (e) {
       addLog({ level: 'error', message: `IMAP error: ${e}` });
       return false;
     }
-  }, [config.imap, addLog, addNotification]);
+  }, [config.imap, addLog]);
 
   const handleStop = useCallback(async () => {
     const currentIsStopping = useRegistrationStore.getState().isStopping;
@@ -211,14 +199,14 @@ export const useRegistrationFlow = ({
       await cancelActiveRegistrationJob();
       await stopRegistration();
       addLog({ level: 'info', message: 'All registration processes terminated' });
-      addNotification({ type: 'info', title: 'Stopped', message: 'Registration process stopped' });
+      toast.info('Stopped', { description: 'Registration process stopped' });
     } catch (e) {
       addLog({ level: 'error', message: `Failed to stop processes: ${e}` });
     } finally {
       handleSetActiveThreads(0);
       setIsStopping(false);
     }
-  }, [addLog, addNotification, handleSetActiveThreads, setIsStopping]);
+  }, [addLog, handleSetActiveThreads, setIsStopping]);
 
   // Read from store so values survive page navigation
   const activeThreadsFromStore = useRegistrationStore(state => state.activeThreads);

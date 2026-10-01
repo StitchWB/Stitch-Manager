@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MailOpen, Paperclip, Trash2 } from 'lucide-react';
 import { Badge, Button, Checkbox, EmptyState } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
+import { cn, formatDate, formatTime } from '@/lib/utils';
 import type { EmailMessage, ProviderCapabilities } from '@/lib/backend/modules/emailInbox';
 import { ButtonBase } from '@/components/ui/ButtonBase';
 
@@ -37,7 +37,7 @@ function formatTimestamp(value: string): string {
     date.getFullYear() === now.getFullYear();
 
   if (sameDay) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatTime(date, { hour: '2-digit', minute: '2-digit' });
   }
 
   // Yesterday
@@ -48,21 +48,21 @@ function formatTimestamp(value: string): string {
     date.getMonth() === yesterday.getMonth() &&
     date.getFullYear() === yesterday.getFullYear()
   ) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatTime(date, { hour: '2-digit', minute: '2-digit' });
   }
 
   const diffDays = Math.floor(diffMs / 86_400_000);
   if (diffDays < 7) {
     // Within a week: weekday short ("Mon", "Tue", ...)
-    return date.toLocaleDateString([], { weekday: 'short' });
+    return formatDate(date, { weekday: 'short' });
   }
 
   const sameYear = date.getFullYear() === now.getFullYear();
   if (sameYear) {
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return formatDate(date, { month: 'short', day: 'numeric' });
   }
 
-  return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDate(date, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function getSenderLabel(message: EmailMessage): string {

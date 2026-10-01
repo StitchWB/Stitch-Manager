@@ -45,15 +45,21 @@ export function ProviderCard({
   const successRate = totalKeys > 0 ? Math.round((validKeys / totalKeys) * 100) : 0;
 
   // Health summary - filter by this provider
-  const healthRecords = keyHealth?.filter(r => 
-    r.providerId === provider.name || 
-    r.providerId === provider.id || 
+  const healthRecords = keyHealth?.filter(r =>
+    r.providerId === provider.name ||
+    r.providerId === provider.id ||
     r.providerId === `custom_${provider.id}`
   ) ?? [];
   const healthSummary = getHealthSummary(healthRecords);
 
-  // Calculate average latency (mock for now)
-  const avgLatency = '1.2s'; // TODO: get from metrics API
+  const latencyValues = healthRecords
+    .map(r => r.avgLatency)
+    .filter((v): v is number => v !== null);
+  const avgLatency = latencyValues.length > 0
+    ? t('apiKeys.latencyValue', {
+        count: Math.round(latencyValues.reduce((sum, v) => sum + v, 0) / latencyValues.length),
+      })
+    : t('apiKeys.latencyNoData');
 
   // Extract unique models from keys
   const allModels = new Set<string>();

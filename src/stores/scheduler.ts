@@ -11,6 +11,7 @@ interface SchedulerState {
   tasks: ScheduledTask[];
   templates: SchedulerTemplate[];
   isRunning: boolean;
+  statusError: string | null;
   loading: boolean;
   templatesLoading: boolean;
 
@@ -55,6 +56,7 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
   tasks: [],
   templates: [],
   isRunning: false,
+  statusError: null,
   loading: false,
   templatesLoading: false,
 
@@ -174,7 +176,7 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
   startScheduler: async () => {
     try {
       await safeInvoke('start_scheduler');
-      set({ isRunning: true });
+      set({ isRunning: true, statusError: null });
       toast.success('Scheduler started');
     } catch (error) {
       console.error('[Scheduler] Failed to start scheduler:', error);
@@ -185,7 +187,7 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
   stopScheduler: async () => {
     try {
       await safeInvoke('stop_scheduler');
-      set({ isRunning: false });
+      set({ isRunning: false, statusError: null });
       toast.success('Scheduler stopped');
     } catch (error) {
       console.error('[Scheduler] Failed to stop scheduler:', error);
@@ -196,9 +198,10 @@ export const useSchedulerStore = create<SchedulerState>((set, get) => ({
   getSchedulerStatus: async () => {
     try {
       const isRunning = await safeInvoke<boolean>('get_scheduler_status');
-      set({ isRunning });
+      set({ isRunning, statusError: null });
     } catch (error) {
       console.error('[Scheduler] Failed to get scheduler status:', error);
+      set({ statusError: error instanceof Error ? error.message : String(error) });
     }
   },
 
@@ -366,7 +369,7 @@ export function startSchedulerStatusPolling() {
     statusUnlistenPromise = listen<{ running: boolean }>(
       'scheduler.status_changed',
       (event) => {
-        useSchedulerStore.setState({ isRunning: event.payload.running });
+        useSchedulerStore.setState({ isRunning: event.payload.running, statusError: null });
       },
     );
     startStatusHeartbeat();

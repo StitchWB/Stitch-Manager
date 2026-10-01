@@ -60,7 +60,9 @@ _BOOL_KEYS = {
     "inputCompressionEnabled", "outputCompressionEnabled", "preserveSystemPrompt",
 }
 _FLOAT_KEYS = {"uiScale", "speedMultiplier"}
-_JSON_KEYS = {"customIdePaths"}
+_JSON_KEYS = {"customIdePaths", "fleetTargets"}
+
+FLEET_TARGETS_KEY = "fleetTargets"
 
 PASSWORD_MASK = "********"
 _PASSWORD_KEYS = {
@@ -88,8 +90,29 @@ def _parse_value(key: str, raw: str | None) -> Any:
         try:
             return json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            return {}
+            # fleetTargets null/absent means "fall back to legacy min_active_*".
+            return None if key == FLEET_TARGETS_KEY else {}
     return raw
+
+
+def _validate_fleet_targets(value: Any) -> dict[str, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("fleetTargets must be an object mapping provider id to a non-negative integer")
+    cleaned: dict[str, int] = {}
+    for provider, target in value.items():
+        if (
+            not isinstance(provider, str)
+            or isinstance(target, bool)
+            or not isinstance(target, int)
+            or target < 0
+        ):
+            raise ValueError(
+                f"fleetTargets[{provider!r}] must be a non-negative integer"
+            )
+        cleaned[provider] = target
+    return cleaned
 
 
 def _serialise_value(key: str, value: Any) -> str:
@@ -156,6 +179,9 @@ class SettingsService:
             # Skip masked passwords
             if key in _PASSWORD_KEYS and value == PASSWORD_MASK:
                 continue
+
+            if key == FLEET_TARGETS_KEY:
+                value = _validate_fleet_targets(value)
 
             raw = _serialise_value(key, value)
             db_key = f"{prefix}{key}"

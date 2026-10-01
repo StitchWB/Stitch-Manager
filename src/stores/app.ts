@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { toast } from 'sonner';
 import type { ProviderName, Theme, ProviderInfo } from '../types/ui';
+import { ALL_PROVIDER_IDS, PROVIDER_META } from '../constants/providerIds';
+import { PROVIDER_GRADIENTS } from '../constants/providers';
 import { setLocale } from '../lib/i18n';
 
 export type Language = 'en' | 'ru' | 'zh';
@@ -51,48 +52,17 @@ interface AppState {
   // UI State
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
-
-  // Notifications
-  notifications: AppNotification[];
-  addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp'>) => void;
-  removeNotification: (id: string) => void;
-  clearNotifications: () => void;
 }
 
-interface AppNotification {
-  id: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  title: string;
-  message?: string;
-  timestamp: number;
-}
-
-const DEFAULT_PROVIDERS: ProviderInfo[] = [
-  {
-    id: 'kiro',
-    name: 'Kiro',
-    version: 'v2.1',
-    activeCount: 12,
-    status: 'active',
-    color: 'from-purple-500 to-indigo-600',
-  },
-  {
-    id: 'windsurf',
-    name: 'Windsurf',
-    version: 'v1.4',
-    activeCount: 4,
-    status: 'active',
-    color: 'from-cyan-400 to-blue-500',
-  },
-  {
-    id: 'trae',
-    name: 'Trae',
-    version: 'v1.0',
-    activeCount: 8,
-    status: 'active',
-    color: 'from-emerald-400 to-teal-600',
-  },
-];
+const DEFAULT_PROVIDERS: ProviderInfo[] = ALL_PROVIDER_IDS.map(id => ({
+  // The Specta-generated Provider union lags the Python registry (no zai/anthropic).
+  id: id as ProviderName,
+  name: PROVIDER_META[id].displayName,
+  version: '',
+  activeCount: 0,
+  status: 'inactive',
+  color: (PROVIDER_GRADIENTS as Partial<Record<string, string>>)[id] ?? 'from-slate-600 to-slate-700',
+}));
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -127,28 +97,6 @@ export const useAppStore = create<AppState>()(
       // UI State
       sidebarCollapsed: false,
       toggleSidebar: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-
-      // Notifications - using Sonner toasts
-      notifications: [],
-      addNotification: notification => {
-        const { type, title, message } = notification;
-
-        if (type === 'success') {
-          toast.success(title, { description: message });
-        } else if (type === 'error') {
-          toast.error(title, { description: message });
-        } else if (type === 'warning') {
-          toast.warning(title, { description: message });
-        } else {
-          toast.info(title, { description: message });
-        }
-      },
-      removeNotification: _id => {
-        // Sonner handles its own toast removal
-      },
-      clearNotifications: () => {
-        toast.dismiss();
-      },
     }),
     {
       name: 'stitch-app-storage',

@@ -150,6 +150,11 @@ export function invalidate(): void {
   void fetchServicePlugins();
 }
 
+export async function restartServicePlugin(pluginId: string): Promise<void> {
+  await safeInvoke('restart_service_plugin', { plugin_id: pluginId });
+  invalidate();
+}
+
 /**
  * Reset module-level state. Test-only — production code uses invalidate().
  */

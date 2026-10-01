@@ -2,7 +2,7 @@ import { t } from '@/lib/i18n';
 import { Activity, ArrowRight, Loader2 } from 'lucide-react';
 import { GlassCard, StatusBadge, Toggle } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { Tooltip } from '@/components/Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { RegistrationStatus } from '@/types/generated';
 
 export interface AutomationHeaderCardProps {

@@ -70,7 +70,8 @@ def _invalidate_cache() -> None:
 def fetch_catalog() -> dict[str, Any]:
     """Return the community catalog dict (sync, 60s in-memory cache).
 
-    Network/parse failure → ``{"plugins": []}`` + warning; never raises.
+    Network/parse failure → ``{"plugins": [], "_fetch_error": ...}`` +
+    warning; never raises.  The marker lets the UI show a stale-feed banner.
     """
     global _catalog_cache, _catalog_cache_ts
     now = time.monotonic()
@@ -82,20 +83,20 @@ def fetch_catalog() -> dict[str, Any]:
             resp = c.get(_catalog_url())
             if resp.status_code != 200:
                 logger.warning("Community catalog non-200 status %d", resp.status_code)
-                result: dict[str, Any] = {"plugins": []}
+                result = {"plugins": [], "_fetch_error": f"http {resp.status_code}"}
             else:
                 try:
                     body = resp.json()
                 except ValueError as exc:
                     logger.warning("Community catalog JSON parse error: %s", exc)
-                    body = {"plugins": []}
+                    body = {"plugins": [], "_fetch_error": "bad json"}
                 if not isinstance(body, dict) or not isinstance(body.get("plugins"), list):
                     logger.warning("Community catalog malformed shape")
-                    body = {"plugins": []}
+                    body = {"plugins": [], "_fetch_error": "malformed"}
                 result = body
     except httpx.HTTPError as exc:
         logger.warning("Community catalog network error: %s", exc)
-        result = {"plugins": []}
+        result = {"plugins": [], "_fetch_error": str(exc)}
 
     _catalog_cache = result
     _catalog_cache_ts = now

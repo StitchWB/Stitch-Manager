@@ -14,6 +14,7 @@ import {
 } from '@/components/ui';
 import type { KeyValueRow } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 
 type FireworksCheckStatus = 'active' | 'frozen' | 'limit' | 'invalid';
 
@@ -52,7 +53,7 @@ function fireworksStatusToBadge(status: FireworksCheckStatus): {
 
 function formatTimestamp(timestamp: number): string {
   try {
-    return new Date(timestamp).toLocaleTimeString();
+    return formatTime(timestamp);
   } catch {
     return '';
   }

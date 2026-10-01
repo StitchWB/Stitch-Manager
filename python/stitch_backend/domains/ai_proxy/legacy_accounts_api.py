@@ -50,643 +50,52 @@ A startup conversion (``convert_legacy_labels``) migrates rows whose
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
-import time
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
-from stitch_backend.domains.ai_gateway.models import (
-    Credential,
-    CredentialSecret,
-    ProviderEndpoint,
+from stitch_backend.domains.ai_gateway.models import Credential
+from stitch_backend.domains.ai_proxy.legacy_authz import (
+    _caller_can_modify_credential,
+    caller_can_delete_credential,
 )
-from stitch_backend.domains.ai_gateway.service import (
-    CredentialService,
-    ProviderEndpointService,
-    compute_fingerprint,
+from stitch_backend.domains.ai_proxy.legacy_crud import (
+    create_account,
+    delete_account,
+    get_account_by_name,
+    list_accounts,
+    update_account,
 )
+from stitch_backend.domains.ai_proxy.legacy_mapping import (
+    _decode_metadata,
+    _decode_old_label,
+    _find_credential_by_legacy_id,
+    _legacy_id,
+    _mask_secret,
+)
+
+__all__ = [
+    "caller_can_delete_credential",
+    "conversion_failed",
+    "convert_legacy_labels",
+    "create_account",
+    "delete_account",
+    "export_payload",
+    "get_account_by_name",
+    "import_payload",
+    "list_accounts",
+    "run_final_conversion",
+    "update_account",
+    "_caller_can_modify_credential",
+    "_find_credential_by_legacy_id",
+    "_legacy_id",
+    "_mask_secret",
+]
 
 logger = logging.getLogger(__name__)
-
-# ── Adapter type mapping (mirrors KeyHealthWorker._adapter_type_for_provider) ──
-
-_ADAPTER_MAP: dict[str, str] = {
-    "anthropic": "anthropic",
-    "gemini": "gemini",
-}
-
-# Default base URLs for built-in providers (mirrors KeyHealthWorker + commands).
-_BASE_URL_MAP: dict[str, str] = {
-    "openai": "https://api.openai.com",
-    "antigravity": "https://api.openai.com",
-    "fireworks": "https://api.fireworks.ai/inference",
-    "dashscope": "https://dashscope.aliyuncs.com/compatible-mode",
-    "gemini": "https://generativelanguage.googleapis.com/v1beta",
-    "anthropic": "https://api.anthropic.com",
-}
-
-
-def _adapter_type_for_provider(provider: str) -> str:
-    return _ADAPTER_MAP.get(provider, "openai_compatible")
-
-
-def _default_base_url(provider: str) -> str:
-    return _BASE_URL_MAP.get(provider, f"https://unknown-base-url.invalid/{provider}")
-
-
-def _display_name(provider: str) -> str:
-    return provider.replace("_", " ").strip().title() or provider
-
-
-# ── ID mapping: deterministic int hash of Credential UUID ────────────────────
-
-
-def _legacy_id(credential_id: str) -> int:
-    """Deterministic 31-bit positive int from a Credential UUID.
-
-    Used as the ``id`` field in legacy AiProxyAccount responses so the
-    frontend can pass it back to update/delete. Resolved by scanning
-    credentials (small N) — see :func:`_find_credential_by_legacy_id`.
-    """
-    h = hashlib.sha256(credential_id.encode()).hexdigest()
-    return int(h[:8], 16) & 0x7FFFFFFF
-
-
-async def _find_credential_by_legacy_id(
-    session: Any, legacy_id: int
-) -> Credential | None:
-    """Scan credentials for one whose hash matches *legacy_id*."""
-    result = await session.execute(select(Credential))
-    for cred in result.scalars().all():
-        if _legacy_id(cred.id) == legacy_id:
-            return cast("Credential", cred)
-    return None
-
-
-# ── Legacy metadata: stores imperfect legacy fields ─────────────────────────
-#
-# ``name`` lives in ``Credential.label`` as a plain string.
-# Everything else with no 1:1 gateway column lives in
-# ``Credential.legacy_metadata`` (JSON dict) so export/import is lossless.
-
-_METADATA_FIELDS: tuple[str, ...] = (
-    "accountType",
-    "softQuotaTokensDaily",
-    "softQuotaRequestsDaily",
-    "oauthScopes",
-    "oauthTokenType",
-    "refCode",
-    "refUrl",
-    "refUsedCount",
-    "refMaxCount",
-    "referredById",
-)
-
-
-def _encode_metadata(account: dict[str, Any]) -> dict[str, Any]:
-    """Pack legacy fields with no 1:1 gateway column into a metadata dict."""
-    payload: dict[str, Any] = {}
-    for key in _METADATA_FIELDS:
-        val = account.get(key)
-        if val is not None:
-            payload[key] = val
-    return payload
-
-
-def _decode_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
-    """Unpack the metadata dict back into a dict of legacy fields."""
-    if not metadata:
-        return {}
-    return dict(metadata) if isinstance(metadata, dict) else {}
-
-
-# ── Old JSON-in-label backward compat (read-only, for migration) ───────────
-
-
-def _decode_old_label(label: str | None) -> dict[str, Any]:
-    """Decode the old JSON-in-label format (pre-P0.2).
-
-    Before P0.2, all imperfect fields (including ``name``) were packed
-    into ``Credential.label`` as a JSON dict.  This decodes that format
-    so the startup conversion can split it into ``label`` + ``legacy_metadata``.
-    """
-    if not label:
-        return {}
-    try:
-        data = json.loads(label)
-        return data if isinstance(data, dict) else {}
-    except (json.JSONDecodeError, TypeError):
-        return {}
-
-
-# ── Secret selection (same priority as migration._pick_account_secret) ──────
-
-
-def _is_masked_secret(value: str | None) -> bool:
-    """True when *value* looks like a masked secret (first4+****+last4).
-
-    The mask format produced by :func:`_mask_secret` always contains
-    ``"****"``.  Real API keys / OAuth tokens never contain literal
-    asterisks, so this is a safe heuristic for detecting write-back
-    of a masked value (which would corrupt the stored secret).
-    """
-    if not value:
-        return False
-    return "****" in value
-
-
-def _pick_secret(account: dict[str, Any]) -> tuple[str | None, str]:
-    """Return (secret, auth_type) — first non-empty of apiKey/oauth/session.
-
-    Masked values (containing ``"****"``) are skipped to prevent
-    write-back corruption — a masked secret is never a real secret,
-    so it is treated as absent.  In ``update_account`` this means the
-    existing secret is kept (no rotation); in ``create_account`` the
-    empty-placeholder path runs (same as when no secret is provided).
-    """
-    api_key = account.get("apiKey") or account.get("api_key")
-    if api_key and not _is_masked_secret(api_key):
-        return api_key, "api_key"
-    oauth = account.get("oauthToken") or account.get("oauth_token")
-    if oauth and not _is_masked_secret(oauth):
-        return oauth, "oauth"
-    session_tok = account.get("sessionToken") or account.get("session_token")
-    if session_tok and not _is_masked_secret(session_tok):
-        return session_tok, "session"
-    return None, ""
-
-
-# ── Timestamp conversion ────────────────────────────────────────────────────
-
-
-def _dt_to_ts(dt: datetime | None) -> int | None:
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        # SQLite strips tzinfo on persist; stored wall time is UTC.  Without
-        # this, .timestamp() would interpret the naive value as LOCAL time
-        # and drift by the local UTC offset on every round-trip.
-        dt = dt.replace(tzinfo=UTC)
-    return int(dt.timestamp())
-
-
-def _ts_to_dt(ts: int | None) -> datetime | None:
-    if ts is None:
-        return None
-    return datetime.fromtimestamp(ts, tz=UTC)
-
-
-# ── Endpoint resolution ──────────────────────────────────────────────────────
-
-
-async def _get_or_create_endpoint(
-    session: Any,
-    *,
-    provider: str,
-    base_url: str | None = None,
-    owner_id: int | None = None,
-) -> ProviderEndpoint:
-    """Find or create a ProviderEndpoint for *provider* + *base_url*."""
-    url = base_url or _default_base_url(provider)
-    name = _display_name(provider)
-
-    result = await session.execute(
-        select(ProviderEndpoint).where(
-            ProviderEndpoint.name == name,
-            ProviderEndpoint.base_url == url,
-        )
-    )
-    existing = result.scalar_one_or_none()
-    if existing is not None:
-        return cast("ProviderEndpoint", existing)
-
-    svc = ProviderEndpointService(session)
-    endpoint = await svc.create_endpoint(
-        name=name,
-        adapter_type=_adapter_type_for_provider(provider),
-        base_url=url,
-        enabled=True,
-        owner_id=owner_id,
-    )
-    return endpoint
-
-
-# ── Row → legacy account dict ────────────────────────────────────────────────
-
-
-def _mask_secret(value: str | None) -> str | None:
-    """Mask a secret for non-owner callers: first4+****+last4.
-
-    Short secrets → ``****``.  ``None`` stays ``None``.
-    """
-    if value is None:
-        return None
-    if len(value) < 8:
-        return "****"
-    return value[:4] + "****" + value[-4:]
-
-
-def _should_mask_secret(credential: Credential, caller_uid: int | None, caller_role: str | None) -> bool:
-    """True when the caller must NOT see the raw secret.
-
-    Raw secret visible when:
-    - caller is admin, OR
-    - credential.owner_id is None AND caller is admin (instance-shared → admin only raw), OR
-    - credential.owner_id == caller_uid (own credential).
-
-    Masked when:
-    - credential.owner_id is None (instance-shared) and caller is non-admin, OR
-    - credential.owner_id is not None and differs from caller_uid.
-    """
-    if caller_role == "admin":
-        return False
-    if credential.owner_id is None:
-        # Instance-shared: mask for non-admin callers.
-        return True
-    return credential.owner_id != caller_uid
-
-
-def _caller_can_modify_credential(
-    credential: Credential, caller_uid: int | None, caller_role: str | None,
-) -> bool:
-    """True when the caller may update/delete *credential*.
-
-    Same authz model as :func:`_should_mask_secret` but for write
-    operations:
-
-    - admin → always allowed (also covers desktop where the dispatcher
-      sets ``caller_role="admin"``), OR
-    - credential.owner_id is None (instance-shared) → admin only
-      (non-admin cannot modify shared rows), OR
-    - credential.owner_id == caller_uid (own credential).
-
-    Unauthenticated callers (``caller_uid is None``, non-admin role)
-    are denied — the command handler guards desktop mode via
-    ``auth_enabled`` before calling this helper.
-    """
-    if caller_role == "admin":
-        return True
-    if caller_uid is None:
-        return False  # auth on but not authenticated → deny
-    if credential.owner_id is None:
-        return False  # instance-shared → admin only
-    return credential.owner_id == caller_uid
-
-
-async def caller_can_delete_credential(
-    session: Any,
-    credential: Credential,
-    caller_uid: int | None,
-    caller_role: str | None,
-) -> bool:
-    """Deletion policy: delete anything EXCEPT group-shared rows you neither
-    added nor administer.
-
-    - app admin → always;
-    - unauthenticated (web guest) → never (desktop guests resolve to admin
-      upstream via STITCH_DESKTOP_MODE);
-    - own credential → yes;
-    - not shared into any group → yes (delete anything);
-    - shared into a group → only its owner (above), an app admin (above), or
-      the owner of a group it is shared into.
-    """
-    if caller_role == "admin":
-        return True
-    if caller_uid is None:
-        return False
-    if credential.owner_id == caller_uid:
-        return True
-
-    from sqlalchemy import and_
-
-    from stitch_backend.domains.ai_gateway.models import CredentialGroupShare
-    from stitch_backend.domains.groups.models import Group
-
-    shares = (
-        await session.execute(
-            select(CredentialGroupShare).where(
-                CredentialGroupShare.credential_id == credential.id
-            )
-        )
-    ).scalars().all()
-    if not shares:
-        return True  # not group-shared → free to delete
-
-    group_ids = [s.group_id for s in shares]
-    owned = (
-        await session.execute(
-            select(Group.id).where(
-                and_(Group.id.in_(group_ids), Group.owner_id == caller_uid)
-            )
-        )
-    ).first()
-    return owned is not None
-
-
-async def _credential_to_account(
-    session: Any,
-    credential: Credential,
-    endpoint: ProviderEndpoint | None = None,
-    secret_row: CredentialSecret | None = None,
-    *,
-    caller_uid: int | None = None,
-    caller_role: str | None = None,
-) -> dict[str, Any]:
-    """Map a Credential row back to the legacy AiProxyAccount dict shape.
-
-    When ``caller_uid`` / ``caller_role`` are provided, secrets are
-    masked for non-owner, non-admin callers (instance-shared rows are
-    masked for non-admin; own rows are raw).  When both are ``None``
-    (desktop / auth-disabled), secrets are raw (legacy behaviour).
-    """
-    if endpoint is None:
-        result = await session.execute(
-            select(ProviderEndpoint).where(
-                ProviderEndpoint.id == credential.provider_endpoint_id
-            )
-        )
-        endpoint = result.scalar_one_or_none()
-    if secret_row is None:
-        result = await session.execute(
-            select(CredentialSecret).where(
-                CredentialSecret.credential_id == credential.id
-            )
-        )
-        secret_row = result.scalar_one_or_none()
-
-    provider = ""
-    if endpoint is not None:
-        # Reverse-derive provider from endpoint name (best-effort).
-        provider = endpoint.name.lower().replace(" ", "_")
-
-    # Read name from label (plain string in the new format).
-    # Fall back to old JSON-in-label format for un-migrated rows.
-    name = credential.label or ""
-    metadata = _decode_metadata(credential.legacy_metadata)
-    if not metadata and credential.label:
-        # Un-migrated row: label may be old JSON dict format.
-        old_data = _decode_old_label(credential.label)
-        if old_data and "name" in old_data:
-            name = old_data.get("name", "")
-            metadata = {k: v for k, v in old_data.items() if k != "name"}
-
-    # Reconstruct the secret fields based on auth_type.
-    api_key: str | None = None
-    oauth_token: str | None = None
-    session_token: str | None = None
-    if secret_row is not None:
-        if credential.auth_type == "api_key":
-            api_key = secret_row.secret_value
-        elif credential.auth_type == "oauth":
-            oauth_token = secret_row.secret_value
-        elif credential.auth_type == "session":
-            session_token = secret_row.secret_value
-
-    # Mask secrets for non-owner, non-admin callers.
-    # FE-impacting contract NOTE: shared rows (instance-shared or owned
-    # by another user) will have masked secrets for non-admin callers.
-    # FE copy flows that display the secret will see the mask — this is
-    # acceptable (the raw secret is never needed for copy; the gateway
-    # uses it internally for upstream calls).
-    if caller_uid is not None or caller_role is not None:
-        if _should_mask_secret(credential, caller_uid, caller_role):
-            api_key = _mask_secret(api_key)
-            oauth_token = _mask_secret(oauth_token)
-            session_token = _mask_secret(session_token)
-
-    now_ts = int(time.time())
-
-    return {
-        "id": _legacy_id(credential.id),
-        "provider": provider,
-        "name": name,
-        "oauthToken": oauth_token,
-        "apiKey": api_key,
-        "sessionToken": session_token,
-        "enabled": bool(credential.enabled),
-        "accountType": metadata.get("accountType"),
-        "requestsToday": 0,
-        "requestsTotal": 0,
-        "tokensUsed": 0,
-        "lastUsedAt": _dt_to_ts(credential.last_success_at),
-        "softQuotaTokensDaily": metadata.get("softQuotaTokensDaily"),
-        "softQuotaRequestsDaily": metadata.get("softQuotaRequestsDaily"),
-        "createdAt": _dt_to_ts(credential.created_at) or now_ts,
-        "updatedAt": _dt_to_ts(credential.updated_at) or now_ts,
-        "oauthRefreshToken": secret_row.refresh_token if secret_row else None,
-        "oauthExpiresAt": _dt_to_ts(secret_row.expires_at) if secret_row else None,
-        "oauthScopes": metadata.get("oauthScopes"),
-        "oauthTokenType": metadata.get("oauthTokenType"),
-        "refCode": metadata.get("refCode"),
-        "refUrl": metadata.get("refUrl"),
-        # None-safe reads: `or` would coerce a stored 0 back to the default
-        # (refMaxCount=0 used to read back as 40).
-        "refUsedCount": metadata["refUsedCount"] if metadata.get("refUsedCount") is not None else 0,
-        "refMaxCount": metadata["refMaxCount"] if metadata.get("refMaxCount") is not None else 40,
-        "referredById": metadata.get("referredById"),
-    }
-
-
-# ── Public CRUD API ──────────────────────────────────────────────────────────
-
-
-async def list_accounts(
-    session: Any,
-    owner_id: int | None = None,
-    *,
-    caller_uid: int | None = None,
-    caller_role: str | None = None,
-) -> list[dict[str, Any]]:
-    """Return all credentials visible to *owner_id* as legacy account dicts.
-
-    When ``caller_uid`` / ``caller_role`` are provided, secrets are
-    masked for non-owner, non-admin callers (see
-    :func:`_should_mask_secret`).
-    """
-    stmt = select(Credential).where(
-        or_(
-            Credential.owner_id.is_(None),
-            Credential.owner_id == owner_id,
-        )
-    ).order_by(Credential.created_at.desc())
-    result = await session.execute(stmt)
-    credentials = list(result.scalars().all())
-
-    accounts: list[dict[str, Any]] = []
-    for cred in credentials:
-        acct = await _credential_to_account(
-            session, cred,
-            caller_uid=caller_uid,
-            caller_role=caller_role,
-        )
-        accounts.append(acct)
-    return accounts
-
-
-async def create_account(
-    session: Any, account: dict[str, Any], owner_id: int | None = None
-) -> int:
-    """Create a Credential + Secret + (maybe) Endpoint from a legacy account dict."""
-    provider = str(account.get("provider", "")).strip()
-    if not provider:
-        provider = "unknown"
-
-    secret, auth_type = _pick_secret(account)
-    if not secret:
-        # No secret — still create a credential with an empty placeholder
-        # so the row exists (matches legacy behavior where accounts could
-        # have no secret). Use a sentinel that won't be returned.
-        secret = ""
-        auth_type = "api_key"
-
-    endpoint = await _get_or_create_endpoint(
-        session,
-        provider=provider,
-        base_url=account.get("baseUrl") or account.get("base_url"),
-        owner_id=owner_id,
-    )
-
-    # name → label (plain string); extras → legacy_metadata (JSON dict).
-    label = account.get("name", "") or ""
-    metadata = _encode_metadata(account)
-
-    svc = CredentialService(session)
-    credential = await svc.create_credential(
-        provider_endpoint_id=endpoint.id,
-        label=label,
-        auth_type=auth_type,
-        secret=secret,
-        owner_id=owner_id,
-    )
-
-    # Store legacy_metadata on the newly created credential; honour the
-    # legacy `enabled` flag (create_credential defaults to True).
-    touched = False
-    if metadata:
-        credential.legacy_metadata = metadata
-        touched = True
-    if not bool(account.get("enabled", True)):
-        credential.enabled = False
-        touched = True
-    if touched:
-        await session.flush()
-
-    # Update the CredentialSecret with OAuth metadata if present.
-    if account.get("oauthRefreshToken") or account.get("oauthExpiresAt"):
-        result = await session.execute(
-            select(CredentialSecret).where(
-                CredentialSecret.credential_id == credential.id
-            )
-        )
-        secret_row = result.scalar_one_or_none()
-        if secret_row is not None:
-            secret_row.refresh_token = account.get("oauthRefreshToken") or account.get("oauth_refresh_token")
-            secret_row.expires_at = _ts_to_dt(
-                account.get("oauthExpiresAt") or account.get("oauth_expires_at")
-            )
-            secret_row.updated_at = datetime.now(UTC)
-            await session.flush()
-
-    return _legacy_id(credential.id)
-
-
-async def update_account(
-    session: Any, account: dict[str, Any], owner_id: int | None = None
-) -> None:
-    """Update a Credential from a legacy account dict."""
-    legacy_id = account.get("id")
-    if legacy_id is None:
-        return
-
-    credential = await _find_credential_by_legacy_id(session, int(legacy_id))
-    if credential is None:
-        return
-
-    # Update label (name) and legacy_metadata (extras).
-    credential.label = account.get("name", "") or ""
-    credential.legacy_metadata = _encode_metadata(account)
-    credential.enabled = bool(account.get("enabled", True))
-    credential.updated_at = datetime.now(UTC)
-
-    # Update secret if a new one is provided.
-    secret, auth_type = _pick_secret(account)
-    if secret:
-        # Resolve endpoint for fingerprint.
-        result = await session.execute(
-            select(ProviderEndpoint).where(
-                ProviderEndpoint.id == credential.provider_endpoint_id
-            )
-        )
-        endpoint = result.scalar_one_or_none()
-        if endpoint is not None:
-            new_fp = compute_fingerprint(endpoint.id, secret)
-            if new_fp != credential.fingerprint:
-                # Rotate the secret via the service.
-                svc = CredentialService(session)
-                await svc.rotate_secret(credential.id, secret)
-                # rotate_secret refreshes the credential; re-fetch.
-                result = await session.execute(
-                    select(Credential).where(Credential.id == credential.id)
-                )
-                credential = result.scalar_one()
-
-    # Update OAuth metadata on the secret row.
-    if account.get("oauthRefreshToken") or account.get("oauthExpiresAt"):
-        result = await session.execute(
-            select(CredentialSecret).where(
-                CredentialSecret.credential_id == credential.id
-            )
-        )
-        secret_row = result.scalar_one_or_none()
-        if secret_row is not None:
-            secret_row.refresh_token = account.get("oauthRefreshToken") or account.get("oauth_refresh_token")
-            secret_row.expires_at = _ts_to_dt(
-                account.get("oauthExpiresAt") or account.get("oauth_expires_at")
-            )
-            secret_row.updated_at = datetime.now(UTC)
-
-    await session.flush()
-
-
-async def delete_account(session: Any, account_id: int) -> None:
-    """Delete a Credential by its legacy int ID."""
-    credential = await _find_credential_by_legacy_id(session, int(account_id))
-    if credential is None:
-        return
-    await session.delete(credential)
-    await session.flush()
-
-
-async def get_account_by_name(
-    session: Any, provider: str, name: str
-) -> dict[str, Any] | None:
-    """Find a credential whose endpoint matches *provider* and label name == *name*."""
-    ep_name = _display_name(provider)
-    result = await session.execute(
-        select(Credential, ProviderEndpoint)
-        .join(ProviderEndpoint, Credential.provider_endpoint_id == ProviderEndpoint.id)
-        .where(ProviderEndpoint.name == ep_name)
-    )
-    for cred, ep in result.all():
-        # Check label (new format: plain string) or old JSON-in-label.
-        label_name = cred.label or ""
-        if not _decode_old_label(cred.label) and cred.label:
-            # New format: label is the name directly.
-            pass
-        else:
-            # Old format: label is JSON dict with 'name' key.
-            old_data = _decode_old_label(cred.label)
-            label_name = old_data.get("name", "")
-        if label_name.lower() == name.lower():
-            return await _credential_to_account(session, cred, endpoint=ep)
-    return None
-
-
-# ── Export / Import (lossless round-trip) ────────────────────────────────────
 
 
 async def export_payload(
@@ -792,9 +201,6 @@ async def import_payload(session: Any, payload_str: str) -> int:
     return imported
 
 
-# ── Startup conversion: old JSON-in-label → label + legacy_metadata ─────────
-
-
 async def convert_legacy_labels(session: Any) -> int:
     """Migrate Credential rows whose ``label`` is a JSON dict with key ``name``.
 
@@ -831,9 +237,6 @@ async def convert_legacy_labels(session: Any) -> int:
     return converted
 
 
-# ── L2 final wave: one-time legacy row drain ──────────────────────────────────
-
-
 _conversion_failed: bool = False
 
 
@@ -863,8 +266,6 @@ async def run_final_conversion(session: Any) -> dict[str, Any]:
 
     from sqlalchemy import text as _text
 
-    # Check if the legacy table exists via PRAGMA (no _ensure_table call here —
-    # if the table doesn't exist, there's nothing to convert).
     try:
         result = await session.execute(_text("PRAGMA table_info(ai_proxy_accounts)"))
         if not result.fetchall():
@@ -872,7 +273,6 @@ async def run_final_conversion(session: Any) -> dict[str, Any]:
     except Exception:
         return {"legacy_rows": 0, "converted": 0, "deleted": 0}
 
-    # Count rows.
     count_result = await session.execute(_text("SELECT COUNT(*) FROM ai_proxy_accounts"))
     legacy_count = int(count_result.scalar_one())
     if legacy_count == 0:
@@ -898,8 +298,6 @@ async def run_final_conversion(session: Any) -> dict[str, Any]:
                 if legacy_id is not None:
                     converted_ids.append(int(legacy_id))
             except Exception as row_exc:
-                # Per-row failure — log and continue (retry semantics
-                # preserved: remaining rows are kept for next boot).
                 logger.warning(
                     "Final legacy conversion: row id=%s failed: %s "
                     "(remaining unconverted: %d)",

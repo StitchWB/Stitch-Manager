@@ -18,7 +18,7 @@ import {
   Download,
 } from 'lucide-react';
 import { Button, Checkbox, IconButton, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui';
-import { cn } from '../lib/utils';
+import { cn, formatTime } from '../lib/utils';
 import { useBinPresetsStore, type BinPreset } from '../stores/binPresets';
 import { useCardToolsStore, type PersistedCard } from '../stores/cardTools';
 import { toast } from 'sonner';
@@ -479,7 +479,7 @@ export default function Tools() {
   };
 
   function addDebugLog(msg: string) {
-    const time = new Date().toLocaleTimeString('ru-RU', { hour12: false });
+    const time = formatTime(new Date(), { hour12: false });
     log.debug(`[CardCheck ${time}] ${msg}`);
     setDebugLogs(prev => {
       const next = [{ time, msg }, ...prev].slice(0, 20);

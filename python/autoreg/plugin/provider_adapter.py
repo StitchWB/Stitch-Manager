@@ -20,27 +20,35 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import shutil
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..scenario.parse_v2 import parse_scenario_v2
-from ..scenario.schema import SelectorCandidate
+from .billing import _should_skip_billing, _strip_billing_steps
+from .browser_lifecycle import (
+    apply_spoofing,
+    cleanup_profile_dir,
+    close_browser,
+    create_browser,
+)
 from .dependency_resolver import (
     DependencyResolutionError,
     ResolvedDependency,
     resolve_dependencies,
 )
-from .executor import ScenarioExecutor
+from .email_gen import generate_email
+from .entry_files import (
+    apply_local_override,
+    apply_selector_overlay,
+    load_entry_files,
+)
+from .event_executor import _EventEmittingExecutor
 from .manifest import validate_manifest
+from .results import build_failure_report, build_result, fail
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from ..scenario.schema import ScenarioStep, ScenarioV2
-    from .capabilities import StepResult
+    from ..scenario.schema import ScenarioV2
     from .executor import ExecutorResult
     from .loader import PluginLoader
     from .manifest import PluginManifest
@@ -75,22 +83,16 @@ class PluginScenarioProvider:
         *,
         headless: bool = True,
         imap_config: dict[str, Any] | None = None,
-        # email_strategy / base_email / addyio_config / *_config are
-        # accepted for kwarg-compatibility with _build_provider_kwargs
-        # output; they are not used by the scenario executor in v1
-        # (email is seeded into the store by register()).
+        # Kwarg-compat with _build_provider_kwargs; unused by scenario executor v1.
         email_strategy: str = "mailtm",
         base_email: str | None = None,
         addyio_config: Any = None,
         thirty_three_mail_config: dict[str, Any] | None = None,
         mailtm_inbox_config: dict[str, Any] | None = None,
         browser_factory: Callable[[], Any] | None = None,
-        # Plan selection (kiro): seeded into the store as ``kiro_plan`` so
-        # branch steps (var_equals) can gate the plan-upgrade sub-flow.
+        # Seeded as kiro_plan in store for var_equals plan-upgrade gating.
         kiro_plan: str | None = None,
-        # v1.1: registration config fields seeded into the store as
-        # config.<name> so capabilities (e.g. stripe.fill_checkout) can
-        # resolve ${config.*} templates.  All optional — tolerate absence.
+        # v1.1: config.* fields for ${config.*} template resolution; all optional.
         card_number: str | None = None,
         card_expiry: str | None = None,
         card_cvc: str | None = None,
@@ -109,23 +111,15 @@ class PluginScenarioProvider:
         self._browser_factory = browser_factory
         self._log_callback: Callable[[str], None] | None = None
         self._browser: Any | None = None
-        # Email strategy config — used by _generate_email when register()
-        # is called without an explicit email (parity with built-in
-        # providers, which generate via CommonProvider internally).
         self._email_strategy = email_strategy
         self._base_email = base_email
         self._addyio_config = addyio_config
         self._thirty_three_mail_config = thirty_three_mail_config
         self._mailtm_inbox_config = mailtm_inbox_config
         self._kiro_plan = kiro_plan or "free"
-        # Per-run fresh user-data dir (set by _create_browser).  None when
-        # browser_factory is used (tests) or before browser launch.  Kept
-        # on success for session reuse; cleaned up on failure (see
-        # _cleanup_profile_dir).
+        # Per-run fresh user-data dir; None before launch / in tests; kept on success, cleaned on failure.
         self._profile_dir: str | None = None
         self._last_executor_result: ExecutorResult | None = None
-        # Registration config fields — seeded into the store as config.* by
-        # register() so stripe.fill_checkout can resolve ${config.*}.
         self._config_fields: dict[str, Any] = {
             "config.card_number": card_number,
             "config.card_expiry": card_expiry,
@@ -144,185 +138,29 @@ class PluginScenarioProvider:
         self._manifest: PluginManifest = validate_manifest(raw_manifest)
         self._service = self._manifest.service
 
-        # Pre-parse entry files.  A broken scenario raises so the dispatch
-        # layer can catch it and fall back to built-in.  Selectors/profile
-        # failures are non-fatal warnings.
+        # Pre-parse entry files; broken scenario raises for dispatch fallback, selectors/profile failures are warnings.
         self._scenario: ScenarioV2 | None = None
         self._profile: dict[str, Any] = {}
         self._selectors: dict[str, Any] = {}
-        # v1.1 LOCAL OVERRIDES (plan §8): "override" when a user-edited
-        # override scenario is loaded, "package" otherwise.  Surfaced in
-        # _build_result as ``scenario_source`` for provenance.
+        # v1.1: "override" if user-edited scenario loaded, else "package" — surfaced as scenario_source for provenance.
         self._scenario_source: str = "package"
         self._load_entry_files()
 
-        # Resolve dependencies (plan §3.3 — depends chaining).  Pre-parse
-        # dep scenarios in __init__ so errors surface before register()
-        # opens any browser.  Unresolvable deps store an error string in
-        # _dep_error; register() returns it as a failure before browser
-        # launch (does NOT raise — the dispatch layer must not fall back to
-        # built-in when the main package IS installed but a dep is missing).
         self._dependencies: list[ResolvedDependency] = []
         self._dep_error: str | None = None
-        # Attribution: which package's step was executing when the run
-        # ended (dep manifest on dep failure, main manifest otherwise).
-        # Used by build_failure_report so the bundle's plugin_id/version
-        # come from the package that actually failed.
         self._failure_manifest: PluginManifest = self._manifest
         self._failure_scenario: ScenarioV2 | None = self._scenario
         if self._manifest.depends:
             self._resolve_dependencies(loader)
 
-    # ── Entry-file loading ───────────────────────────────────────────────
-
     def _load_entry_files(self) -> None:
-        """Read scenario / selectors / profile from the package dir.
-
-        Scenario parse failures propagate (so the dispatch can fall back
-        to built-in).  Selectors/profile failures are non-fatal warnings.
-        """
-        entry = self._manifest.entry
-
-        # Scenario — required for data plugins; parse failure propagates
-        # so the dispatch layer can fall back to built-in (graceful
-        # degradation, plan §3.3 decision 9).
-        scenario_rel = entry.get("scenario", "scenario.json")
-        scenario_path = self._package_dir / scenario_rel
-        scenario_raw = json.loads(scenario_path.read_text(encoding="utf-8"))
-        self._scenario = parse_scenario_v2(scenario_raw)
-
-        # v1.1 SELECTOR-PACK channel (plan §8): if a selectors_overlay.json
-        # exists in the package dir (downloaded by sync, or placed manually
-        # for plugins-local dev packages), merge it into the scenario.  For
-        # each step id present in the overlay, REPLACE step.selector_candidates
-        # with the overlay list.  Invalid overlay entries are skipped with a
-        # warning; the scenario object is otherwise untouched.
-        self._apply_selector_overlay()
-
-        # v1.1 LOCAL OVERRIDES (plan §8): if a user-edited override
-        # scenario exists at <data_dir>/overrides/<manifest.id>/scenario.json
-        # AND parses → use it instead of the package scenario.  Parse
-        # failure → warn + keep package scenario.  The override wins at
-        # run time; provenance is tracked in _scenario_source.
-        self._apply_local_override()
-
-        # Selectors (v1.1 selector-pack channel — read + validated, not
-        # the primary selector source in v1; scenario has inline candidates).
-        selectors_rel = entry.get("selectors", "selectors.json")
-        selectors_path = self._package_dir / selectors_rel
-        if selectors_path.is_file():
-            try:
-                self._selectors = json.loads(
-                    selectors_path.read_text(encoding="utf-8")
-                )
-            except (OSError, ValueError):
-                logger.warning(
-                    "selectors.json unreadable in %s", self._package_dir
-                )
-
-        # Profile (spoofer persona hints — read for future use, not
-        # applied in v1).
-        profile_rel = entry.get("profile", "profile.json")
-        profile_path = self._package_dir / profile_rel
-        if profile_path.is_file():
-            try:
-                self._profile = json.loads(
-                    profile_path.read_text(encoding="utf-8")
-                )
-            except (OSError, ValueError):
-                logger.warning(
-                    "profile.json unreadable in %s", self._package_dir
-                )
+        load_entry_files(self)
 
     def _apply_selector_overlay(self) -> None:
-        """Merge ``selectors_overlay.json`` into the parsed scenario (plan §8).
-
-        Overlay shape: ``{step_id: [{kind, value, weight?}, ...]}``.  For each
-        step id present in the overlay, the scenario step's
-        ``selector_candidates`` are REPLACED with the overlay list.  Steps
-        absent from the overlay keep their inline candidates.  Invalid
-        candidate entries (missing kind or value) are skipped with a warning;
-        if a step's overlay list has zero valid candidates, that step's
-        override is skipped entirely (inline candidates kept).
-
-        Parse failure of the overlay file is non-fatal — the scenario is
-        left with its inline candidates and a warning is logged.
-        """
-        if self._scenario is None:
-            return
-        overlay_path = self._package_dir / "selectors_overlay.json"
-        if not overlay_path.is_file():
-            return
-        try:
-            overlay_raw = json.loads(overlay_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            logger.warning(
-                "selectors_overlay.json unreadable in %s: %s",
-                self._package_dir, exc,
-            )
-            return
-        if not isinstance(overlay_raw, dict) or not overlay_raw:
-            return
-
-        from dataclasses import replace
-
-        new_steps: list[ScenarioStep] = []
-        for step in self._scenario.steps:
-            override = overlay_raw.get(step.id)
-            if not isinstance(override, list):
-                new_steps.append(step)
-                continue
-
-            candidates: list[SelectorCandidate] = []
-            for idx, item in enumerate(override):
-                cand = _parse_overlay_candidate(item, step.id, idx)
-                if cand is None:
-                    continue
-                candidates.append(cand)
-
-            if not candidates:
-                logger.warning(
-                    "overlay for step %s has zero valid candidates — "
-                    "keeping inline candidates",
-                    step.id,
-                )
-                new_steps.append(step)
-                continue
-
-            new_steps.append(
-                replace(step, selector_candidates=candidates)
-            )
-
-        self._scenario = replace(self._scenario, steps=new_steps)
+        apply_selector_overlay(self)
 
     def _apply_local_override(self) -> None:
-        """Apply a user-edited local override scenario (plan §8 v1.1).
-
-        If ``<data_dir>/overrides/<manifest.id>/scenario.json`` exists AND
-        parses → replace ``self._scenario`` with the override and mark
-        provenance ``"override"``.  Parse failure → warn + keep package
-        scenario (provenance stays ``"package"``).  No override file →
-        no-op.
-        """
-        if self._scenario is None:
-            return
-        from .layout import _base_dir
-
-        override_path = _base_dir() / "overrides" / self._manifest.id / "scenario.json"
-        if not override_path.is_file():
-            return
-        try:
-            override_raw = json.loads(override_path.read_text(encoding="utf-8"))
-            override_scenario = parse_scenario_v2(override_raw)
-        except (OSError, ValueError) as exc:
-            logger.warning(
-                "override scenario for %s unreadable at %s: %s — keeping package scenario",
-                self._manifest.id, override_path, exc,
-            )
-            return
-        self._scenario = override_scenario
-        self._scenario_source = "override"
-        logger.warning("override active for %s", self._manifest.id)
+        apply_local_override(self)
 
     # ── Duck-typed provider interface ───────────────────────────────────
 
@@ -388,10 +226,7 @@ class PluginScenarioProvider:
             self.log(self._dep_error)
             return self._fail(email, self._dep_error)
 
-        # Generate defaults for missing credentials.  Built-in providers
-        # do this internally; the plugin path has nobody to do it, so we
-        # generate here before seeding the store.  Reuses the existing
-        # generators in autoreg.shared (no new dependencies).
+        # Generate defaults for missing credentials here (built-in providers do this internally).
         if not email:
             email = self._generate_email()
             if not email:
@@ -421,11 +256,7 @@ class PluginScenarioProvider:
             return self._fail(email, f"browser launch failed: {exc}")
         self._browser = browser
 
-        # Seed store with credentials so scenario steps can reference them
-        # via ${account.email} / ${account.password} / ${account.name}.
-        # The same store dict is shared across all dep + main scenarios.
-        # v1.1: also seed config.* from the registration config kwargs so
-        # capabilities (e.g. stripe.fill_checkout) can resolve ${config.*}.
+        # Seed store with credentials + config.* for ${account.*}/${config.*} template resolution.
         store: dict[str, Any] = {
             "account.email": email,
             "account.password": password,
@@ -437,30 +268,21 @@ class PluginScenarioProvider:
         _name_parts = (name or "").split(None, 1)
         store["account.first_name"] = _name_parts[0] if _name_parts else ""
         store["account.last_name"] = _name_parts[1] if len(_name_parts) > 1 else ""
-        # Tolerate absence: only seed non-None config values; absent keys
-        # resolve to empty string via resolve_template.
+        # Tolerate absence: only seed non-None config values; absent keys resolve to empty string via resolve_template.
         store.update(
             {k: v for k, v in self._config_fields.items() if v is not None}
         )
 
-        # Track whether the run reached account.save (terminal success) so
-        # the finally block can decide whether to keep or clean up the
-        # per-run profile dir.  False on every path except a completed run.
+        # Track whether the run reached account.save (terminal success) so finally decides profile dir cleanup.
         run_succeeded = False
 
         try:
-            # Build the execution plan: dependencies in declared order,
-            # then the main package's scenario.  Each entry is a
-            # (manifest, scenario) pair so failure attribution can point
-            # at the package whose step actually failed.
             plan: list[tuple[PluginManifest, ScenarioV2]] = [
                 (dep.manifest, dep.scenario) for dep in self._dependencies
             ]
             plan.append((self._manifest, self._scenario))
 
-            # Billing skip: honor KIRO_SKIP_BILLING=1 (parity with the
-            # built-in KIRO_V2_SKIP_BILLING).  Remove stripe.fill_checkout
-            # steps from all scenarios (deps + main) before execution.
+            # Billing skip: honor KIRO_SKIP_BILLING=1 (parity with built-in KIRO_V2_SKIP_BILLING).
             if _should_skip_billing(kwargs):
                 plan = [(m, _strip_billing_steps(s)) for m, s in plan]
                 self.log("billing disabled — stripe.fill_checkout skipped")
@@ -492,13 +314,11 @@ class PluginScenarioProvider:
                 self._last_executor_result = result
                 self._failure_manifest = self._manifest
                 self._failure_scenario = self._scenario
-                # account.save is terminal — success + completed means the
-                # profile dir holds a real session worth keeping.
+                # account.save is terminal — success + completed means profile dir holds a real session worth keeping.
                 run_succeeded = result.success and result.completed
                 return self._build_result(result, email, password, name)
 
-            # No steps to execute (empty plan — should not happen since the
-            # main scenario is always in the plan, but guard anyway).
+            # Empty plan guard — main scenario is always in the plan.
             return self._fail(email, "no scenario steps to execute")
         except Exception as exc:
             self.log(f"scenario execution failed: {exc}")
@@ -514,168 +334,20 @@ class PluginScenarioProvider:
         self._close_browser(self._browser)
         self._browser = None
 
-    # ── Internals ────────────────────────────────────────────────────────
-
     def _generate_email(self) -> str | None:
-        """Generate an email via the configured strategy (generator half only).
-
-        Verification is the scenario's job (imap.otp step), so only the
-        generator is built here.  Mirrors the mapping in
-        ``CommonProvider._create_email_strategy`` (Zone 2) — lazy imports
-        keep the Zone-1 export guard happy and avoid heavy imports at
-        module load.
-        """
-        strategy = (self._email_strategy or "mailtm").lower()
-        try:
-            if strategy == "static":
-                if not self._base_email:
-                    return None
-                from ..email_providers.generators.static import (
-                    StaticEmailGenerator,
-                )
-
-                gen = StaticEmailGenerator(self._base_email)
-            elif strategy == "counter":
-                if not self._base_email:
-                    return None
-                from ..email_providers.generators.counter import (
-                    CounterEmailGenerator,
-                )
-
-                gen = CounterEmailGenerator(self._base_email)
-            elif strategy in ("addyio", "addyio_counter"):
-                if not self._addyio_config:
-                    return None
-                from ..email_providers.generators.addyio import (
-                    AddyIoEmailGenerator,
-                )
-
-                gen = AddyIoEmailGenerator(self._addyio_config)
-            elif strategy in ("33mail", "thirtythreemail"):
-                cfg = self._thirty_three_mail_config
-                if not cfg or not cfg.get("username"):
-                    return None
-                from ..email_providers.generators.thirtythreemail import (
-                    ThirtyThreeMailGenerator,
-                )
-
-                gen = ThirtyThreeMailGenerator(cfg["username"])
-            elif strategy == "mailtm":
-                from ..email_providers.generators.mailtm import (
-                    MailTmEmailGenerator,
-                )
-
-                gen = MailTmEmailGenerator()
-            else:
-                logger.warning(
-                    "plugin adapter: unsupported email strategy %r", strategy
-                )
-                return None
-            ctx = gen.generate(description=f"{self._service} plugin registration")
-            email = getattr(ctx, "email", None)
-            if email:
-                self.log(f"generated email via {strategy}: {email}")
-            return email
-        except Exception as exc:  # noqa: BLE001
-            self.log(f"email generation failed: {exc}")
-            return None
+        return generate_email(self)
 
     def _create_browser(self, proxy: str | None = None, email: str | None = None) -> Any:
-        """Create a DrissionPage-style browser for the scenario executor.
-
-        The executor duck-types the browser (``.get``, ``.ele``, ``.url``,
-        ``.cookies``, ``.run_js``).  ``browser_factory`` kwarg allows tests
-        to inject a mock without launching a real browser.
-
-        A fresh user-data dir is created per run via ``tempfile.mkdtemp`` so
-        cookies/sessions never leak between runs (run #9 regression: the
-        default persistent profile inherited the previous run's AWS cookies
-        and showed the password page for the wrong email).  The path is
-        stored on ``self._profile_dir`` so ``_build_result`` can record it
-        truthfully as ``browser_profile_path`` for the account's session
-        reuse.  Cleanup: on failure (account.save not reached) the dir is
-        removed to avoid temp-dir litter; on success it is kept for session
-        reuse (OS temp cleanup handles it eventually).
-        """
-        if self._browser_factory is not None:
-            return self._browser_factory()
-        # Lazy import — DrissionPage is a heavy dependency and may not be
-        # available in all environments (e.g. CI without a display).
-        try:
-            from DrissionPage import ChromiumOptions, ChromiumPage
-        except ImportError as exc:
-            raise RuntimeError(
-                "DrissionPage not available for plugin scenario execution"
-            ) from exc
-
-        # Fresh per-run user-data dir — no cookie/session leakage between
-        # runs.  Mirrors the established pattern in autoreg/browser/base.py
-        # (_setup_chrome_options) and providers/openai/browser.py.
-        profile_dir = tempfile.mkdtemp(prefix="stitch-plugin-profile-")
-        self._profile_dir = profile_dir
-
-        options = ChromiumOptions()
-        options.set_user_data_path(profile_dir)
-        if self._headless:
-            options.headless()
-        if proxy:
-            options.set_argument(f"--proxy-server={proxy}")
-        page = ChromiumPage(options)
-        # Anti-detection BEFORE any navigation (the scenario's first goto
-        # happens later in the executor) — parity with built-in providers.
-        self._apply_spoofing(page, email)
-        return page
+        return create_browser(self, proxy, email=email)
 
     def _apply_spoofing(self, page: Any, email: str | None) -> None:
-        """Apply pre-navigation anti-detection spoofing (parity with built-ins).
-
-        Uses the same ``ProfileStorage`` + CDP spoofer the built-in providers
-        use, keyed by the account email so the fingerprint persona stays
-        consistent for the account across runs.  Lazy imports keep the
-        Zone-1 export guard happy; any failure degrades to "no spoofing"
-        with a warning rather than failing the registration.
-        """
-        if not email:
-            return
-        try:
-            from ..core.paths import get_paths
-            from ..spoofers.cdp_spoofer import apply_pre_navigation_spoofing
-            from ..spoofers.profile_storage import ProfileStorage
-
-            profile = ProfileStorage(get_paths().tokens_dir).get_or_create(email)
-            apply_pre_navigation_spoofing(page, profile)
-            self.log("anti-detection spoofing applied")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "spoofing unavailable — continuing without it: %s", exc
-            )
+        apply_spoofing(self, page, email)
 
     def _close_browser(self, browser: Any) -> None:
-        """Close a browser instance, trying quit() then close()."""
-        if browser is None:
-            return
-        for method_name in ("quit", "close"):
-            fn = getattr(browser, method_name, None)
-            if fn is not None:
-                try:
-                    fn()
-                except Exception:
-                    pass
-                break
+        close_browser(browser)
 
     def _cleanup_profile_dir(self) -> None:
-        """Remove the per-run profile dir on failure (no session worth keeping).
-
-        On success the dir is kept for session reuse (the account's
-        ``browser_profile_path`` points at it).  On failure — browser
-        launch error, scenario exception, or a failed step before
-        ``account.save`` was reached — the dir is removed to avoid
-        temp-dir litter.  OS temp cleanup is the final backstop.
-        """
-        if self._profile_dir is None:
-            return
-        shutil.rmtree(self._profile_dir, ignore_errors=True)
-        self._profile_dir = None
+        cleanup_profile_dir(self)
 
     def _build_result(
         self,
@@ -684,189 +356,10 @@ class PluginScenarioProvider:
         password: str | None,
         name: str | None,
     ) -> dict[str, Any]:
-        """Map ExecutorResult + outputs to the built-in provider result shape.
-
-        The ``account.save`` capability collects declared outputs from the
-        store (e.g. ``account.email``, ``account.session``).  These are
-        mapped to the keys the downstream ``RegistrationService._run()``
-        reads via ``result.get(...)``.
-
-        ``kiro_account.browser_profile_path`` records the per-run temp
-        profile dir truthfully (the temp path IS the profile for this
-        account) so the downstream service can persist it for session
-        reuse — same shape as the built-in kiro_v2 provider's result.
-        """
-        outputs = result.outputs or {}
-        session_data = outputs.get("account.session") or {}
-        profile_path = self._profile_dir or ""
-        return {
-            "success": result.success,
-            "provider": self._service,
-            "email": outputs.get("account.email") or email or "",
-            "password": outputs.get("account.password") or password or "",
-            "name": name or "",
-            "token": outputs.get("account.token"),
-            "refresh_token": outputs.get("account.refresh_token"),
-            "api_key": outputs.get("account.api_key"),
-            # TOTP secret captured by totp.register (built-in parity: the
-            # built-in provider returns it as "totp_secret").
-            "totp_secret": outputs.get("account.totp_ref"),
-            "session_data": session_data,
-            "kiro_account": {
-                "email": outputs.get("account.email") or email or "",
-                "browser_profile_path": profile_path,
-                "cookies": session_data.get("cookies", "[]"),
-                "session_data": session_data.get("session_data", "{}"),
-            },
-            "error": result.error,
-            "steps_completed": result.steps_completed,
-            "human_pause": result.human_pause,
-            "human_pause_reason": result.human_pause_reason,
-            "scenario_source": self._scenario_source,
-        }
+        return build_result(self, result, email, password, name)
 
     def _fail(self, email: str | None, error: str) -> dict[str, Any]:
-        """Build a failure result dict."""
-        return {
-            "success": False,
-            "provider": self._service,
-            "email": email or "",
-            "error": error,
-            "scenario_source": self._scenario_source,
-        }
+        return fail(self, email, error)
 
     def build_failure_report(self, *, consent: bool = False) -> dict[str, Any] | None:
-        """Build a scrubbed failure-report bundle from the last executor run.
-
-        Called by the backend's failure hook after ``register()`` returns a
-        failed result.  Returns ``None`` when there is no executor result or
-        when consent is off (mirrors :func:`build_report_bundle`).
-
-        Attribution: the bundle's ``plugin_id`` / ``version`` / ``step``
-        come from the package whose step actually failed — a dependency's
-        manifest on dep failure, the main manifest on main failure.
-        """
-        if self._last_executor_result is None:
-            return None
-        scenario = self._failure_scenario or self._scenario
-        if scenario is None:
-            return None
-        from .reporter import build_report_bundle
-
-        manifest = self._failure_manifest or self._manifest
-        return build_report_bundle(
-            manifest.id,
-            manifest.version,
-            scenario,
-            self._last_executor_result,
-            artifacts=self._last_executor_result.artifacts or None,
-            consent=consent,
-        )
-
-
-def _should_skip_billing(kwargs: dict[str, Any]) -> bool:
-    """Check if billing should be skipped (env var or kwargs flag)."""
-    return (
-        os.environ.get("KIRO_SKIP_BILLING", "0") == "1"
-        or os.environ.get("KIRO_V2_SKIP_BILLING", "0") == "1"
-        or bool(kwargs.get("skipBilling") or kwargs.get("skip_billing"))
-    )
-
-
-def _parse_overlay_candidate(
-    item: Any, step_id: str, idx: int
-) -> SelectorCandidate | None:
-    """Parse one overlay candidate entry into a SelectorCandidate.
-
-    Returns None (and logs a warning) when the entry is missing ``kind``
-    or ``value``.  Mirrors the tolerant parse in ``parse_v2`` but emits a
-    warning instead of raising — an overlay with one bad entry should not
-    abort the whole merge.
-    """
-    if not isinstance(item, dict):
-        logger.warning(
-            "overlay step %s: candidate[%d] not a dict — skipped",
-            step_id, idx,
-        )
-        return None
-    value = item.get("value")
-    if not isinstance(value, str):
-        logger.warning(
-            "overlay step %s: candidate[%d] missing string 'value' — skipped",
-            step_id, idx,
-        )
-        return None
-    kind = item.get("kind", "css")
-    if not isinstance(kind, str):
-        logger.warning(
-            "overlay step %s: candidate[%d] 'kind' not a string — skipped",
-            step_id, idx,
-        )
-        return None
-    weight = item.get("weight", 1.0)
-    if not isinstance(weight, int | float) or isinstance(weight, bool):
-        weight = 1.0
-    return SelectorCandidate(kind=kind, value=value, weight=float(weight))
-
-
-def _strip_billing_steps(scenario: ScenarioV2) -> ScenarioV2:
-    """Remove stripe.fill_checkout steps from a scenario (billing skip)."""
-    from dataclasses import replace
-
-    filtered = [s for s in scenario.steps if s.kind != "stripe.fill_checkout"]
-    if len(filtered) == len(scenario.steps):
-        return scenario
-    return replace(scenario, steps=filtered)
-
-
-class _EventEmittingExecutor(ScenarioExecutor):
-    """ScenarioExecutor subclass that emits step events via transport.
-
-    Events: ``step_started``, ``step_completed``, ``step_failed`` — matching
-    the event names built-in providers use through ``PipeTransport``.
-    Transport failures are silently swallowed so they never crash the
-    scenario execution.
-    """
-
-    def __init__(
-        self,
-        scenario: ScenarioV2,
-        browser: Any,
-        *,
-        store: dict[str, Any] | None = None,
-        imap_config: dict[str, Any] | None = None,
-        transport: Any = None,
-        proxy: str | None = None,
-    ) -> None:
-        super().__init__(
-            scenario, browser, store=store, imap_config=imap_config, proxy=proxy
-        )
-        self._transport = transport
-
-    def _dispatch(self, step: ScenarioStep) -> StepResult:
-        if self._transport is not None:
-            try:
-                self._transport.emit("step_started", {
-                    "step_id": step.id,
-                    "kind": step.kind,
-                })
-            except Exception:
-                pass
-        result = super()._dispatch(step)
-        if self._transport is not None:
-            try:
-                if result.success and not result.skipped:
-                    self._transport.emit("step_completed", {
-                        "step_id": step.id,
-                        "kind": step.kind,
-                        "matched_candidate": result.matched_candidate,
-                    })
-                elif not result.success:
-                    self._transport.emit("step_failed", {
-                        "step_id": step.id,
-                        "kind": step.kind,
-                        "error": result.error,
-                    })
-            except Exception:
-                pass
-        return result
+        return build_failure_report(self, consent=consent)

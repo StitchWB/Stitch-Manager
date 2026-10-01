@@ -35,7 +35,12 @@ import stitch_backend.core.spi_builtin_email  # noqa: F401
 import stitch_backend.core.spi_builtin_oauth  # noqa: F401
 from autoreg.plugin import crypto
 from autoreg.plugin.dependency_resolver import resolve_service_dependencies
-from autoreg.plugin.layout import _base_dir, plugins_cache_dir, plugins_local_dir
+from autoreg.plugin.layout import (
+    _base_dir,
+    plugins_cache_dir,
+    plugins_local_dir,
+    resolve_link,
+)
 from autoreg.plugin.loader import PluginLoader
 from autoreg.plugin.manifest import (
     ManifestValidationError,
@@ -438,6 +443,8 @@ def _discover_service_plugins(
         for entry in sorted(local_root.iterdir()):
             if not entry.is_dir():
                 continue
+            # dev-install --link leaves only a .stitch-link pointer file.
+            entry = resolve_link(entry)
             manifest = _try_read_manifest(entry)
             if manifest is None or manifest.kind != "service":
                 continue

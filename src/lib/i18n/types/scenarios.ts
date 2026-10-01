@@ -1,0 +1,43 @@
+export interface ScenariosTranslations {
+  scenarios: {
+    copyPath: string;
+    deleteArmedHint: string;
+    deleteArmedLabel: string;
+    description: string;
+    duplicateScenario: string;
+    editScenario: string;
+    emptyDescription: string;
+    emptyTitle: string;
+    favoritesOnly: string;
+    healthScore: string;
+    lastDurationValue: string;
+    lastPlayed: string;
+    lastStatus: string;
+    librarySubtitle: string;
+    libraryTitle: string;
+    missingFile: string;
+    missingProfile: string;
+    noProfiles: string;
+    noScenarios: string;
+    openFolder: string;
+    playCount: string;
+    profileHint: string;
+    searchPlaceholder: string;
+    selectProfile: string;
+    stepsCount: string;
+    subtitle: string;
+    tags: string;
+    tagsFilterLabel: string;
+    tagsHint: string;
+    tierLocked: string;
+    title: string;
+    toggleFavorite: string;
+    update: string;
+    viewCards: string;
+    viewList: string;
+    howToGetTier: string;
+    showLocked: string;
+    howToGetTierSubscribe: string;
+    howToGetTierAskAdmin: string;
+  };
+}

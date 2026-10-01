@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { formatDateTime } from '@/lib/utils';
 import {
   UserCircle,
   ArrowLeft,
@@ -94,7 +95,7 @@ function formatTimestamp(value: string | null | undefined): string {
   if (!value) return t('admin.userProfile.notSet');
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return t('admin.userProfile.notSet');
-  return date.toLocaleString();
+  return formatDateTime(date);
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────

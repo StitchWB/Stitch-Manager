@@ -12,3 +12,6 @@ export const STITCH_BOT_URL = 'https://t.me/whitebite_stitch_bot';
 
 /** Deep link: opens the bot and issues a login code right after Start. */
 export const STITCH_BOT_LOGIN_URL = `${STITCH_BOT_URL}?start=login`;
+
+/** Deep link carrying a one-time login token: the bot confirms it on Start. */
+export const stitchBotDeeplinkUrl = (token: string): string => `${STITCH_BOT_URL}?start=login_${token}`;

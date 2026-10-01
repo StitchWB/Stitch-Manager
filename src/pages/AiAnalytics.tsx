@@ -34,6 +34,7 @@ import type {
   RequestLog,
 } from '../types/generated';
 import { t } from '../lib/i18n';
+import { formatDateTime } from '../lib/utils';
 
 type StatusKind = 'success' | 'client' | 'server' | 'unknown';
 
@@ -62,7 +63,7 @@ function statusBadgeProps(kind: StatusKind): {
 function formatTimestamp(epochSeconds: number): string {
   if (!epochSeconds || Number.isNaN(epochSeconds)) return '-';
   const date = new Date(epochSeconds * 1000);
-  return date.toLocaleString();
+  return formatDateTime(date);
 }
 
 function formatDuration(durationMs: number | null | undefined): string {

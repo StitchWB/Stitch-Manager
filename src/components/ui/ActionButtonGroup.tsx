@@ -1,6 +1,6 @@
 import { LucideIcon } from 'lucide-react';
 import { IconButton } from './IconButton';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from './Tooltip';
 import { cn } from '../../lib/utils';
 import { LoadingSpinner } from './LoadingSpinner';
 

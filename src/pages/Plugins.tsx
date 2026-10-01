@@ -16,7 +16,7 @@
  * Follows the same layout/card conventions as Users.tsx/Privileges.tsx.
  */
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Puzzle, Loader2, AlertCircle, RefreshCw, ShieldCheck, Server, RotateCcw, FileText, Download, Activity, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
@@ -45,13 +45,13 @@ import { GroupPluginGrants } from '../components/admin/GroupPluginGrants';
 import { SubmissionsSection } from '../components/plugins/SubmissionsSection';
 import { safeInvoke } from '@/lib/backend/core';
 import {
-  fetchServicePlugins,
-  getServicePlugins,
-  subscribeServicePlugins,
   invalidate as invalidateServicePlugins,
+  restartServicePlugin,
   type ServicePluginInfo,
   type ServicePluginStatus,
 } from '@/lib/backend/modules/servicePlugins';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
+import { useServicePluginLogs } from '@/hooks/useServicePluginLogs';
 import { SandboxSection } from '../components/plugins/SandboxSection';
 import { ServicePluginMetricsPanel } from '../components/plugins/ServicePluginMetricsPanel';
 
@@ -78,19 +78,11 @@ export default function Plugins() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // Service plugins section state
-  const servicePlugins = useSyncExternalStore(
-    subscribeServicePlugins,
-    getServicePlugins,
-    getServicePlugins,
-  );
+  const servicePlugins = useServicePlugins();
+  const logs = useServicePluginLogs();
   const [restartingId, setRestartingId] = useState<string | null>(null);
-  const [logsOpenId, setLogsOpenId] = useState<string | null>(null);
-  const [logsCache, setLogsCache] = useState<Record<string, string[]>>({});
-  const [logsLoadingId, setLogsLoadingId] = useState<string | null>(null);
   const [metricsOpenId, setMetricsOpenId] = useState<string | null>(null);
   const [installModalOpen, setInstallModalOpen] = useState(false);
-
-  useEffect(() => { void fetchServicePlugins(); }, []);
 
   // Re-fetch only the role matrix (used after successful role mutations
   // to reconcile with server truth — e.g. backend normalizes "*" by
@@ -127,8 +119,7 @@ export default function Plugins() {
   const onRestartServicePlugin = useCallback(async (pluginId: string) => {
     setRestartingId(pluginId);
     try {
-      await safeInvoke('restart_service_plugin', { plugin_id: pluginId });
-      invalidateServicePlugins();
+      await restartServicePlugin(pluginId);
       toast.success(t('admin.plugins.servicePluginRestarted'));
     } catch {
       toast.error(t('admin.plugins.servicePluginRestartFailed'));
@@ -136,27 +127,6 @@ export default function Plugins() {
       setRestartingId(null);
     }
   }, []);
-
-  const onToggleLogs = useCallback(async (pluginId: string) => {
-    if (logsOpenId === pluginId) {
-      setLogsOpenId(null);
-      return;
-    }
-    setLogsOpenId(pluginId);
-    if (logsCache[pluginId] !== undefined) return;
-    setLogsLoadingId(pluginId);
-    try {
-      const lines = await safeInvoke<string[]>('get_service_plugin_logs', {
-        plugin_id: pluginId,
-        lines: 100,
-      });
-      setLogsCache(prev => ({ ...prev, [pluginId]: Array.isArray(lines) ? lines : [] }));
-    } catch {
-      setLogsCache(prev => ({ ...prev, [pluginId]: [] }));
-    } finally {
-      setLogsLoadingId(null);
-    }
-  }, [logsOpenId, logsCache]);
 
   const onToggleMetrics = useCallback((pluginId: string) => {
     setMetricsOpenId(prev => (prev === pluginId ? null : pluginId));
@@ -487,12 +457,12 @@ export default function Plugins() {
                     key={plugin.id}
                     plugin={plugin}
                     restarting={restartingId === plugin.id}
-                    logsOpen={logsOpenId === plugin.id}
-                    logsLines={logsCache[plugin.id]}
-                    logsLoading={logsLoadingId === plugin.id}
+                    logsOpen={logs.openPluginId === plugin.id}
+                    logsLines={logs.lines}
+                    logsLoading={logs.loading}
                     metricsOpen={metricsOpenId === plugin.id}
                     onRestart={() => void onRestartServicePlugin(plugin.id)}
-                    onToggleLogs={() => void onToggleLogs(plugin.id)}
+                    onToggleLogs={() => void logs.open(plugin.id)}
                     onToggleMetrics={() => onToggleMetrics(plugin.id)}
                   />
                 ))}

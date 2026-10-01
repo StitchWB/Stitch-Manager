@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { t } from '../lib/i18n';
+import { formatTime } from '../lib/utils';
+import { createAsyncStore } from '../lib/store/createAsyncStore';
 import type { ContentBlock } from '../types/generated';
 
 export type ChatMessageContent = string | ContentBlock[];
@@ -51,7 +51,6 @@ export interface ForceRoutingOverride {
   accountId: string;
 }
 
-/** A single chat session with its own messages, model, and system prompt. */
 export interface ChatSession {
   id: string;
   title: string;
@@ -63,26 +62,21 @@ export interface ChatSession {
 }
 
 interface ChatState {
-  // ─── Session data ────────────────────────────────────────────────
   sessions: ChatSession[];
   activeSessionId: string;
 
-  // ─── Transient (non-persisted) state ────────────────────────────
   isLoading: boolean;
   error: string | null;
 
-  // ─── Global settings (persisted) ────────────────────────────────
   profiles: ChatProfile[];
   activeProfileId: string;
   forceOverride: ForceRoutingOverride;
   inspectorOpen: boolean;
 
-  // ─── Convenience selectors ───────────────────────────────────────
   activeSession: () => ChatSession | undefined;
   messages: () => ChatMessage[];
   model: () => string;
 
-  // ─── Session actions ─────────────────────────────────────────────
   createSession: (title?: string) => string;
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
@@ -90,7 +84,6 @@ interface ChatState {
   setSessionModel: (model: string) => void;
   setSessionSystemPrompt: (prompt: string) => void;
 
-  // ─── Message actions (operate on active session) ────────────────
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
   updateMessage: (id: string, content: ChatMessageContent) => void;
   appendToMessage: (id: string, text: string) => void;
@@ -103,7 +96,6 @@ interface ChatState {
   removeMessage: (id: string) => void;
   clearMessages: () => void;
 
-  // ─── Global settings actions ─────────────────────────────────────
   createProfile: (name?: string) => string;
   updateProfile: (id: string, patch: Partial<Omit<ChatProfile, 'id'>>) => void;
   deleteProfile: (id: string) => void;
@@ -145,7 +137,6 @@ function makeDefaultSession(): ChatSession {
   };
 }
 
-/** Helper: map over messages of the active session, returning a new sessions array. */
 function patchActiveSessionMessages(
   sessions: ChatSession[],
   activeSessionId: string,
@@ -156,301 +147,293 @@ function patchActiveSessionMessages(
   );
 }
 
-export const useChatStore = create<ChatState>()(
-  persist(
-    (set, get) => {
-      const firstSession = makeDefaultSession();
+const firstSession = makeDefaultSession();
 
-      return {
-        sessions: [firstSession],
-        activeSessionId: firstSession.id,
-        isLoading: false,
-        error: null,
-        profiles: [DEFAULT_PROFILE],
-        activeProfileId: DEFAULT_PROFILE.id,
-        forceOverride: DEFAULT_FORCE_OVERRIDE,
-        inspectorOpen: true,
-
-        // ─── Convenience selectors ───────────────────────────────────
-        activeSession: () => {
-          const { sessions, activeSessionId } = get();
-          return sessions.find(s => s.id === activeSessionId);
-        },
-        messages: () => {
-          const session = get().activeSession();
-          return session?.messages ?? [];
-        },
-        model: () => {
-          const session = get().activeSession();
-          return session?.model ?? 'auto';
-        },
-
-        // ─── Session actions ──────────────────────────────────────────
-        createSession: (title?: string) => {
-          const session = makeDefaultSession();
-          if (title) session.title = title;
-          set(state => ({
-            sessions: [session, ...state.sessions],
-            activeSessionId: session.id,
-          }));
-          return session.id;
-        },
-
-        switchSession: (id: string) => {
-          const { sessions } = get();
-          if (sessions.some(s => s.id === id)) {
-            set({ activeSessionId: id });
-          }
-        },
-
-        deleteSession: (id: string) => {
-          set(state => {
-            if (state.sessions.length <= 1) return state;
-            const remaining = state.sessions.filter(s => s.id !== id);
-            const nextActiveId =
-              state.activeSessionId === id
-                ? remaining[0]?.id ?? state.activeSessionId
-                : state.activeSessionId;
-            return { sessions: remaining, activeSessionId: nextActiveId };
-          });
-        },
-
-        renameSession: (id: string, title: string) => {
-          set(state => ({
-            sessions: state.sessions.map(s =>
-              s.id === id ? { ...s, title, updatedAt: Date.now() } : s
-            ),
-          }));
-        },
-
-        setSessionModel: (model: string) => {
-          set(state => ({
-            sessions: state.sessions.map(s =>
-              s.id === state.activeSessionId ? { ...s, model, updatedAt: Date.now() } : s
-            ),
-          }));
-        },
-
-        setSessionSystemPrompt: (prompt: string) => {
-          set(state => ({
-            sessions: state.sessions.map(s =>
-              s.id === state.activeSessionId
-                ? { ...s, systemPrompt: prompt, updatedAt: Date.now() }
-                : s
-            ),
-          }));
-        },
-
-        // ─── Message actions ──────────────────────────────────────────
-        addMessage: message => {
-          const id = generateId('msg');
-          const newMessage: ChatMessage = { ...message, id, timestamp: Date.now() };
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs => [
-              ...msgs,
-              newMessage,
-            ]),
-          }));
-          return id;
-        },
-
-        updateMessage: (id, content) => {
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
-              msgs.map(msg => (msg.id === id ? { ...msg, content } : msg))
-            ),
-          }));
-        },
-
-        appendToMessage: (id, text) => {
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
-              msgs.map(msg =>
-                msg.id === id
-                  ? {
-                      ...msg,
-                      content:
-                        typeof msg.content === 'string'
-                          ? msg.content + text
-                          : [...msg.content, { type: 'text' as const, text }],
-                    }
-                  : msg
-              )
-            ),
-          }));
-        },
-
-        setMessageStreaming: (id, streaming) => {
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
-              msgs.map(msg => (msg.id === id ? { ...msg, isStreaming: streaming } : msg))
-            ),
-          }));
-        },
-
-        setMessageRouting: (id, routing) => {
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
-              msgs.map(msg => (msg.id === id ? { ...msg, ...routing } : msg))
-            ),
-          }));
-        },
-
-        setMessageDebug: (id, debugPatch) => {
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
-              msgs.map(msg =>
-                msg.id === id
-                  ? {
-                      ...msg,
-                      debug: {
-                        ...(msg.debug || {
-                          apiUrl: '',
-                          startedAt: Date.now(),
-                          requestHeaders: {},
-                          requestBody: {},
-                        }),
-                        ...debugPatch,
-                      },
-                    }
-                  : msg
-              )
-            ),
-          }));
-        },
-
-        removeMessage: id => {
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
-              msgs.filter(msg => msg.id !== id)
-            ),
-          }));
-        },
-
-        clearMessages: () => {
-          set(state => ({
-            sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, () => []),
-            error: null,
-          }));
-        },
-
-        // ─── Global settings actions ──────────────────────────────────
-        createProfile: name => {
-          const id = generateId('profile');
-          const profile: ChatProfile = {
-            id,
-            name: name?.trim() || `Profile ${new Date().toLocaleTimeString()}`,
-            systemPrompt: '',
-            temperature: 1,
-            maxTokens: 4096,
-          };
-
-          set(state => ({
-            profiles: [...state.profiles, profile],
-            activeProfileId: id,
-          }));
-
-          return id;
-        },
-
-        updateProfile: (id, patch) => {
-          set(state => ({
-            profiles: state.profiles.map(profile =>
-              profile.id === id ? { ...profile, ...patch } : profile
-            ),
-          }));
-        },
-
-        deleteProfile: id => {
-          set(state => {
-            if (state.profiles.length <= 1) return state;
-
-            const remaining = state.profiles.filter(profile => profile.id !== id);
-            const nextActiveId =
-              state.activeProfileId === id
-                ? remaining[0]?.id ?? DEFAULT_PROFILE.id
-                : state.activeProfileId;
-
-            return {
-              profiles: remaining,
-              activeProfileId: nextActiveId,
-            };
-          });
-        },
-
-        setActiveProfile: id => {
-          set({ activeProfileId: id });
-        },
-
-        setForceOverride: patch => {
-          set(state => ({
-            forceOverride: { ...state.forceOverride, ...patch },
-          }));
-        },
-
-        resetForceOverride: () => {
-          set({ forceOverride: DEFAULT_FORCE_OVERRIDE });
-        },
-
-        setLoading: loading => {
-          set({ isLoading: loading });
-        },
-
-        setError: error => {
-          set({ error });
-        },
-
-        setInspectorOpen: open => {
-          set({ inspectorOpen: open });
-        },
-      };
+export const useChatStore = createAsyncStore<ChatState>({
+  name: 'stitch-chat-storage',
+  persist: {
+    name: 'stitch-chat-storage',
+    version: 1,
+    /** v0 persisted a flat messages[] at root; wrap it into one session. */
+    migrate: (persisted, version) => {
+      const data = persisted as Record<string, unknown> | null;
+      if (version === 0 && data && 'messages' in data && !('sessions' in data)) {
+        const oldMessages = (data.messages ?? []) as ChatMessage[];
+        const oldModel = (data.model ?? 'auto') as string;
+        const migratedSession: ChatSession = {
+          id: generateId('ses'),
+          title: 'Migrated Chat',
+          messages: oldMessages,
+          model: oldModel,
+          systemPrompt: '',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        return {
+          ...data,
+          sessions: [migratedSession],
+          activeSessionId: migratedSession.id,
+          inspectorOpen: true,
+        };
+      }
+      return persisted;
     },
-    {
-      name: 'stitch-chat-storage',
-      version: 1,
-      /** Migrate from the old flat schema (messages[] at root) to sessions. */
-      migrate: (persisted, version) => {
-        const data = persisted as Record<string, unknown> | null;
-        if (version === 0 && data && 'messages' in data && !('sessions' in data)) {
-          const oldMessages = (data.messages ?? []) as ChatMessage[];
-          const oldModel = (data.model ?? 'auto') as string;
-          const migratedSession: ChatSession = {
-            id: generateId('ses'),
-            title: 'Migrated Chat',
-            messages: oldMessages,
-            model: oldModel,
-            systemPrompt: '',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          return {
-            ...data,
-            sessions: [migratedSession],
-            activeSessionId: migratedSession.id,
-            inspectorOpen: true,
-          };
-        }
-        return persisted;
-      },
-      partialize: state => ({
-        sessions: state.sessions,
-        activeSessionId: state.activeSessionId,
-        profiles: state.profiles,
-        activeProfileId: state.activeProfileId,
-        forceOverride: state.forceOverride,
-        inspectorOpen: state.inspectorOpen,
-      }),
-      merge: (persisted, current) => {
-        const persistedState = (typeof persisted === 'object' && persisted !== null) ? persisted : {};
-        const merged = { ...current, ...persistedState } as ChatState;
-        // activeSessionId might point to a deleted session after
-        // partialization changes. Fall back to the first stored session.
-        const sessionExists = merged.sessions.some(s => s.id === merged.activeSessionId);
-        if (!sessionExists && merged.sessions.length > 0) {
-          merged.activeSessionId = merged.sessions[0].id;
-        }
-        return merged;
-      },
-    }
-  )
-);
+    partialize: state => ({
+      sessions: state.sessions,
+      activeSessionId: state.activeSessionId,
+      profiles: state.profiles,
+      activeProfileId: state.activeProfileId,
+      forceOverride: state.forceOverride,
+      inspectorOpen: state.inspectorOpen,
+    }),
+    merge: (persisted, current) => {
+      const persistedState = (typeof persisted === 'object' && persisted !== null) ? persisted : {};
+      const merged = { ...current, ...persistedState } as ChatState;
+      // persisted activeSessionId can point to a deleted session; fall back to the first stored one
+      if (!merged.sessions.some(s => s.id === merged.activeSessionId) && merged.sessions.length > 0) {
+        merged.activeSessionId = merged.sessions[0].id;
+      }
+      return merged;
+    },
+  },
+  initial: {
+    sessions: [firstSession],
+    activeSessionId: firstSession.id,
+    isLoading: false,
+    error: null,
+    profiles: [DEFAULT_PROFILE],
+    activeProfileId: DEFAULT_PROFILE.id,
+    forceOverride: DEFAULT_FORCE_OVERRIDE,
+    inspectorOpen: true,
+  },
+  actions: (set, get) => ({
+    activeSession: () => {
+      const { sessions, activeSessionId } = get();
+      return sessions.find(s => s.id === activeSessionId);
+    },
+    messages: () => {
+      const session = get().activeSession();
+      return session?.messages ?? [];
+    },
+    model: () => {
+      const session = get().activeSession();
+      return session?.model ?? 'auto';
+    },
+
+    createSession: (title?: string) => {
+      const session = makeDefaultSession();
+      if (title) session.title = title;
+      set(state => ({
+        sessions: [session, ...state.sessions],
+        activeSessionId: session.id,
+      }));
+      return session.id;
+    },
+
+    switchSession: (id: string) => {
+      const { sessions } = get();
+      if (sessions.some(s => s.id === id)) {
+        set({ activeSessionId: id });
+      }
+    },
+
+    deleteSession: (id: string) => {
+      set(state => {
+        if (state.sessions.length <= 1) return state;
+        const remaining = state.sessions.filter(s => s.id !== id);
+        const nextActiveId =
+          state.activeSessionId === id
+            ? remaining[0]?.id ?? state.activeSessionId
+            : state.activeSessionId;
+        return { sessions: remaining, activeSessionId: nextActiveId };
+      });
+    },
+
+    renameSession: (id: string, title: string) => {
+      set(state => ({
+        sessions: state.sessions.map(s =>
+          s.id === id ? { ...s, title, updatedAt: Date.now() } : s
+        ),
+      }));
+    },
+
+    setSessionModel: (model: string) => {
+      set(state => ({
+        sessions: state.sessions.map(s =>
+          s.id === state.activeSessionId ? { ...s, model, updatedAt: Date.now() } : s
+        ),
+      }));
+    },
+
+    setSessionSystemPrompt: (prompt: string) => {
+      set(state => ({
+        sessions: state.sessions.map(s =>
+          s.id === state.activeSessionId
+            ? { ...s, systemPrompt: prompt, updatedAt: Date.now() }
+            : s
+        ),
+      }));
+    },
+
+    addMessage: message => {
+      const id = generateId('msg');
+      const newMessage: ChatMessage = { ...message, id, timestamp: Date.now() };
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs => [
+          ...msgs,
+          newMessage,
+        ]),
+      }));
+      return id;
+    },
+
+    updateMessage: (id, content) => {
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
+          msgs.map(msg => (msg.id === id ? { ...msg, content } : msg))
+        ),
+      }));
+    },
+
+    appendToMessage: (id, text) => {
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
+          msgs.map(msg =>
+            msg.id === id
+              ? {
+                  ...msg,
+                  content:
+                    typeof msg.content === 'string'
+                      ? msg.content + text
+                      : [...msg.content, { type: 'text' as const, text }],
+                }
+              : msg
+          )
+        ),
+      }));
+    },
+
+    setMessageStreaming: (id, streaming) => {
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
+          msgs.map(msg => (msg.id === id ? { ...msg, isStreaming: streaming } : msg))
+        ),
+      }));
+    },
+
+    setMessageRouting: (id, routing) => {
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
+          msgs.map(msg => (msg.id === id ? { ...msg, ...routing } : msg))
+        ),
+      }));
+    },
+
+    setMessageDebug: (id, debugPatch) => {
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
+          msgs.map(msg =>
+            msg.id === id
+              ? {
+                  ...msg,
+                  debug: {
+                    ...(msg.debug || {
+                      apiUrl: '',
+                      startedAt: Date.now(),
+                      requestHeaders: {},
+                      requestBody: {},
+                    }),
+                    ...debugPatch,
+                  },
+                }
+              : msg
+          )
+        ),
+      }));
+    },
+
+    removeMessage: id => {
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, msgs =>
+          msgs.filter(msg => msg.id !== id)
+        ),
+      }));
+    },
+
+    clearMessages: () => {
+      set(state => ({
+        sessions: patchActiveSessionMessages(state.sessions, state.activeSessionId, () => []),
+        error: null,
+      }));
+    },
+
+    createProfile: name => {
+      const id = generateId('profile');
+      const profile: ChatProfile = {
+        id,
+        name: name?.trim() || `Profile ${formatTime(new Date())}`,
+        systemPrompt: '',
+        temperature: 1,
+        maxTokens: 4096,
+      };
+
+      set(state => ({
+        profiles: [...state.profiles, profile],
+        activeProfileId: id,
+      }));
+
+      return id;
+    },
+
+    updateProfile: (id, patch) => {
+      set(state => ({
+        profiles: state.profiles.map(profile =>
+          profile.id === id ? { ...profile, ...patch } : profile
+        ),
+      }));
+    },
+
+    deleteProfile: id => {
+      set(state => {
+        if (state.profiles.length <= 1) return state;
+
+        const remaining = state.profiles.filter(profile => profile.id !== id);
+        const nextActiveId =
+          state.activeProfileId === id
+            ? remaining[0]?.id ?? DEFAULT_PROFILE.id
+            : state.activeProfileId;
+
+        return {
+          profiles: remaining,
+          activeProfileId: nextActiveId,
+        };
+      });
+    },
+
+    setActiveProfile: id => {
+      set({ activeProfileId: id });
+    },
+
+    setForceOverride: patch => {
+      set(state => ({
+        forceOverride: { ...state.forceOverride, ...patch },
+      }));
+    },
+
+    resetForceOverride: () => {
+      set({ forceOverride: DEFAULT_FORCE_OVERRIDE });
+    },
+
+    setLoading: loading => {
+      set({ isLoading: loading });
+    },
+
+    setError: error => {
+      set({ error });
+    },
+
+    setInspectorOpen: open => {
+      set({ inspectorOpen: open });
+    },
+  }),
+});

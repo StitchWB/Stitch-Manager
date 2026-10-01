@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { t } from '@/lib/i18n';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { openUrlInBrowser } from '@/lib/backend/modules/aiProxy';
+import { cancelPluginAuthFlow } from '@/lib/backend/modules/pluginRpc';
 import { Button, GlassCard, IconButton } from '@/components/ui';
 
 interface OAuthFlowWizardProps {
@@ -162,7 +163,7 @@ export function OAuthFlowWizard({
     setAuthUrl('');
     if (sid) {
       try {
-        await safeInvoke(`plugin.${pluginId}.auth_flow_cancel`, { sessionId: sid });
+        await cancelPluginAuthFlow(pluginId, sid);
       } catch {
         // Best-effort cancel; the flow also expires server-side.
       }

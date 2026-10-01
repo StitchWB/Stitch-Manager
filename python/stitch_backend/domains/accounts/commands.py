@@ -10,11 +10,17 @@ which guarantees auto-commit on success and rollback on error.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_read_session, run_in_session
@@ -56,23 +62,20 @@ def _parse(model_cls, params: dict):
 # Commands
 # ═════════════════════════════════════════════════════════════════════════════
 
-@register_command("list_accounts", readonly=True)
-async def cmd_list_accounts(params: dict) -> list:
+@command("list_accounts", readonly=True)
+async def cmd_list_accounts(db: AsyncSession, params: dict) -> list:
     req = _parse(ListAccountsRequest, params)
     owner_id = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.list_accounts(
-            provider=req.provider,
-            provider_type=req.provider_type,
-            provider_subtype=req.provider_subtype,
-            show_archived=req.show_archived,
-            owner_id=owner_id,
-            caller_uid=owner_id,
-        )
-
-    return await run_in_read_session(_op)
+    svc = AccountService(db)
+    return await svc.list_accounts(
+        provider=req.provider,
+        provider_type=req.provider_type,
+        provider_subtype=req.provider_subtype,
+        show_archived=req.show_archived,
+        owner_id=owner_id,
+        caller_uid=owner_id,
+    )
 
 
 @register_command("get_accounts", readonly=True)
@@ -81,85 +84,68 @@ async def cmd_get_accounts(params: dict) -> list:
     return cast("list[Any]", await cmd_list_accounts(params))
 
 
-@register_command("add_account")
-async def cmd_add_account(params: dict) -> Any:
+@command("add_account")
+async def cmd_add_account(db: AsyncSession, params: dict) -> Any:
     req = _parse(AddAccountRequest, params)
     owner_id = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.add_account(req, owner_id=owner_id)
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.add_account(req, owner_id=owner_id)
 
 
-@register_command("delete_account")
-async def cmd_delete_account(params: dict) -> dict:
+@command("delete_account")
+async def cmd_delete_account(db: AsyncSession, params: dict) -> dict:
     req = _parse(DeleteAccountRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        await svc.delete_account(str(req.id), caller_uid=caller_uid)
+    svc = AccountService(db)
+    await svc.delete_account(str(req.id), caller_uid=caller_uid)
 
-    await run_in_session(_op)
     return {"success": True}
 
 
-@register_command("update_account_token")
-async def cmd_update_account_token(params: dict) -> Any:
+@command("update_account_token")
+async def cmd_update_account_token(db: AsyncSession, params: dict) -> Any:
     req = _parse(UpdateAccountTokenRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.update_token(
-            str(req.id), req.token, req.refresh_token, caller_uid=caller_uid,
-        )
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.update_token(
+        str(req.id), req.token, req.refresh_token, caller_uid=caller_uid,
+    )
 
 
-@register_command("update_account_notes_tags")
-async def cmd_update_account_notes_tags(params: dict) -> Any:
+@command("update_account_notes_tags")
+async def cmd_update_account_notes_tags(db: AsyncSession, params: dict) -> Any:
     req = _parse(UpdateAccountNotesTagsRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.update_notes_tags(
-            str(req.id), req.notes, req.tags, caller_uid=caller_uid,
-        )
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.update_notes_tags(
+        str(req.id), req.notes, req.tags, caller_uid=caller_uid,
+    )
 
 
-@register_command("update_account_metadata")
-async def cmd_update_account_metadata(params: dict) -> Any:
+@command("update_account_metadata")
+async def cmd_update_account_metadata(db: AsyncSession, params: dict) -> Any:
     req = _parse(UpdateAccountMetadataRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.update_metadata(
-            str(req.account_id), req.metadata, caller_uid=caller_uid,
-        )
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.update_metadata(
+        str(req.account_id), req.metadata, caller_uid=caller_uid,
+    )
 
 
-@register_command("set_account_proxy")
-async def cmd_set_account_proxy(params: dict) -> Any:
+@command("set_account_proxy")
+async def cmd_set_account_proxy(db: AsyncSession, params: dict) -> Any:
     req = _parse(SetAccountProxyRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.set_proxy(
-            str(req.account_id), req.proxy_id, caller_uid=caller_uid,
-        )
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.set_proxy(
+        str(req.account_id), req.proxy_id, caller_uid=caller_uid,
+    )
 
 
 @register_command("get_account_proxy", readonly=True)
@@ -177,8 +163,8 @@ async def cmd_get_account_proxy(params: dict) -> dict:
     return {"accountId": account_id, "proxyId": account.proxy_id, "proxyConfig": account.proxy_config}
 
 
-@register_command("refresh_account")
-async def cmd_refresh_account(params: dict) -> Any:
+@command("refresh_account")
+async def cmd_refresh_account(db: AsyncSession, params: dict) -> Any:
     """Run a real provider status/quota check and return the updated account.
 
     Delegates to ``AccountService.refresh_account`` which calls the
@@ -190,11 +176,8 @@ async def cmd_refresh_account(params: dict) -> Any:
     req = _parse(RefreshAccountRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.refresh_account(str(req.account_id), caller_uid=caller_uid)
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.refresh_account(str(req.account_id), caller_uid=caller_uid)
 
 
 @register_command("refresh_accounts", timeout=300)
@@ -286,8 +269,8 @@ async def cmd_refresh_accounts(params: dict) -> dict:
     }
 
 
-@register_command("get_account_quota", readonly=True)
-async def cmd_get_account_quota(params: dict) -> dict:
+@command("get_account_quota", readonly=True)
+async def cmd_get_account_quota(db: AsyncSession, params: dict) -> dict:
     """Return persisted quota for an account (no live fetch).
 
     Reads ``quota_used``, ``quota_limit``, ``quota_checked_at`` from the
@@ -296,38 +279,32 @@ async def cmd_get_account_quota(params: dict) -> dict:
     req = _parse(GetAccountQuotaRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        account = await svc.get_account(str(req.account_id))
-        svc._check_ownership(account, caller_uid, str(req.account_id))
-        used = account.quota_used or 0
-        limit = account.quota_limit or 0
-        checked_at = (
-            account.quota_checked_at.isoformat()
-            if account.quota_checked_at
-            else None
-        )
-        return {
-            "accountId": str(req.account_id),
-            "used": used,
-            "limit": limit,
-            "remaining": max(0, limit - used) if limit > 0 else 0,
-            "checkedAt": checked_at,
-        }
-
-    return await run_in_read_session(_op)
+    svc = AccountService(db)
+    account = await svc.get_account(str(req.account_id))
+    svc._check_ownership(account, caller_uid, str(req.account_id))
+    used = account.quota_used or 0
+    limit = account.quota_limit or 0
+    checked_at = (
+        account.quota_checked_at.isoformat()
+        if account.quota_checked_at
+        else None
+    )
+    return {
+        "accountId": str(req.account_id),
+        "used": used,
+        "limit": limit,
+        "remaining": max(0, limit - used) if limit > 0 else 0,
+        "checkedAt": checked_at,
+    }
 
 
-@register_command("archive_account")
-async def cmd_archive_account(params: dict) -> Any:
+@command("archive_account")
+async def cmd_archive_account(db: AsyncSession, params: dict) -> Any:
     req = _parse(ArchiveAccountRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.archive(str(req.id), req.archived, caller_uid=caller_uid)
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.archive(str(req.id), req.archived, caller_uid=caller_uid)
 
 
 @register_command("validate_account", readonly=True)
@@ -568,8 +545,8 @@ async def cmd_accounts_assign_owner(params: dict) -> dict:
 # ── Kiro token management ─────────────────────────────────────────────────────
 
 
-@register_command("refresh_kiro_token")
-async def cmd_refresh_kiro_token(params: dict) -> dict:
+@command("refresh_kiro_token")
+async def cmd_refresh_kiro_token(db: AsyncSession, params: dict) -> dict:
     """Refresh the OAuth access token for a Kiro account.
 
     Uses ``provider_metadata.client_id`` + ``client_secret`` when available
@@ -582,20 +559,17 @@ async def cmd_refresh_kiro_token(params: dict) -> dict:
     req = _parse(RefreshKiroTokenRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.refresh_kiro_token(
-            str(req.account_id),
-            proxy=req.proxy,
-            force=req.force,
-            caller_uid=caller_uid,
-        )
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.refresh_kiro_token(
+        str(req.account_id),
+        proxy=req.proxy,
+        force=req.force,
+        caller_uid=caller_uid,
+    )
 
 
-@register_command("check_kiro_account")
-async def cmd_check_kiro_account(params: dict) -> dict:
+@command("check_kiro_account")
+async def cmd_check_kiro_account(db: AsyncSession, params: dict) -> dict:
     """Verify a Kiro account is alive and fetch credit / subscription info.
 
     Calls GET /getUsageLimits.  Automatically attempts a token refresh when
@@ -608,16 +582,13 @@ async def cmd_check_kiro_account(params: dict) -> dict:
     req = _parse(CheckKiroAccountRequest, params)
     caller_uid = params.get("_caller_user_id")
 
-    async def _op(session):
-        svc = AccountService(session)
-        return await svc.check_kiro_account(
-            str(req.account_id),
-            proxy=req.proxy,
-            auto_refresh=req.auto_refresh,
-            caller_uid=caller_uid,
-        )
-
-    return await run_in_session(_op)
+    svc = AccountService(db)
+    return await svc.check_kiro_account(
+        str(req.account_id),
+        proxy=req.proxy,
+        auto_refresh=req.auto_refresh,
+        caller_uid=caller_uid,
+    )
 
 
 # ── Claim ─────────────────────────────────────────────────────────────────────

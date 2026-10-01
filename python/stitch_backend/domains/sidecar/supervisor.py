@@ -2,8 +2,7 @@
 
 Owns start / stop / status / stop_all for every registered sidecar. Domains
 (turnstile_solver, plugin hosts, ...) keep their own commands and domain
-logic; only the process management lives here. Replaces the near-duplicated
-module-level singleton lifecycle code that each service previously carried.
+logic; only the process management lives here.
 
 Status shape is the dict the existing callers already consume::
 
@@ -22,16 +21,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
-import signal
 import subprocess
 import sys
-import tempfile
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
+
+from . import killtree as _killtree
+from .env import _child_env
+from .killtree import subprocess_isolation_kwargs as subprocess_isolation_kwargs
+from .winjob import _assign_to_kill_job, _close_kill_job, _create_kill_job
 
 if TYPE_CHECKING:
     from .spec import LaunchPlan, SidecarSpec
@@ -39,103 +39,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# ── child env allowlist ───────────────────────────────────────────────────
-# Community plugins are unsigned arbitrary code; a ~10-line exfiltration of
-# os.environ leaks FERNET_KEY, JWT_SECRET, IMAP_PASSWORD, API keys.  Children
-# spawned by the supervisor receive ONLY these host vars (locale/Python
-# tuning — none secret, none code-loading) plus the explicit plan.env
-# overrides declared by each SidecarSpec.prepare().  Never add
-# KEY/SECRET/PASSWORD/TOKEN/CREDENTIAL vars here; a sidecar needing a
-# specific var must declare it in its own plan.env.
-#
-# Deliberately NOT inherited (constructed instead):
-#   PATH      → reduced to the Python interpreter dir + OS system dirs
-#               (:func:`_minimal_path`); the user's PATH may contain
-#               attacker-writable dirs that shadow executables.
-#   TEMP/TMP/HOME/USERPROFILE → replaced with a per-sidecar scoped temp dir
-#               (:func:`_scoped_tmp_dir`) so children get an isolated
-#               writable home/temp instead of the user's real profile dirs
-#               (APPDATA/LOCALAPPDATA/PROGRAMDATA are NOT passed at all —
-#               they are credential-bearing).
-_CHILD_ENV_ALLOWLIST = frozenset({
-    # Windows runtime (PATH/TEMP/TMP/USERPROFILE are constructed, not inherited)
-    "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC",
-    # POSIX runtime (HOME is constructed)
-    "TZ", "TERM", "SHELL",
-    # locale / encoding
-    "LANG", "LC_ALL", "LC_CTYPE",
-    # Python tuning (non-secret, no code-execution effect)
-    "PYTHONIOENCODING", "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE",
-})
-
-
-def _minimal_path() -> str:
-    """Reduced PATH for children: python interpreter dir + OS system dirs.
-
-    Never inherits the user's PATH — it may contain attacker-writable
-    directories that shadow executables the child resolves by name.
-    """
-    python_dir = os.path.dirname(sys.executable)
-    if os.name == "nt":
-        win_dir = os.environ.get("SYSTEMROOT", r"C:\Windows")
-        return os.pathsep.join(
-            [python_dir, os.path.join(win_dir, "System32"), win_dir]
-        )
-    return os.pathsep.join([python_dir, "/usr/local/bin", "/usr/bin", "/bin"])
-
-
-def _scoped_tmp_dir(name: str) -> Path:
-    """Per-sidecar scoped temp dir: ``<temp-root>/sidecar-env/<name>/tmp``.
-
-    Passed as TEMP/TMP (and HOME/USERPROFILE on the respective OS) so
-    children that need a writable home/temp get an isolated one instead of
-    the user's real profile directories.
-    """
-    safe = re.sub(r"[^A-Za-z0-9_-]", "_", name) or "sidecar"
-    scoped = Path(tempfile.gettempdir()) / "sidecar-env" / safe / "tmp"
-    scoped.mkdir(parents=True, exist_ok=True)
-    return scoped
-
-
-def _child_env(extra: dict[str, str], name: str) -> dict[str, str]:
-    """Minimal env for child processes: allowlisted host vars + explicit extras.
-
-    Boundary: the host's full environment (FERNET_KEY, JWT_SECRET,
-    IMAP_PASSWORD, ...) must NOT leak into plugin/sidecar subprocesses —
-    community plugins are unsigned code.  PATH is reconstructed minimal and
-    TEMP/TMP/HOME/USERPROFILE are scoped per sidecar (see allowlist note).
-
-    Honest limitation: this is defense-in-depth, not a sandbox.  On Linux a
-    same-user process can still read the host's env via ``/proc/<ppid>/environ``
-    — the allowlist stops *inherited* leakage into children, nothing stops a
-    malicious child from reading its parent's procfs entry under the same uid.
-    """
-    env = {k: v for k, v in os.environ.items() if k in _CHILD_ENV_ALLOWLIST}
-    env["PATH"] = _minimal_path()
-    scoped = str(_scoped_tmp_dir(name))
-    env["TEMP"] = scoped
-    env["TMP"] = scoped
-    if os.name == "nt":
-        env["USERPROFILE"] = scoped
-    else:
-        env["HOME"] = scoped
-    env.update(extra)
-    return env
-
-
-# ── opt-in privilege drop ──────────────────────────────────────────────────
-# When STITCH_PLUGIN_RUN_AS_USER is set (POSIX only), plugin/sidecar
-# subprocesses are spawned with ``user=<that user>`` so they run as a
-# DIFFERENT (unprivileged) uid.  This is ADDITIVE defense-in-depth on top
-# of the env allowlist and scoped TEMP — it does NOT replace them.
-#
-# Why a different uid is needed (Linux): a same-user child can read the
-# parent's env via ``/proc/<ppid>/environ``, defeating the env allowlist.
-# Running as a different uid closes that hole (the child cannot read a
-# /proc entry owned by a different uid).  See
-# ``docs/plugin-sandbox-isolation.md`` for the full write-up.
-#
-# One-time log guard so the Windows skip warning is not repeated per spawn.
+# Additive to the env allowlist: a different uid closes the Linux same-uid /proc/<ppid>/environ hole.
 _privilege_drop_windows_skip_logged: bool = False
 
 
@@ -144,15 +48,14 @@ def _privilege_drop_kwargs() -> dict[str, Any]:
 
     Reads ``STITCH_PLUGIN_RUN_AS_USER``:
 
-    - **Unset** → returns ``{}`` (behavior identical to pre-feature — no
-      regression).
+    - **Unset** → returns ``{}`` (no ``user=`` kwarg is passed).
     - **Set + POSIX** (``sys.platform != "win32"``) → returns
       ``{"user": <value>}`` so children run as that user.  Only ``user=``
       is passed; the OS resolves the primary group from the user's passwd
       entry (no fabricated group).
     - **Set + Windows** → logs a one-time WARNING that privilege drop is
       POSIX-only (``subprocess.Popen(user=)`` raises on Windows) and
-      returns ``{}`` (no regression, no failure).
+      returns ``{}`` (spawn proceeds without privilege drop).
 
     Failure semantics: if Popen raises because the target user doesn't
     exist or setuid is denied, the caller's ``except Exception`` path
@@ -176,124 +79,6 @@ def _privilege_drop_kwargs() -> dict[str, Any]:
     return {"user": run_as}
 
 
-# ── Windows kill-tree Job Object ────────────────────────────────────────────
-# On Windows there is no process-group kill that survives the direct child:
-# taskkill /T walks the tree by parent pid, so once a cooperative child
-# exits (plugin.shutdown) its grandchildren are unreachable — and walking a
-# recycled pid is dangerous.  A Job Object with
-# JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE is the correct primitive: every
-# descendant a child spawns joins the job, and closing the supervisor's
-# (last) handle terminates all members atomically, alive or orphaned.
-
-
-def _win_kernel32() -> Any:
-    import ctypes
-
-    return ctypes.windll.kernel32  # type: ignore[attr-defined]
-
-
-def _create_kill_job() -> Any:
-    """Create a Job Object whose members die when the last handle closes."""
-    import ctypes
-    from ctypes import wintypes
-
-    kernel32 = _win_kernel32()
-    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
-    kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
-    kernel32.SetInformationJobObject.argtypes = [
-        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
-    ]
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-
-    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000  # noqa: N806 (Win32 name)
-
-    class _IO_COUNTERS(ctypes.Structure):  # noqa: N801 (Win32 struct name)
-        _fields_ = [
-            ("ReadOperationCount", ctypes.c_uint64),
-            ("WriteOperationCount", ctypes.c_uint64),
-            ("OtherOperationCount", ctypes.c_uint64),
-            ("ReadTransferCount", ctypes.c_uint64),
-            ("WriteTransferCount", ctypes.c_uint64),
-            ("OtherTransferCount", ctypes.c_uint64),
-        ]
-
-    class _JOBOBJECT_BASIC_LIMIT_INFORMATION(  # noqa: N801 (Win32 struct name)
-        ctypes.Structure
-    ):
-        _fields_ = [
-            ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
-            ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
-            ("LimitFlags", wintypes.DWORD),
-            ("MinimumWorkingSetSize", ctypes.c_size_t),
-            ("MaximumWorkingSetSize", ctypes.c_size_t),
-            ("ActiveProcessLimit", wintypes.DWORD),
-            ("Affinity", ctypes.c_void_p),
-            ("PriorityClass", wintypes.DWORD),
-            ("SchedulingClass", wintypes.DWORD),
-        ]
-
-    class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(  # noqa: N801 (Win32 struct name)
-        ctypes.Structure
-    ):
-        _fields_ = [
-            ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
-            ("IoInfo", _IO_COUNTERS),
-            ("ProcessMemoryLimit", ctypes.c_size_t),
-            ("JobMemoryLimit", ctypes.c_size_t),
-            ("PeakProcessMemoryUsed", ctypes.c_size_t),
-            ("PeakJobMemoryUsed", ctypes.c_size_t),
-        ]
-
-    h_job = kernel32.CreateJobObjectW(None, None)
-    if not h_job:
-        raise ctypes.WinError()  # type: ignore[attr-defined]
-    info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-    ok = kernel32.SetInformationJobObject(
-        h_job, 9, ctypes.byref(info), ctypes.sizeof(info)
-    )
-    if not ok:
-        kernel32.CloseHandle(h_job)
-        raise ctypes.WinError()  # type: ignore[attr-defined]
-    return h_job
-
-
-def _assign_to_kill_job(h_job: Any, pid: int) -> None:
-    """Assign a spawned child to the kill-job via a process handle.
-
-    The process handle is always closed before returning; the assignment
-    survives handle closure (the process stays a job member).
-    """
-    import ctypes
-    from ctypes import wintypes
-
-    kernel32 = _win_kernel32()
-    PROCESS_ALL_ACCESS = 0x1FFFFF  # noqa: N806 (Win32 name)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-
-    h_proc = kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, pid)
-    if not h_proc:
-        raise ctypes.WinError()  # type: ignore[attr-defined]
-    try:
-        ok = kernel32.AssignProcessToJobObject(h_job, h_proc)
-        if not ok:
-            raise ctypes.WinError()  # type: ignore[attr-defined]
-    finally:
-        kernel32.CloseHandle(h_proc)
-
-
-def _close_kill_job(h_job: Any) -> None:
-    """Close the supervisor's job handle — kills every remaining member."""
-    from ctypes import wintypes
-
-    kernel32 = _win_kernel32()
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    kernel32.CloseHandle(h_job)
-
-
 class _State:
     __slots__ = (
         "process", "port", "config", "start_time", "error", "lock",
@@ -301,31 +86,18 @@ class _State:
     )
 
     def __init__(self) -> None:
-        # asyncio.subprocess.Process (stdio=devnull) or subprocess.Popen
-        # (stdio=pipes — RPC plugins need sync stdin/stdout handles).
+        # asyncio Process (stdio=devnull) or subprocess.Popen (stdio=pipes; RPC needs sync stdin/stdout).
         self.process: asyncio.subprocess.Process | subprocess.Popen[bytes] | None = None
         self.port: int | None = None
         self.config: dict[str, Any] = {}
         self.start_time: float | None = None
-        # Invariant: ``error`` is only meaningful when ``process`` is None.
-        # ``stop`` clears it; ``status`` surfaces it only when not running.
+        # error is meaningful only when process is None; stop clears it, status surfaces it.
         self.error: str | None = None
-        # Serializes start/stop for this sidecar (asyncio.Lock is not
-        # reentrant — internal helpers assume it is already held).
+        # Per-sidecar start/stop serializer; asyncio.Lock is not reentrant, helpers assume it held.
         self.lock = asyncio.Lock()
-        # POSIX: process-group id recorded at spawn time.  Children are
-        # spawned with start_new_session=True, so pgid == child pid — but
-        # recording it at spawn is what makes the kill-tree SAFE: killing
-        # by the recorded pgid works even after the direct child exited
-        # (a cooperative plugin.shutdown) and never resolves a RECYCLED pid
-        # to a foreign group the way os.getpgid(dead_pid) would.
+        # Recorded at spawn: killpg on it reaches orphans later and never resolves a recycled pid.
         self.pgid: int | None = None
-        # Windows: Job Object handle with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        # (stdio=pipes children).  Closing the last handle at stop kills
-        # every tree member — including grandchildren orphaned by a
-        # cooperative child that exited on plugin.shutdown — without any
-        # pid-based tree walk (which cannot identify orphans and can hit a
-        # recycled pid).  None on POSIX or when job creation failed.
+        # Windows KILL_ON_JOB_CLOSE handle (stdio=pipes); closing kills the whole tree. None on POSIX.
         self.job: Any = None
 
 
@@ -409,19 +181,12 @@ class SidecarSupervisor:
         async with st.lock:
             running = st.process is not None and st.process.returncode is None
             if running and force:
-                # No delay after _stop_locked: _terminate_tree already waited
-                # the old process to its exit (_wait_proc_exit) before
-                # returning, so the replacement spawn cannot race a live
-                # predecessor.
+                # _terminate_tree already waited the old process out; the respawn cannot race a live predecessor.
                 await self._stop_locked(name)
             elif running:
                 return self.status(name)
             elif force and st.process is not None:
-                # Dead predecessor (crash-restart path): sweep the remnants
-                # of its tree via the recorded group/job BEFORE respawning —
-                # descendants a crashed child left behind are killed here,
-                # and the recorded pgid/job makes the sweep safe (no pid
-                # resolution of a possibly-recycled pid).
+                # Dead predecessor (crash-restart): sweep its tree via the recorded group/job before respawn.
                 await self._terminate_tree(st.process, name)
                 st.process = None
                 st.pgid = None
@@ -436,11 +201,7 @@ class SidecarSupervisor:
 
             try:
                 if plan.stdio == "pipes":
-                    # RPC plugins need sync stdin/stdout PIPE handles for
-                    # line-delimited JSON-RPC.  Spawn via subprocess.Popen
-                    # (sync) so the caller can attach an RpcPluginClient reader
-                    # thread to proc.stdout.  Process-group isolation is still
-                    # applied so _terminate_tree can kill the whole tree.
+                    # stdio=pipes: RPC plugins need sync PIPE handles for line-delimited JSON-RPC.
                     proc = subprocess.Popen(
                         plan.command,
                         cwd=plan.cwd,
@@ -460,8 +221,7 @@ class SidecarSupervisor:
                     logger.info(
                         "[Sidecar:%s] started pid=%s (stdio=pipes)", name, proc.pid
                     )
-                    # No HTTP readiness gate for stdio plugins — the caller
-                    # performs the RPC handshake and owns readiness.
+                    # No HTTP readiness gate for stdio plugins — the caller owns readiness via the RPC handshake.
                 else:
                     program, *cmd_args = plan.command
                     st.process = await asyncio.create_subprocess_exec(
@@ -558,130 +318,7 @@ class SidecarSupervisor:
     async def _terminate_tree(
         self, proc: asyncio.subprocess.Process | subprocess.Popen[bytes], name: str
     ) -> None:
-        """Terminate a sidecar and its children (whole process group/tree).
-
-        Sidecars such as the turnstile solver spawn a browser child; killing
-        only the direct child would orphan it.  The kill targets the tree
-        identity recorded AT SPAWN — the process group on POSIX
-        (start_new_session ⇒ pgid == child pid) and a KILL_ON_JOB_CLOSE Job
-        Object on Windows — instead of resolving the pid at kill time: the
-        recorded identity still reaches orphaned descendants when the direct
-        child already exited, and never resolves a possibly-recycled pid to
-        a foreign group/tree.
-
-        Handles both ``asyncio.subprocess.Process`` (stdio=devnull) and
-        ``subprocess.Popen`` (stdio=pipes).  Popen's ``wait()`` is sync, so
-        it is wrapped via ``asyncio.to_thread``.
-        """
-        pid = proc.pid
-        st = self._states.get(name)
-        if os.name == "posix":
-            # Recorded-at-spawn group first; probe a LIVE process only when
-            # nothing was recorded (legacy/test-constructed states).
-            pgid = st.pgid if st is not None else None
-            if pgid is None and proc.returncode is None:
-                try:
-                    pgid = os.getpgid(pid)
-                except (ProcessLookupError, PermissionError):
-                    pgid = None
-            # Safety: never signal our own process group. If the child for
-            # some reason shares the supervisor's group (start_new_session not
-            # honoured), killpg would take down the whole test/runner process.
-            # The ``pgid > 0`` check rejects fake/test pids (-1) — kernel
-            # pids and thus start_new_session pgids are always positive.
-            own_pgid = os.getpgrp()
-            safe_pgid = (
-                pgid
-                if (pgid is not None and pgid > 0 and pgid != own_pgid)
-                else None
-            )
-            if safe_pgid is None and proc.returncode is not None:
-                # Already dead and no group recorded — nothing safe to kill.
-                return
-            try:
-                if safe_pgid is not None:
-                    os.killpg(safe_pgid, signal.SIGTERM)
-                else:
-                    proc.terminate()
-            except (ProcessLookupError, PermissionError):
-                return
-            try:
-                await self._wait_proc_exit(proc, 5)
-            except TimeoutError:
-                try:
-                    if safe_pgid is not None:
-                        os.killpg(safe_pgid, signal.SIGKILL)
-                    else:
-                        proc.kill()
-                except (ProcessLookupError, PermissionError):
-                    return
-                try:
-                    await self._wait_proc_exit(proc, 3)
-                except TimeoutError:
-                    logger.error(
-                        "[Sidecar:%s] SIGKILL did not terminate pid=%s", name, pid
-                    )
-                    return
-            # Deterministic sweep: SIGKILL any tree member that ignored
-            # SIGTERM (only descendants can remain — the direct child exited
-            # or was escalated above).  ESRCH (empty group) is the common
-            # clean-exit case.
-            if safe_pgid is not None:
-                try:
-                    os.killpg(safe_pgid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass
-        else:  # Windows: kill the whole process tree.
-            job = st.job if st is not None else None
-            if job is not None:
-                # Closing the last handle to the kill-job terminates ALL
-                # members — child and any descendants — regardless of
-                # whether the direct child is still alive.  No pid-based
-                # tree walk, hence no recycled-pid hazard.
-                try:
-                    _close_kill_job(job)
-                except Exception:  # noqa: BLE001 — best-effort during teardown
-                    logger.debug("[Sidecar:%s] kill-job close failed", name)
-                if st is not None:
-                    st.job = None
-                try:
-                    await self._wait_proc_exit(proc, 5)
-                except TimeoutError:
-                    logger.error(
-                        "[Sidecar:%s] kill-job close did not terminate pid=%s",
-                        name, pid,
-                    )
-                return
-            if proc.returncode is not None:
-                # Already dead without a kill-job: taskkill cannot walk the
-                # tree from this pid safely (it may be recycled).
-                return
-            try:
-                killer = await asyncio.create_subprocess_exec(
-                    "taskkill", "/T", "/F", "/PID", str(pid),
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await asyncio.wait_for(killer.wait(), timeout=5)
-            except Exception:  # noqa: BLE001
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    return
-            try:
-                await self._wait_proc_exit(proc, 5)
-            except TimeoutError:
-                logger.error("[Sidecar:%s] taskkill did not terminate pid=%s", name, pid)
-
-    @staticmethod
-    async def _wait_proc_exit(
-        proc: asyncio.subprocess.Process | subprocess.Popen[bytes], timeout: float
-    ) -> None:
-        """Wait for a process to exit, handling both async and sync types."""
-        if isinstance(proc, subprocess.Popen):
-            await asyncio.wait_for(asyncio.to_thread(proc.wait), timeout=timeout)
-        else:
-            await asyncio.wait_for(proc.wait(), timeout=timeout)
+        await _killtree._terminate_tree(self._states.get(name), proc, name)
 
     async def stop_all(self) -> None:
         for name in list(self._specs.keys()):
@@ -710,8 +347,7 @@ class SidecarSupervisor:
                 "uptimeSeconds": None, "error": None,
             }
         proc = st.process
-        # For Popen, poll() refreshes returncode; for asyncio Process it is
-        # already up-to-date.
+        # Popen: poll() refreshes returncode; asyncio Process returncode is already up-to-date.
         if isinstance(proc, subprocess.Popen):
             rc = proc.poll()
         else:
@@ -762,32 +398,11 @@ class SidecarSupervisor:
         return st.process if st else None
 
 
-def subprocess_isolation_kwargs() -> dict[str, Any]:
-    """kwargs to run a sidecar in its own process group / session.
-
-    Lets ``_terminate_tree`` kill the whole tree (sidecar + browser child).
-    Public API: callers that spawn sidecar-like subprocesses outside the
-    supervisor (e.g. ``ServicePluginHost`` for memory-capped children)
-    should use this so the kill-tree contract is consistent.
-    """
-    # CREATE_NEW_PROCESS_GROUP only exists on real Windows. Tests monkeypatch
-    # sys.platform to "win32" on POSIX to exercise privilege-drop; the os.name
-    # conjunct keeps that from dereferencing a non-existent attribute at
-    # runtime, while the sys.platform conjunct lets mypy narrow the branch
-    # away on non-Windows platforms (it doesn't narrow os.name).
-    if sys.platform == "win32" and os.name == "nt":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-    return {"start_new_session": True}
-
-
-# Private alias retained for backward compatibility with callers that
-# imported the underscore-prefixed name before it was promoted to public.
+# Backward-compat alias: existing callers import the underscore name.
 _subprocess_isolation_kwargs = subprocess_isolation_kwargs
 
 
-# Eager singleton: created once at module import (atomic under the import
-# lock), so there is no lazy-init race between concurrent get_supervisor()
-# callers.
+# Eager singleton: created at import under the import lock, so get_supervisor() has no lazy-init race.
 _supervisor = SidecarSupervisor()
 
 

@@ -2,7 +2,7 @@ import { t } from "@/lib/i18n";import { useMemo, useState } from 'react';
 import { AlertTriangle, FileSpreadsheet, Search, Table } from 'lucide-react';
 
 import type { GoogleSheetsDataset, GoogleSheetsSheet, GoogleSheetsRow } from '@/types/googleSheets';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 import { ButtonBase, EmptyState, FilterDropdown, Input, TableBody, TableCell, TableHead, TableHeader, TableRow, UITable } from '@/components/ui';
 
 
@@ -185,7 +185,7 @@ export function SheetsExplorerPanel({
               </div>
               {selectedSheet.updatedAt &&
             <div className="text-[10px] text-slate-500">{t("accounts.sheets_explorer_panel.updated")}
-              {new Date(selectedSheet.updatedAt).toLocaleString()}
+              {formatDateTime(selectedSheet.updatedAt)}
                 </div>
             }
             </div>

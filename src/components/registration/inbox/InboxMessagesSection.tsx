@@ -1,5 +1,5 @@
 import { t } from '@/lib/i18n';
-import { Tooltip } from '@/components/Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Button, EmptyState, GlassCard } from '@/components/ui';
 import { Mail, Trash2, Eye, MessageSquare } from 'lucide-react';
 import { CollapsibleSection } from '@/components/ui';

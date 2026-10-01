@@ -1,6 +1,6 @@
 import { HelpCircle } from 'lucide-react';
 import { t } from '@/lib/i18n';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { ButtonBase, Checkbox } from '@/components/ui';
 
 

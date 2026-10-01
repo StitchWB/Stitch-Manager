@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { ScenarioRecordItem } from '@/lib/backend/modules/pythonJobs';
 import type { ReplayListHealthFilter, ReplayListSort } from './replayListPreferences';
+import { formatDate } from '@/lib/utils';
 
 type UseReplayScenarioListParams = {
   items: ScenarioRecordItem[];
@@ -158,6 +159,6 @@ export function deriveFriendlyScenarioName(
   const fromPath = deriveScenarioNameFromPath(item.scenarioPath);
   if (fromPath && fromPath !== defaultScenarioName) return fromPath;
 
-  const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : null;
+  const date = item.createdAt ? formatDate(item.createdAt) : null;
   return date ? `${scenarioLabel} ${date}` : defaultScenarioName;
 }

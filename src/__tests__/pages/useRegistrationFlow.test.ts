@@ -3,9 +3,14 @@ import { renderHook, act } from '@testing-library/react';
 
 // babel-jest hoists jest.mock() above imports and forbids referencing
 // out-of-scope variables inside the factory unless prefixed with `mock`.
-const mockAddNotification = jest.fn();
-jest.mock('../../stores/app', () => ({
-  useAppStore: () => ({ addNotification: mockAddNotification }),
+const mockToastError = jest.fn();
+jest.mock('sonner', () => ({
+  toast: {
+    error: (...args: any[]) => mockToastError(...args),
+    success: jest.fn(),
+    info: jest.fn(),
+    warning: jest.fn(),
+  },
 }));
 
 jest.mock('../../stores/registration', () => ({
@@ -64,8 +69,9 @@ describe('useRegistrationFlow', () => {
     });
 
     expect(mockRunRegistration).toHaveBeenCalledTimes(1);
-    expect(mockAddNotification).not.toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Provider not supported' })
+    expect(mockToastError).not.toHaveBeenCalledWith(
+      'Provider not supported',
+      expect.anything()
     );
   });
 });

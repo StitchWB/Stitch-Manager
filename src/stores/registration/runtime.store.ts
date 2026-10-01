@@ -99,6 +99,9 @@ interface RuntimeState {
   setIsRunning: (running: boolean) => void;
   setStatus: (status: RegistrationStatus) => void;
 
+  // Actions - Browser engine maintenance
+  updateShardEngine: (force: boolean) => Promise<void>;
+
   // Job tracking (survives page navigation)
   pipelineJobId: string | null;
   activeThreads: number;
@@ -301,6 +304,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // Status actions
   setIsRunning: (running: boolean) => set({ isRunning: running }),
   setStatus: (status: RegistrationStatus) => set({ status }),
+
+  updateShardEngine: async (force: boolean) => {
+    await safeInvoke('update_shard_engine', { force });
+  },
 
   // Job tracking actions (survive page navigation)
   setPipelineJobId: (pipelineJobId: string | null) => set({ pipelineJobId }),

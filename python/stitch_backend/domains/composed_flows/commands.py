@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_read_session, run_in_session
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+from stitch_backend.core.command_decorator import command
 
 
 def _caller_uid(params: dict) -> int | None:
@@ -11,8 +15,8 @@ def _caller_uid(params: dict) -> int | None:
     return params.get("_caller_user_id")
 
 
-@register_command("upsert_composed_flow")
-async def cmd_upsert_composed_flow(params: dict) -> dict:
+@command("upsert_composed_flow")
+async def cmd_upsert_composed_flow(db: AsyncSession, params: dict) -> dict:
     """Create or update a composed flow."""
     from stitch_backend.domains.composed_flows.service import ComposedFlowService
 
@@ -22,15 +26,12 @@ async def cmd_upsert_composed_flow(params: dict) -> dict:
     flow_id = params.get("id")
     owner_id = _caller_uid(params)
 
-    async def _op(session):
-        svc = ComposedFlowService(session)
-        return await svc.upsert(alias, name, flow_json, flow_id, owner_id=owner_id)
-
-    return await run_in_session(_op)
+    svc = ComposedFlowService(db)
+    return await svc.upsert(alias, name, flow_json, flow_id, owner_id=owner_id)
 
 
-@register_command("list_composed_flows", readonly=True)
-async def cmd_list_composed_flows(params: dict) -> list:
+@command("list_composed_flows", readonly=True)
+async def cmd_list_composed_flows(db: AsyncSession, params: dict) -> list:
     """List composed flows for an alias."""
     from stitch_backend.domains.composed_flows.service import ComposedFlowService
 
@@ -38,40 +39,31 @@ async def cmd_list_composed_flows(params: dict) -> list:
     limit = int(params.get("limit", 50))
     owner_id = _caller_uid(params)
 
-    async def _op(session):
-        svc = ComposedFlowService(session)
-        return await svc.list_by_alias(alias, limit, owner_id=owner_id)
-
-    return await run_in_read_session(_op)
+    svc = ComposedFlowService(db)
+    return await svc.list_by_alias(alias, limit, owner_id=owner_id)
 
 
-@register_command("delete_composed_flow")
-async def cmd_delete_composed_flow(params: dict) -> dict:
+@command("delete_composed_flow")
+async def cmd_delete_composed_flow(db: AsyncSession, params: dict) -> dict:
     """Delete a composed flow by ID."""
     from stitch_backend.domains.composed_flows.service import ComposedFlowService
 
     flow_id = params.get("flowId", params.get("flow_id", ""))
     owner_id = _caller_uid(params)
 
-    async def _op(session):
-        svc = ComposedFlowService(session)
-        await svc.delete_by_id(flow_id, owner_id=owner_id)
-        return {"success": True}
-
-    return await run_in_session(_op)
+    svc = ComposedFlowService(db)
+    await svc.delete_by_id(flow_id, owner_id=owner_id)
+    return {"success": True}
 
 
-@register_command("mark_composed_flow_ran")
-async def cmd_mark_composed_flow_ran(params: dict) -> dict:
+@command("mark_composed_flow_ran")
+async def cmd_mark_composed_flow_ran(db: AsyncSession, params: dict) -> dict:
     """Mark a composed flow as having been run."""
     from stitch_backend.domains.composed_flows.service import ComposedFlowService
 
     flow_id = params.get("flowId", params.get("flow_id", ""))
     owner_id = _caller_uid(params)
 
-    async def _op(session):
-        svc = ComposedFlowService(session)
-        await svc.mark_ran(flow_id, owner_id=owner_id)
-        return {"success": True}
-
-    return await run_in_session(_op)
+    svc = ComposedFlowService(db)
+    await svc.mark_ran(flow_id, owner_id=owner_id)
+    return {"success": True}

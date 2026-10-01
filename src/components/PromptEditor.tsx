@@ -8,7 +8,7 @@ import {
   getDefaultPromptContent,
   resetPromptToDefault } from
 '../lib/backend';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Button, LoadingSpinner, Textarea } from '@/components/ui';
 
 

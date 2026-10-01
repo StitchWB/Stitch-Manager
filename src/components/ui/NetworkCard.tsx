@@ -8,7 +8,9 @@ import {
 
 import { parseProxyString, validateProxyString } from '../../lib/proxyUtils';
 import { t } from '@/lib/i18n';
-import { Button, Input, SegmentedControl } from './index';
+import { Button } from './Button';
+import { Input } from './Input';
+import { SegmentedControl } from './SegmentedControl';
 import { useUIPreferencesStore } from '../../stores/uiPreferences';
 
 export interface NetworkConfig {

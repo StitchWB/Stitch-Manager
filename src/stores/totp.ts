@@ -1,4 +1,3 @@
-import { create } from 'zustand';
 import {
   listTotpKeys,
   addTotpKey,
@@ -10,6 +9,7 @@ import {
   type UpdateTotpKeyParams,
   type LinkTotpKeyParams,
 } from '@/lib/backend/modules/totp';
+import { createAsyncStore } from '@/lib/store/createAsyncStore';
 
 interface TotpState {
   keys: TotpKey[];
@@ -26,51 +26,43 @@ interface TotpState {
   getKeysForAccount: (accountId: string) => TotpKey[];
 }
 
-export const useTotpStore = create<TotpState>((set, get) => ({
-  keys: [],
-  loading: false,
-  error: null,
+export const useTotpStore = createAsyncStore<TotpState, 'fetchKeys'>({
+  name: 'totp',
+  fetchName: 'fetchKeys',
+  fetch: async () => ({ keys: await listTotpKeys() }),
+  initial: { keys: [] },
+  actions: (set, get) => ({
+    addKey: async (params) => {
+      const key = await addTotpKey(params);
+      set((s) => ({ keys: [key, ...s.keys] }));
+      return key;
+    },
 
-  fetchKeys: async () => {
-    set({ loading: true, error: null });
-    try {
-      const keys = await listTotpKeys();
-      set({ keys, loading: false });
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err), loading: false });
-    }
-  },
+    updateKey: async (params) => {
+      const updated = await updateTotpKey(params);
+      set((s) => ({
+        keys: s.keys.map((k) => (k.id === updated.id ? updated : k)),
+      }));
+      return updated;
+    },
 
-  addKey: async (params) => {
-    const key = await addTotpKey(params);
-    set((s) => ({ keys: [key, ...s.keys] }));
-    return key;
-  },
+    removeKey: async (id) => {
+      await removeTotpKey(id);
+      set((s) => ({ keys: s.keys.filter((k) => k.id !== id) }));
+    },
 
-  updateKey: async (params) => {
-    const updated = await updateTotpKey(params);
-    set((s) => ({
-      keys: s.keys.map((k) => (k.id === updated.id ? updated : k)),
-    }));
-    return updated;
-  },
+    linkKey: async (params) => {
+      const updated = await linkTotpKey(params);
+      set((s) => ({
+        keys: s.keys.map((k) => (k.id === updated.id ? updated : k)),
+      }));
+      return updated;
+    },
 
-  removeKey: async (id) => {
-    await removeTotpKey(id);
-    set((s) => ({ keys: s.keys.filter((k) => k.id !== id) }));
-  },
-
-  linkKey: async (params) => {
-    const updated = await linkTotpKey(params);
-    set((s) => ({
-      keys: s.keys.map((k) => (k.id === updated.id ? updated : k)),
-    }));
-    return updated;
-  },
-
-  getKeysForAccount: (accountId) => {
-    return get().keys.filter(
-      (k) => k.enabled && k.accountId === accountId
-    );
-  },
-}));
+    getKeysForAccount: (accountId) => {
+      return get().keys.filter(
+        (k) => k.enabled && k.accountId === accountId
+      );
+    },
+  }),
+});

@@ -1,0 +1,634 @@
+import type { AiHubTranslations } from '../../i18n/types/aiHub';
+
+export const aiHub: AiHubTranslations = {
+  aiHub: {
+    debugTitle: "Proxy Debug Logs",
+    auto: "Auto",
+    debugMethod: "Method",
+    debugPath: "Path",
+    debugStatus: "Status",
+    debugTime: "Time",
+    request: "Request",
+    response: "Response",
+    statusValue: "Status: {status}",
+    errorValue: "Error: {msg}",
+    selectLog: "Select a log entry to view details",
+    loadingKeys: "Loading keys...",
+    apiKeysTitle: "API Keys",
+    keysConfigured: "{count} key(s) configured",
+    addKey: "Add Key",
+    bulkAdd: "Bulk Add",
+    addKeyTitle: "Add Key to {provider}",
+    saveKeysFailed: "Failed to save API keys",
+    keyValid: "Key is valid",
+    keyInvalid: "Key is invalid",
+    testFailed: "Test failed",
+    keyHealth: "Key Health:",
+    healthHealthy: "{count} healthy",
+    healthFlaky: "{count} flaky",
+    healthBroken: "{count} broken",
+    healthExpired: "{count} expired",
+    healthUnknown: "{count} unknown",
+    noData: "No data yet",
+    customProviders: "Custom Providers",
+    customProvidersDesc: "Add any OpenAI-compatible provider with custom base URL",
+    healthToggle: "Health",
+    healthToggleTip: "Auto-refresh key health every 30s",
+    smartPasteFromPost: "Smart Paste from Post",
+    addProvider: "Add Provider",
+    noCustom: "No custom providers yet",
+    customEmpty: "Use {smart} to add from a post, or {add} manually",
+    providerCreatedWithKeys: "Provider \"{name}\" created with {count} keys",
+    failedGeneric: "Failed: {msg}",
+    clipboardNoUrlKeys: "Could not find URL or keys in clipboard",
+    existingProviderFound: "Found existing provider: {name}",
+    providerCreateFailed: "Failed to create provider",
+    providerCreated: "Provider created: {name}",
+    fmTitle: "FreeModel Bridge",
+    fmDesc: "Access Claude models via FreeModel. Set your API key to enable FM-* models in the proxy.",
+    apiKeyLabel: "API Key",
+    fmModelsAvailable: "{count} FreeModel models available",
+    fmAvailableModels: "Available models: FM-claude-sonnet-4-6, FM-claude-opus-4-8, FM-claude-haiku-4-5",
+    fmGateway: "Gateway: http://127.0.0.1:25583",
+    account_modal: {
+      account_name: "Account name",
+      account_type: "Account type",
+      accountType: {
+        enterprise: "Enterprise",
+        free: "Free",
+        pro: "Pro",
+        team: "Team"
+      },
+      account_will_be_available_for_routing: "Account will be available for routing",
+      add_title: "Add Account",
+      api_key: "Api key",
+      authMethod: {
+        api_key: "API Key",
+        oauth: "OAuth Token",
+        session: "Session Token"
+      },
+      authenticate_via_browser_recommended: "Authenticate via browser recommended",
+      authentication_method: "Authentication method",
+      cancel: "Cancel",
+      create: "Create",
+      created_success: "Account created successfully",
+      credential_required: "Authentication credential is required",
+      edit_title: "Edit Account",
+      enable_account: "Enable account",
+      login_with_oauth: "Login with oauth",
+      name_placeholder: "My OpenAI Account",
+      name_required: "Account name is required",
+      oauth_completed: "OAuth completed! Token will be automatically saved.",
+      oauth_token: "Oauth token",
+      oauth_token_placeholder: "Enter OAuth token",
+      optional_placeholder: "Optional",
+      positive_integer_error: "{label} must be a positive integer",
+      provider: "Provider",
+      save_failed: "Failed to save account: {error}",
+      saving: "Saving...",
+      session_token: "Session token",
+      session_token_placeholder: "Enter session token",
+      soft_daily_request_quota: "Soft daily request quota",
+      soft_daily_token_quota: "Soft daily token quota",
+      update: "Update",
+      updated_success: "Account updated successfully",
+      use_oauth_login: "Use oauth login"
+    },
+    actions: {
+      addAccount: "Add Account",
+      addMapping: "Add mapping",
+      cancel: "Cancel",
+      close: "Close",
+      configureIde: "Configure IDE/CLI",
+      copy: "Copy",
+      download: "Download",
+      generate: "Generate",
+      generating: "Generating…",
+      import: "Import",
+      importAllFromScan: "Import all from scan",
+      importJson: "Import JSON",
+      importing: "Importing…",
+      openAnalytics: "Open Request Analytics",
+      openDebugChat: "Open Debug Chat",
+      openDetailedAnalytics: "Open Detailed Analytics",
+      prepareFromScan: "Prepare JSON from scan",
+      refresh: "Refresh",
+      reset: "Reset",
+      runMigration: "Debug: Run Migration",
+      save: "Save",
+      saveSettings: "Save settings",
+      saving: "Saving...",
+      scanAuthFiles: "Scan auth files",
+      scanningAuthFiles: "Scanning...",
+      startProxy: "Start Proxy",
+      stopProxy: "Stop Proxy",
+      working: "Working..."
+    },
+    ai_proxy_account_drawer: {
+      advanced: "Advanced",
+      connected: "Connected",
+      connection_error: "Connection error",
+      cooldown: "Cooldown",
+      disabled: "Disabled",
+      edit: "Edit",
+      id: "Id",
+      left: "Left",
+      loading: "Loading",
+      no_quota_fetched_yet: "No quota fetched yet",
+      no_requests_yet: "No requests yet",
+      primary: "Primary",
+      quota: "Quota",
+      recent_requests: "Recent requests",
+      refresh: "Refresh",
+      refresh_error: "Refresh error",
+      resets: "Resets",
+      test: "Test",
+      weekly: "Weekly"
+    },
+    analytics: {
+      durationMs: "{count}ms",
+      emptyDescription: "No data yet — start the proxy and make some requests.",
+      emptyTitle: "No analytics data available",
+      openMonitor: "Open Monitor",
+      recentRequestsTitle: "Recent requests",
+      refreshTooltip: "Refresh analytics",
+      requestsCount: "{count} requests",
+      subtitle: "Deep view of AI Proxy traffic, models, and recent calls.",
+      title: "Detailed Analytics",
+      todayErrors: "Today errors",
+      todayRequests: "Today requests",
+      tokensCount: "{count} tokens",
+      topModelsTitle: "Top models",
+      weeklyErrors: "7d errors",
+      weeklyRequests: "7d requests"
+    },
+    holone: {
+      activeRules: "Active Rules",
+      block: "Block",
+      blockMode: "Block",
+      blockModeDescription: "Actively block high-severity threats and strip malicious tool calls. Recommended for production.",
+      enabled: "Enabled",
+      excerpt: "Excerpt",
+      findings: "Findings",
+      findingsLastHour: "Findings (last hour)",
+      highSeverityBlocked: "High Severity Blocked",
+      monitor: "Monitor",
+      monitorMode: "Monitor",
+      monitorModeDescription: "Log all suspicious activity but allow requests to pass through. Use for testing and observation.",
+      noFindings: "No security findings detected",
+      notConfigured: "Not configured",
+      protectionDescription: "HoloNe inspects all AI requests and responses for prompt injection, jailbreak attempts, and suspicious tool calls. Protects against malicious content from AI providers.",
+      protectionMode: "Protection Mode",
+      protectionTitle: "AI Protection",
+      recentFindings: "Recent Findings",
+      rule: "Rule",
+      save: "Save",
+      saveChanges: "Save Changes",
+      severity: "Severity",
+      soundDescription: "Play a sound when high-severity threats are detected",
+      soundEnabled: "Sound Alerts",
+      soundNotifications: "Sound Notifications",
+      testSound: "Test Sound",
+      timestamp: "Time",
+      toasts: {
+        configSaved: "HoloNe settings saved",
+        configSaveFailed: "Failed to save HoloNe settings",
+      },
+      unsavedChanges: "You have unsaved changes",
+      volume: "Volume",
+    },
+    compression: {
+      advancedSettings: "Advanced Settings",
+      autoTriggerThreshold: "Auto Trigger Threshold",
+      autoTriggerThresholdDescription: "Skip compression for prompts smaller than this (tokens)",
+      avgSavings: "Avg Savings",
+      badgeStdout: "stdout",
+      badgeTokens: "tokens",
+      caveman: "Caveman",
+      cavemanEnabled: "Caveman Enabled",
+      enabled: "Enabled",
+      inputCompression: "Input Compression",
+      inputCompressionEnabled: "Input Enabled",
+      level: "Level",
+      levelFull: "Full",
+      levelLite: "Lite",
+      levelUltra: "Ultra",
+      notConfigured: "Compression service not configured",
+      outputCompression: "Output Compression",
+      outputCompressionEnabled: "Output Enabled",
+      preserveSystemPrompt: "Preserve System Prompt",
+      preserveSystemPromptDescription: "Keep system messages unchanged to avoid breaking LLM behavior",
+      preserveSystemPromptEnabled: "Preserve Enabled",
+      rtkEnabled: "RTK Enabled",
+      rtkFilters: "RTK Filters",
+      subtitle: "Token compression & prompt optimization",
+      title: "Compression",
+      tokensSaved: "Tokens Saved",
+      toasts: {
+        configSaved: "Compression settings saved",
+        configSaveFailed: "Failed to save compression settings",
+      },
+    },
+    apiKeys: {
+      errors: {
+        addFailed: "Failed to add key: {msg}",
+        apiKeyRequired: "API key is required",
+        loadFailed: "Failed to load API keys: {msg}"
+      },
+      fireworks: {
+        account: "Account",
+        checkKey: "Check Key",
+        checkKeyRequired: "Please enter a Fireworks API key",
+        checkPlaceholder: "fw_...",
+        email: "Email",
+        historyEmpty: "Run a check to see history.",
+        historyTitle: "Recent Checks",
+        keyTail: "…{tail}",
+        monthlyRemaining: "Monthly Remaining",
+        monthlySpendLimit: "Monthly Spend Limit",
+        noResultYet: "Run a check to see the result.",
+        prepaidCreditsNote: "Fireworks runs on prepaid credits: keep an eye on the balance.",
+        result: "Check Result",
+        statusActive: "Active",
+        statusFrozen: "Frozen",
+        statusInvalid: "Invalid",
+        statusLimit: "Limit Reached",
+        suspendState: "Suspend State",
+        tier: "Tier",
+        totalSpent: "Spent This Month"
+      },
+      metrics: {
+        configuredKeys: "Configured Keys",
+        linkedAccounts: "Linked Accounts"
+      },
+      modals: {
+        fields: {
+          apiKeyLabel: "API Key",
+          baseUrlLabel: "Base URL (optional)",
+          modelPrefixLabel: "Model Prefix (optional)",
+        }
+      },
+      sections: {
+        checkerTitle: "Key Checker",
+      },
+      toasts: {
+        keyAdded: "{provider} API key added",
+        keyCopied: "Key copied to clipboard",
+        keyDeleted: "{provider} API key deleted"
+      }
+    },
+    authScan: {
+      failed: "Scan failed: {msg}",
+      found: "Found {count} auth file(s)"
+    },
+    cards: {
+      accountCoverageTitle: "Account Coverage",
+      errors: "Errors",
+      last20Requests: "Last 20 requests",
+      modelInventoryTitle: "Available Models",
+      providerCounts: "{active} active / {total} acc / {keys} keys",
+      providersTitle: "Providers",
+      requestHistoryTitle: "Recent Request History"
+    },
+    controller: {
+      confirm: {
+        importAllFromScan: "Import {count} scanned credential(s)? Duplicates are skipped.",
+        importPayload: "Import accounts from payload? This may create duplicates. Continue?",
+        prepareFromScan: "Prepare import payload from {count} scanned credential(s)? You'll be able to review before importing."
+      },
+      errors: {
+        connectionTestFailed: "Connection test failed: {msg}",
+        deleteAccountFailed: "Failed to delete account: {msg}",
+        downloadFailed: "Failed to download",
+        exportFailed: "Export failed: {msg}",
+        importFailed: "Import failed: {msg}",
+        importPayloadRequired: "Paste JSON payload first",
+        invalidImportPayload: "Invalid import payload",
+        loadAccountsFailed: "Failed to load accounts: {msg}",
+        migrationFailed: "Migration failed: {msg}",
+        noScanResultsToImport: "No scan results to import",
+        saveMappingsFailed: "Failed to save mappings: {msg}",
+        updateAccountFailed: "Failed to update account: {msg}"
+      },
+      importValidation: {
+        invalidJson: "Invalid JSON. Check for syntax errors.",
+        payloadAccountsRequired: "Payload must include an accounts array.",
+        payloadMustBeObject: "Payload must be a JSON object.",
+        payloadVersionRequired: "Payload must include a numeric version."
+      },
+      toasts: {
+        accountDeleted: "Account deleted successfully",
+        accountDisabled: "Account disabled",
+        accountEnabled: "Account enabled",
+        connectionOk: "{provider} connection OK",
+        downloadStarted: "Download started",
+        exportGenerated: "Export generated",
+        importedAccounts: "Imported {count} account(s)",
+        importedAccountsWithSkipped: "Imported {imported} account(s), skipped {skipped} duplicate(s)",
+        mappingsSaved: "Provider model mappings saved",
+        migrationCompleted: "Migration completed! Check console for details.",
+        migrationRunning: "Running migration...",
+        preparedImportFromScan: "Prepared import JSON from scan (review then import)",
+      }
+    },
+    copy: {
+      empty: "Nothing to copy",
+      fail: "Failed to copy {label}",
+      success: "{label} copied"
+    },
+    diagnostics: {
+      healthTitle: "Proxy Health",
+      latestReason: "Latest waiting/limit reason",
+      noRecentReasons: "No recent cooldown/limit messages.",
+    },
+    empty: {
+      capabilities: "No provider capabilities available yet.",
+      modelsNoAccounts: "Add accounts to unlock provider models.",
+      modelsProxyStopped: "Start the proxy to load model inventory.",
+      modelsUnavailable: "No models available yet.",
+      noAuthFiles: "No auth files found.",
+      noExportPayload: "Generate an export to view payload.",
+      noMappings: "No mappings configured"
+    },
+    groups: {
+      plugins: "Plugins",
+      processing: "Processing",
+      sources: "Sources",
+      usage: "Usage"
+    },
+    integrations: {
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+    },
+    labels: {
+      providers: "Providers",
+      providersHint: "Counts are accounts."
+    },
+    modals: {
+      csvNoSecrets: "CSV export never includes secrets.",
+      expiresShort: "exp {date}",
+      exportDescription: "By default exports are redacted. Enabling “include secrets” will export tokens in plaintext.",
+      exportFormatCsv: "CSV",
+      exportFormatJson: "JSON",
+      exportPayloadLabel: "Export payload",
+      exportTitle: "Export",
+      importDescription: "Import from scanned auth files (legacy locations) or paste an export JSON payload.",
+      importPayloadLabel: "Import payload (JSON)",
+      importPayloadPlaceholder: "Paste export JSON here…",
+      importTitle: "Import",
+      importWarningDescription: "This payload includes secrets (tokens/keys). Importing will store them locally.",
+      importWarningTitle: "Warning",
+      includeSecrets: "Include secrets",
+      mappingPatternPlaceholder: "^gpt-",
+      mappingTargetPlaceholder: "target model id",
+      mappingsTitle: "Provider Model Mappings",
+      noExpiry: "no expiry",
+      scanReportLabel: "Scan report",
+      scanResultsTitle: "Scan results",
+      transferExportTitle: "Export AI Proxy Accounts",
+      transferFooter: "Exports are redacted by default. Enabling “include secrets” exports tokens in plaintext.",
+      transferImportTitle: "Import AI Proxy Accounts"
+    },
+    o_auth_modal: {
+      click_the_button_below_to_open_the_authorization_p: "Click the button below to open the authorization p",
+      device_code_authorization: "Device code authorization",
+      enter_the_user_code_shown_above: "Enter the user code shown above",
+      enter_this_code_on_the_verification_page: "Enter this code on the verification page",
+      open_the_verification_page_using_the_button_below: "Open the verification page using the button below",
+      return_here_authorization_completes_automatically: "Return here authorization completes automatically",
+      sign_in_with_your_aws_builder_id: "Sign in with your aws builder id",
+      waiting_for_authorization: "Waiting for authorization"
+    },
+    oauthWizard: {
+      authUrlLabel: "Authorization URL",
+      copyUrl: "Copy URL",
+      failed: "Sign-in failed: {msg}",
+      notConfigured: "OAuth is not configured for {provider}. Place the client credentials in the plugin's oauth_config.json.",
+      openAgain: "Open sign-in page",
+      retry: "Try again",
+      start: "Sign in with {oauthProvider}",
+      starting: "Starting…",
+      success: "Sign-in completed.",
+      timedOut: "Sign-in timed out.",
+      title: "{provider} sign-in",
+      waiting: "Waiting for authorization — complete the sign-in in your browser."
+    },
+    proxy: {
+      activePortLabel: "Active port",
+      autoStart: "Auto start",
+      baseUrl: "Base URL",
+      clientApiKey: "Client API key",
+      error: "Proxy error",
+      errors: {
+        emptyManagementKey: "Management key cannot be empty",
+        invalidPort: "Port must be an integer between 1024 and 65535",
+        notLoaded: "Proxy settings are not loaded yet"
+      },
+      keyPreviewLabel: "Key preview",
+      managementKey: "Management key",
+      managementKeyPlaceholder: "Management key",
+      modeFull: "Full mode",
+      modeLabel: "Mode",
+      modeQuota: "Quota-only",
+      portLabel: "Port",
+      portPlaceholder: "25583",
+      reachabilityLabel: "Reachability",
+      reachable: "Reachable",
+      routingFillFirst: "Fill first",
+      routingLabel: "Routing",
+      routingRoundRobin: "Round robin",
+      running: "Running",
+      stopped: "Stopped",
+      title: "IDE Proxy",
+      toasts: {
+        saveFailed: "Failed to save proxy settings: {msg}",
+        saved: "Proxy settings saved",
+        started: "Proxy started",
+        stopped: "Proxy stopped"
+      },
+      unreachable: "Unreachable",
+      unsavedChanges: "You have unsaved proxy changes"
+    },
+    readiness: {
+      cooldown: "In cooldown",
+      enabled: "Enabled",
+      ready: "Ready",
+      weeklyLimit: "Weekly limit hit",
+      weeklyLimitShort: "Weekly limit"
+    },
+    rotation: {
+      checkIntervalLabel: "Check interval",
+      secondsUnit: "sec",
+      switchOnZeroHint: "Pick the next account on zero credits",
+      switchOnZeroLabel: "Switch on zero credits",
+      toasts: {
+        saveFailed: "Failed to save rotation settings",
+        strategySaved: "Rotation strategy saved"
+      },
+      strategy: {
+        title: "Rotation Strategy",
+        description: "Choose how to select the next account when switching"
+      },
+      strategies: {
+        roundRobin: {
+          title: "Round Robin",
+          description: "Cycle through accounts in order"
+        },
+        random: {
+          title: "Random",
+          description: "Pick a random account"
+        },
+        leastUsed: {
+          title: "Least Used",
+          description: "Pick the account with the most remaining credits"
+        },
+        priority: {
+          title: "Priority",
+          description: "Use accounts in priority order (drag to reorder)"
+        }
+      },
+      priority: {
+        title: "Provider Priority",
+        description: "Drag providers to set the order they will be used"
+      }
+    },
+    topology: {
+      keys: "keys",
+    },
+    healthCheck: {
+      title: "Health Check",
+      description: "Automatically test provider health and disable unhealthy keys",
+      intervalLabel: "Check interval",
+      intervalHint: "How often to test provider health",
+      autoDisableLabel: "Auto-disable unhealthy",
+      autoDisableHint: "Automatically disable keys that fail health checks",
+      showAdvanced: "Show advanced settings",
+      hideAdvanced: "Hide advanced settings",
+      testEndpointLabel: "Test endpoint",
+      testEndpointHint: "Endpoint to use for health checks",
+      cooldownLabel: "Cooldown duration",
+      cooldownHint: "How long to disable a key after failure",
+      exponentialBackoffLabel: "Exponential backoff",
+      exponentialBackoffHint: "Double cooldown duration on each failure"
+    },
+    search: {
+      placeholder: "Provider, account, or model…"
+    },
+    sections: {
+      monitor: {
+        subtitle: "Account coverage, proxy health, and request signals.",
+        title: "Monitoring"
+      },
+      providers: {
+        subtitle: "Accounts, quota headroom, and proxy health in one place.",
+        title: "AI Providers"
+      },
+      holone: {
+        subtitle: "AI prompt injection & jailbreak protection",
+        title: "HoloNe Security"
+      },
+      routing: {
+        title: "Routing"
+      },
+    },
+    table: {
+      delete: "Delete",
+      edit: "Edit",
+      emptyValue: "—",
+      requestsLine: "{requests} req today · {tokens} tokens",
+      status: "Status",
+      testConnection: "Test connection",
+    },
+    tabs: {
+      compression: "Compression",
+      holone: "HoloNe Security",
+      tools: "Tools",
+      chat: "Chat",
+      integrations: "Integrations",
+      monitor: "Monitor",
+      notebooklm: "NotebookLM",
+      providers: "Providers",
+      routing: "Routing",
+    },
+    warnings: {
+      copySensitiveConfirm: "Copy {label} to clipboard? This is sensitive and may be visible to other apps.",
+      serverOffline: "Server offline — data may be stale"
+    },
+    wizard: {
+      actions: {
+        applyConfiguration: "Apply configuration",
+        back: "Back",
+        done: "Done",
+        next: "Next",
+        restoreBackup: "Restore backup",
+        runSmoke: "Run smoke check"
+      },
+      alreadyConfigured: "Already configured",
+      applying: "Applying configuration...",
+      autoImport: {
+        dryRun: "Dry run",
+        hint: "Opt-in only. Imports discovered local tokens into AI Proxy accounts with duplicate protection.",
+        importNow: "Import now",
+        imported: "Imported",
+        modeDryRun: "Dry run",
+        modeLabel: "Mode",
+        modeWrite: "Write",
+        noDiscovered: "No discovered auth files",
+        scanned: "Scanned",
+        skipped: "Skipped",
+        title: "Auto-import accounts from local IDE auth files"
+      },
+      detecting: "Detecting installed IDEs...",
+      errors: {
+        autoImportFailed: "Failed to auto-import auth files",
+        autoSmokeFailed: "Auto smoke check failed",
+        configurationFailed: "Configuration failed",
+        detectFailed: "Failed to detect IDEs",
+        previewFailed: "Failed to generate preview",
+        restoreFailed: "Restore failed",
+        smokeFailed: "Smoke check failed",
+        startProxyFailed: "Failed to start AI Proxy from wizard"
+      },
+      manual: {
+        copied: "Copied manual setup values",
+        copyButton: "Copy endpoint + key",
+        copyFailed: "Failed to copy manual setup values",
+        hint: "Use these values if IDE auto-config does not apply cleanly:",
+        openaiApiKey: "OpenAI API Key",
+        openaiBaseUrl: "OpenAI Base URL",
+        title: "Manual setup fallback"
+      },
+      nextSteps: {
+        ensureProxy: "Make sure AI Proxy is running in Full mode",
+        restartIde: "Restart your IDE(s) to apply the changes",
+        runSmoke: "Run smoke check for each configured IDE",
+        testRequest: "Test the connection by making an AI request",
+        title: "Next steps:"
+      },
+      noIdesHint: "Make sure you have Cursor, Windsurf, Continue, Cline, or OpenCode installed.",
+      noIdesTitle: "No supported IDEs detected",
+      opencodeLabel: "Opencode Label",
+      previewHint: "This configuration will be merged with your existing IDE settings. A backup will be created automatically.",
+      previewTitle: "Configuration preview for selected IDEs:",
+      providerProfile: "Provider profile",
+      proxyStoppedHint: "AI Proxy is currently stopped. You can still configure IDE files now and start AI Proxy later before testing requests.",
+      results: {
+        configuredPending: "Configured (verification pending)",
+        configuredVerified: "Configured and verified",
+        restored: "Restored from backup",
+        restoredVerified: "Restored from backup and verified",
+        smokeAttention: "Smoke check: attention",
+        smokeOk: "Smoke check: OK"
+      },
+      runningAutoSmoke: "Running automatic smoke checks for configured IDEs...",
+      selectDescription: "Select the IDEs you want to configure to use AI Proxy:",
+      smoke: {
+        noModels: "AI Proxy is running but no models are available",
+        notConfigured: "IDE config does not look configured yet",
+        passed: "Smoke check passed",
+        proxyNotRunning: "AI Proxy is not running"
+      },
+      title: "Configure IDEs for AI Proxy"
+    }
+  }
+};

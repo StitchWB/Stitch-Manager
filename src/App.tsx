@@ -47,7 +47,6 @@ import Accounts from './pages/Accounts';
 import Login from './pages/Login';
 import Landing from './pages/Landing';
 import Setup from './pages/Setup';
-import WelcomeGate from './components/auth/WelcomeGate';
 import TelegramLogin from './components/auth/TelegramLogin';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProviders = lazy(() => import('./pages/AiProviders'));
@@ -514,12 +513,11 @@ function App() {
   //   2. required && !hasUsers && !user         → <Setup/>   (mandatory)
   //   3. required && hasUsers && !user          → <Login/>   (mandatory, TG reachable via link)
   //   4. required && authView='telegram'        → <TelegramLogin/>  (from Login link)
-  //   5. !required && !user && !guest          → <WelcomeGate/>  (opt-in)
+  //   5. !required && !user && !guest          → <TelegramLogin/>  (merged optional root: TG + guest + web password/setup)
   //   6. !required && !user && guest            → the normal app (guest mode)
-  //   7. !required && !user && authView='setup' → <Setup/>   (with back link)
-  //   8. !required && !user && authView='login' → <Login/>   (with back link)
-  //   9. !required && !user && authView='telegram' → <TelegramLogin/>  (with back link)
-  //  10. otherwise (user present)               → the normal app
+  //   7. !required && !user && authView='setup' → <Setup/>   (web only, with back link)
+  //   8. !required && !user && authView='login' → <Login/>   (web only, with back link)
+  //   9. otherwise (user present)               → the normal app
   if (!authChecked) {
     return <AuthLoadingSplash />;
   }
@@ -543,8 +541,9 @@ function App() {
     }
     return <Landing />;
   } else if (authEnabled && !authGuest) {
-    // Optional auth, not yet a guest: show welcome gate or the optional
-    // setup/login/telegram surface the user navigated to from the gate.
+    // Optional auth, not yet a guest: TelegramLogin is the merged root
+    // surface (Telegram login + guest entry + web-only password/setup);
+    // setup/login render only on web when the user navigated to them.
     // Desktop: local-only or TG-bound — local password accounts are a web
     // concept, so the setup/login pages never render on desktop.
     const desktop = isDesktopApp();
@@ -554,10 +553,7 @@ function App() {
     if (authView === 'login' && !desktop) {
       return <Login />;
     }
-    if (authView === 'telegram') {
-      return <TelegramLogin />;
-    }
-    return <WelcomeGate />;
+    return <TelegramLogin />;
   }
   // Otherwise: auth disabled, or guest mode, or user present → render the app.
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Activity, Eye, Send, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, EmptyState, SectionHeader, Toggle } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import { getSettings, updateSettings } from '@/lib/backend/modules/settings';
 import {
@@ -17,14 +17,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
 }
 
 export function TelemetrySection() {
@@ -194,7 +186,7 @@ export function TelemetrySection() {
                           {t('settings.telemetry.colDate')}:
                         </span>{' '}
                         <span className="text-slate-300">
-                          {formatDate(report.created_at)}
+                          {formatDateTime(report.created_at)}
                         </span>
                         <span className="text-slate-600 mx-1">·</span>
                         <span className="text-slate-500">

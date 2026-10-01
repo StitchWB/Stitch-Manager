@@ -3,6 +3,7 @@ import { User, Bot, Copy, Pencil, RefreshCw, Trash2, Check } from 'lucide-react'
 import type { ChatMessage as ChatMessageType } from '../../stores/chat';
 import type { ContentBlock } from '../../types/generated';
 import { t } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 import { ButtonBase, LoadingSpinner } from '@/components/ui';
 
 interface ChatMessageProps {
@@ -275,7 +276,7 @@ export const ChatMessage = memo(function ChatMessage({
             {isUser ? t('chat.you') : t('chat.assistant')}
           </span>
           <span className="text-2xs text-vsc-text-muted">
-            {new Date(message.timestamp).toLocaleTimeString('en-US', {
+            {formatTime(message.timestamp, {
               hour: '2-digit',
               minute: '2-digit',
             })}

@@ -22,7 +22,6 @@ from __future__ import annotations
 import hashlib
 import io
 import os
-import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -32,7 +31,18 @@ import httpx
 
 from autoreg.plugin import crypto
 from autoreg.plugin.layout import plugins_local_dir
-from autoreg.plugin.manifest import MANIFEST_FILENAME, SCHEMA_ID
+from autoreg.plugin.manifest import (
+    MANIFEST_FILENAME,
+    PluginManifest,
+    resolve_i18n,
+    validate_manifest,
+)
+from stitch_plugin_tools.publish_compile import (
+    compile_provider_package as compile_provider_package,
+)
+from stitch_plugin_tools.publish_pack import pack_engine as pack_engine
+from stitch_plugin_tools.publish_pack import pack_provider as pack_provider
+from stitch_plugin_tools.publish_pack import pack_service as pack_service
 
 if TYPE_CHECKING:
     from typing import Any
@@ -41,6 +51,9 @@ if TYPE_CHECKING:
 ENV_PUBLISH_URL = "STITCH_PUBLISH_URL"
 ENV_ADMIN_KEY = "STITCH_ADMIN_KEY"
 ENV_SIGNING_KEY = "STITCH_SIGNING_KEY"
+
+# DOS epoch floor: a fixed entry timestamp keeps archives byte-reproducible.
+_ZIP_FIXED_DATE = (1980, 1, 1, 0, 0, 0)
 
 
 # ── Packaging ──────────────────────────────────────────────────────────
@@ -51,15 +64,19 @@ def zip_package(package_dir: Path) -> bytes:
 
     The client runs ``extractall(tmp)`` then ``install_package(tmp)``, so the
     manifest must land at the zip root (no wrapping directory).  Files are
-    walked in sorted order for reproducible archives.
+    walked in sorted order with fixed entry timestamps so identical trees
+    produce byte-identical archives (reproducible signed artifacts).
     """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for root, _dirs, files in os.walk(package_dir):
+        for root, dirs, files in os.walk(package_dir):
+            dirs.sort()
             for fname in sorted(files):
                 full = Path(root) / fname
                 rel = full.relative_to(package_dir).as_posix()
-                zf.write(full, rel)
+                info = zipfile.ZipInfo(rel, date_time=_ZIP_FIXED_DATE)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                zf.writestr(info, full.read_bytes())
     return buf.getvalue()
 
 
@@ -96,6 +113,64 @@ def resolve_publish_config(
 
 # ── Publish ────────────────────────────────────────────────────────────
 
+# validate_manifest only type-checks these; the official publish path requires presence.
+REQUIRED_PUBLISH_METADATA = ("description", "category", "status")
+
+
+def _require_publish_metadata(manifest: PluginManifest) -> None:
+    """Raise ``ValueError`` when required marketplace metadata is missing.
+
+    The official publish channel ships rich marketplace metadata; community
+    packages (installed via the catalog, not this path) stay exempt.
+    """
+    missing: list[str] = []
+    if not resolve_i18n(manifest.extras.get("description")):
+        missing.append("description")
+    for key in ("category", "status"):
+        value = manifest.extras.get(key)
+        if not isinstance(value, str) or not value.strip():
+            missing.append(key)
+    if missing:
+        raise ValueError(
+            f"manifest {manifest.id}@{manifest.version} is missing marketplace "
+            f"metadata required for official publish: {', '.join(missing)}"
+        )
+
+
+def _marketplace_form_fields(manifest: PluginManifest) -> dict[str, str]:
+    """Extract marketplace metadata extras into /admin/publish form fields.
+
+    ``description`` carries the resolved plain string (ru-first via
+    ``resolve_i18n``); when the manifest value was an i18n object, the raw
+    object is also sent JSON-encoded as ``description_i18n``.  ``features``
+    and ``changelog`` travel JSON-encoded.  Absent extras are simply not
+    sent — the server leaves the corresponding Plugin columns untouched.
+    """
+    import json
+
+    fields: dict[str, str] = {}
+    extras = manifest.extras
+
+    description = extras.get("description")
+    if description is not None:
+        resolved = resolve_i18n(description)
+        if resolved:
+            fields["description"] = resolved
+        if isinstance(description, dict):
+            fields["description_i18n"] = json.dumps(description, ensure_ascii=False)
+
+    for key in ("author", "category", "status", "icon", "homepage", "repository"):
+        value = extras.get(key)
+        if isinstance(value, str) and value:
+            fields[key] = value
+
+    for key in ("features", "changelog"):
+        value = extras.get(key)
+        if isinstance(value, list):
+            fields[key] = json.dumps(value, ensure_ascii=False)
+
+    return fields
+
 
 async def publish_package(
     package_dir: Path,
@@ -120,19 +195,22 @@ async def publish_package(
     :class:`httpx.HTTPStatusError` on a non-2xx response and
     :class:`httpx.HTTPError` on transport failure.
     """
-    # 1. Sign in place if a key is provided (updates plugin.json signature).
+    # Gate before signing: signing mutates plugin.json, so missing metadata must fail first.
+    manifest = crypto.read_manifest(package_dir)
+    _require_publish_metadata(manifest)
+
+    # Sign in place if a key is provided (updates plugin.json signature).
     if signing_key_pem is not None:
         signature = crypto.sign_package(package_dir, signing_key_pem)
         crypto.write_signature(package_dir, signature)
+        # Re-read: the signature field changed on disk.
+        manifest = crypto.read_manifest(package_dir)
 
-    # 2. Read the manifest (post-sign) for id / version / signature.
-    manifest = crypto.read_manifest(package_dir)
-
-    # 3. Zip + transport sha256 (server re-checks against the uploaded bytes).
+    # Zip + transport sha256 (server re-checks against the uploaded bytes).
     zip_bytes = zip_package(package_dir)
     sha256 = hashlib.sha256(zip_bytes).hexdigest()
 
-    # 4. POST /admin/publish (multipart, X-Admin-Key header).
+    # POST /admin/publish (multipart, X-Admin-Key header).
     url = f"{server_url.rstrip('/')}/admin/publish"
     files = {
         "package": (
@@ -153,14 +231,7 @@ async def publish_package(
         data["variant_index"] = str(variant_index)
     if platform is not None:
         data["platform"] = platform
-    # Forward description/author from plugin.json extras so the server can
-    # store them on the Plugin row and serve them in the marketplace manifest.
-    description = manifest.extras.get("description")
-    if isinstance(description, str) and description:
-        data["description"] = description
-    author = manifest.extras.get("author")
-    if isinstance(author, str) and author:
-        data["author"] = author
+    data.update(_marketplace_form_fields(manifest))
     headers = {"X-Admin-Key": admin_key}
 
     own_client = client is None
@@ -227,8 +298,7 @@ def dev_install(package_dir: Path, *, link: bool = False) -> Path:
 
     manifest = crypto.read_manifest(package_dir)
 
-    # i18n flat-key check — catch the silent walkBundle resolution failure
-    # at dev-install time so authors fix it before publishing.
+    # i18n flat-key check: catch silent walkBundle resolution failures at dev-install, before publishing.
     i18n = manifest.contributions.get("i18n")
     if isinstance(i18n, dict):
         flat_keys = _find_flat_i18n_keys(i18n)
@@ -241,8 +311,7 @@ def dev_install(package_dir: Path, *, link: bool = False) -> Path:
 
     dest = plugins_local_dir() / manifest.id
     if dest.exists():
-        # A link dest contains only the pointer file; a copy dest is a full
-        # package tree.  Both are safe to rmtree: links never hold real files.
+        # Both link and copy dests are safe to rmtree: a link holds only the pointer file, never real package files.
         shutil.rmtree(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -261,484 +330,114 @@ def dev_install(package_dir: Path, *, link: bool = False) -> Path:
         ),
     )
 
-    # Refresh _vendor/ from canonical so the dev install always carries the
-    # current vendored server (idempotent byte-refresh).
+    # Refresh _vendor/ from canonical so the dev install always carries the current vendored server (idempotent).
     module = manifest.entry.get("module") if manifest.entry else None
     if module and (dest / module).is_dir():
-        from stitch_plugin_tools.vendoring import vendor_rpc_server
-        vendor_rpc_server(dest / module)
+        from stitch_plugin_tools.vendoring import vendor_all
+        vendor_all(dest / module)
 
     return dest
 
 
-# ── Engine-pack assembly ───────────────────────────────────────────────
+# Canonical ids resolve via pack_provider's <slug>-autoreg rule.
+_PUBLISH_ALL_PROVIDERS = (
+    "kiro", "kiro_v2", "windsurf", "trae", "fireworks", "qoder", "v0_app",
+)
 
 
-# Solver modules to bundle from autoreg/captcha/ into the engine-pack.
-# Only aliyun_slider is copied here — turnstile is replaced by the unified
-# solver from engine-pack/captcha/ which supports local_service, remote_http,
-# and opencv_dom backends.
-_ENGINE_PACK_SOLVERS = ("aliyun_slider",)
-
-
-def _default_src_roots() -> tuple[Path, Path]:
-    """Derive ``(autoreg_root, repo_root)`` from the installed SDK location.
-
-    Back-compat default for :func:`pack_engine` / :func:`pack_provider`:
-    ``crypto.__file__`` → ``autoreg/plugin/crypto.py`` → ``autoreg/`` → repo
-    root.  Callers that build from an explicit checkout (e.g. a standalone
-    plugin repo's CI) pass ``src_root`` / ``providers_root`` instead.
-    """
-    plugin_dir = Path(crypto.__file__).resolve().parent  # autoreg/plugin/
-    autoreg_root = plugin_dir.parent                     # autoreg/
-    repo_root = autoreg_root.parents[1]                  # python/ → repo root
-    return autoreg_root, repo_root
-
-
-def pack_engine(
-    out_dir: Path,
+async def publish_all(
     *,
-    version: str = "0.1.0",
-    name: str = "Engine Pack",
-    service: str = "engine",
-    src_root: Path | None = None,
-) -> Path:
-    """Assemble an engine-pack from the canonical source tree.
+    server_url: str,
+    admin_key: str,
+    signing_pem: bytes | None,
+    only: list[str] | None = None,
+    dry_run: bool = False,
+) -> list[dict]:
+    """Publish every official package in one run (17 packages).
 
-    The engine-pack consists of:
-      1. ``plugin.json`` — manifest with ``captcha_backends`` config
-      2. ``captcha/turnstile.py`` — unified multi-backend solver
-      3. ``captcha/aliyun_slider.py`` — aliyun slider solver (from autoreg)
-      4. ``vendor/turnstile-solver/`` — bundled D3-vin HTTP service
-      5. ``captcha/checkbox_template.png`` — OpenCV template (optional)
+    Registry:
+      1. every ``plugins-src/<id>/`` whose manifest has ``kind == "service"``
+         (packed fresh into a temp dir),
+      2. the engine-pack (packed fresh into a temp dir),
+      3. the seven autoreg providers (packed fresh into temp dirs).
 
-    The unified TurnstileSolver (item 2) replaces the old separate
-    turnstile.py + turnstile_api.py pair.  It supports three backends:
-      - ``local_service`` : launch bundled D3-vin at <pack>/vendor/...
-      - ``remote_http``   : call a central farm endpoint (config-only switch)
-      - ``opencv_dom``    : pure in-browser fallback (always available)
+    Entries are processed sorted by manifest id.  With ``only`` given,
+    non-matching entries are reported as ``skipped``.  ``dry_run=True``
+    validates each manifest and never touches the network.  A per-entry
+    failure is recorded as ``failed`` and never aborts the run.  Temp dirs
+    are always removed.
 
-    The captcha_backends config lives in plugin.json extras so that
-    operators can switch from local_service → remote_http without
-    rebuilding the pack — just update the manifest on the server.
-
-    Args:
-        out_dir: Target directory for the engine-pack. Created if absent.
-        version: Semver version string (default ``"0.1.0"``).
-        name: Human-readable pack name (default ``"Engine Pack"``).
-        service: Service identifier (default ``"engine"``).
-        src_root: Repo root to assemble from — must contain
-            ``python/autoreg/`` (engine-pack + captcha sources) and
-            ``vendor/turnstile-solver/``.  ``None`` (default) resolves the
-            roots from the installed SDK location (back-compat).
-
-    Returns:
-        The path to the assembled engine-pack directory.
+    Returns one ``{"id", "version", "status", "error"}`` dict per entry,
+    status ∈ ``published | dry-run | failed | skipped``.
     """
     import json
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Locate source directories: explicit checkout root, or the installed
-    # SDK location (back-compat).
-    if src_root is not None:
-        repo_root = Path(src_root)
-        autoreg_root = repo_root / "python" / "autoreg"
-        plugin_dir = autoreg_root / "plugin"
-    else:
-        autoreg_root, repo_root = _default_src_roots()
-        plugin_dir = autoreg_root / "plugin"
-    captcha_src = autoreg_root / "captcha"               # autoreg/captcha/
-
-    # ── 1. plugin.json with captcha_backends config ──────────────────────
-    manifest = {
-        "schema": SCHEMA_ID,
-        "id": "engine-pack",
-        "name": name,
-        "version": version,
-        "service": service,
-        "kind": "engine-pack",
-        "engine": {"min": "0.3.0", "api": 2},
-        "depends": [],
-        "entry": {},
-        "capabilities": ["captcha.solve"],
-        "outputs": [],
-        "signature": "",
-        # Captcha backend configuration — declarative, swappable without code.
-        # Default: local_service (bundled D3-vin). To use a central farm,
-        # change type to "remote_http" and set endpoint + auth_token.
-        "captcha_backends": {
-            "turnstile": {
-                "type": "local_service",
-                "service_dir": "vendor/turnstile-solver",
-                "service_entrypoint": "api.py",
-                "service_port_env": "TURNSTILE_SOLVER_PORT",
-                "service_host_env": "TURNSTILE_API_HOST",
-                "headless": True,
-                "fallback": "opencv_dom",
-            }
-        },
-    }
-    (out_dir / MANIFEST_FILENAME).write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-    )
-
-    # ── 2. Unified TurnstileSolver from engine-pack source ───────────────
-    # This is the single source of truth — replaces old turnstile.py +
-    # turnstile_api.py pair.  Supports local_service, remote_http, opencv_dom.
-    engine_pack_src = plugin_dir / "engine-pack" / "captcha"
-    captcha_dst = out_dir / "captcha"
-    if engine_pack_src.is_dir():
-        shutil.copytree(
-            engine_pack_src, captcha_dst, dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
-        )
-        # Add aliyun_slider from autoreg/captcha/ (not part of unified pack).
-        aliyun_src = captcha_src / "aliyun_slider.py"
-        if aliyun_src.is_file():
-            shutil.copy2(aliyun_src, captcha_dst / "aliyun_slider.py")
-    else:
-        # Fallback: build captcha dir from individual sources (greenfield).
-        captcha_dst.mkdir(exist_ok=True)
-        legacy_turnstile = autoreg_root / "captcha" / "turnstile.py"
-        if legacy_turnstile.is_file():
-            shutil.copy2(legacy_turnstile, captcha_dst / "turnstile.py")
-        for solver in _ENGINE_PACK_SOLVERS:
-            src = captcha_src / f"{solver}.py"
-            if src.is_file():
-                shutil.copy2(src, captcha_dst / src.name)
-
-    # ── 3. OpenCV checkbox template (optional, degrades gracefully) ──────
-    template_src = captcha_src / "checkbox_template.png"
-    if template_src.is_file():
-        shutil.copy2(template_src, out_dir / "captcha" / template_src.name)
-
-    # ── 4. Bundled D3-vin turnstile SERVICE ──────────────────────────────
-    # Makes the engine-pack self-sufficient: the solver launches this service
-    # when type=local_service.  Copied from repo's vendor/ submodule.
-    # Excludes: .git, __pycache__, *.pyc, proxies.txt (user-specific config).
-    service_src = repo_root / "vendor" / "turnstile-solver"
-    if service_src.is_dir():
-        service_dst = out_dir / "vendor" / "turnstile-solver"
-        if service_dst.exists():
-            shutil.rmtree(service_dst)
-        shutil.copytree(
-            service_src,
-            service_dst,
-            ignore=shutil.ignore_patterns(
-                ".git", "__pycache__", "*.pyc", "proxies.txt",
-            ),
-        )
-
-    return out_dir
-
-
-# ── Provider plugin assembly ────────────────────────────────────────────
-
-
-def _rewrite_provider_imports(source: str, provider_id: str) -> str:
-    """Rewrite imports in a bundled provider module to package-relative.
-
-    Transforms (applied to every ``.py`` file in the assembled package):
-
-      ``from ..base import``        → ``from .base import``      (bundled)
-      ``from ..common import``      → ``from .common import``    (bundled)
-      ``from ..<other>.X import``    → ``from autoreg.providers.<other>.X import``
-      ``from ..<other> import``     → ``from autoreg.providers.<other> import``
-      ``from ...X import``          → ``from autoreg.X import``  (host-resolved)
-      ``from autoreg.providers.<id>.X import`` → ``from .X import``
-      ``from autoreg.providers.<id> import``    → ``from . import``
-      ``from autoreg.providers.base import``    → ``from .base import``
-      ``from autoreg.providers.common import`` → ``from .common import``
-
-    One-dot relative imports (``from .browser import``) are left untouched —
-    they already resolve within the bundled package.
-    """
-    pid = re.escape(provider_id)
-
-    # Absolute imports referencing the provider's own package → package-relative
-    source = re.sub(
-        rf"from autoreg\.providers\.{pid}\.([\w.]+) import",
-        r"from .\1 import",
-        source,
-    )
-    source = re.sub(
-        rf"from autoreg\.providers\.{pid} import",
-        "from . import",
-        source,
-    )
-    # Absolute imports to base/common → package-relative (bundled copies)
-    source = re.sub(
-        r"from autoreg\.providers\.base import",
-        "from .base import",
-        source,
-    )
-    source = re.sub(
-        r"from autoreg\.providers\.common import",
-        "from .common import",
-        source,
-    )
-
-    # Two-dot relative: ..base / ..common → .base / .common (bundled)
-    source = re.sub(r"from \.\.base import", "from .base import", source)
-    source = re.sub(r"from \.\.common import", "from .common import", source)
-    # Two-dot relative: ..<other>.X → autoreg.providers.<other>.X (cross-provider)
-    source = re.sub(
-        r"from \.\.([a-zA-Z_]\w*)\.([\w.]+) import",
-        r"from autoreg.providers.\1.\2 import",
-        source,
-    )
-    source = re.sub(
-        r"from \.\.([a-zA-Z_]\w*) import",
-        r"from autoreg.providers.\1 import",
-        source,
-    )
-    # Three-dot relative: ...X → autoreg.X (host-resolved absolute)
-    source = re.sub(
-        r"from \.\.\.([\w.]+) import",
-        r"from autoreg.\1 import",
-        source,
-    )
-    # Four-dot relative: ....X → autoreg.X (unlikely, but handle for safety)
-    source = re.sub(
-        r"from \.\.\.\.([\w.]+) import",
-        r"from autoreg.\1 import",
-        source,
-    )
-    return source
-
-
-def pack_provider(
-    provider_id: str,
-    out_dir: Path,
-    *,
-    version: str = "0.1.0",
-    providers_root: Path | None = None,
-) -> Path:
-    """Assemble a self-contained CODE plugin package from ``<providers>/<id>/``.
-
-    Mirrors :func:`pack_engine`: copies the provider implementation into the
-    package dir, bundles ``base.py`` + ``common.py`` if any bundled module
-    imports them, rewrites all imports to package-relative or host-resolved
-    absolute form, emits ``plugin.json`` (``kind=provider``, entry
-    ``provider.py`` / class ``Provider``), and appends a ``Provider = <ClassName>``
-    alias to ``provider.py`` so the manifest entry class resolves.
-
-    The package is unsigned — sign with :func:`autoreg.plugin.crypto.sign_package`
-    + :func:`autoreg.plugin.crypto.write_signature`, then publish with
-    :func:`publish_package` (same pipeline as engine-pack).
-
-    Args:
-        provider_id: Provider directory name (e.g. ``"kiro"``).
-        out_dir: Target directory for the package. Created if absent.
-        version: Semver version string (default ``"0.1.0"``).
-        providers_root: Directory containing ``<provider_id>/`` plus the
-            shared ``base.py`` / ``common.py`` — e.g. a method repo's
-            ``providers/`` tree.  ``None`` (default) resolves
-            ``autoreg/providers/`` from the installed SDK location
-            (back-compat with the monorepo layout).
-    """
-    import json
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Locate the providers tree: explicit root, or the installed SDK
-    # location (back-compat).
-    if providers_root is not None:
-        providers_src = Path(providers_root)
-    else:
-        autoreg_root, _repo_root = _default_src_roots()
-        providers_src = autoreg_root / "providers"      # autoreg/providers/
-    provider_src = providers_src / provider_id
-
-    if not provider_src.is_dir():
-        raise FileNotFoundError(f"provider source not found: {provider_src}")
-
-    # ── 1. Copy provider implementation ────────────────────────────────
-    shutil.copytree(
-        provider_src, out_dir, dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
-    )
-
-    # ── 2. Bundle base.py + common.py if any bundled file imports them ──
-    needs_base = False
-    needs_common = False
-    for py_file in out_dir.rglob("*.py"):
-        text = py_file.read_text(encoding="utf-8")
-        if "from ..base import" in text or "from autoreg.providers.base import" in text:
-            needs_base = True
-        if "from ..common import" in text or "from autoreg.providers.common import" in text:
-            needs_common = True
-    if needs_base:
-        base_src = providers_src / "base.py"
-        if base_src.is_file():
-            shutil.copy2(base_src, out_dir / "base.py")
-    if needs_common:
-        common_src = providers_src / "common.py"
-        if common_src.is_file():
-            shutil.copy2(common_src, out_dir / "common.py")
-
-    # ── 3. Rewrite imports in all .py files ─────────────────────────────
-    for py_file in out_dir.rglob("*.py"):
-        text = py_file.read_text(encoding="utf-8")
-        rewritten = _rewrite_provider_imports(text, provider_id)
-        if rewritten != text:
-            py_file.write_text(rewritten, encoding="utf-8")
-
-    # ── 4. Append Provider alias to provider.py ────────────────────────
-    provider_py = out_dir / "provider.py"
-    if not provider_py.is_file():
-        raise FileNotFoundError(
-            f"provider.py not found in {provider_src} — cannot emit entry point"
-        )
-    source = provider_py.read_text(encoding="utf-8")
-    match = re.search(r"^class (\w+Provider)\b", source, re.MULTILINE)
-    if not match:
-        raise ValueError(
-            f"could not detect provider class in {provider_py} "
-            f"(expected a class matching \\w+Provider)"
-        )
-    class_name = match.group(1)
-    if f"Provider = {class_name}" not in source:
-        provider_py.write_text(
-            source.rstrip()
-            + f"\n\n# Plugin entry alias (generated by pack_provider)\n"
-            f"Provider = {class_name}\n",
-            encoding="utf-8",
-        )
-
-    # ── 5. Emit plugin.json ───────────────────────────────────────────
-    manifest = {
-        "schema": SCHEMA_ID,
-        "id": f"{provider_id}-provider",
-        "name": f"{provider_id} provider",
-        "description": f"Code plugin for {provider_id} registration provider.",
-        "author": "WhiteBite",
-        "version": version,
-        "service": provider_id,
-        "kind": "provider",
-        "engine": {"min": "0.3.0", "api": 2},
-        "depends": [],
-        "entry": {"module": "provider.py", "class": "Provider"},
-        "capabilities": [f"autoreg.{provider_id}"],
-        "outputs": [],
-        "signature": "",
-    }
-    (out_dir / MANIFEST_FILENAME).write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-    )
-    return out_dir
-
-
-def compile_provider_package(package_dir: Path, provider_id: str) -> Path:
-    """Compile a staged provider plugin package into one native extension.
-
-    Takes the output of :func:`pack_provider` (a directory of ``.py`` files +
-    ``plugin.json``) and replaces the Python sources with a single
-    Nuitka-compiled extension module, then rewrites the manifest entry to the
-    compiled form.  This is what keeps the method source code out of the
-    distributed artifact — only machine code ships.
-
-    The package is compiled under the module name ``<provider_id>_provider``
-    (identifier-safe; matches the ``PyInit_`` export the loader resolves).  The
-    compiled ``--mode=package`` output bundles every package module yet leaves
-    host imports (``autoreg.shared``, ``pydantic``, ...) as runtime imports
-    resolved from the host app — verified empirically.
-
-    Requires a C compiler reachable by Nuitka (MSVC on Windows, gcc/cc on
-    Linux) and ``nuitka`` installed in the running interpreter.
-
-    Args:
-        package_dir: Staged package directory (from :func:`pack_provider`).
-        provider_id: Provider id (e.g. ``"trae"``).
-
-    Returns the path of the compiled extension module inside ``package_dir``.
-
-    Raises:
-        FileNotFoundError: ``provider.py`` missing from the staged package.
-        ValueError: the ``Provider = <Class>`` alias cannot be detected.
-        RuntimeError: Nuitka failed or produced no binary.
-    """
-    import json
-    import subprocess
-    import sys
     import tempfile
 
-    base_name = f"{provider_id.replace('-', '_')}_provider"
+    repo_root = Path(__file__).resolve().parents[2]
+    temp_dirs: list[Path] = []
+    try:
+        package_dirs: list[Path] = []
+        plugins_src = repo_root / "plugins-src"
+        if plugins_src.is_dir():
+            for child in sorted(plugins_src.iterdir()):
+                manifest_path = child / MANIFEST_FILENAME
+                if not child.is_dir() or not manifest_path.is_file():
+                    continue
+                raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if raw.get("kind") == "service":
+                    pack_dir = Path(tempfile.mkdtemp(prefix=f"stitch-{raw['id']}-"))
+                    temp_dirs.append(pack_dir)
+                    pack_service(child, pack_dir)
+                    package_dirs.append(pack_dir)
 
-    # ── 1. Detect the real provider class (exported by the package __init__) ─
-    provider_py = package_dir / "provider.py"
-    if not provider_py.is_file():
-        raise FileNotFoundError(f"provider.py not found in {package_dir}")
-    match = re.search(
-        r"^Provider\s*=\s*(\w+)", provider_py.read_text(encoding="utf-8"), re.MULTILINE
-    )
-    if not match:
-        raise ValueError(
-            f"could not detect 'Provider = <Class>' alias in {provider_py}"
-        )
-    class_name = match.group(1)
+        engine_dir = Path(tempfile.mkdtemp(prefix="stitch-engine-pack-"))
+        temp_dirs.append(engine_dir)
+        pack_engine(engine_dir)
+        package_dirs.append(engine_dir)
 
-    with tempfile.TemporaryDirectory(prefix="stitch-nuitka-") as tmp:
-        # ── 2. Copy package sources into a dir named exactly base_name ────────
-        # Nuitka derives the compiled module name from the directory name.
-        src_dir = Path(tmp) / base_name
-        src_dir.mkdir()
-        for py_file in package_dir.rglob("*.py"):
-            dst = src_dir / py_file.relative_to(package_dir)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(py_file, dst)
+        for provider_id in _PUBLISH_ALL_PROVIDERS:
+            provider_dir = Path(tempfile.mkdtemp(prefix=f"stitch-{provider_id}-"))
+            temp_dirs.append(provider_dir)
+            pack_provider(provider_id, provider_dir)
+            package_dirs.append(provider_dir)
 
-        # ── 3. Compile the whole package into one extension module ─────────
-        build_out = Path(tmp) / "build"
-        cmd = [
-            sys.executable,
-            "-m",
-            "nuitka",
-            "--mode=package",
-            "--remove-output",   # clean intermediate C build artefacts
-            "--no-pyi-file",     # no type stubs in the distributed package
-            f"--output-dir={build_out}",
-            str(src_dir),
-        ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"Nuitka compile failed for {provider_id} "
-                f"(rc={proc.returncode}):\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
+        records: list[tuple[dict, Path]] = []
+        for package_dir in package_dirs:
+            raw = json.loads(
+                (package_dir / MANIFEST_FILENAME).read_text(encoding="utf-8")
             )
+            records.append((raw, package_dir))
+        records.sort(key=lambda r: r[0]["id"])
 
-        # ── 4. Move the produced binary into the package dir ───────────────
-        binaries = [
-            b
-            for b in build_out.glob(f"{base_name}.*")
-            if b.is_file() and not b.name.endswith((".pyi", ".json"))
-        ]
-        if not binaries:
-            raise RuntimeError(
-                f"Nuitka reported success but no {base_name}.* binary in {build_out}"
-            )
-        binary = sorted(binaries)[0]
-        target = package_dir / binary.name
-        shutil.copy2(binary, target)
-
-    # ── 5. Strip the Python sources — only the binary must ship ──────────
-    for py_file in list(package_dir.rglob("*.py")):
-        py_file.unlink()
-    for pyc_file in list(package_dir.rglob("*.pyc")):
-        pyc_file.unlink()
-    for cache_dir in list(package_dir.rglob("__pycache__")):
-        shutil.rmtree(cache_dir, ignore_errors=True)
-
-    # ── 6. Rewrite the manifest entry to the compiled form ───────────────
-    manifest_path = package_dir / MANIFEST_FILENAME
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["entry"] = {
-        "module": base_name,
-        "class": class_name,
-        "compiled": True,
-    }
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-    )
-    return target
+        results: list[dict] = []
+        for raw, package_dir in records:
+            entry = {
+                "id": raw["id"],
+                "version": raw["version"],
+                "status": "",
+                "error": None,
+            }
+            results.append(entry)
+            if only is not None and raw["id"] not in only:
+                entry["status"] = "skipped"
+                continue
+            try:
+                if dry_run:
+                    validate_manifest(raw)
+                    entry["status"] = "dry-run"
+                else:
+                    await publish_package(
+                        package_dir,
+                        server_url=server_url,
+                        admin_key=admin_key,
+                        signing_key_pem=signing_pem,
+                        rollout_percent=100,
+                    )
+                    entry["status"] = "published"
+            except Exception as exc:
+                entry["status"] = "failed"
+                entry["error"] = str(exc)
+        return results
+    finally:
+        for temp_dir in temp_dirs:
+            shutil.rmtree(temp_dir, ignore_errors=True)

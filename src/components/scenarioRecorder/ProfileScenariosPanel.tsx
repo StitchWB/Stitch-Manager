@@ -1,42 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Archive,
-  Copy,
-  Trash2,
-  Heart,
-  Pencil,
-  PlayCircle,
-  PlusCircle,
-  RefreshCw,
-  Repeat2,
-  FolderOpen,
-  Tag,
-  LayoutGrid,
-  List,
-  Lock,
-  GitBranch,
-  HelpCircle } from
-'lucide-react';
-import {
-  Modal,
-  Button,
-  Input,
-  Textarea,
-  Badge,
-  Select,
-  MultiFilterDropdown,
-  ConfirmActionButton,
-  IconButton,
-  Tooltip,
-  ViewModeSwitch,
-  StickyToolbar,
-  ToolbarTitle,
-  ListHeaderRow,
-  ToolbarSearchField,
-  ToolbarActionsCluster,
-  ToolbarSection } from
-'@/components/ui';
-import { TierBadge } from '@/components/ui/TierBadge';
+import { Modal, Button } from '@/components/ui';
 import {
   deleteRecordedScenario,
   listRecordedScenarios,
@@ -51,12 +14,17 @@ import {
   type ScenarioRevisionItem,
   type ScenarioRecordItem } from
 '@/lib/backend/modules/pythonJobs';
-import { openInFileManager, copyToClipboard } from '@/lib/backend/modules/utils';
 import { t } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
 import { useUIPreferencesStore } from '@/stores/uiPreferences';
 import { useAuthStore, effectiveRole } from '@/stores/auth';
+import { BatchOpsBar } from './panels/BatchOpsBar';
+import { FilterRow } from './panels/FilterRow';
+import { ReplayControls } from './panels/ReplayControls';
+import { ScenarioList } from './panels/ScenarioList';
+import { ScenarioDialogs } from './panels/ScenarioDialogs';
+import { safeMeta } from './panels/scenarioMeta';
 
 type ProfileScenariosPanelProps = {
   alias: string | null;
@@ -88,10 +56,7 @@ export function ProfileScenariosPanel({
   const viewMode = useUIPreferencesStore((state) => state.scenariosPage.viewMode);
   const setScenariosViewMode = useUIPreferencesStore((state) => state.setScenariosViewMode);
   const currentUser = useAuthStore((state) => state.user);
-  // Use the EFFECTIVE role so an admin previewing a non-admin role loses
-  // the admin-only edit controls (editTier / min_role). The item-level
-  // editTier/min_role semantics below are left as-is; only the isAdmin
-  // flag flips with the previewed role.
+  // effective role: an admin previewing a non-admin role must lose the admin-only edit controls
   const isAdmin = effectiveRole(currentUser) === 'admin';
 
   const [editOpen, setEditOpen] = useState(false);
@@ -238,37 +203,6 @@ export function ProfileScenariosPanel({
     });
   }, [favoritesOnly, items, query, selectedTags, showLocked, toTagLabel]);
 
-  const formatLastPlayed = useCallback((value?: string | null) => {
-    if (!value) return '—';
-    const dt = new Date(value);
-    if (Number.isNaN(dt.getTime())) return value;
-    return dt.toLocaleString();
-  }, []);
-
-  const formatDateTime = useCallback((value?: string | null) => {
-    if (!value) return '—';
-    const dt = new Date(value);
-    if (Number.isNaN(dt.getTime())) return value;
-    return dt.toLocaleString();
-  }, []);
-
-  const healthVariant = useCallback((score?: number | null) => {
-    if (score == null) return 'outline' as const;
-    if (score >= 85) return 'success' as const;
-    if (score >= 60) return 'warning' as const;
-    return 'danger' as const;
-  }, []);
-
-  const safeMeta = useCallback((m?: ScenarioMetadata | null): ScenarioMetadata => {
-    return {
-      description: m?.description ?? null,
-      tags: Array.isArray(m?.tags) ? m!.tags.filter(Boolean) : [],
-      lastStatus: m?.lastStatus ?? null,
-      lastDurationMs: m?.lastDurationMs ?? null,
-      lastRunAt: m?.lastRunAt ?? null
-    };
-  }, []);
-
   const openEdit = useCallback(
     (item: ScenarioRecordItem) => {
       setEditItem(item);
@@ -279,7 +213,7 @@ export function ProfileScenariosPanel({
       setEditTier(item.min_role ?? 'user');
       setEditOpen(true);
     },
-    [safeMeta]
+    []
   );
 
   const saveEdit = useCallback(async () => {
@@ -320,7 +254,7 @@ export function ProfileScenariosPanel({
     } finally {
       setEditSaving(false);
     }
-  }, [alias, editDescription, editItem, editName, editTagsText, editTier, fetchScenarioItems, isAdmin, parseTagsFromText, safeMeta]);
+  }, [alias, editDescription, editItem, editName, editTagsText, editTier, fetchScenarioItems, isAdmin, parseTagsFromText]);
 
   const toggleFavorite = useCallback(async (item: ScenarioRecordItem) => {
     try {
@@ -428,665 +362,82 @@ export function ProfileScenariosPanel({
   const content =
   <div className="space-y-4">
       {variant === 'modal' ?
-    <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-          <ToolbarTitle
-        eyebrow={t('scenarios.libraryTitle')}
-        title={t('scenarios.librarySubtitle')}
-        eyebrowClassName="text-[10px] uppercase tracking-[0.3em] text-slate-500"
-        titleClassName="text-sm text-slate-200" />
-      
-          <Button
-        size="sm"
-        className="h-9"
-        variant="secondary"
-        onClick={handleRefresh}
-        disabled={!alias || loading}
-        leftIcon={<RefreshCw size={14} />}>
-        
-            {loading ? t('common.loading') : t('common.refresh')}
-          </Button>
-        </div> :
+    <BatchOpsBar loading={loading} refreshDisabled={!alias || loading} onRefresh={handleRefresh} /> :
     null}
 
-      <StickyToolbar>
-        <ToolbarSection
-        left={
-        <ToolbarSearchField
-          value={query}
-          onValueChange={setQuery}
-          placeholder={t('scenarios.searchPlaceholder')} />
-
-        }
-        right={
-        <ToolbarActionsCluster className="min-w-0" align="start">
-              <Button
-            size="sm"
-            className="h-9"
-            variant={favoritesOnly ? 'primary' : 'secondary'}
-            onClick={() => setFavoritesOnly((v) => !v)}
-            leftIcon={<Heart size={14} />}>
-            
-                {t('scenarios.favoritesOnly')}
-              </Button>
-
-              <Button
-            size="sm"
-            className="h-9"
-            variant={showLocked ? 'primary' : 'secondary'}
-            onClick={() => setShowLocked((v) => !v)}
-            leftIcon={<Lock size={14} />}>
-
-                {t('scenarios.showLocked')}
-              </Button>
-
-              <MultiFilterDropdown
-            values={selectedTags}
-            onChange={setSelectedTags}
-            icon={<Tag size={14} />}
-            placeholder={t('scenarios.tagsFilterLabel')}
-            triggerClassName="h-9"
-            menuClassName="min-w-[260px]"
-            showActiveState
-            showFooterActions
-            options={tagOptions}
-            renderValue={(values) =>
-            values.length === 0 ? t('scenarios.tagsFilterLabel') : values.join(', ')
-            } />
-          
-
-              <ViewModeSwitch
-            value={viewMode}
-            onChange={(value) =>
-            setScenariosViewMode(value as 'cards' | 'list' === 'list' ? 'list' : 'cards')
-            }
-            options={[
-            {
-              value: 'cards',
-              label: t('scenarios.viewCards'),
-              icon: <LayoutGrid size={14} />
-            },
-            {
-              value: 'list',
-              label: t('scenarios.viewList'),
-              icon: <List size={14} />
-            }]
-            } />
-          
-
-              <Button
-            size="sm"
-            className="h-9"
-            variant="secondary"
-            onClick={handleRefresh}
-            disabled={!alias || loading}
-            leftIcon={<RefreshCw size={14} />}>
-            
-                {loading ? t('common.loading') : t('common.refresh')}
-              </Button>
-            </ToolbarActionsCluster>
-        } />
-      
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-          <div>
-            {t('scenarios.title')}: <span className="text-slate-200">{filtered.length}</span> /{' '}
-            {items.length}
-          </div>
-        </div>
-      </StickyToolbar>
-
-      <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-        {loading ?
-      <div className="text-xs text-slate-500">{t('common.loading')}</div> :
-      error ?
-      <div className="text-xs text-amber-300">{error}</div> :
-      items.length === 0 ?
-      <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Archive size={14} /> {t('scenarios.noScenarios')}
-          </div> :
-
-      <div className="max-h-[60vh] overflow-y-auto overflow-x-hidden space-y-3 pr-1">
-            {filtered.length === 0 ?
-        <div className="text-xs text-slate-500">{t('common.none')}</div> :
-        viewMode === 'list' ?
-        <div className="rounded-lg border border-white/10 overflow-hidden">
-                <ListHeaderRow className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
-                  <div>{t('common.name')}</div>
-                  <div className="text-right">{t('common.actions')}</div>
-                </ListHeaderRow>
-                <div className="divide-y divide-white/10">
-                  {filtered.map((item) => {
-              const meta = safeMeta(item.metadata);
-              const isLocked = item.locked === true;
-              return (
-                <div
-                  key={item.id}
-                  className={`grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2 hover:bg-white/[0.04]${isLocked ? ' opacity-50' : ''}`}>
-                  
-                        <div
-                    className={`min-w-0 text-left ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                    onClick={() => { if (!isLocked) onReplay(item.scenarioPath); }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onReplay(item.scenarioPath); }}}
-                    title={item.name}>
-
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="text-sm text-slate-100 font-semibold truncate min-w-0">
-                              {item.name}
-                            </div>
-                            {item.favorite ? <Heart size={14} className="text-pink-300" /> : null}
-                            {item.missing ?
-                      <Badge variant="warning" size="sm" className="normal-case">
-                                {t('scenarios.missingFile')}
-                              </Badge> :
-                      null}
-                            {isLocked ? <Lock size={14} className="text-amber-400 shrink-0" /> : null}
-                            {isLocked && item.min_role ?
-                      <TierBadge tier={item.min_role} size="sm" /> :
-                      null}
-                          </div>
-                          <div
-                    className="mt-1 text-[11px] text-slate-500 font-mono truncate"
-                    title={item.scenarioPath}>
-
-                            {item.scenarioPath}
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                            <span>
-                              {item.stepsCount} {t('scenarios.stepsCount')}
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {t('scenarios.playCount')}: {item.playCount}
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {t('scenarios.lastPlayed')}: {formatLastPlayed(item.lastPlayedAt)}
-                            </span>
-                            {meta.lastStatus ?
-                      <>
-                                <span>•</span>
-                                <span>
-                                  {t('scenarios.lastStatus')}: {meta.lastStatus}
-                                </span>
-                              </> :
-                      null}
-                          </div>
-                </div>
-
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          {isLocked && item.min_role && (
-                    <IconButton
-                      size="md"
-                      variant="ghost"
-                      onClick={() => setHowToGetItem(item)}
-                      aria-label={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
-                      title={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
-                      className="text-slate-400 hover:text-amber-300">
-                      <HelpCircle size={16} />
-                    </IconButton>
-                  )}
-                          <IconButton
-                      size="md"
-                      variant="ghost"
-                      disabled={isLocked}
-                      onClick={() => { if (!isLocked) void toggleFavorite(item); }}
-                      aria-label={t('scenarios.toggleFavorite')}
-                      title={isLocked ? t('scenarios.tierLocked') : t('scenarios.toggleFavorite')}>
-                      
-                            <Heart size={16} className={item.favorite ? 'text-pink-300' : ''} />
-                          </IconButton>
-                          <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => openEdit(item)}
-                      disabled={isLocked}
-                      leftIcon={<Pencil size={14} />}
-                      className="h-8"
-                      title={isLocked ? t('scenarios.tierLocked') : undefined}>
-                      
-                            {t('common.edit')}
-                          </Button>
-                          <ConfirmActionButton
-                      iconOnly
-                      size="md"
-                      variant="ghost"
-                      isLoading={duplicateLoading}
-                      disabled={isLocked}
-                      onConfirm={() => { if (!isLocked) void confirmDuplicate(item); }}
-                      armedLabel={<Repeat2 size={16} />}
-                      aria-label={t('scenarios.duplicateScenario')}
-                      title={isLocked ? t('scenarios.tierLocked') : t('scenarios.duplicateScenario')}>
-
-                            <Repeat2 size={16} />
-                          </ConfirmActionButton>
-                          <IconButton
-                      size="md"
-                      variant="ghost"
-                      onClick={() => void openHistory(item)}
-                      aria-label={t('common.history')}
-                      title={t('common.history')}>
-                      
-                            <Archive size={16} />
-                          </IconButton>
-                          <IconButton
-                      size="md"
-                      variant="ghost"
-                      onClick={() =>
-                      void openInFileManager({ path: item.scenarioPath }).catch(() => {
-                        toast.error(t('common.error'));
-                      })
-                      }
-                      aria-label={t('scenarios.openFolder')}
-                      title={t('scenarios.openFolder')}>
-                      
-                            <FolderOpen size={16} />
-                          </IconButton>
-                          <IconButton
-                      size="md"
-                      variant="ghost"
-                      onClick={() =>
-                      void copyToClipboard({ text: item.scenarioPath }).then(
-                        () => toast.success(t('common.success')),
-                        () => toast.error(t('common.error'))
-                      )
-                      }
-                      aria-label={t('scenarios.copyPath')}
-                      title={t('scenarios.copyPath')}>
-                      
-                            <Copy size={16} />
-                          </IconButton>
-                          <Tooltip
-                      content={
-                      isLocked ? t('scenarios.tierLocked') :
-                      pendingDeleteId === item.id ?
-                      t('scenarios.deleteArmedHint') :
-                      t('common.delete')
-                      }
-                      side="top">
-                      
-                            <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => void handleDeleteClick(item)}
-                        disabled={isLocked || deleteLoadingId === item.id}
-                        leftIcon={<Trash2 size={14} />}
-                        className={
-                        pendingDeleteId === item.id ?
-                        'h-8 border-red-500/90 bg-red-700/70 text-red-100 hover:bg-red-700/90 hover:text-white' :
-                        'h-8 border-red-500/60 bg-red-500/30 text-red-200 hover:bg-red-500/45 hover:text-red-50'
-                        }>
-                        
-                              {pendingDeleteId === item.id ?
-                        t('scenarios.deleteArmedLabel') :
-                        t('common.delete')}
-                            </Button>
-                          </Tooltip>
-                        </div>
-                      </div>);
-
-            })}
-                </div>
-              </div> :
-
-        filtered.map((item) => {
-          const meta = safeMeta(item.metadata);
-          const isLocked = item.locked === true;
-          return (
-            <div
-              key={item.id}
-              className={`rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-colors ${
-              viewMode === 'cards' ? 'px-4 py-3' : 'px-3 py-2'}${isLocked ? ' opacity-50' : ''}`
-              }>
-              
-                    <div
-                className={`flex ${
-                viewMode === 'cards' ?
-                'flex-col gap-3 sm:flex-row sm:items-start sm:justify-between' :
-                'flex-col gap-2 lg:flex-row lg:items-center lg:justify-between'}`
-                }>
-                
-                      <div
-                  className={`min-w-0 flex-1 text-left ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                  onClick={() => { if (!isLocked) onReplay(item.scenarioPath); }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onReplay(item.scenarioPath); }}}
-                  title={item.name}>
-
-                        <div className="flex flex-wrap items-center gap-2 min-w-0">
-                          <div className="text-sm text-slate-100 font-semibold truncate min-w-0">
-                            {item.name}
-                          </div>
-                          {item.favorite ? <Heart size={14} className="text-pink-300" /> : null}
-                          {item.missing ?
-                    <Badge variant="warning" size="sm" className="normal-case">
-                              {t('scenarios.missingFile')}
-                            </Badge> :
-                    null}
-                          {isLocked ? <Lock size={14} className="text-amber-400 shrink-0" /> : null}
-                          {isLocked && item.min_role ?
-                    <TierBadge tier={item.min_role} size="sm" /> :
-                    null}
-                        </div>
-                        <div
-                    className="mt-1 text-[11px] text-slate-500 font-mono truncate"
-                    title={item.scenarioPath}>
-                    
-                          {item.scenarioPath}
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                          <span className="text-slate-400">
-                            {t('accounts.created')}{' '}
-                            <span className="text-slate-300 tabular-nums">
-                              {formatDateTime(item.createdAt)}
-                            </span>
-                          </span>
-                          <span className="text-slate-600">•</span>
-                          <span className="text-slate-400">
-                            {t('logs.lastUpdated')}{' '}
-                            <span className="text-slate-300 tabular-nums">
-                              {formatDateTime(item.updatedAt)}
-                            </span>
-                          </span>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <Badge variant="outline" size="sm" className="normal-case">
-                            {item.stepsCount} {t('scenarios.stepsCount')}
-                          </Badge>
-                          <Badge variant="outline" size="sm" className="normal-case">
-                            {t('scenarios.playCount')}: {item.playCount}
-                          </Badge>
-                          <Badge variant="outline" size="sm" className="normal-case">
-                            {t('scenarios.lastPlayed')}: {formatLastPlayed(item.lastPlayedAt)}
-                          </Badge>
-                          {item.healthScore != null ?
-                    <Badge
-                      variant={healthVariant(item.healthScore)}
-                      size="sm"
-                      className="normal-case">
-                      
-                              {t('scenarios.healthScore')}: {item.healthScore}
-                            </Badge> :
-                    null}
-                          {meta.lastStatus ?
-                    <Badge variant="info" size="sm" className="normal-case">
-                              {t('scenarios.lastStatus')}: {meta.lastStatus}
-                            </Badge> :
-                    null}
-                          {meta.lastDurationMs != null ?
-                    <Badge variant="outline" size="sm" className="normal-case">
-                              {t('scenarios.lastDurationValue', { duration: Math.round(meta.lastDurationMs / 100) / 10 })}
-                            </Badge> :
-                    null}
-                        </div>
-                        {meta.tags.length && viewMode === 'cards' ?
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                            {meta.tags.slice(0, 6).map((tag) =>
-                    <Badge key={tag} variant="default" size="sm" className="normal-case">
-                                {tag}
-                              </Badge>
-                    )}
-                            {meta.tags.length > 6 ?
-                    <Badge variant="outline" size="sm" className="normal-case">
-                                +{meta.tags.length - 6}
-                              </Badge> :
-                    null}
-                          </div> :
-                  null}
-                        {meta.description && viewMode === 'cards' ?
-                  <div className="mt-3 text-xs text-slate-400 whitespace-pre-wrap break-words">
-                            {meta.description}
-                          </div> :
-                  null}
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:flex-nowrap flex-shrink-0">
-                        {isLocked && item.min_role && (
-                    <IconButton
-                      size="md"
-                      variant="ghost"
-                      onClick={() => setHowToGetItem(item)}
-                      aria-label={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
-                      title={t('scenarios.howToGetTier', { tier: t(`auth.role.${item.min_role}`) })}
-                      className="text-slate-400 hover:text-amber-300">
-                      <HelpCircle size={16} />
-                    </IconButton>
-                  )}
-                        <IconButton
-                    size="md"
-                    variant="ghost"
-                    disabled={isLocked}
-                    onClick={() => { if (!isLocked) void toggleFavorite(item); }}
-                    aria-label={t('scenarios.toggleFavorite')}
-                    title={isLocked ? t('scenarios.tierLocked') : t('scenarios.toggleFavorite')}>
-                    
-                          <Heart size={16} className={item.favorite ? 'text-pink-300' : ''} />
-                        </IconButton>
-                        <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => openEdit(item)}
-                    disabled={isLocked}
-                    leftIcon={<Pencil size={14} />}
-                    className="h-8"
-                    title={isLocked ? t('scenarios.tierLocked') : undefined}>
-                    
-                          {t('common.edit')}
-                        </Button>
-                        <Tooltip
-                    content={
-                    isLocked ? t('scenarios.tierLocked') :
-                    pendingDeleteId === item.id ?
-                    t('scenarios.deleteArmedHint') :
-                    t('common.delete')
-                    }
-                    side="top">
-                    
-                          <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => void handleDeleteClick(item)}
-                      disabled={isLocked || deleteLoadingId === item.id}
-                      leftIcon={<Trash2 size={14} />}
-                      className={
-                      pendingDeleteId === item.id ?
-                      'h-8 border-red-500/90 bg-red-700/70 text-red-100 hover:bg-red-700/90 hover:text-white' :
-                      'h-8 border-red-500/60 bg-red-500/30 text-red-200 hover:bg-red-500/45 hover:text-red-50'
-                      }>
-                      
-                            {pendingDeleteId === item.id ?
-                      t('scenarios.deleteArmedLabel') :
-                      t('common.delete')}
-                          </Button>
-                        </Tooltip>
-                        <ConfirmActionButton
-                    iconOnly
-                    size="md"
-                    variant="ghost"
-                    isLoading={duplicateLoading}
-                    disabled={isLocked}
-                    onConfirm={() => { if (!isLocked) void confirmDuplicate(item); }}
-                    armedLabel={<Repeat2 size={16} />}
-                    aria-label={t('scenarios.duplicateScenario')}
-                    title={isLocked ? t('scenarios.tierLocked') : t('scenarios.duplicateScenario')}>
-
-                          <Repeat2 size={16} />
-                        </ConfirmActionButton>
-                        <IconButton
-                    size="md"
-                    variant="ghost"
-                    onClick={() => void openHistory(item)}
-                    aria-label={t('common.history')}
-                    title={t('common.history')}>
-                    
-                          <Archive size={16} />
-                        </IconButton>
-                        <IconButton
-                    size="md"
-                    variant="ghost"
-                    onClick={() =>
-                    void openInFileManager({ path: item.scenarioPath }).catch(() => {
-                      toast.error(t('common.error'));
-                    })
-                    }
-                    aria-label={t('scenarios.openFolder')}
-                    title={t('scenarios.openFolder')}>
-                    
-                          <FolderOpen size={16} />
-                        </IconButton>
-                        <IconButton
-                    size="md"
-                    variant="ghost"
-                    onClick={() =>
-                    void copyToClipboard({ text: item.scenarioPath }).then(
-                      () => toast.success(t('common.success')),
-                      () => toast.error(t('common.error'))
-                    )
-                    }
-                    aria-label={t('scenarios.copyPath')}
-                    title={t('scenarios.copyPath')}>
-                    
-                          <Copy size={16} />
-                        </IconButton>
-                      </div>
-                    </div>
-                  </div>);
-
-        })
-        }
-          </div>
+      <FilterRow
+      query={query}
+      onQueryChange={setQuery}
+      favoritesOnly={favoritesOnly}
+      onToggleFavorites={() => setFavoritesOnly((v) => !v)}
+      showLocked={showLocked}
+      onToggleLocked={() => setShowLocked((v) => !v)}
+      selectedTags={selectedTags}
+      onSelectedTagsChange={setSelectedTags}
+      tagOptions={tagOptions}
+      viewMode={viewMode}
+      onViewModeChange={(value) =>
+      setScenariosViewMode(value as 'cards' | 'list' === 'list' ? 'list' : 'cards')
       }
-      </div>
+      onRefresh={handleRefresh}
+      refreshDisabled={!alias || loading}
+      loading={loading}
+      filteredCount={filtered.length}
+      itemsCount={items.length} />
 
-      <Modal
-      isOpen={editOpen}
-      onClose={() => {
+
+      <ScenarioList
+      loading={loading}
+      error={error}
+      itemsCount={items.length}
+      filtered={filtered}
+      viewMode={viewMode}
+      onReplay={onReplay}
+      duplicateLoading={duplicateLoading}
+      pendingDeleteId={pendingDeleteId}
+      deleteLoadingId={deleteLoadingId}
+      onHowToGet={setHowToGetItem}
+      onToggleFavorite={(item) => void toggleFavorite(item)}
+      onEdit={openEdit}
+      onDuplicate={(item) => void confirmDuplicate(item)}
+      onOpenHistory={(item) => void openHistory(item)}
+      onDeleteClick={(item) => void handleDeleteClick(item)} />
+
+
+      <ScenarioDialogs
+      editOpen={editOpen}
+      editSaving={editSaving}
+      editName={editName}
+      editDescription={editDescription}
+      editTagsText={editTagsText}
+      editTier={editTier}
+      isAdmin={isAdmin}
+      onEditClose={() => {
         setEditOpen(false);
         setEditItem(null);
       }}
-      title={t('scenarios.editScenario')}
-      size="lg"
-      footer={
-      <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setEditOpen(false)} disabled={editSaving}>
-              {t('common.cancel')}
-            </Button>
-            <Button variant="primary" onClick={() => void saveEdit()} isLoading={editSaving}>
-              {t('scenarios.update')}
-            </Button>
-          </div>
-      }>
-      
-        <div className="space-y-3">
-          <Input
-          label={t('common.name')}
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-          placeholder="scenario" />
-        
-          <Textarea
-          label={t('scenarios.description')}
-          value={editDescription}
-          onChange={(e) => setEditDescription(e.target.value)}
-          rows={3} />
-        
-          <Input
-          label={t('scenarios.tags')}
-          value={editTagsText}
-          onChange={(e) => setEditTagsText(e.target.value)}
-          placeholder={t('scenarios.tagsHint')} />
-        
-          {isAdmin ? (
-          <Select
-            label={t('auth.users.role')}
-            value={editTier}
-            onValueChange={setEditTier}
-            options={[
-              { value: 'user', label: t('auth.users.roleUser') },
-              { value: 'vip', label: t('auth.users.roleVip') },
-              { value: 'premium', label: t('auth.users.rolePremium') },
-              { value: 'elite', label: t('auth.users.roleElite') },
-              { value: 'admin', label: t('auth.users.roleAdmin') },
-            ]}
-          />
-          ) : null}
-        
-        </div>
-      </Modal>
-
-
-
-      <Modal
-      isOpen={historyOpen}
-      onClose={() => {
+      onEditCancel={() => setEditOpen(false)}
+      onEditNameChange={setEditName}
+      onEditDescriptionChange={setEditDescription}
+      onEditTagsTextChange={setEditTagsText}
+      onEditTierChange={setEditTier}
+      onEditSave={() => void saveEdit()}
+      historyOpen={historyOpen}
+      historyItem={historyItem}
+      historyLoading={historyLoading}
+      historyError={historyError}
+      revisions={revisions}
+      rollbackLoading={rollbackLoading}
+      onHistoryClose={() => {
         setHistoryOpen(false);
         setHistoryItem(null);
         setRevisions([]);
         setHistoryError(null);
       }}
-      title={t('common.history')}
-      size="lg">
-      
-        <div className="space-y-3">
-          <div className="text-sm text-slate-200 font-medium">{historyItem?.name ?? ''}</div>
-          <div className="text-xs text-slate-500 break-all">{historyItem?.scenarioPath ?? ''}</div>
+      onRollback={(versionNo) => void doRollback(versionNo)}
+      howToGetItem={howToGetItem}
+      onHowToGetClose={() => setHowToGetItem(null)} />
 
-          {historyLoading ?
-        <div className="text-xs text-slate-500">{t('common.loading')}</div> :
-        historyError ?
-        <div className="text-xs text-amber-300">{historyError}</div> :
-        revisions.length === 0 ?
-        <div className="text-xs text-slate-500">{t('common.none')}</div> :
-
-        <div className="max-h-80 overflow-auto rounded-lg border border-white/10 bg-black/20 p-2 space-y-2">
-              {revisions.map((r) =>
-          <div
-            key={r.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
-            
-                  <div className="min-w-0">
-                    <div className="text-xs text-slate-200">
-                      {t('common.versionPrefix', { version: r.versionNo })} <span className="text-slate-500">{t('common.bullet')}</span>{' '}
-                      <span className="text-slate-400">
-                        {new Date(r.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                    {r.reason ?
-              <div className="text-[11px] text-slate-500 truncate">{r.reason}</div> :
-              null}
-                  </div>
-                  <Button
-              size="xs"
-              variant="secondary"
-              onClick={() => void doRollback(r.versionNo)}
-              isLoading={rollbackLoading}>
-              
-                    {t('common.rollback')}
-                  </Button>
-                </div>
-          )}
-            </div>
-        }
-        </div>
-      </Modal>
-
-      <Modal
-      isOpen={howToGetItem !== null}
-      onClose={() => setHowToGetItem(null)}
-      title={t('scenarios.howToGetTier', { tier: t(`auth.role.${howToGetItem?.min_role ?? 'user'}`) })}
-      size="sm">
-        <ul className="space-y-2 text-sm text-slate-300">
-          <li className="flex items-start gap-2">
-            <span className="text-slate-500 mt-0.5">•</span>
-            <span>{t('scenarios.howToGetTierSubscribe')}</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-slate-500 mt-0.5">•</span>
-            <span>{t('scenarios.howToGetTierAskAdmin')}</span>
-          </li>
-        </ul>
-      </Modal>
     </div>;
 
 
@@ -1109,45 +460,15 @@ export function ProfileScenariosPanel({
             <div className="text-sm text-slate-400">{t('scenarios.librarySubtitle')}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2 justify-start lg:justify-end">
-            <Button
-              size="sm"
-              className="h-9"
-              variant="secondary"
-              onClick={handleRefresh}
-              disabled={!alias || loading}
-              leftIcon={<RefreshCw size={14} />}>
-              
-              {loading ? t('common.loading') : t('common.refresh')}
-            </Button>
-            <Button
-              size="sm"
-              className="h-9"
-              variant="secondary"
-              onClick={() => onReplay()}
-              leftIcon={<PlayCircle size={16} />}>
-              
-              {t('common.replay')}
-            </Button>
-            {onComposeFlow ?
-            <Button
-              size="sm"
-              className="h-9"
-              variant="secondary"
-              onClick={onComposeFlow}
-              leftIcon={<GitBranch size={16} />}>{t("recorder.profile_scenarios_panel.flow_composer")}
+            <ReplayControls
+              variant="panel"
+              loading={loading}
+              refreshDisabled={!alias || loading}
+              onRefresh={handleRefresh}
+              onReplay={() => onReplay()}
+              onComposeFlow={onComposeFlow}
+              onRecord={onRecord} />
 
-
-            </Button> :
-            null}
-            <Button
-              size="sm"
-              className="h-9 px-4"
-              variant="primary"
-              onClick={onRecord}
-              leftIcon={<PlusCircle size={16} />}>
-              
-              {t('common.record')}
-            </Button>
           </div>
         </div>
         <div className="mt-5">{content}</div>
@@ -1167,29 +488,16 @@ export function ProfileScenariosPanel({
             {t('common.close')}
           </Button>
           <div className="flex gap-2">
-            <Button
-            variant="secondary"
-            onClick={() => onReplay()}
-            leftIcon={<PlayCircle size={16} />}>
-            
-              {t('common.replay')}
-            </Button>
-            {onComposeFlow ?
-          <Button
-            variant="secondary"
-            onClick={onComposeFlow}
-            leftIcon={<GitBranch size={16} />}>{t("recorder.profile_scenarios_panel.flow_composer")}
+            <ReplayControls
+            variant="modal"
+            onReplay={() => onReplay()}
+            onComposeFlow={onComposeFlow}
+            onRecord={onRecord} />
 
-
-          </Button> :
-          null}
-            <Button variant="primary" onClick={onRecord} leftIcon={<PlusCircle size={16} />}>
-              {t('common.record')}
-            </Button>
           </div>
         </div>
       }>
-      
+
       {content}
     </Modal>);
 

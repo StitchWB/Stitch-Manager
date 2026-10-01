@@ -2,7 +2,7 @@ import { t } from "@/lib/i18n";
 import { Volume2, Play, AlertCircle } from 'lucide-react';
 import { GlassCard, DropdownMenu, Toggle, Button } from '@/components/ui';
 import { NumberInput } from '@/components/ui/NumberInput';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 export interface SoundsTabProps {
   captchaSoundEnabled: boolean;

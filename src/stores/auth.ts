@@ -8,7 +8,7 @@
  *   !checked                              → themed loading splash
  *   required && !hasUsers && !user         → <Setup/>   (first-run, mandatory)
  *   required && hasUsers && !user          → <Login/>   (mandatory)
- *   !required && !user && !guest           → <WelcomeGate/>  (opt-in)
+ *   !required && !user && !guest           → <TelegramLogin/>  (merged optional root)
  *   !required && !user && guest            → the normal app (guest mode)
  *   !required && !user && authView='setup' → <Setup/>   (with back link)
  *   !required && !user && authView='login' → <Login/>   (with back link)
@@ -19,15 +19,16 @@
  * is disabled, the store stays in the "checked, no user, not enabled" state
  * and the app renders exactly as before — no login surface, no gate.
  *
- * `guest` lets a desktop user dismiss the welcome gate and use the app
+ * `guest` lets a desktop user dismiss the auth gate and use the app
  * without authenticating. On desktop it persists (localStorage) so the
  * choice survives restarts; on web it is in-memory only (shared machines).
  * It is cleared on logout, session expiry, exitGuest, or — web only — page
  * reload.
  *
  * `authView` tracks which optional auth surface the user navigated to from
- * the welcome gate or the sidebar guest chip ('welcome' | 'setup' | 'login'
- * | 'telegram'). It is only consulted when !required && !user && !guest.
+ * the merged TelegramLogin root screen or the sidebar guest chip ('welcome'
+ * | 'setup' | 'login' | 'telegram'). It is only consulted when !required &&
+ * !user && !guest.
  *
  * `tgAuthMode` mirrors the backend's `tg_auth_mode` from /api/auth/status:
  * 'legacy' (one-time-code flow via the bot) or 'oidc' (official Telegram
@@ -48,6 +49,7 @@ import {
   getMyPermissions,
   loginUser,
   loginTelegram as loginTelegramApi,
+  loginTelegramDeeplink as loginTelegramDeeplinkApi,
   loginTelegramOidc as loginTelegramOidcApi,
   logoutUser,
   setupUser,
@@ -124,6 +126,8 @@ interface AuthState {
   init: () => Promise<void>;
   login: (username: string, password: string) => Promise<boolean>;
   loginTelegram: (code: string) => Promise<boolean>;
+  /** Exchange a bot-confirmed deep-link token (from the t.me ?start=login_ flow) for a session. */
+  loginTelegramDeeplink: (token: string) => Promise<boolean>;
   /** Exchange a Telegram OIDC id_token (from the official popup) for a session. */
   loginTelegramOidc: (idToken: string) => Promise<boolean>;
   setup: (username: string, password: string) => Promise<boolean>;
@@ -367,6 +371,27 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ busy: true, error: null, sessionExpired: false });
       try {
         const result = await loginTelegramApi(code);
+        if (!result.success) {
+          throw new Error(result.error || 'auth.tg.errorGeneric');
+        }
+        // Success — refresh session/user state so the gate closes.
+        await get().init();
+        set({ busy: false, authView: 'welcome' });
+        return true;
+      } catch (err) {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : 'auth.tg.errorGeneric';
+        set({ busy: false, error: message });
+        throw err;
+      }
+    },
+
+    loginTelegramDeeplink: async (token) => {
+      set({ busy: true, error: null, sessionExpired: false });
+      try {
+        const result = await loginTelegramDeeplinkApi(token);
         if (!result.success) {
           throw new Error(result.error || 'auth.tg.errorGeneric');
         }

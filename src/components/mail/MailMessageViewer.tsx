@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FileText, ImageOff, Images, MailOpen, MailSearch, Trash2, X } from 'lucide-react';
 import { Badge, EmptyState, IconButton, LoadingSpinner, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
 import type { EmailMessage, ProviderCapabilities } from '@/lib/backend/modules/emailInbox';
 import { MailHtmlSandbox } from './MailHtmlSandbox';
 import { VerificationCodeChip } from './VerificationCodeChip';
@@ -163,7 +164,7 @@ export function MailMessageViewer({
               </div>
               <div className="text-right shrink-0">
                 <p className="text-[11px] text-slate-500">
-                  {new Date(message.receivedAt).toLocaleString()}
+                  {formatDateTime(message.receivedAt)}
                 </p>
                 <Badge size="sm" variant={message.isRead ? 'outline' : 'info'} className="mt-1">
                   {message.isRead ? t('mail.readStateRead') : t('mail.readStateUnread')}

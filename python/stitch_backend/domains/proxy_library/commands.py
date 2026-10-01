@@ -9,15 +9,21 @@ OR shared into caller's groups; writes filter by the same visible set.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import logging
 from typing import Any
 
 import httpx
 from sqlalchemy import and_, delete, or_, select
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import StitchError
-from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.database import run_in_session
 from stitch_backend.domains.auth.permissions import ensure_permission
 from stitch_backend.domains.groups.models import Group
 from stitch_backend.domains.groups.service import (
@@ -153,8 +159,8 @@ def _visible_filter(uid: int | None, group_ids: list[str]):
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 
-@register_command("list_proxy_library", readonly=True)
-async def cmd_list_proxy_library(params: dict) -> list[dict]:
+@command("list_proxy_library", readonly=True)
+async def cmd_list_proxy_library(db: AsyncSession, params: dict) -> list[dict]:
     """List all proxy library entries visible to the caller.
 
     Single LEFT JOIN to ``proxy_entry_group_shares`` + ``groups``
@@ -162,145 +168,130 @@ async def cmd_list_proxy_library(params: dict) -> list[dict]:
     """
     uid = _caller_uid(params)
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        stmt = (
-            select(ProxyLibraryEntry, Group.name)
-            .select_from(ProxyLibraryEntry)
-            .outerjoin(
-                ProxyEntryGroupShare,
-                ProxyEntryGroupShare.entry_id == ProxyLibraryEntry.id,
-            )
-            .outerjoin(Group, Group.id == ProxyEntryGroupShare.group_id)
-            .where(_visible_filter(uid, group_ids))
-            .order_by(ProxyLibraryEntry.created_at)
+    group_ids = await group_ids_for_user(db, uid)
+    stmt = (
+        select(ProxyLibraryEntry, Group.name)
+        .select_from(ProxyLibraryEntry)
+        .outerjoin(
+            ProxyEntryGroupShare,
+            ProxyEntryGroupShare.entry_id == ProxyLibraryEntry.id,
         )
-        result = await db.execute(stmt)
+        .outerjoin(Group, Group.id == ProxyEntryGroupShare.group_id)
+        .where(_visible_filter(uid, group_ids))
+        .order_by(ProxyLibraryEntry.created_at)
+    )
+    result = await db.execute(stmt)
 
-        # Aggregate: one entry per row, group names collected.
-        entry_map: dict[str, ProxyLibraryEntry] = {}
-        group_names_map: dict[str, list[str]] = {}
-        for entry, gname in result.all():
-            if entry.id not in entry_map:
-                entry_map[entry.id] = entry
-                group_names_map[entry.id] = []
-            if gname is not None:
-                group_names_map[entry.id].append(gname)
+    # Aggregate: one entry per row, group names collected.
+    entry_map: dict[str, ProxyLibraryEntry] = {}
+    group_names_map: dict[str, list[str]] = {}
+    for entry, gname in result.all():
+        if entry.id not in entry_map:
+            entry_map[entry.id] = entry
+            group_names_map[entry.id] = []
+        if gname is not None:
+            group_names_map[entry.id].append(gname)
 
-        return [
-            _entry_to_response(
-                entry_map[eid],
-                uid=uid,
-                shared_group_names=group_names_map[eid],
-            )
-            for eid in entry_map
-        ]
-
-    return await run_in_read_session(_op)
+    return [
+        _entry_to_response(
+            entry_map[eid],
+            uid=uid,
+            shared_group_names=group_names_map[eid],
+        )
+        for eid in entry_map
+    ]
 
 
-@register_command("create_proxy_library_entry")
-async def cmd_create_proxy_library_entry(params: dict) -> dict:
+@command("create_proxy_library_entry")
+async def cmd_create_proxy_library_entry(db: AsyncSession, params: dict) -> dict:
     """Create a new proxy library entry from a draft."""
     uid = _caller_uid(params)
     draft = _draft_from_dict(params.get("draft", params))
 
-    async def _op(db):
-        entry = entry_from_draft(draft)
-        entry.owner_id = uid
-        response = _entry_to_response(entry)  # capture plaintext before encrypt
-        entry.username = _store_secret(entry.id, "username", entry.username)
-        entry.password = _store_secret(entry.id, "password", entry.password)
-        db.add(entry)
-        await db.flush()
-        return response
-
-    return await run_in_session(_op)
+    entry = entry_from_draft(draft)
+    entry.owner_id = uid
+    response = _entry_to_response(entry)  # capture plaintext before encrypt
+    entry.username = _store_secret(entry.id, "username", entry.username)
+    entry.password = _store_secret(entry.id, "password", entry.password)
+    db.add(entry)
+    await db.flush()
+    return response
 
 
-@register_command("create_or_get_proxy_library_entry")
-async def cmd_create_or_get(params: dict) -> dict:
+@command("create_or_get_proxy_library_entry")
+async def cmd_create_or_get(db: AsyncSession, params: dict) -> dict:
     """Create entry or return existing one with same stable key."""
     uid = _caller_uid(params)
     draft = _draft_from_dict(params.get("draft", params))
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        items = await load_proxy_library(db, uid, group_ids=group_ids)
-        target_key = _draft_stable_key(draft)
-        for existing in items:
-            if _stable_key(existing) == target_key:
-                return _entry_to_response(existing)
-        entry = entry_from_draft(draft)
-        entry.owner_id = uid
-        response = _entry_to_response(entry)
-        entry.username = _store_secret(entry.id, "username", entry.username)
-        entry.password = _store_secret(entry.id, "password", entry.password)
-        db.add(entry)
-        await db.flush()
-        return response
-
-    return await run_in_session(_op)
+    group_ids = await group_ids_for_user(db, uid)
+    items = await load_proxy_library(db, uid, group_ids=group_ids)
+    target_key = _draft_stable_key(draft)
+    for existing in items:
+        if _stable_key(existing) == target_key:
+            return _entry_to_response(existing)
+    entry = entry_from_draft(draft)
+    entry.owner_id = uid
+    response = _entry_to_response(entry)
+    entry.username = _store_secret(entry.id, "username", entry.username)
+    entry.password = _store_secret(entry.id, "password", entry.password)
+    db.add(entry)
+    await db.flush()
+    return response
 
 
-@register_command("update_proxy_library_entry")
-async def cmd_update_proxy_library_entry(params: dict) -> dict:
+@command("update_proxy_library_entry")
+async def cmd_update_proxy_library_entry(db: AsyncSession, params: dict) -> dict:
     """Update an existing proxy library entry."""
     uid = _caller_uid(params)
     req = params.get("request", params)
     entry_id = str(req.get("id", ""))
     draft = _draft_from_dict(req.get("draft", {}))
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        result = await db.execute(
-            select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
-            )
+    group_ids = await group_ids_for_user(db, uid)
+    result = await db.execute(
+        select(ProxyLibraryEntry).where(
+            and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
         )
-        entry = result.scalar_one_or_none()
-        if entry is None:
-            raise ValueError(f"Proxy entry not found: {entry_id}")
-        apply_update(entry, draft)
-        response = _entry_to_response(entry)  # plaintext after apply_update
-        entry.username = _store_secret(entry.id, "username", entry.username)
-        entry.password = _store_secret(entry.id, "password", entry.password)
-        await db.flush()
-        return response
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise ValueError(f"Proxy entry not found: {entry_id}")
+    apply_update(entry, draft)
+    response = _entry_to_response(entry)  # plaintext after apply_update
+    entry.username = _store_secret(entry.id, "username", entry.username)
+    entry.password = _store_secret(entry.id, "password", entry.password)
+    await db.flush()
+    return response
 
-    return await run_in_session(_op)
 
-
-@register_command("delete_proxy_library_entry")
-async def cmd_delete_proxy_library_entry(params: dict) -> dict:
+@command("delete_proxy_library_entry")
+async def cmd_delete_proxy_library_entry(db: AsyncSession, params: dict) -> dict:
     """Delete a proxy library entry."""
     uid = _caller_uid(params)
     req = params.get("request", params)
     entry_id = str(req.get("id", ""))
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        result = await db.execute(
-            select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
-            )
+    group_ids = await group_ids_for_user(db, uid)
+    result = await db.execute(
+        select(ProxyLibraryEntry).where(
+            and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
         )
-        entry = result.scalar_one_or_none()
-        if entry is None:
-            return {"changed": False, "usage": {"profileAliases": [], "scenarioPaths": []}}
-        _keyring_delete(_keyring_account(entry_id, "username"))
-        _keyring_delete(_keyring_account(entry_id, "password"))
-        await db.delete(entry)
-        return {"changed": True, "usage": {"profileAliases": [], "scenarioPaths": []}}
-
-    return await run_in_session(_op)
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        return {"changed": False, "usage": {"profileAliases": [], "scenarioPaths": []}}
+    _keyring_delete(_keyring_account(entry_id, "username"))
+    _keyring_delete(_keyring_account(entry_id, "password"))
+    await db.delete(entry)
+    return {"changed": True, "usage": {"profileAliases": [], "scenarioPaths": []}}
 
 
 # ── Bulk import ───────────────────────────────────────────────────────────────
 
 
-@register_command("import_proxy_library_bulk")
-async def cmd_import_bulk(params: dict) -> dict:
+@command("import_proxy_library_bulk")
+async def cmd_import_bulk(db: AsyncSession, params: dict) -> dict:
     """Import proxies from bulk text."""
     uid = _caller_uid(params)
     req = params.get("request", params)
@@ -308,25 +299,22 @@ async def cmd_import_bulk(params: dict) -> dict:
     default_type = str(req.get("defaultType", "http"))
     default_enabled = bool(req.get("defaultEnabled", True))
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        items = await load_proxy_library(db, uid, group_ids=group_ids)
-        existing_count = len(items)
-        result = import_lines(items, raw_text, default_type, default_enabled)
-        # Encrypt + persist new entries (items[existing_count:])
-        for entry in items[existing_count:]:
-            entry.owner_id = uid
-            entry.username = _store_secret(entry.id, "username", entry.username)
-            entry.password = _store_secret(entry.id, "password", entry.password)
-            db.add(entry)
-        await db.flush()
-        return _import_result_to_response(result)
-
-    return await run_in_session(_op)
+    group_ids = await group_ids_for_user(db, uid)
+    items = await load_proxy_library(db, uid, group_ids=group_ids)
+    existing_count = len(items)
+    result = import_lines(items, raw_text, default_type, default_enabled)
+    # Encrypt + persist new entries (items[existing_count:])
+    for entry in items[existing_count:]:
+        entry.owner_id = uid
+        entry.username = _store_secret(entry.id, "username", entry.username)
+        entry.password = _store_secret(entry.id, "password", entry.password)
+        db.add(entry)
+    await db.flush()
+    return _import_result_to_response(result)
 
 
-@register_command("preview_proxy_library_bulk", readonly=True)
-async def cmd_preview_bulk(params: dict) -> dict:
+@command("preview_proxy_library_bulk", readonly=True)
+async def cmd_preview_bulk(db: AsyncSession, params: dict) -> dict:
     """Preview bulk import without saving."""
     uid = _caller_uid(params)
     req = params.get("request", params)
@@ -334,21 +322,18 @@ async def cmd_preview_bulk(params: dict) -> dict:
     default_type = str(req.get("defaultType", "http"))
     default_enabled = bool(req.get("defaultEnabled", True))
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        items = await load_proxy_library(db, uid, group_ids=group_ids)
-        copy = list(items)
-        result = import_lines(copy, raw_text, default_type, default_enabled)
-        return _import_result_to_response(result)
-
-    return await run_in_read_session(_op)
+    group_ids = await group_ids_for_user(db, uid)
+    items = await load_proxy_library(db, uid, group_ids=group_ids)
+    copy = list(items)
+    result = import_lines(copy, raw_text, default_type, default_enabled)
+    return _import_result_to_response(result)
 
 
 # ── Runtime URLs ──────────────────────────────────────────────────────────────
 
 
-@register_command("get_proxy_library_runtime_proxy_url", readonly=True)
-async def cmd_get_runtime_url(params: dict) -> str | None:
+@command("get_proxy_library_runtime_proxy_url", readonly=True)
+async def cmd_get_runtime_url(db: AsyncSession, params: dict) -> str | None:
     """Resolve a proxy library entry ID to a proxy URL.
 
     Caller must be owner OR member of a sharing group OR row instance-shared.
@@ -356,32 +341,26 @@ async def cmd_get_runtime_url(params: dict) -> str | None:
     uid = _caller_uid(params)
     entry_id = str(params.get("id", ""))
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        result = await db.execute(
-            select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
-            )
+    group_ids = await group_ids_for_user(db, uid)
+    result = await db.execute(
+        select(ProxyLibraryEntry).where(
+            and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
         )
-        entry = result.scalar_one_or_none()
-        if entry is not None and entry.enabled:
-            return entry_to_proxy_url(entry)
-        return None
+    )
+    entry = result.scalar_one_or_none()
+    if entry is not None and entry.enabled:
+        return entry_to_proxy_url(entry)
+    return None
 
-    return await run_in_read_session(_op)
 
-
-@register_command("get_proxy_library_runtime_proxy_map", readonly=True)
-async def cmd_get_runtime_map(params: dict) -> dict[str, str]:
+@command("get_proxy_library_runtime_proxy_map", readonly=True)
+async def cmd_get_runtime_map(db: AsyncSession, params: dict) -> dict[str, str]:
     """Get a map of entry ID → proxy URL for all enabled visible entries."""
     uid = _caller_uid(params)
 
-    async def _op(db):
-        group_ids = await group_ids_for_user(db, uid)
-        items = await load_proxy_library(db, uid, group_ids=group_ids)
-        return {e.id: entry_to_proxy_url(e) for e in items if e.enabled}
-
-    return await run_in_read_session(_op)
+    group_ids = await group_ids_for_user(db, uid)
+    items = await load_proxy_library(db, uid, group_ids=group_ids)
+    return {e.id: entry_to_proxy_url(e) for e in items if e.enabled}
 
 
 # ── Usage ─────────────────────────────────────────────────────────────────────
@@ -484,38 +463,35 @@ async def _persist_test_result(
 # ── Save guard ────────────────────────────────────────────────────────────────
 
 
-@register_command("ensure_proxy_save_use_allowed", readonly=True)
-async def cmd_ensure_save_allowed(params: dict) -> bool:
+@command("ensure_proxy_save_use_allowed", readonly=True)
+async def cmd_ensure_save_allowed(db: AsyncSession, params: dict) -> bool:
     """Check if a proxy was recently tested OK (save guard)."""
     uid = _caller_uid(params)
     req = params.get("request", params)
     entry_id = str(req.get("proxyLibraryId", ""))
     max_age = int(req.get("maxAgeSeconds", 300))
 
-    async def _op(db):
-        import time as _time
-        group_ids = await group_ids_for_user(db, uid)
-        result = await db.execute(
-            select(ProxyLibraryEntry).where(
-                and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
-            )
+    import time as _time
+    group_ids = await group_ids_for_user(db, uid)
+    result = await db.execute(
+        select(ProxyLibraryEntry).where(
+            and_(ProxyLibraryEntry.id == entry_id, _visible_filter(uid, group_ids))
         )
-        entry = result.scalar_one_or_none()
-        if entry is None:
-            return False
-        if entry.last_test_ok is not True:
-            return False
-        if not entry.last_test_at:
-            return False
-        try:
-            from datetime import datetime
-            tested = datetime.fromisoformat(entry.last_test_at.replace("Z", "+00:00"))
-            age = (_time.time() - tested.timestamp())
-            return age <= max_age
-        except Exception:
-            return False
-
-    return await run_in_read_session(_op)
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        return False
+    if entry.last_test_ok is not True:
+        return False
+    if not entry.last_test_at:
+        return False
+    try:
+        from datetime import datetime
+        tested = datetime.fromisoformat(entry.last_test_at.replace("Z", "+00:00"))
+        age = (_time.time() - tested.timestamp())
+        return age <= max_age
+    except Exception:
+        return False
 
 
 # ── Parse ─────────────────────────────────────────────────────────────────────

@@ -1,0 +1,41 @@
+export interface TotpTranslations {
+  totp: {
+    title: string;
+    pageTitle: string;
+    subtitle: string;
+    addKey: string;
+    adding: string;
+    searchPlaceholder: string;
+    sortNewest: string;
+    sortAlpha: string;
+    groupByIssuer: string;
+    noIssuer: string;
+    noMatch: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    formTitle: string;
+    labelLabel: string;
+    labelPlaceholder: string;
+    issuerLabel: string;
+    issuerPlaceholder: string;
+    secretLabel: string;
+    secretPlaceholder: string;
+    labelRequired: string;
+    invalidSecret: string;
+    invalidOtpauth: string;
+    keyAdded: string;
+    keyUpdated: string;
+    keyRemoved: string;
+    addFailed: string;
+    updateFailed: string;
+    removeFailed: string;
+    deleteConfirm: string;
+    editTooltip: string;
+    removeTooltip: string;
+    copyCode: string;
+columnHeader: string;
+    codeCopied: string;
+    linkedAccount: string;
+    uriDetected: string;
+  };
+}

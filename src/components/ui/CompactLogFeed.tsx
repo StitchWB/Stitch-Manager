@@ -17,9 +17,9 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatTime as formatTimeBase } from '../../lib/utils';
 import { t } from '@/lib/i18n';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from './Tooltip';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { EmptyState } from './EmptyState';
 import { Select } from './Select';
@@ -235,16 +235,14 @@ function CompactLogRow({ log, onCopy, debugMode }: { log: LogEntry; onCopy: (tex
   }, [onCopy, displayMsg]);
 
   const formatTime = (timestamp: string) => {
-    try {
-      return new Date(timestamp).toLocaleTimeString('en-US', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    } catch {
-      return '--:--:--';
-    }
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '--:--:--';
+    return formatTimeBase(date, {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
   };
 
   if (isDebug) {

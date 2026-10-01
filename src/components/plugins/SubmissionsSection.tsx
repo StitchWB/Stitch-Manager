@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { t } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
+import { cn, formatDate as formatDateBase } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
@@ -69,9 +69,7 @@ function StatusChip({ status }: { status: string }) {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString();
+  return formatDateBase(iso);
 }
 
 function errText(err: unknown, fallbackKey: string): string {

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { t } from '@/lib/i18n';
 import { CheckCircle2, XCircle, AlertCircle, Trash2, Copy, RefreshCw, ChevronDown, Activity } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatDate } from '../../lib/utils';
 import { maskKey } from '../../lib/utils/maskKey';
 import { KeyMetricsDisplay } from './KeyMetricsDisplay';
 import { KeyHealthBadge } from './KeyHealthBadge';
@@ -179,7 +179,7 @@ export function KeyRow({ entry, provider, isTesting, healthStatus, onTest, onDel
             </div>
             <div>
               <span className="text-slate-500">{t('apiKeys.addedLabel')}</span>
-              <p className="text-slate-300 mt-0.5">{new Date(entry.addedAt).toLocaleDateString()}</p>
+              <p className="text-slate-300 mt-0.5">{formatDate(entry.addedAt)}</p>
             </div>
             {entry.lastTested && (
               <div>

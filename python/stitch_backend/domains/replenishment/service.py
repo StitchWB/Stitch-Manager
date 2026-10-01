@@ -8,6 +8,7 @@ when counts fall below configured thresholds.
 
 Settings are read from the ``settings`` table:
     - ``auto_replenish_enabled``
+    - ``fleet_targets`` (per-provider map; falls back to the legacy trio)
     - ``min_active_kiro``, ``min_active_windsurf``, ``min_active_trae``
     - Registration strategy per provider
     - IMAP credentials for email generation
@@ -16,6 +17,7 @@ Settings are read from the ``settings`` table:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import secrets
 import string
@@ -29,6 +31,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_REG_STRATEGY = "counter"
+
 
 # ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -40,6 +44,7 @@ class ReplenishmentSettings:
     min_active_kiro: int = 2
     min_active_windsurf: int = 2
     min_active_trae: int = 2
+    fleet_targets: dict[str, int] | None = None
     kiro_reg_strategy: str = "counter"
     windsurf_reg_strategy: str = "counter"
     trae_reg_strategy: str = "counter"
@@ -47,6 +52,27 @@ class ReplenishmentSettings:
     imap_password: str = ""
     addyio_domain: str = ""
     imap_server: str = ""
+
+
+def effective_fleet_targets(settings: ReplenishmentSettings) -> dict[str, int]:
+    """Per-provider fleet targets; falls back to the legacy min_active_* trio."""
+    if settings.fleet_targets is not None:
+        return settings.fleet_targets
+    return {
+        "kiro": settings.min_active_kiro,
+        "windsurf": settings.min_active_windsurf,
+        "trae": settings.min_active_trae,
+    }
+
+
+def _provider_known(provider: str) -> bool:
+    from autoreg.providers.registry import get_provider_meta
+
+    try:
+        get_provider_meta(provider)
+    except KeyError:
+        return False
+    return True
 
 
 # ── Status ───────────────────────────────────────────────────────────────────
@@ -171,13 +197,17 @@ class ReplenishmentService:
             logger.debug("Skipping check — registration already in progress")
             return
 
-        providers = [
-            ("kiro", settings.kiro_reg_strategy, settings.min_active_kiro),
-            ("windsurf", settings.windsurf_reg_strategy, settings.min_active_windsurf),
-            ("trae", settings.trae_reg_strategy, settings.min_active_trae),
-        ]
+        strategies = {
+            "kiro": settings.kiro_reg_strategy,
+            "windsurf": settings.windsurf_reg_strategy,
+            "trae": settings.trae_reg_strategy,
+        }
 
-        for provider, strategy, min_count in providers:
+        for provider, min_count in effective_fleet_targets(settings).items():
+            if not _provider_known(provider):
+                logger.warning("Skipping unknown provider %r in fleet targets", provider)
+                continue
+            strategy = strategies.get(provider, _DEFAULT_REG_STRATEGY)
             active_count = await self._count_active(provider)
 
             if active_count < min_count:
@@ -258,6 +288,12 @@ class ReplenishmentService:
                     s.min_active_windsurf = int(value) if value.isdigit() else 2
                 elif key == "min_active_trae":
                     s.min_active_trae = int(value) if value.isdigit() else 2
+                elif key in ("fleet_targets", "fleetTargets"):
+                    try:
+                        parsed = json.loads(value) if value else None
+                    except (json.JSONDecodeError, TypeError):
+                        parsed = None
+                    s.fleet_targets = parsed if isinstance(parsed, dict) else None
                 elif key == "kiro_reg_strategy":
                     s.kiro_reg_strategy = value
                 elif key == "windsurf_reg_strategy":

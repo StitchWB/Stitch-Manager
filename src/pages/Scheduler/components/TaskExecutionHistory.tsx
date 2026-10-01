@@ -6,6 +6,7 @@ import type { TaskExecution } from '../../../types/generated';
 import { formatDistanceToNow } from 'date-fns';
 import { Button, ButtonBase, EmptyState } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
 
 interface TaskExecutionHistoryProps {
   taskId: number;
@@ -96,7 +97,7 @@ export function TaskExecutionHistory({ taskId, onClose }: TaskExecutionHistoryPr
                     <div>
                       <span className="text-vsc-text-muted">{t('scheduler.started')}</span>
                       <span className="ml-2 text-vsc-text">
-                        {new Date(execution.startedAt * 1000).toLocaleString()}
+                        {formatDateTime(execution.startedAt * 1000)}
                       </span>
                     </div>
                     <div>

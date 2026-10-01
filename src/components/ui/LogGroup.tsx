@@ -1,10 +1,10 @@
 import { ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, Info } from 'lucide-react';
 import { LogEntry, LogLevel } from '../../stores/logs';
-import { cn } from '../../lib/utils';
+import { cn, formatTime } from '../../lib/utils';
 import { Copy, Check } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from './Tooltip';
 import { t } from '../../lib/i18n';
 
 // ============================================
@@ -182,7 +182,7 @@ export function LogGroup({
     [copy]
   );
 
-  const timeStr = new Date(lastActivity).toLocaleTimeString('en-US', {
+  const timeStr = formatTime(lastActivity, {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
@@ -267,7 +267,7 @@ export function LogGroup({
                   )}
                 >
                   <span className="text-slate-600 tabular-nums shrink-0 w-20 text-right">
-                    {new Date(log.timestamp).toLocaleTimeString('en-US', {
+                    {formatTime(log.timestamp, {
                       hour12: false,
                       hour: '2-digit',
                       minute: '2-digit',
@@ -326,7 +326,7 @@ export function LogGroup({
                     )}
                   >
                     <span className="text-slate-600 tabular-nums shrink-0 w-20 text-right">
-                      {new Date(dupLog.timestamp).toLocaleTimeString('en-US', {
+                      {formatTime(dupLog.timestamp, {
                         hour12: false,
                         hour: '2-digit',
                         minute: '2-digit',

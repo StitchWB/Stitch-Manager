@@ -98,7 +98,7 @@ def _pid_alive(pid: int) -> bool:
         import ctypes
         from ctypes import wintypes
 
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        kernel32 = ctypes.windll.kernel32
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000  # noqa: N806 (Win32 name)
         STILL_ACTIVE = 259  # noqa: N806 (Win32 name)
 

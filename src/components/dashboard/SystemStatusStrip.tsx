@@ -12,8 +12,8 @@ import {
 import { toast } from 'sonner';
 
 import { t } from '@/lib/i18n';
-import { GlassCard, IconButton, Toggle, Tooltip } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { IconButton, Toggle, Tooltip } from '@/components/ui';
+import { cn, formatDateTime, formatTime } from '@/lib/utils';
 
 import { useAiProxyStore, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
 import type { SettingsData } from '@/types/generated';
@@ -43,9 +43,9 @@ function formatNextRun(unixSeconds: number | null): string {
   const sameDay = date.toDateString() === now.toDateString();
   if (diffMs <= 0) return t('dashboard.systemStrip.scheduler.due');
   if (sameDay) {
-    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return formatTime(date, { hour: '2-digit', minute: '2-digit' });
   }
-  return date.toLocaleString(undefined, {
+  return formatDateTime(date, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -81,19 +81,17 @@ function StatusCell({
       : 'bg-slate-600';
 
   const content = (
-    <GlassCard className="flex items-center gap-2 px-3 py-2 h-full">
-      <span className="relative flex items-center justify-center w-7 h-7 rounded-md bg-white/[0.04] text-slate-300 shrink-0">
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : icon}
+    <div className="flex items-center gap-1.5 px-2 h-8 rounded-md bg-white/[0.03] border border-white/[0.06] min-w-0">
+      <span className="relative flex items-center justify-center text-slate-400 shrink-0">
+        {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : icon}
       </span>
       <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dotClass)} />
-      <div className="flex flex-col min-w-0 flex-1">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500 truncate">
-          {label}
-        </span>
-        <span className="text-xs text-slate-200 font-medium tabular-nums truncate">{value}</span>
-      </div>
+      <span className="text-[10px] uppercase tracking-wider text-slate-400 truncate shrink-0">
+        {label}
+      </span>
+      <span className="text-[11px] text-slate-200 tabular-nums truncate min-w-0">{value}</span>
       {control && <div className="ml-auto shrink-0">{control}</div>}
-    </GlassCard>
+    </div>
   );
 
   return tooltip ? <Tooltip content={tooltip}>{content}</Tooltip> : content;
@@ -112,6 +110,7 @@ export function SystemStatusStrip() {
 
   const tasks = useSchedulerStore(state => state.tasks);
   const isRunning = useSchedulerStore(state => state.isRunning);
+  const statusError = useSchedulerStore(state => state.statusError);
   const startScheduler = useSchedulerStore(state => state.startScheduler);
   const stopScheduler = useSchedulerStore(state => state.stopScheduler);
 
@@ -218,6 +217,7 @@ export function SystemStatusStrip() {
 
   const schedulerValue = useMemo(() => {
     if (schedulerBusy) return t('common.loading');
+    if (statusError !== null) return t('dashboard.systemStrip.scheduler.unknown');
     if (!isRunning) return t('dashboard.systemStrip.scheduler.stopped');
     if (nextRunUnix === null) {
       return t('dashboard.systemStrip.scheduler.runningNoNext');
@@ -225,16 +225,16 @@ export function SystemStatusStrip() {
     return t('dashboard.systemStrip.scheduler.runningWithNext', {
       next: formatNextRun(nextRunUnix),
     });
-  }, [schedulerBusy, isRunning, nextRunUnix]);
+  }, [schedulerBusy, statusError, isRunning, nextRunUnix]);
 
   return (
     <section
       aria-label={t('dashboard.systemStrip.ariaLabel')}
-      className="flex flex-wrap gap-2 p-2 rounded-xl bg-white/[0.02] border border-white/[0.06]"
+      className="shrink-0 flex items-center gap-1.5 h-10 px-1 rounded-lg bg-white/[0.02] border border-white/[0.06] overflow-x-auto"
     >
-      <div className="flex-1 basis-[200px] min-w-[180px]">
+      <div className="flex-1 min-w-[170px] h-8">
         <StatusCell
-          icon={<Server size={14} />}
+          icon={<Server size={12} />}
           label={t('dashboard.systemStrip.proxy.label')}
           value={proxyValue}
           active={proxyRunning}
@@ -262,9 +262,9 @@ export function SystemStatusStrip() {
         />
       </div>
 
-      <div className="flex-1 basis-[200px] min-w-[180px]">
+      <div className="flex-1 min-w-[170px] h-8">
         <StatusCell
-          icon={<Activity size={14} />}
+          icon={<Activity size={12} />}
           label={t('dashboard.systemStrip.replenish.label')}
           value={
             autoReplenishEnabled
@@ -283,9 +283,9 @@ export function SystemStatusStrip() {
         />
       </div>
 
-      <div className="flex-1 basis-[200px] min-w-[180px]">
+      <div className="flex-1 min-w-[170px] h-8">
         <StatusCell
-          icon={<Repeat size={14} />}
+          icon={<Repeat size={12} />}
           label={t('dashboard.systemStrip.autoSwitch.label')}
           value={
             bgConfig?.autoSwitchEnabled
@@ -310,12 +310,13 @@ export function SystemStatusStrip() {
         />
       </div>
 
-      <div className="flex-1 basis-[200px] min-w-[180px]">
+      <div className="flex-1 min-w-[170px] h-8">
         <StatusCell
-          icon={<Calendar size={14} />}
+          icon={<Calendar size={12} />}
           label={t('dashboard.systemStrip.scheduler.label')}
           value={schedulerValue}
-          active={isRunning}
+          active={isRunning && statusError === null}
+          warning={statusError !== null}
           loading={schedulerBusy}
           tooltip={
             isRunning
@@ -340,9 +341,9 @@ export function SystemStatusStrip() {
         />
       </div>
 
-      <div className="flex-1 basis-[160px] min-w-[140px]">
+      <div className="flex-1 min-w-[140px] h-8">
         <StatusCell
-          icon={<Shield size={14} />}
+          icon={<Shield size={12} />}
           label={t('dashboard.systemStrip.bridge.label')}
           value={
             bridgeOnline

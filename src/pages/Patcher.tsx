@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { Search, AlertCircle, XCircle, Code, Code2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import Header from '../components/layout/Header';
 import { usePatcherStore } from '../stores/patcher';
@@ -137,12 +138,7 @@ export default function PatcherV2() {
       await applyPatch(ideId, true);
     } catch (err) {
       console.error('Patch failed:', err);
-      const { addNotification } = useAppStore.getState();
-      addNotification({
-        type: 'error',
-        title: t('patcher.patchFailed'),
-        message: String(err),
-      });
+      toast.error(t('patcher.patchFailed'), { description: String(err) });
     }
   };
 
@@ -152,12 +148,7 @@ export default function PatcherV2() {
       await removePatch(ideId, true);
     } catch (err) {
       console.error('Unpatch failed:', err);
-      const { addNotification } = useAppStore.getState();
-      addNotification({
-        type: 'error',
-        title: t('patcher.unpatchFailed'),
-        message: String(err),
-      });
+      toast.error(t('patcher.unpatchFailed'), { description: String(err) });
     }
   };
 
@@ -167,12 +158,7 @@ export default function PatcherV2() {
       await restoreBackup(backupId);
       await listBackups();
     } catch (error) {
-      const { addNotification } = useAppStore.getState();
-      addNotification({
-        type: 'error',
-        title: t('patcher.restoreFailed'),
-        message: String(error),
-      });
+      toast.error(t('patcher.restoreFailed'), { description: String(error) });
     }
   };
 
@@ -182,12 +168,7 @@ export default function PatcherV2() {
       await deleteBackup(backupId);
       await listBackups();
     } catch (error) {
-      const { addNotification } = useAppStore.getState();
-      addNotification({
-        type: 'error',
-        title: t('patcher.deleteFailed'),
-        message: String(error),
-      });
+      toast.error(t('patcher.deleteFailed'), { description: String(error) });
     }
   };
 
@@ -218,12 +199,7 @@ export default function PatcherV2() {
         setKiroPatchConfig(updatedConfig);
       } catch (err) {
         console.error('Failed to save patch options:', err);
-        const { addNotification } = useAppStore.getState();
-        addNotification({
-          type: 'error',
-          title: 'Failed to save options',
-          message: String(err),
-        });
+        toast.error('Failed to save options', { description: String(err) });
       }
     }
   };
@@ -255,12 +231,7 @@ export default function PatcherV2() {
         setKiroPatchConfig(updatedConfig);
       } catch (err) {
         console.error('Failed to save patch options:', err);
-        const { addNotification } = useAppStore.getState();
-        addNotification({
-          type: 'error',
-          title: 'Failed to save options',
-          message: String(err),
-        });
+        toast.error('Failed to save options', { description: String(err) });
       }
     }
   };

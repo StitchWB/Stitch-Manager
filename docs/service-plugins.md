@@ -573,17 +573,19 @@ The dev loop uses `plugins-local/` — a directory of unsigned packages
 that the host discovers when `STITCH_DEV_MODE=1`.
 
 The official service plugins live in their own **public repos**
-(`StitchWB/stitch-antigravity`, `stitch-cards`, `stitch-freemodel`,
-`stitch-mail`, `stitch-notebooklm`, `stitch-opencode`, `stitch-radar`,
-`stitch-sheets`, `stitch-totp`) — that is
-their source of truth and where external PRs land. The hub keeps a mirror in
-`plugins-src/`, refreshed one-way (public → hub) by
-`scripts/sync_service_plugins.py` / `sync-service-plugins.yml`. Each plugin
+([`StitchWB/stitch-antigravity`](https://github.com/StitchWB/stitch-antigravity), [`stitch-cards`](https://github.com/StitchWB/stitch-cards), `stitch-freemodel` (private),
+[`stitch-mail`](https://github.com/StitchWB/stitch-mail), [`stitch-notebooklm`](https://github.com/StitchWB/stitch-notebooklm), [`stitch-opencode`](https://github.com/StitchWB/stitch-opencode), [`stitch-radar`](https://github.com/StitchWB/stitch-radar),
+[`stitch-sheets`](https://github.com/StitchWB/stitch-sheets), [`stitch-totp`](https://github.com/StitchWB/stitch-totp)) — that is
+their source of truth and where external PRs land. The hub mounts them as git
+submodules at `plugins-src/` (pinned commit; advance with
+`scripts/bump_service_plugins.py`). Each plugin
 commits its `_vendor/rpc_server.py`, so a bare clone runs it standalone
 (`python -m <module>` from the plugin dir) without `pip install -e`.
 `dev-install` and the `vendor` command refresh `_vendor/` from the
 canonical `autoreg/plugin/rpc.py` on demand, and discovery warns when a
 package's vendored server drifts.
+
+For community-authored plugins see the [community catalog](https://github.com/StitchWB/stitch-plugin-catalog).
 
 ### Prerequisites
 
@@ -865,7 +867,7 @@ endpoint.
 
 ### Community catalog (source index)
 
-The community catalog (`StitchWB/stitch-plugin-catalog`) is a
+The community catalog ([`StitchWB/stitch-plugin-catalog`](https://github.com/StitchWB/stitch-plugin-catalog)) is a
 **source index**: each entry points at a git repo or a GitHub release
 tarball — the catalog no longer hosts zip packages.  Installation
 reuses the existing `install_from_source` machinery (git clone or
@@ -1067,14 +1069,14 @@ offline; the public key ships with the app.
 ## 10. Worked Example: `stitch-notebooklm`
 
 The `stitch-notebooklm` service plugin (source of truth:
-`StitchWB/stitch-notebooklm`, mirrored to `plugins-src/stitch-notebooklm/`
+[`StitchWB/stitch-notebooklm`](https://github.com/StitchWB/stitch-notebooklm), mirrored to `plugins-src/stitch-notebooklm/`
 in this hub) is a complete service plugin that demonstrates the full
 contract.
 
 ### Layout
 
 ```
-plugins-src/stitch-notebooklm/          # hub mirror of StitchWB/stitch-notebooklm
+plugins-src/stitch-notebooklm/          # hub mirror of [`StitchWB/stitch-notebooklm`](https://github.com/StitchWB/stitch-notebooklm)
 ├── plugin.json                              # v2 manifest (kind=service)
 └── stitch_notebooklm/
     ├── __init__.py

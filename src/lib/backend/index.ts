@@ -582,6 +582,7 @@ export {
   uninstallMarketplacePlugin,
   type MarketplaceSource,
   type MarketplaceItem,
+  type MarketplaceFeeds,
   type GetMarketplaceResponse,
   type InstallMarketplacePluginParams,
   type InstallMarketplacePluginResult,

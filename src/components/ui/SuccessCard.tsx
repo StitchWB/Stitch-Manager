@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { Copy, Check, Key, CheckCircle2, FileText } from 'lucide-react';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from './Tooltip';
 
 interface SuccessCardProps {
   email: string;

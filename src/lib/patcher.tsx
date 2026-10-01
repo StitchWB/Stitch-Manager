@@ -1,5 +1,6 @@
 import { Code2, Wind, Terminal } from 'lucide-react';
 import { IDE_CONFIG } from '../constants/patcher';
+import { formatDateTime } from './utils';
 
 export const truncateMiddle = (path: string, maxLength: number = 50): string => {
   if (path.length <= maxLength) return path;
@@ -19,7 +20,7 @@ export const formatSize = (bytes: number): string => {
 };
 
 export const formatDate = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleDateString(undefined, {
+  return formatDateTime(dateStr, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',

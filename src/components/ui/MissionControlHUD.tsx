@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { cn } from '../../lib/utils';
+import { cn, formatTime } from '../../lib/utils';
 import { t } from '@/lib/i18n';
 import { ProcessTimeline, type ProcessStep } from './ProcessTimeline';
 import { LiveStatusCard, type LiveAction } from './LiveStatusCard';
@@ -278,7 +278,7 @@ function TelemetryBar({ logs }: { logs: LogEntry[] }) {
       )}
       <div className="flex items-center gap-1.5 ml-auto">
         <Timer className="w-3 h-3" />
-        <span>{new Date().toLocaleTimeString('en-US', { hour12: false })}</span>
+        <span>{formatTime(new Date(), { hour12: false })}</span>
       </div>
     </div>
   );

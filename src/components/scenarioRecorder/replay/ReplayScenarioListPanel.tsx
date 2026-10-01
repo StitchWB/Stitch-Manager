@@ -12,6 +12,7 @@ import {
   ToolbarSection,
 } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
 import type { ScenarioRecordItem } from '@/lib/backend/modules/pythonJobs';
 
 type ReplayScenarioListPanelProps = {
@@ -213,7 +214,7 @@ export function ReplayScenarioListPanel({
                         </div>
                         {!compactMode ? (
                           <div className="mt-1 text-[11px] text-slate-500 truncate">
-                            {new Date(item.createdAt).toLocaleString()} • {item.scenarioPath}
+                            {formatDateTime(item.createdAt)} • {item.scenarioPath}
                           </div>
                         ) : null}
                       </div>

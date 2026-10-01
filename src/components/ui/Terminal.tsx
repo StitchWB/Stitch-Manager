@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { ArrowDown, Trash2, Rocket, Copy, ChevronRight } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatTime as formatTimeBase } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { EmptyState } from './EmptyState';
@@ -108,11 +108,11 @@ function LogRow({ log, isLatest, onCopy }: { log: LogEntry; isLatest: boolean; o
   const config = levelConfig[log.level];
   
   const formatTime = (timestamp: string) => {
-    try {
-      return new Date(timestamp).toLocaleTimeString('en-US', { 
-        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-      });
-    } catch { return '--:--:--'; }
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '--:--:--';
+    return formatTimeBase(date, {
+      hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
   };
 
   // Check if message contains credentials (email + password pattern)

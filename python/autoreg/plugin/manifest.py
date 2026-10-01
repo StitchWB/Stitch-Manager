@@ -11,6 +11,7 @@ Required fields are enforced; missing or invalid values raise
 
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 import re
 from dataclasses import dataclass, field
@@ -27,6 +28,20 @@ MANIFEST_FILENAME = "plugin.json"
 # "provider" — code plugin shipping a provider class.
 # "service" — v2 out-of-process plugin (subprocess JSON-RPC, plan v2).
 VALID_KINDS = ("data", "engine-pack", "provider", "service")
+
+# Optional in the manifest; the official publish path requires description/category/status.
+VALID_CATEGORIES = (
+    "autoreg",
+    "engine",
+    "ide-integration",
+    "ai-tools",
+    "productivity",
+    "security",
+    "communication",
+    "data",
+)
+VALID_STATUSES = ("stable", "beta", "deprecated")
+VALID_FEATURE_STATUSES = ("stable", "beta", "planned")
 
 _logger = logging.getLogger(__name__)
 
@@ -58,6 +73,130 @@ class ManifestValidationError(Exception):
     def __init__(self, field: str, message: str) -> None:
         self.field = field
         super().__init__(f"{field}: {message}")
+
+
+def resolve_i18n(value: Any, lang: str = "ru") -> str:
+    """Resolve an I18nString (``str`` or ``{locale: str}``) to a plain string.
+
+    Strings pass through unchanged.  Objects resolve the requested ``lang``
+    member, falling back to ``"ru"``, then to the first string value.
+    Anything else (None, empty object, non-string values) resolves to ``""``.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in (lang, "ru"):
+            member = value.get(key)
+            if isinstance(member, str) and member:
+                return member
+        for member in value.values():
+            if isinstance(member, str) and member:
+                return member
+    return ""
+
+
+def _check_i18n(value: Any, field_name: str) -> None:
+    """Type-check an I18nString field (``str`` or ``{locale: str}``)."""
+    if isinstance(value, str):
+        if not value.strip():
+            raise ManifestValidationError(field_name, "must be a non-empty string")
+        return
+    if isinstance(value, dict):
+        if not value or not all(
+            isinstance(k, str) and isinstance(v, str) and v.strip()
+            for k, v in value.items()
+        ):
+            raise ManifestValidationError(
+                field_name, "must map locales to non-empty strings"
+            )
+        return
+    raise ManifestValidationError(
+        field_name, "must be a string or an object of locale -> string"
+    )
+
+
+def _validate_marketplace_metadata(raw: dict[str, Any]) -> None:
+    """Type-check the optional rich marketplace fields (stitch.plugin/v2).
+
+    Every field is OPTIONAL — absent keys are skipped so old manifests keep
+    parsing.  Present-but-mistyped values raise ``ManifestValidationError``.
+    The fields stay in ``PluginManifest.extras`` (tolerant reader); the
+    official publish path additionally requires description/category/status.
+    """
+    if "description" in raw:
+        _check_i18n(raw["description"], "description")
+    if "author" in raw:
+        if not isinstance(raw["author"], str) or not raw["author"].strip():
+            raise ManifestValidationError("author", "must be a non-empty string")
+    if "category" in raw and raw["category"] not in VALID_CATEGORIES:
+        raise ManifestValidationError(
+            "category", f'must be one of {VALID_CATEGORIES}, got "{raw["category"]}"'
+        )
+    if "status" in raw and raw["status"] not in VALID_STATUSES:
+        raise ManifestValidationError(
+            "status", f'must be one of {VALID_STATUSES}, got "{raw["status"]}"'
+        )
+    if "icon" in raw:
+        if not isinstance(raw["icon"], str) or not raw["icon"].strip():
+            raise ManifestValidationError("icon", "must be a non-empty emoji string")
+    for url_field in ("homepage", "repository"):
+        if url_field in raw:
+            url = raw[url_field]
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                raise ManifestValidationError(
+                    url_field, "must be an http(s) URL string"
+                )
+
+    features_raw = raw.get("features")
+    if features_raw is not None:
+        if not isinstance(features_raw, list):
+            raise ManifestValidationError("features", "must be a list")
+        for i, feat in enumerate(features_raw):
+            if not isinstance(feat, dict):
+                raise ManifestValidationError(f"features[{i}]", "must be an object")
+            if "title" not in feat:
+                raise ManifestValidationError(
+                    f"features[{i}].title", "required field missing"
+                )
+            _check_i18n(feat["title"], f"features[{i}].title")
+            if feat.get("status") not in VALID_FEATURE_STATUSES:
+                raise ManifestValidationError(
+                    f"features[{i}].status",
+                    f'must be one of {VALID_FEATURE_STATUSES}, got "{feat.get("status")}"',
+                )
+
+    changelog_raw = raw.get("changelog")
+    if changelog_raw is not None:
+        if not isinstance(changelog_raw, list):
+            raise ManifestValidationError("changelog", "must be a list")
+        for i, entry in enumerate(changelog_raw):
+            if not isinstance(entry, dict):
+                raise ManifestValidationError(f"changelog[{i}]", "must be an object")
+            version = entry.get("version")
+            if not isinstance(version, str) or not _SEMVER_RE.match(version):
+                raise ManifestValidationError(
+                    f"changelog[{i}].version",
+                    f'"{version}" is not a valid semver 2.0.0 string',
+                )
+            date = entry.get("date")
+            if not isinstance(date, str):
+                raise ManifestValidationError(
+                    f"changelog[{i}].date", 'must be a "YYYY-MM-DD" date string'
+                )
+            try:
+                _dt.date.fromisoformat(date)
+            except ValueError:
+                raise ManifestValidationError(
+                    f"changelog[{i}].date",
+                    f'"{date}" is not a valid "YYYY-MM-DD" date',
+                ) from None
+            changes = entry.get("changes")
+            if not isinstance(changes, list) or not changes:
+                raise ManifestValidationError(
+                    f"changelog[{i}].changes", "must be a non-empty list"
+                )
+            for j, change in enumerate(changes):
+                _check_i18n(change, f"changelog[{i}].changes[{j}]")
 
 
 @dataclass(frozen=True)
@@ -301,6 +440,9 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     if not isinstance(contributions_raw, dict):
         raise ManifestValidationError("contributions", "must be an object")
     contributions = dict(contributions_raw)
+
+    # Validated here but kept in extras on purpose: publish reads them from extras.
+    _validate_marketplace_metadata(raw)
 
     known = {
         "schema", "id", "name", "version", "service", "kind",
