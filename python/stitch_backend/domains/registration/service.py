@@ -20,400 +20,36 @@ import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
-from stitch_backend.config import REPO_ROOT
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.core.event_schemas import LogEntryPayload, ObsEventPayload
+from stitch_backend.domains.registration.cards import _load_cards
+from stitch_backend.domains.registration.entitlement import _check_entitlement
+from stitch_backend.domains.registration.log_bridge import (
+    _install_log_bridge,
+    _remove_log_bridge,
+)
+from stitch_backend.domains.registration.persistence import _save_registration_account
+from stitch_backend.domains.registration.provider_factory import (
+    _build_provider,
+)
+from stitch_backend.domains.registration.provider_factory import (
+    _build_provider_kwargs as _build_provider_kwargs,
+)
+from stitch_backend.domains.registration.provider_factory import (
+    _resolve_imap_password_from_db as _resolve_imap_password_from_db,
+)
+from stitch_backend.domains.registration.transport import (
+    _make_event_bus_transport,
+    cleanup_transport,
+)
+from stitch_backend.domains.registration.transport import (
+    push_control_to_transport as push_control_to_transport,
+)
+from stitch_backend.domains.registration.v0_app import _prepare_v0_app
 
 logger = logging.getLogger(__name__)
-
-
-# ── Provider factory ────────────────────────────────────────────────────────
-
-def _resolve_imap_password_from_db(
-    host: str, owner_id: int | None = None
-) -> str:
-    """Synchronously resolve the real IMAP/Gmail password from the settings DB.
-
-    When ``owner_id`` is given, the user-scoped key ``u<uid>:<key>`` is tried
-    first, falling back to the global key.  When ``owner_id`` is ``None``
-    (desktop), only the global key is read — byte-identical to the
-    pre-multi-user behaviour.
-    """
-    import sqlite3 as _sqlite3
-    from pathlib import Path
-
-    from stitch_backend.config import PYTHON_DIR, _app_data_dir, get_settings
-    # Single source of truth: derive the sqlite path from settings.database_url
-    # (the same value the async engine uses), so tests that set DATABASE_URL
-    # steer both resolvers uniformly on every platform. Fall back to the
-    # canonical on-disk layout when the URL is not a sqlite file URL.
-    db_path: Path | None = None
-    db_url = get_settings().database_url or ""
-    if db_url.startswith("sqlite") and "///" in db_url:
-        db_path = Path(db_url.split("///", 1)[1])
-    if db_path is None or not db_path.exists():
-        canonical = _app_data_dir() / "stitch-manager"
-        if canonical.is_dir():
-            db_path = canonical / "stitch.db"
-        else:
-            db_path = REPO_ROOT / "stitch.db"
-            # Also try python/stitch.db (dev layout)
-            if not db_path.exists():
-                db_path = PYTHON_DIR / "stitch.db"
-    key = "gmailAppPassword" if "gmail" in host.lower() else "imapPassword"
-    user_key = f"u{owner_id}:{key}" if owner_id is not None else None
-    try:
-        con = _sqlite3.connect(str(db_path), timeout=5)
-        # Try user-scoped key first, then global.
-        if user_key:
-            row = con.execute(
-                "SELECT value FROM settings WHERE key = ?", (user_key,)
-            ).fetchone()
-            if row and row[0]:
-                con.close()
-                return cast("str", row[0])
-        row = con.execute(
-            "SELECT value FROM settings WHERE key = ?", (key,)
-        ).fetchone()
-        con.close()
-        return row[0] if row and row[0] else ""
-    except Exception as exc:
-        logger.warning("_resolve_imap_password_from_db failed: %s", exc)
-        return ""
-
-
-def _build_imap_config(config: dict) -> dict | None:
-    """Extract IMAP config from frontend config dict.
-
-    Accepts both camelCase (from frontend JSON) and snake_case keys.
-    When the password is the sentinel '********' (masked by settings API),
-    resolves the real password from the settings DB synchronously.
-    Threads ``owner_id`` from config to the resolver for per-user lookup.
-    """
-    server = config.get("imap_server") or config.get("imapServer")
-    user = config.get("imap_user") or config.get("imapUser")
-    password = config.get("imap_password") or config.get("imapPassword")
-    owner_id = config.get("owner_id") or config.get("_caller_user_id")
-    if server and user and password:
-        port_raw = config.get("imap_port") or config.get("imapPort") or 993
-        # Resolve sentinel — frontend sends '********' when the password is
-        # stored in the DB (to avoid echoing it to the UI).
-        if password in ("********", "••••••••", ""):
-            real_pwd = _resolve_imap_password_from_db(
-                str(server), owner_id=owner_id
-            )
-            if real_pwd:
-                logger.debug("_build_imap_config: resolved DB password for %s", server)
-                password = real_pwd
-            else:
-                logger.warning(
-                    "_build_imap_config: sentinel received but no password in DB for %s",
-                    server,
-                )
-                return None  # Don't build a broken imap_config
-        logger.debug(
-            "_build_imap_config: server=%s user=%s password_len=%d",
-            server, user, len(password),
-        )
-        return {
-            "host": server,
-            "user": user,
-            "password": password,
-            "port": int(port_raw),
-        }
-    return None
-
-
-def _build_addyio_config(config: dict):
-    """Extract AddyIO config from frontend config dict."""
-    if not (config.get("addyio_enabled") or config.get("addyioEnabled")):
-        return None
-    from autoreg.services.addyio import AddyIoConfig
-    return AddyIoConfig(
-        api_token=config.get("addyio_api_token") or config.get("addyioApiToken") or "",
-        domain=config.get("addyio_domain") or config.get("addyioDomain") or "",
-        alias_format=config.get("addyio_alias_format") or config.get("addyioAliasFormat") or "uuid",
-        auto_delete=bool(config.get("addyio_auto_delete") or config.get("addyioAutoDelete")),
-    )
-
-
-def _build_mailtm_config(config: dict) -> dict | None:
-    """Extract MailTM inbox config from frontend config dict."""
-    address = (config.get("inbox_mailtm_address") or config.get("inboxMailtmAddress") or "").strip()
-    password = (config.get("inbox_mailtm_password") or config.get("inboxMailtmPassword") or "").strip()
-    if not address or not password:
-        return None
-    return {
-        "address": address,
-        "password": password,
-        "base_url": config.get("inbox_mailtm_base_url", "https://api.mail.tm"),
-    }
-
-
-def _build_33mail_config(config: dict) -> dict | None:
-    """Extract 33mail config from frontend config dict."""
-    if not (config.get("thirty_three_mail_enabled") or config.get("thirtyThreeMailEnabled")):
-        return None
-    username = (config.get("thirty_three_mail_username") or config.get("thirtyThreeMailUsername") or "").strip()
-    if not username:
-        return None
-    return {
-        "username": username,
-        "domain": config.get("thirty_three_mail_domain") or config.get("thirtyThreeMailDomain") or "33mail.com",
-    }
-
-
-def _build_provider_kwargs(config: dict) -> dict[str, Any]:
-    """Build common provider kwargs from frontend config dict.
-
-    Accepts both camelCase (from frontend JSON) and snake_case keys.
-    """
-    kwargs: dict[str, Any] = {
-        "headless": config.get("headless", True),
-        "imap_config": _build_imap_config(config),
-        "email_strategy": config.get("email_strategy") or config.get("emailStrategy") or "mailtm",
-        "base_email": config.get("base_email") or config.get("baseEmail") or None,
-        "addyio_config": _build_addyio_config(config),
-        "thirty_three_mail_config": _build_33mail_config(config),
-        "mailtm_inbox_config": _build_mailtm_config(config),
-    }
-    return kwargs
-
-
-def _build_provider(provider_name: str, config: dict):
-    """Instantiate a provider from config dict.
-
-    Core is a pure plugin HOST — every provider exists ONLY as a plugin.
-    Two plugin sources are checked in order:
-
-    1. **DATA plugin** (``kind=data``): resolved via :class:`PluginLoader` →
-       :class:`PluginScenarioProvider` runs the package's data-only scenario.
-    2. **PROVIDER plugin** (``kind=provider``): resolved via
-       :data:`PLUGIN_PROVIDERS` (populated by
-       :func:`autoreg.providers.registry.load_plugin_providers`) → the
-       provider class is instantiated with ``base_kwargs``.
-
-    If neither source has the provider, a clear ``RuntimeError`` is raised
-    ("provider not installed — install plugin").
-    """
-    base_kwargs = _build_provider_kwargs(config)
-
-    # ── 1. DATA plugin resolution (plan §3.3 decision 9) ───────────────
-    # A FRESH PluginLoader is created per call — this is the pinning contract
-    # (plan §3.2 item 5): a package installed/removed mid-run does not change
-    # the resolved version; the next run picks up the change.
-    try:
-        from autoreg.plugin.loader import PluginLoader
-        from autoreg.plugin.provider_adapter import PluginScenarioProvider
-
-        loader = PluginLoader()
-        pkg_dir = loader.resolve(provider_name)
-        if pkg_dir is not None:
-            logger.info(
-                "Registration: using plugin package for %s from %s",
-                provider_name, pkg_dir,
-            )
-            return PluginScenarioProvider(
-                pkg_dir,
-                loader=loader,
-                **base_kwargs,
-                card_number=config.get("card_number") or config.get("cardNumber"),
-                card_expiry=config.get("card_expiry") or config.get("cardExpiry"),
-                card_cvc=config.get("card_cvc") or config.get("cardCvc"),
-                cardholder_name=config.get("cardholder_name")
-                or config.get("cardholderName"),
-                billing_country=config.get("billing_country")
-                or config.get("billingCountry"),
-                billing_address=config.get("billing_address")
-                or config.get("billingAddress"),
-                billing_city=config.get("billing_city") or config.get("billingCity"),
-                billing_state=config.get("billing_state") or config.get("billingState"),
-                billing_zip=config.get("billing_zip") or config.get("billingZip"),
-                kiro_plan=config.get("kiro_plan") or config.get("kiroPlan"),
-            )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Plugin scenario resolution for %s failed: %s",
-            provider_name, exc,
-        )
-
-    # ── 2. PROVIDER plugin (kind=provider class override) ──────────────
-    # PLUGIN_PROVIDERS is populated by load_plugin_providers() scanning
-    # installed kind=provider plugin packages.  Re-scan here so a fresh
-    # STITCH_PLUGINS_DIR (e.g. tests redirecting to tmp_path) is respected —
-    # consistent with the "fresh loader per call" pinning contract above.
-    # The provider class is instantiated with base_kwargs (same shape as
-    # built-in providers).
-    try:
-        from autoreg.providers.registry import get_plugin_provider, load_plugin_providers
-
-        load_plugin_providers()
-        provider_cls = get_plugin_provider(provider_name)
-        if provider_cls is not None:
-            logger.info(
-                "Registration: using provider plugin for %s (%s)",
-                provider_name, provider_cls.__name__,
-            )
-            return provider_cls(**base_kwargs)
-    except Exception as exc:  # noqa: BLE001 — autoreg.providers may be absent
-        logger.debug(
-            "Provider plugin lookup for %s failed: %s", provider_name, exc
-        )
-
-    # ── 3. No plugin found — clear error ───────────────────────────────
-    raise RuntimeError(
-        f"provider '{provider_name}' not installed — install plugin"
-    )
-
-
-# ── Logging bridge ─────────────────────────────────────────────────────────
-#
-# CRITICAL: Providers (FireworksProvider, KiroProvider, etc.) and pipeline
-# code use ``logger.info()`` — they NEVER call ``self.log()``.  Without this
-# bridge, zero logs reach the frontend.
-#
-# We install a custom logging.Handler on the ``autoreg`` and ``pipeline``
-# logger hierarchies.  Every log record is formatted and forwarded to the
-# log_callback, which emits obs:event + logs:new to the EventBus.
-
-class _LogBridgeHandler(logging.Handler):
-    """Forward Python logging records to a ``Callable[[str], None]`` callback."""
-
-    # Stable marker so we can recognise bridge handlers even across module
-    # hot-reloads (where isinstance() fails because the class object differs).
-    _is_stitch_log_bridge = True
-
-    def __init__(self, callback: Callable[[str], None]) -> None:
-        super().__init__(level=logging.DEBUG)
-        self._callback = callback
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            self._callback(msg)
-        except Exception:
-            pass  # Never let logging crash the provider
-
-
-# Logger names to bridge — covers all autoreg providers + pipeline code
-_BRIDGE_LOGGER_NAMES = ("autoreg",)
-
-
-def _install_log_bridge(callback: Callable[[str], None]) -> list[_LogBridgeHandler]:
-    """Attach ``_LogBridgeHandler`` to all autoreg/pipeline loggers.
-
-    Idempotent: any previously-attached bridge handlers are removed first so
-    that concurrent/overlapping jobs in the same backend process can NEVER
-    accumulate multiple handlers (which would deliver each log N times).
-    """
-    handlers: list[_LogBridgeHandler] = []
-    for name in _BRIDGE_LOGGER_NAMES:
-        lg = logging.getLogger(name)
-        # Purge any stale bridge handlers left over from a previous job.
-        # Match by marker attribute (not isinstance) so handlers from a
-        # hot-reloaded module are also removed — otherwise they accumulate
-        # and every log line is delivered N times.
-        for h in list(lg.handlers):
-            if getattr(h, "_is_stitch_log_bridge", False):
-                lg.removeHandler(h)
-                try:
-                    h.close()
-                except Exception:
-                    pass
-        handler = _LogBridgeHandler(callback)
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        lg.addHandler(handler)
-        # Ensure the logger level allows info/debug records through.
-        if lg.level == logging.NOTSET or lg.level > logging.DEBUG:
-            lg.setLevel(logging.DEBUG)
-        # Disable propagation so records don't ALSO go to the root logger.
-        lg.propagate = False
-        handlers.append(handler)
-    return handlers
-
-
-def _remove_log_bridge(handlers: list[_LogBridgeHandler]) -> None:
-    """Detach bridge handlers from their loggers and restore propagation."""
-    for handler in handlers:
-        for name in _BRIDGE_LOGGER_NAMES:
-            try:
-                lg = logging.getLogger(name)
-                lg.removeHandler(handler)
-                # Restore propagation so normal logging works outside of jobs
-                lg.propagate = True
-            except Exception:
-                pass
-        handler.close()
-
-
-# ── EventBus pipeline transport ──────────────────────────────────────────────
-#
-# PipeTransport writes JSON to sys.stdout — designed for subprocess mode.
-# In-process mode needs events to go through the EventBus instead.
-
-def _make_event_bus_transport(job_id: str, provider_name: str):
-    """Create a PipeTransport subclass that routes events through EventBus
-    and receives control commands from ``registration_control`` API calls.
-
-    In-process mode:
-    - emit() → EventBus (WebSocket → frontend)
-    - read_command() → in-memory queue populated by push_command()
-    - push_command() → called by registration_control command handler
-    """
-    from autoreg.pipeline.transport import PipeTransport
-
-    class EventBusTransport(PipeTransport):
-        """PipeTransport backed by EventBus instead of stdin/stdout."""
-
-        def emit(self, event: str, data: dict) -> None:
-            # Skip stdout write (parent); emit to EventBus only
-            event_bus.emit_sync(
-                f"pipeline.{event}",
-                {"jobId": job_id, "provider": provider_name, **data},
-            )
-            logger.debug("Emitted event: %s", event)
-
-        def _ensure_reader(self) -> None:
-            # No stdin reader — commands come via push_command()
-            self._started = True
-
-        def push_command(self, command: str, step_id=None, data=None) -> None:
-            """Called by registration_control to inject a control command."""
-            from autoreg.pipeline.transport import PipelineCommand
-            cmd = PipelineCommand(
-                command=command,
-                step_id=step_id,
-                data=data or {},
-            )
-            self._queue.append(cmd)
-
-    transport = EventBusTransport()
-    # Register transport in global registry so registration_control can push commands
-    _ACTIVE_TRANSPORTS[job_id] = transport
-    return transport
-
-
-# Registry: job_id → EventBusTransport (so registration_control can push commands)
-_ACTIVE_TRANSPORTS: dict[str, Any] = {}
-
-
-def push_control_to_transport(job_id: str, command: str, step_id=None, data=None) -> bool:
-    """Called by the registration_control command to forward resume/skip/abort."""
-    t = _ACTIVE_TRANSPORTS.get(job_id)
-    if t and hasattr(t, "push_command"):
-        t.push_command(command, step_id=step_id, data=data)
-        return True
-    return False
-
-
-def cleanup_transport(job_id: str) -> None:
-    """Remove transport from registry when job completes."""
-    _ACTIVE_TRANSPORTS.pop(job_id, None)
 
 
 # ── Log callback factory ─────────────────────────────────────────────────
@@ -462,60 +98,6 @@ def _build_log_callback(job_id: str, provider_name: str):
         )
         event_bus.emit_sync("logs:new", log_entry.model_dump())
     return log_callback
-
-
-async def _check_entitlement(provider_name: str, config: dict) -> None:
-    """Run-gate: reject the submission when the caller's role is not
-    entitled to the plugin that backs *provider_name*.
-
-    The canonical entitlement key is the plugin package id (manifest
-    ``id``, e.g. "kiro-autoreg").  ``provider_name`` is the service id
-    (e.g. "kiro") and is resolved to the package id via
-    :func:`resolve_provider_plugin_id`.  When the plugin is not
-    installed (``None``) the gate is skipped — the existing
-    "provider not installed" error path in :func:`_build_provider`
-    handles it.
-
-    Caller context is read from *config*:
-      - ``owner_id`` (threaded from ``_caller_user_id``) → caller_user_id
-      - ``_caller_role`` → caller_role
-
-    Desktop / no-auth (both ``None``) →
-    :func:`get_effective_entitlements` returns ``{"*"}`` → passes.
-
-    Raises ``ValueError`` with a clear message when the caller is not
-    entitled.  The command dispatcher maps ``ValueError`` to HTTP 400
-    with ``str(exc)`` as the detail — matching the codebase error style
-    for expected rejections.
-    """
-    # Lazy import — sibling module in plugin_distribution domain.
-    from stitch_backend.domains.plugin_distribution.entitlements import (
-        get_effective_entitlements,
-        is_entitled_to,
-        resolve_provider_plugin_id,
-    )
-
-    plugin_id = await resolve_provider_plugin_id(provider_name)
-    if plugin_id is None:
-        # Plugin not installed → let _build_provider's "provider not
-        # installed" error path handle it (unchanged behaviour).
-        return
-
-    # Defense in depth (FIX 1 P0): caller identity must come from the
-    # dispatcher-injected top-level params (threaded as owner_id /
-    # _caller_role by the command handlers).  We prefer owner_id (the
-    # canonical key threaded from _caller_user_id) and fall back to
-    # _caller_user_id.  _caller_role is read directly.  Entry points
-    # now unconditionally overwrite these keys, but this guard ensures
-    # that even a direct caller of submit()/run() with a spoofed config
-    # cannot inject an arbitrary role.
-    caller_user_id = config.get("owner_id") or config.get("_caller_user_id")
-    caller_role = config.get("_caller_role")
-    entitlements = await get_effective_entitlements(caller_user_id, caller_role)
-    if not is_entitled_to(plugin_id, entitlements):
-        raise ValueError(
-            f"plugin '{plugin_id}' is not entitled for your role — contact admin"
-        )
 
 
 # ── Service ────────────�����������────────────────────────────────────────────────────
@@ -677,22 +259,14 @@ class RegistrationService:
 
         log_callback = _build_log_callback(job_id, provider_name)
 
-        # Ensure DB schema is up to date before any session work.
-        # When the Python backend starts normally this runs in lifespan(), but
-        # when the server is offline or the job runs in a separate process the
-        # lifespan never fires.  Running it here is idempotent (no-op if schema
-        # is already current) and prevents silent OperationalError on old DBs
-        # that are missing columns added after their creation (e.g. ref_code,
-        # expires_at, registration_source, ...).
+        # Idempotent migration here because offline/standalone jobs skip lifespan().
         try:
             from stitch_backend.database import create_all_tables as _migrate_db
             await _migrate_db()
         except Exception as _mig_exc:
             log_callback(f"[db] Schema migration warning: {_mig_exc!r}")
 
-        # Install logging bridge: capture ALL logger.info() from autoreg/pipeline
-        # and forward to the EventBus.  Without this, zero logs reach the frontend
-        # because providers use ``logger.info()`` not ``self.log()``.
+        # Providers use `logger.info()` not `self.log()` — bridge forwards to EventBus.
         bridge_handlers = _install_log_bridge(log_callback)
 
         provider = None
@@ -700,119 +274,13 @@ class RegistrationService:
         try:
             # ── v0_app: auto-select proxy + referral donor ─────────────────
             if provider_name == "v0_app":
-                from stitch_backend.database import run_in_session
-                from stitch_backend.domains.registration.proxy_selector import ProxySelector
-                from stitch_backend.domains.registration.referral_pool import ReferralPoolService
-
-                # Auto-pick proxy ONLY when explicitly opted in via config flag.
-                # Previously this ran whenever ``proxy_url`` was empty, which
-                # silently applied a (possibly dead) proxy from the library to
-                # every v0_app registration and caused ERR_EMPTY_RESPONSE in the
-                # CloakBrowser. Now it is opt-in: registration goes direct unless
-                # the caller enables rotation.
-                auto_proxy_enabled = bool(
-                    config.get("auto_proxy")
-                    or config.get("autoProxy")
-                    or config.get("proxy_rotation")
-                    or config.get("proxyRotation")
-                )
-                if auto_proxy_enabled and not config.get("proxy_url"):
-                    try:
-                        async def _pick_proxy(session):
-                            return await ProxySelector.next_proxy(session)
-                        proxy_entry = await run_in_session(_pick_proxy)
-                        if proxy_entry:
-                            config = dict(config)  # copy — do not mutate caller's dict
-                            config["proxy_url"] = ProxySelector.build_proxy_url(proxy_entry)
-                            config["proxy_type"] = proxy_entry.get("proxy_type", "http")
-                            config["proxy_username"] = proxy_entry.get("proxy_username")
-                            config["proxy_password"] = proxy_entry.get("proxy_password")
-                            # Visible in the registration console so a bad proxy
-                            # is immediately obvious instead of a silent failure.
-                            log_callback(
-                                f"[proxy] Auto-rotation ON — using proxy "
-                                f"{proxy_entry.get('proxy_url')}"
-                            )
-                            logger.info(
-                                "Registration %s: auto-proxy %s",
-                                job_id, proxy_entry.get("proxy_url"),
-                            )
-                        else:
-                            log_callback(
-                                "[proxy] Auto-rotation ON but no enabled proxy in "
-                                "library — continuing with a direct connection"
-                            )
-                    except Exception as proxy_exc:
-                        log_callback(
-                            f"[proxy] Auto-select failed ({proxy_exc}) — "
-                            f"continuing with a direct connection"
-                        )
-                        logger.warning(
-                            "Registration %s: proxy auto-select failed (continuing without proxy): %s",
-                            job_id, proxy_exc,
-                        )
-                elif config.get("proxy_url"):
-                    log_callback(f"[proxy] Using configured proxy {config.get('proxy_url')}")
-
-                # A custom referral link entered manually in the UI arrives as
-                # camelCase ``signupUrl``. Normalize it to ``signup_url`` so the
-                # block below treats it as an explicit override and skips donor
-                # selection entirely.
-                _custom_signup_url = (
-                    config.get("signup_url")
-                    or config.get("signupUrl")
-                )
-                if _custom_signup_url and not config.get("signup_url"):
-                    config = dict(config)
-                    config["signup_url"] = str(_custom_signup_url).strip()
-
-                # Referral donor: manual selection (referred_by_id) takes
-                # priority; otherwise auto-pick the oldest eligible donor.
-                # Skipped entirely if the caller passed an explicit signup_url.
-                if config.get("signup_url"):
-                    log_callback(
-                        f"[v0_app] Using custom referral link: {config.get('signup_url')}"
-                    )
-                if not config.get("signup_url"):
-                    manual_donor_id = (
-                        config.get("referred_by_id") or config.get("referredById")
-                    )
-                    try:
-                        async def _pick_donor(session):
-                            if manual_donor_id:
-                                return await ReferralPoolService.get_donor_by_id(
-                                    session, str(manual_donor_id)
-                                )
-                            return await ReferralPoolService.get_active_donor(session)
-                        donor = await run_in_session(_pick_donor)
-                        config = dict(config)
-                        config["signup_url"] = ReferralPoolService.get_signup_url(donor)
-                        if donor and donor.get("refUrl"):
-                            _donor_id = donor.get("id")
-                            logger.info(
-                                "Registration %s: using %s referral donor id=%s url=%s",
-                                job_id,
-                                "manual" if manual_donor_id else "auto",
-                                _donor_id,
-                                config["signup_url"],
-                            )
-                        else:
-                            logger.info(
-                                "Registration %s: no usable donor — using seed URL %s",
-                                job_id, config["signup_url"],
-                            )
-                    except Exception as donor_exc:
-                        logger.warning(
-                            "Registration %s: donor selection failed (using seed URL): %s",
-                            job_id, donor_exc,
-                        )
+                config, _donor_id = await _prepare_v0_app(job_id, config, log_callback)
 
             # Build provider
             provider = _build_provider(provider_name, config)
             provider.set_log_callback(log_callback)
 
-            # Create EventBus-backed transport so pipeline events (pause/resume/
-            # step_waiting etc.) flow to the frontend over WebSocket.
+
             event_transport = _make_event_bus_transport(job_id, provider_name)
 
             # Load card pool if configured
@@ -825,9 +293,7 @@ class RegistrationService:
                 "message": f"Starting {provider_name} registration...",
             })
 
-            # Run blocking provider.register() in a thread
-            # Read outbound proxy from kiro-patch config (prevents IP leak
-            # during token exchange HTTP requests inside the provider)
+            # Outbound proxy prevents IP leak during token exchange inside provider.
             outbound_proxy: str | None = None
             try:
                 from stitch_backend.domains.kiro_proxy.server import _get_outbound_proxy
@@ -855,266 +321,17 @@ class RegistrationService:
                 if result.get("email"):
                     job["email"] = result["email"]
 
-            # Emit completion event + persist account to DB
-            # Debug visibility: show what the provider actually returned so a
-            # missing/false `success` key (which silently skips the DB save)
-            # is immediately obvious in the registration console.
+            # Log provider result keys — missing/false `success` silently skips DB save.
             log_callback(
                 f"[db] Provider result: success={result.get('success')!r} "
                 f"email={result.get('email')!r} keys={sorted(result.keys())}"
             )
             if result.get("success"):
                 # ── Persist account to the `accounts` table (UI source) ────
-                account_id: str | None = None
                 reg_email = result.get("email") or config.get("email") or ""
-                try:
-                    from stitch_backend.database import run_in_session
-                    from stitch_backend.domains.accounts.service import AccountService
-
-                    _donor_id_for_increment = _donor_id  # capture for closure
-
-                    async def _save(session):
-                        svc = AccountService(session)
-                        account = await svc.add_registered_account(
-                            provider=provider_name,
-                            email=reg_email,
-                            password=config.get("password"),
-                            token=result.get("token"),
-                            refresh_token=result.get("refresh_token")
-                            or result.get("refreshToken"),
-                            api_key=result.get("api_key") or result.get("apiKey"),
-                            display_name=reg_email,
-                            account_type=result.get("plan")
-                            or result.get("accountType")
-                            or "free",
-                            ref_code=result.get("ref_code"),
-                            ref_url=result.get("ref_url"),
-                            referred_by_id=_donor_id_for_increment,
-                        )
-                        # Increment donor counter inside the same session
-                        if _donor_id_for_increment is not None:
-                            from stitch_backend.domains.registration.referral_pool import (
-                                ReferralPoolService,
-                            )
-                            await ReferralPoolService.increment_donor(
-                                session, _donor_id_for_increment
-                            )
-                        return account.id
-
-                    account_id = await run_in_session(_save)
-                    logger.info(
-                        "Registration %s: account saved to DB id=%s email=%s",
-                        job_id, account_id, reg_email,
-                    )
-                    log_callback(
-                        f"[db] Account saved: id={account_id} email={reg_email}"
-                    )
-
-                    # ── Auto-share to group if groupId was provided ──────
-                    # After a successful registration + account save, if
-                    # the caller passed a groupId AND is a member of that
-                    # group, insert a group_shares row
-                    # (resource_type='account', shared_by=caller).  Silent
-                    # no-op when groupId is absent or the caller is not a
-                    # member.  Non-fatal on failure — the account is
-                    # already saved.
-                    _group_id = config.get("group_id") or config.get("groupId")
-                    if _group_id and account_id:
-                        try:
-                            from stitch_backend.domains.groups.service import (
-                                is_member as _is_group_member,
-                            )
-                            from stitch_backend.domains.groups.service import (
-                                share_resource as _share_resource,
-                            )
-
-                            _caller_uid = (
-                                config.get("owner_id")
-                                or config.get("_caller_user_id")
-                            )
-
-                            async def _auto_share(session):
-                                if await _is_group_member(
-                                    session, _group_id, _caller_uid
-                                ):
-                                    await _share_resource(
-                                        session,
-                                        group_id=_group_id,
-                                        resource_type="account",
-                                        resource_id=str(account_id),
-                                        shared_by=_caller_uid,
-                                    )
-                                    return True
-                                return False
-
-                            _shared = await run_in_session(_auto_share)
-                            if _shared:
-                                log_callback(
-                                    f"[db] Account auto-shared to group {_group_id}"
-                                )
-                            else:
-                                log_callback(
-                                    f"[db] Group auto-share skipped: "
-                                    f"caller is not a member of group {_group_id}"
-                                )
-                        except Exception as _share_exc:
-                            log_callback(
-                                f"[db] Group auto-share failed (non-fatal): "
-                                f"{_share_exc}"
-                            )
-
-                    # Link TOTP key to the account if MFA was registered
-                    totp_key_id = result.get("totp_key_id")
-                    if totp_key_id and account_id:
-                        try:
-                            import sqlite3 as _sqlite3
-
-                            from stitch_backend.config import get_settings as _get_settings
-                            _db_path = _get_settings().database_url.split("///", 1)[-1]
-                            with _sqlite3.connect(_db_path) as _conn:
-                                _conn.execute(
-                                    "UPDATE totp_keys SET account_id = ? WHERE id = ?",
-                                    (str(account_id), totp_key_id),
-                                )
-                                _conn.commit()
-                            log_callback(f"[db] TOTP key {totp_key_id} linked to account {account_id}")
-                        except Exception as _totp_exc:
-                            log_callback(f"[db] TOTP link failed (non-fatal): {_totp_exc}")
-
-                    # Persist browser profile path + cookies so "Open browser"
-                    # button restores the authenticated session instead of
-                    # launching a blank profile.
-                    _kiro_account = result.get("kiro_account") or {}
-                    _profile_path = _kiro_account.get("browser_profile_path") or ""
-                    _cookies = _kiro_account.get("cookies") or "[]"
-                    _session_data = (_kiro_account.get("session_data")
-                                     or result.get("session_data", {}).get("session_data")
-                                     or "{}")
-                    if _profile_path and account_id:
-                        try:
-                            import sqlite3 as _sqlite3
-
-                            from stitch_backend.config import get_settings as _get_settings
-                            _db_path = _get_settings().database_url.split("///", 1)[-1]
-                            with _sqlite3.connect(_db_path) as _conn:
-                                _conn.execute(
-                                    "UPDATE accounts SET browser_profile_path=?, cookies=?, "
-                                    "session_data=? WHERE id=?",
-                                    (_profile_path, _cookies, _session_data, str(account_id)),
-                                )
-                                _conn.commit()
-                            log_callback(
-                                f"[db] Browser profile saved: {_profile_path}"
-                            )
-                        except Exception as _bp_exc:
-                            log_callback(f"[db] Browser profile save failed (non-fatal): {_bp_exc}")
-
-                    # Persist browser engine + shard profile id via ORM so the
-                    # interactive "Open browser" relaunches the account with the
-                    # same engine/fingerprint. ORM update works on both legacy
-                    # Rust-created and ORM-created schemas.
-                    _engine = _kiro_account.get("browser_engine") or "cloakbrowser"
-                    _shard_id = _kiro_account.get("shard_profile_id")
-                    if account_id:
-                        try:
-                            from stitch_backend.database import run_in_session
-                            from stitch_backend.domains.accounts.models import Account
-
-                            async def _set_engine(session):
-                                acc = await session.get(Account, str(account_id))
-                                if acc is not None:
-                                    acc.browser_engine = _engine
-                                    acc.shard_profile_id = _shard_id
-
-                            await run_in_session(_set_engine)
-                            log_callback(f"[db] Browser engine saved: {_engine}")
-                        except Exception as _eng_exc:
-                            log_callback(
-                                f"[db] Browser engine save failed (non-fatal): {_eng_exc}"
-                            )
-
-                    # ── kiro_v2 also registers an AWS Builder ID ──────────
-                    # Persist a companion aws_builder_id account so the AWS
-                    # identity appears in the account list (parity with the
-                    # legacy v1 behaviour). It reuses the SAME browser
-                    # profile/cookies/engine as the kiro_v2 account — both
-                    # sessions live in one profile — so "Open browser" on the
-                    # AWS account restores the logged-in AWS session.
-                    if provider_name == "kiro_v2":
-                        try:
-                            async def _save_aws(session):
-                                svc = AccountService(session)
-                                aws_acc = await svc.add_registered_account(
-                                    provider="aws_builder_id",
-                                    email=reg_email,
-                                    password=config.get("password"),
-                                    display_name=reg_email,
-                                    account_type="free",
-                                )
-                                return aws_acc.id
-
-                            aws_account_id = await run_in_session(_save_aws)
-                            log_callback(
-                                f"[db] AWS Builder ID account saved: "
-                                f"id={aws_account_id} email={reg_email}"
-                            )
-
-                            # Attach the same browser session to the AWS account.
-                            if _profile_path and aws_account_id:
-                                try:
-                                    import sqlite3 as _sqlite3
-
-                                    from stitch_backend.config import get_settings as _get_settings
-                                    _db_path = _get_settings().database_url.split("///", 1)[-1]
-                                    with _sqlite3.connect(_db_path) as _conn:
-                                        _conn.execute(
-                                            "UPDATE accounts SET browser_profile_path=?, "
-                                            "cookies=?, session_data=? WHERE id=?",
-                                            (_profile_path, _cookies, _session_data,
-                                             str(aws_account_id)),
-                                        )
-                                        _conn.commit()
-                                except Exception as _aws_bp_exc:
-                                    log_callback(
-                                        f"[db] AWS browser profile save failed "
-                                        f"(non-fatal): {_aws_bp_exc}"
-                                    )
-
-                            if aws_account_id:
-                                try:
-                                    from stitch_backend.domains.accounts.models import Account
-
-                                    async def _set_aws_engine(session):
-                                        acc = await session.get(Account, str(aws_account_id))
-                                        if acc is not None:
-                                            acc.browser_engine = _engine
-                                            acc.shard_profile_id = _shard_id
-
-                                    await run_in_session(_set_aws_engine)
-                                except Exception as _aws_eng_exc:
-                                    log_callback(
-                                        f"[db] AWS browser engine save failed "
-                                        f"(non-fatal): {_aws_eng_exc}"
-                                    )
-                        except Exception as _aws_exc:
-                            log_callback(
-                                f"[db] AWS account save failed (non-fatal): {_aws_exc}"
-                            )
-                except Exception as db_exc:
-                    import traceback as _tb
-                    logger.warning(
-                        "Registration %s: DB account save failed (non-critical): %s",
-                        job_id, db_exc,
-                    )
-                    # CRITICAL for debugging: without this the account silently
-                    # never appears in the UI list. Show the real error + a
-                    # trimmed traceback in the registration console.
-                    log_callback(
-                        f"[db] ACCOUNT SAVE FAILED — the account will NOT "
-                        f"appear in the list! Error: {db_exc!r}"
-                    )
-                    for _line in _tb.format_exc().strip().splitlines()[-4:]:
-                        log_callback(f"[db]   {_line}")
+                account_id = await _save_registration_account(
+                    job_id, provider_name, config, result, reg_email, _donor_id, log_callback,
+                )
 
                 # ── Notify frontend: ACCOUNT_ADDED ─────────────────────────
                 await event_bus.emit("registration.account_added", {
@@ -1141,10 +358,6 @@ class RegistrationService:
                     "message": f"Registration failed: {error_msg}",
                 })
 
-                # ── Pending failure report (plan §7 Phase 4) ──────────────
-                # On plugin scenario failure with telemetry consent, build a
-                # scrubbed bundle and store it as a pending report.  Never
-                # raises — telemetry must not break a run.
                 try:
                     from stitch_backend.domains.plugin_distribution.failure_hook import (
                         maybe_save_failure_report,
@@ -1193,33 +406,6 @@ class RegistrationService:
                     pass
             # Remove transport from registry so stale job_ids don't leak
             cleanup_transport(job_id)
-
-
-def _load_cards(provider_name: str, config: dict) -> None:
-    """Load card pool from config (cards_file, cards_text, card_bin)."""
-    cards_file = config.get("cards_file") or config.get("cardsFile") or ""
-    cards_text = config.get("cards_text") or config.get("cardsText") or ""
-    card_bin = config.get("card_bin") or config.get("cardBin") or ""
-
-    if not any([cards_file, cards_text, card_bin]):
-        return
-
-    try:
-        from autoreg.core.card_pool import get_card_pool
-        pool = get_card_pool()
-        if cards_file:
-            pool.load_from_file(provider_name, cards_file)
-        elif cards_text:
-            pool.load_from_text(provider_name, cards_text)
-        elif card_bin:
-            from autoreg.core.card_generator import start_live_card_search
-            finder = start_live_card_search(card_bin, max_attempts=50)
-            import time
-            time.sleep(5)
-            if finder.live_card:
-                pool.load_from_text(provider_name, finder.live_card)
-    except Exception as exc:
-        logger.warning("Card pool loading failed: %s", exc)
 
 
 # ── Singleton ───────────────────────────────────────────────────────────────

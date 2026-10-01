@@ -25,12 +25,16 @@ import logging
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Type alias for an async handler
 EventHandler = Callable[["Event"], Coroutine[Any, Any, None]]
+
+WS_CLIENT_TTL_SECONDS = 600.0
+WS_SWEEP_INTERVAL_SECONDS = 60.0
 
 
 # ── Event dataclass ───────────────────────────────────────────────────────────
@@ -60,6 +64,8 @@ class EventBus:
     def __init__(self) -> None:
         self._handlers: dict[str, list[EventHandler]] = {}
         self._ws_clients: list[asyncio.Queue[dict[str, Any]]] = []
+        self._ws_last_active: dict[asyncio.Queue[dict[str, Any]], float] = {}
+        self._last_sweep = 0.0
         self._loop: asyncio.AbstractEventLoop | None = None
 
     # ── Subscribe ─────────────────────────────────────────────────────────────
@@ -99,6 +105,8 @@ class EventBus:
 
         # 2) WebSocket broadcast (non-blocking put)
         ws_payload = event.to_ws_payload()
+        now = monotonic()
+        self._sweep_idle_ws_clients(now)
         stale: list[asyncio.Queue[dict[str, Any]]] = []
         for queue in self._ws_clients:
             try:
@@ -106,6 +114,8 @@ class EventBus:
             except asyncio.QueueFull:
                 # Client is too slow — drop it
                 stale.append(queue)
+            else:
+                self._ws_last_active[queue] = now
         for q in stale:
             self.unregister_ws_client(q)
 
@@ -115,12 +125,23 @@ class EventBus:
         """Add a per-connection queue; the WS endpoint reads from it."""
         if queue not in self._ws_clients:
             self._ws_clients.append(queue)
+        self._ws_last_active[queue] = monotonic()
 
     def unregister_ws_client(self, queue: asyncio.Queue[dict[str, Any]]) -> None:
         try:
             self._ws_clients.remove(queue)
         except ValueError:
             pass
+        self._ws_last_active.pop(queue, None)
+
+    def _sweep_idle_ws_clients(self, now: float) -> None:
+        if now - self._last_sweep < WS_SWEEP_INTERVAL_SECONDS:
+            return
+        self._last_sweep = now
+        for queue in list(self._ws_clients):
+            if now - self._ws_last_active.get(queue, now) > WS_CLIENT_TTL_SECONDS:
+                logger.info("EventBus: evicting idle WS client")
+                self.unregister_ws_client(queue)
 
     @property
     def ws_client_count(self) -> int:

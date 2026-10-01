@@ -260,7 +260,19 @@ async def _download_or_read(url: str, auth_token: str | None = None) -> bytes:
     headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "HTTP %d downloading plugin from %s: %s",
+                exc.response.status_code,
+                url,
+                exc.response.text[:500] if exc.response.text else "(no body)",
+            )
+            raise SourceError(
+                "download_failed",
+                f"server denied download ({exc.response.status_code})",
+            ) from exc
         return resp.content
 
 
@@ -402,8 +414,8 @@ def _install_to_local(pkg_dir: Path, manifest: Any) -> None:
 
     module = manifest.entry.get("module") if manifest.entry else None
     if module and (dest / module).is_dir():
-        from stitch_plugin_tools.vendoring import vendor_rpc_server
-        vendor_rpc_server(dest / module)
+        from stitch_plugin_tools.vendoring import vendor_all
+        vendor_all(dest / module)
 
 
 def _install_to_community(pkg_dir: Path, plugin_id: str, version: str) -> None:

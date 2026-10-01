@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from stitch_backend.core.provider_defaults import PROVIDER_DEFAULTS
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,20 +83,6 @@ def _profile_dir_for_account(account_id: int, email: str = "") -> Path:
 
 # ── Launch browser ─────────────────────────────────────────────────────────
 
-_PROVIDER_URLS: dict[str, str] = {
-    "kiro": "https://app.kiro.dev/home",
-    "kiro_v2": "https://app.kiro.dev/home",
-    "aws": "https://account.aws.com/",
-    "aws_builder_id": "https://account.aws.com/",
-    "windsurf": "https://codeium.com/profile",
-    "github": "https://github.com/settings/profile",
-    "trae": "https://trae.sh/",
-    "cursor": "https://cursor.sh/",
-    "fireworks": "https://app.fireworks.ai/",
-    "openai": "https://platform.openai.com/",
-    "bitbucket": "https://bitbucket.org/",
-}
-
 
 @dataclass
 class LaunchResult:
@@ -147,7 +135,8 @@ async def launch_account_browser(
 
     profile = Path(profile_path) if profile_path else _profile_dir_for_account(account_id, email)
 
-    url = extra_url or _PROVIDER_URLS.get(provider.lower(), "https://google.com")
+    defaults = PROVIDER_DEFAULTS.get(provider.lower())
+    url = extra_url or (defaults.browser_url if defaults else None) or "https://google.com"
 
     cmd = [
         str(browser_exe),
@@ -217,7 +206,8 @@ async def _launch_shard_worker(
     if not open_browser.exists():
         return LaunchResult(success=False, error=f"open_browser.py not found: {open_browser}")
 
-    url = extra_url or _PROVIDER_URLS.get(provider.lower(), "https://google.com")
+    defaults = PROVIDER_DEFAULTS.get(provider.lower())
+    url = extra_url or (defaults.browser_url if defaults else None) or "https://google.com"
     config_json = json.dumps({
         "engine": "shardbrowser",
         "shard_profile_id": shard_profile_id,

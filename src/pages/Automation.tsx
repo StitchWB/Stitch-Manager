@@ -8,6 +8,7 @@ import type { AutomationTabId } from '../components/automation/AutomationTopTabs
 import { Button, MetricStrip, PageHeader } from '@/components/ui';
 import type { MetricSegment } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 import { getScheduledTasks } from '../lib/backend/modules/scheduler';
 import { getSettings } from '../lib/backend/modules/settings';
 import {
@@ -25,7 +26,7 @@ function formatNextRun(epochSeconds: number | null): string {
     return t('automation.kpi.noNextRun');
   }
   try {
-    return new Date(epochSeconds * 1000).toLocaleTimeString();
+    return formatTime(epochSeconds * 1000);
   } catch {
     return t('automation.kpi.noNextRun');
   }

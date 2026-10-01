@@ -7,13 +7,18 @@ These commands replace the legacy utility commands:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import logging
 import subprocess
 import webbrowser
 from datetime import UTC
-from typing import Any, cast
 
 from stitch_backend import __version__
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -99,22 +104,18 @@ async def cmd_check_fireworks_api_key(params: dict) -> dict:
 # Dashboard stats stub
 # ═════════════════════════════════════════════════════════════════════════════
 
-@register_command("get_dashboard_stats", readonly=True)
-async def cmd_get_dashboard_stats(params: dict) -> dict:
+@command("get_dashboard_stats", readonly=True)
+async def cmd_get_dashboard_stats(db: AsyncSession, params: dict) -> dict:
     """Return basic dashboard statistics."""
     from sqlalchemy import func, select
 
-    from stitch_backend.database import run_in_read_session
     from stitch_backend.domains.accounts.models import Account
 
-    async def _op(session):
-        total = await session.execute(select(func.count(Account.id)))
-        active = await session.execute(
-            select(func.count(Account.id)).where(Account.status == "active")
-        )
-        return total.scalar() or 0, active.scalar() or 0
-
-    total, active = await run_in_read_session(_op)
+    total_r = await db.execute(select(func.count(Account.id)))
+    active_r = await db.execute(
+        select(func.count(Account.id)).where(Account.status == "active")
+    )
+    total, active = total_r.scalar() or 0, active_r.scalar() or 0
 
     return {
         "totalAccounts": total,
@@ -492,164 +493,134 @@ async def cmd_initialize_app(params: dict) -> dict:
 # Proxy config (replaces stubs — backed by settings table)
 # =============================================================================
 
-@register_command("get_proxy_config", readonly=True)
-async def cmd_get_proxy_config(params: dict) -> dict:
+@command("get_proxy_config", readonly=True)
+async def cmd_get_proxy_config(db: AsyncSession, params: dict) -> dict:
     """Return proxy configuration from settings."""
     import json
 
     from sqlalchemy import text
 
-    from stitch_backend.database import run_in_read_session
 
-    async def _op(session):
-        result = await session.execute(
-            text("SELECT value FROM settings WHERE key = 'proxy_config'")
-        )
-        row = result.first()
-        if row and row[0]:
-            try:
-                return json.loads(row[0])
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return {"enabled": False, "proxyType": "http", "proxies": []}
-
-    return await run_in_read_session(_op)
+    result = await db.execute(
+        text("SELECT value FROM settings WHERE key = 'proxy_config'")
+    )
+    row = result.first()
+    if row and row[0]:
+        try:
+            return cast("dict[str, Any]", json.loads(row[0]))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {"enabled": False, "proxyType": "http", "proxies": []}
 
 
-@register_command("save_proxy_config")
-async def cmd_save_proxy_config(params: dict) -> None:
+@command("save_proxy_config")
+async def cmd_save_proxy_config(db: AsyncSession, params: dict) -> None:
     """Persist proxy configuration to settings."""
     import json
 
     from sqlalchemy import text
 
-    from stitch_backend.database import run_in_session
-
     config_json = json.dumps(params)
 
-    async def _op(session):
-        await session.execute(
-            text(
-                "INSERT INTO settings (key, value) VALUES ('proxy_config', :v) "
-                "ON CONFLICT(key) DO UPDATE SET value = :v"
-            ),
-            {"v": config_json},
-        )
-
-    await run_in_session(_op)
+    await db.execute(
+        text(
+            "INSERT INTO settings (key, value) VALUES ('proxy_config', :v) "
+            "ON CONFLICT(key) DO UPDATE SET value = :v"
+        ),
+        {"v": config_json},
+    )
 
 
-@register_command("get_proxy_settings", readonly=True)
-async def cmd_get_proxy_settings(params: dict) -> dict:
+@command("get_proxy_settings", readonly=True)
+async def cmd_get_proxy_settings(db: AsyncSession, params: dict) -> dict:
     """Return AI proxy settings from settings table."""
     import json
 
     from sqlalchemy import text
 
-    from stitch_backend.database import run_in_read_session
 
-    async def _op(session):
-        result = await session.execute(
-            text("SELECT value FROM settings WHERE key = 'proxy_settings'")
-        )
-        row = result.first()
-        if row and row[0]:
-            try:
-                return json.loads(row[0])
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return {
-            "appMode": "disabled",
-            "proxyPort": 0,
-            "autoStart": False,
-            "routingStrategy": "round_robin",
-            "managementKey": "",
-        }
-
-    return await run_in_read_session(_op)
+    result = await db.execute(
+        text("SELECT value FROM settings WHERE key = 'proxy_settings'")
+    )
+    row = result.first()
+    if row and row[0]:
+        try:
+            return cast("dict[str, Any]", json.loads(row[0]))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "appMode": "disabled",
+        "proxyPort": 0,
+        "autoStart": False,
+        "routingStrategy": "round_robin",
+        "managementKey": "",
+    }
 
 
-@register_command("update_proxy_settings")
-async def cmd_update_proxy_settings(params: dict) -> None:
+@command("update_proxy_settings")
+async def cmd_update_proxy_settings(db: AsyncSession, params: dict) -> None:
     """Persist AI proxy settings to settings table."""
     import json
 
     from sqlalchemy import text
 
-    from stitch_backend.database import run_in_session
-
     settings_json = json.dumps(params)
 
-    async def _op(session):
-        await session.execute(
-            text(
-                "INSERT INTO settings (key, value) VALUES ('proxy_settings', :v) "
-                "ON CONFLICT(key) DO UPDATE SET value = :v"
-            ),
-            {"v": settings_json},
-        )
-
-    await run_in_session(_op)
+    await db.execute(
+        text(
+            "INSERT INTO settings (key, value) VALUES ('proxy_settings', :v) "
+            "ON CONFLICT(key) DO UPDATE SET value = :v"
+        ),
+        {"v": settings_json},
+    )
 
 
 # =============================================================================
 # Proxy debug logs (replaces stubs — backed by app_logs table)
 # =============================================================================
 
-@register_command("get_proxy_debug_logs", readonly=True)
-async def cmd_get_proxy_debug_logs(params: dict) -> list:
+@command("get_proxy_debug_logs", readonly=True)
+async def cmd_get_proxy_debug_logs(db: AsyncSession, params: dict) -> list:
     """Return proxy debug logs from app_logs table."""
-    from stitch_backend.database import run_in_read_session
     from stitch_backend.domains.logging.service import LoggingService
 
     limit = int(params.get("limit", 100))
-    result = await run_in_read_session(
-        lambda s: LoggingService(s).query_logs({
-            "channels": ["proxy"],
-            "limit": limit,
-        })
-    )
+    result = await LoggingService(db).query_logs({
+        "channels": ["proxy"],
+        "limit": limit,
+    })
     return cast("list[Any]", cast("dict[Any, Any]", result).get("logs", []))
 
 
-@register_command("clear_proxy_debug_logs")
-async def cmd_clear_proxy_debug_logs(params: dict) -> int:
+@command("clear_proxy_debug_logs")
+async def cmd_clear_proxy_debug_logs(db: AsyncSession, params: dict) -> int:
     """Clear proxy debug logs from app_logs table."""
-    from stitch_backend.database import run_in_session
     from stitch_backend.domains.logging.service import LoggingService
 
-    return await run_in_session(
-        lambda s: LoggingService(s).clear_logs()
-    )
+    return await LoggingService(db).clear_logs()
 
 
 # =============================================================================
 # Request history (replaces stubs — backed by app_logs table)
 # =============================================================================
 
-@register_command("get_request_history", readonly=True)
-async def cmd_get_request_history(params: dict) -> dict:
+@command("get_request_history", readonly=True)
+async def cmd_get_request_history(db: AsyncSession, params: dict) -> dict:
     """Return AI proxy request history from app_logs."""
-    from stitch_backend.database import run_in_read_session
     from stitch_backend.domains.logging.service import LoggingService
 
     limit = int(params.get("limit", 50))
-    result = await run_in_read_session(
-        lambda s: LoggingService(s).query_logs({
-            "sources": ["ai_proxy", "proxy"],
-            "limit": limit,
-        })
-    )
+    result = await LoggingService(db).query_logs({
+        "sources": ["ai_proxy", "proxy"],
+        "limit": limit,
+    })
     logs = result.get("logs", [])
     return {"items": logs, "total": result.get("total", 0)}
 
 
-@register_command("clear_request_history")
-async def cmd_clear_request_history(params: dict) -> None:
+@command("clear_request_history")
+async def cmd_clear_request_history(db: AsyncSession, params: dict) -> None:
     """Clear AI proxy request history."""
-    from stitch_backend.database import run_in_session
     from stitch_backend.domains.logging.service import LoggingService
 
-    await run_in_session(
-        lambda s: LoggingService(s).clear_logs()
-    )
+    await LoggingService(db).clear_logs()

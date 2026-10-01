@@ -529,3 +529,82 @@ export async function loginTelegramOidc(idToken: string): Promise<TelegramLoginR
   }
   return (data ?? { success: false }) as TelegramLoginResult;
 }
+
+// ── Telegram deep-link login ─────────────────────────────────────────────────
+
+export type TelegramDeeplinkStatus = 'pending' | 'ready' | 'consumed' | 'expired';
+
+/**
+ * POST /api/auth/deeplink/start — mint a one-time deep-link token. The caller
+ * opens `https://t.me/<bot>?start=login_<token>` and polls the status
+ * endpoint until the bot confirms the token.
+ * @throws {Error} on network failure or a non-200 response (400 in oidc mode).
+ */
+export async function startTelegramDeeplink(): Promise<{ token: string; expires_in: number }> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/deeplink/start`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  });
+
+  const data = (await parseJson(response)) as
+    | { token?: string; expires_in?: number; detail?: string }
+    | null;
+
+  if (!response.ok || !data?.token) {
+    throw new Error(detailToMessage(data?.detail, 'Failed to start Telegram deep-link login'));
+  }
+  return { token: data.token, expires_in: data.expires_in ?? 300 };
+}
+
+/**
+ * GET /api/auth/deeplink/status?token= — poll the deep-link token state.
+ * A 404 means the backend dropped the token (TTL sweep) → 'expired'.
+ * @throws {Error} on network failure or an unexpected non-200/404 response.
+ */
+export async function getTelegramDeeplinkStatus(token: string): Promise<TelegramDeeplinkStatus> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/auth/deeplink/status?token=${encodeURIComponent(token)}`,
+    {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    },
+  );
+
+  if (response.status === 404) return 'expired';
+
+  const data = (await parseJson(response)) as { status?: string; detail?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(detailToMessage(data?.detail, 'Failed to poll Telegram deep-link status'));
+  }
+  const status = data?.status;
+  return status === 'ready' || status === 'consumed' || status === 'expired' ? status : 'pending';
+}
+
+/**
+ * POST /api/auth/deeplink/login — exchange a bot-confirmed deep-link token
+ * for a session cookie. Same response shape as /api/auth/login_telegram.
+ * Direct fetch like the other auth wrappers: a 4xx on a stale token is
+ * expected and must NOT trip the safeInvoke session-expiry hook.
+ */
+export async function loginTelegramDeeplink(token: string): Promise<TelegramLoginResult> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/deeplink/login`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+
+  const data = (await parseJson(response)) as
+    | (TelegramLoginResult & { detail?: string })
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      detailToMessage(data?.detail, detailToMessage(data?.error, 'Telegram deep-link login failed')),
+    );
+  }
+  return (data ?? { success: false }) as TelegramLoginResult;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Mail as MailIcon, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Header from '@/components/layout/Header';
@@ -14,11 +14,7 @@ import type { AddMailboxAction } from '@/components/mail/MailSidebar';
 import type { MailboxProviderKind } from '@/lib/mail/providerPresets';
 import { detectMailboxProviderKind } from '@/lib/mail/providerPresets';
 import { emailInboxUpsertProfile, claimEmailInboxProfile } from '@/lib/backend/modules/emailInbox';
-import {
-  fetchServicePlugins,
-  getServicePlugins,
-  subscribeServicePlugins,
-} from '@/lib/backend/modules/servicePlugins';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
 import { Button, Modal } from '@/components/ui';
 import { useMailRuntime } from '@/hooks/useMailRuntime';
 import { useMailStore } from '@/stores/mail';
@@ -90,11 +86,7 @@ export default function Mail() {
   // built-in based on plugin health — the profile list must refresh
   // when the plugin set changes).  Minimal: derive a version string
   // from the snapshot and add it to the loadProfiles deps.
-  const servicePluginsSnapshot = useSyncExternalStore(
-    subscribeServicePlugins,
-    getServicePlugins,
-    getServicePlugins,
-  );
+  const servicePluginsSnapshot = useServicePlugins();
   const servicePluginsVersion = useMemo(
     () => servicePluginsSnapshot.map(p => p.id).join(','),
     [servicePluginsSnapshot],
@@ -104,10 +96,6 @@ export default function Mail() {
     () => servicePluginsSnapshot.some(p => p.id === 'stitch-mail'),
     [servicePluginsSnapshot],
   );
-
-  useEffect(() => {
-    void fetchServicePlugins();
-  }, []);
 
   useEffect(() => {
     // Refetch profiles when the plugin set changes (install/uninstall).

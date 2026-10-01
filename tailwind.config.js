@@ -15,9 +15,7 @@ export default {
         
         // Deep Space Void - Core backgrounds (never pure black)
         'void': {
-          'deep': '#0B0C15',            // Rich dark background
           'base': '#050508',            // Main app background
-          'card': 'rgba(19, 20, 31, 0.8)', // Card/container bg
         },
         
         // VS Code / Deep Space Theme
@@ -37,18 +35,6 @@ export default {
         'vsc-red': '#f87171',
         'vsc-yellow': '#fbbf24',
         'vsc-terminal': 'rgba(0, 0, 0, 0.4)',
-        
-        // Deep Space Void - Surface colors
-        'surface': {
-          'light': 'rgba(255, 255, 255, 0.05)',
-          'lighter': 'rgba(255, 255, 255, 0.08)',
-          'glass': 'rgba(255, 255, 255, 0.03)',
-        },
-        // Deep Space Void - Glow colors
-        'glow': {
-          'purple': 'rgba(139, 92, 246, 0.3)',
-          'blue': 'rgba(59, 130, 246, 0.3)',
-        },
       },
       fontFamily: {
         sans: ['Segoe UI', 'system-ui', 'sans-serif'],
@@ -57,23 +43,12 @@ export default {
       fontSize: {
         '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
       },
-      borderRadius: {
-        'vsc': '2px',
-      },
       boxShadow: {
-        'glow-sm': '0 0 10px rgba(139, 92, 246, 0.2)',
         'glow-primary': '0 0 10px rgba(99, 102, 241, 0.2)',
         'glow-danger': '0 0 10px rgba(239, 68, 68, 0.25)',
-        'glow': '0 0 20px rgba(99, 102, 241, 0.4)',
-        'glow-md': '0 0 20px rgba(139, 92, 246, 0.3)',
-        'glow-lg': '0 0 30px rgba(99, 102, 241, 0.5)',
         'glow-purple': '0 0 15px rgba(124, 58, 237, 0.1)',
         'glow-blue': '0 0 15px rgba(59, 130, 246, 0.1)',
-        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
         'action-bar': '0 -5px 15px rgba(0, 0, 0, 0.5)',
-      },
-      backdropBlur: {
-        'glass': '10px',
       },
     },
   },

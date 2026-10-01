@@ -2,6 +2,7 @@ import { FileSpreadsheet, Share2 } from 'lucide-react';
 import type { Account } from '../../types/generated';
 import type { ProfileItem } from '../ProfilesTable';
 import { t } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
 import {
   extractRelationEdges,
   extractRelationHints,
@@ -118,7 +119,7 @@ export function AccountsMainPanels({
               </div>
               {sheetsUpdatedAt && (
                 <span className="text-[11px] text-slate-500">
-                  {t('logs.lastUpdated')} {new Date(sheetsUpdatedAt).toLocaleString()}
+                  {t('logs.lastUpdated')} {formatDateTime(sheetsUpdatedAt)}
                 </span>
               )}
             </div>
@@ -145,7 +146,7 @@ export function AccountsMainPanels({
               </div>
               {sheetsUpdatedAt && (
                 <span className="text-[11px] text-slate-500">
-                  {t('logs.lastUpdated')} {new Date(sheetsUpdatedAt).toLocaleString()}
+                  {t('logs.lastUpdated')} {formatDateTime(sheetsUpdatedAt)}
                 </span>
               )}
             </div>

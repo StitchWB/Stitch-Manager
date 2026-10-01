@@ -7,62 +7,28 @@ each other's repos directly.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, or_, select
 
 from stitch_backend.core.exceptions import AccountNotFoundError
+from stitch_backend.domains.accounts import kiro, listing, registered
+from stitch_backend.domains.accounts.helpers import _to_response, _utcnow
 from stitch_backend.domains.accounts.models import Account
-from stitch_backend.domains.accounts.schemas import (
-    AccountResponse,
-    AddAccountRequest,
-)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from stitch_backend.domains.accounts.schemas import (
+        AccountResponse,
+        AddAccountRequest,
+    )
+
 logger = logging.getLogger(__name__)
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
-
-
-def _to_response(
-    account: Account,
-    caller_uid: int | None = None,
-    group_ids: list[str] | None = None,
-    group_names: list[str] | None = None,
-) -> AccountResponse:
-    """Convert an ORM model → Pydantic response DTO.
-
-    Delegates to the ``@model_validator`` on AccountResponse which handles
-    datetime→ISO-string, JSON→string, and field-name mismatches.
-
-    When ``caller_uid`` is given, additive ``mine`` and ``shared`` fields
-    are set on the response: ``mine`` = account.owner_id == caller_uid,
-    ``shared`` = account.owner_id is None.
-
-    When ``group_ids`` / ``group_names`` are given, they are set on the
-    response so the frontend can show which groups the account belongs to.
-    """
-    resp = AccountResponse.model_validate(account)
-    if caller_uid is not None:
-        resp.mine = (account.owner_id == caller_uid)
-        resp.shared = (account.owner_id is None)
-    if group_ids is not None:
-        resp.group_ids = group_ids
-    if group_names is not None:
-        resp.group_names = group_names
-    return resp
 
 
 # ── Service ───────────────────────────────────────────────────────────────────
@@ -84,108 +50,15 @@ class AccountService:
         owner_id: int | None = None,
         caller_uid: int | None = None,
     ) -> list[AccountResponse]:
-        """Unified listing: supports provider filter and archive visibility.
-
-        When *owner_id* is supplied, only legacy shared rows (owner_id IS
-        NULL) and rows owned by *owner_id* are returned (per-user
-        isolation).  When *owner_id* is None (desktop / unauthenticated),
-        only shared rows are returned.
-
-        When *caller_uid* is given, additive ``mine`` and ``shared``
-        fields are set on each response.
-
-        When *caller_uid* is given, visibility is ALSO extended to include
-        accounts shared into any group where the caller is a member (via
-        the ``group_shares`` table).  Each visible account also gets
-        ``group_ids`` and ``group_names`` populated — listing only the
-        groups the caller is a member of (to avoid leaking group
-        existence).  Guest (caller None) behavior is unchanged: shared
-        pool only, no group fields.
-        """
-        stmt = select(Account).order_by(Account.created_at.desc())
-        effective_provider = provider or provider_type or provider_subtype
-        if effective_provider:
-            stmt = stmt.where(Account.provider == effective_provider)
-        if not show_archived:
-            stmt = stmt.where(Account.status != "archived")
-
-        if caller_uid is not None:
-            # Extended visibility: shared (NULL) OR owned by caller OR
-            # shared into a group where the caller is a member.
-            from sqlalchemy import and_
-            from sqlalchemy import select as sa_select
-
-            from stitch_backend.domains.groups.models import GroupMember, GroupShare
-
-            member_group_ids_subq = (
-                sa_select(GroupMember.group_id)
-                .where(GroupMember.user_id == caller_uid)
-                .scalar_subquery()
-            )
-            # Account.id and GroupShare.resource_id are both TEXT, so the
-            # subquery compares like with like.
-            shared_account_ids_subq = (
-                sa_select(GroupShare.resource_id)
-                .where(
-                    and_(
-                        GroupShare.resource_type == "account",
-                        GroupShare.group_id.in_(member_group_ids_subq),
-                    )
-                )
-                .scalar_subquery()
-            )
-            stmt = stmt.where(
-                or_(
-                    Account.owner_id.is_(None),
-                    Account.owner_id == owner_id,
-                    Account.id.in_(shared_account_ids_subq),
-                )
-            )
-        else:
-            # Guest / desktop: shared pool (NULL) OR owned by caller
-            # (caller is None → owner_id is None → matches NULL only).
-            # Exactly the pre-group-shares behaviour.
-            stmt = stmt.where(
-                or_(Account.owner_id.is_(None), Account.owner_id == owner_id)
-            )
-
-        result = await self._db.execute(stmt)
-        accounts = result.scalars().all()
-
-        if caller_uid is None or not accounts:
-            return [_to_response(a, caller_uid=caller_uid) for a in accounts]
-
-        # ── Populate group_ids / group_names via resource_shares ──────
-        # Only groups where the caller is a member are included (avoids
-        # leaking group existence to non-members).
-        from stitch_backend.domains.groups.service import (
-            group_ids_for_user,
-            resource_shares,
+        return await listing.list_accounts(
+            self,
+            provider,
+            provider_type,
+            provider_subtype,
+            show_archived,
+            owner_id,
+            caller_uid,
         )
-
-        member_group_ids = set(await group_ids_for_user(self._db, caller_uid))
-        account_ids = [str(a.id) for a in accounts]
-        shares = await resource_shares(
-            self._db, resource_type="account", resource_ids=account_ids
-        )
-
-        responses: list[AccountResponse] = []
-        for a in accounts:
-            acct_shares = shares.get(str(a.id), [])
-            filtered = [
-                (gid, gname)
-                for gid, gname, _sby in acct_shares
-                if gid in member_group_ids
-            ]
-            responses.append(
-                _to_response(
-                    a,
-                    caller_uid=caller_uid,
-                    group_ids=[gid for gid, _ in filtered if gid is not None],
-                    group_names=[gname for _, gname in filtered if gname is not None],
-                )
-            )
-        return responses
 
     async def get_account(self, account_id: str) -> Account:
         stmt = select(Account).where(Account.id == str(account_id))
@@ -270,143 +143,21 @@ class AccountService:
         ref_max_count: int = 40,
         referred_by_id: str | None = None,
     ) -> Account:
-        """Persist an auto-registered account (registration_source='auto').
-
-        Schema-adaptive: introspects the ``accounts`` table via
-        ``PRAGMA table_info`` to detect whether it uses the legacy Rust-era
-        schema (``id INTEGER PRIMARY KEY AUTOINCREMENT``, ``quota_used``
-        column present) or the newer Python ORM schema (``id`` String/UUID,
-        no ``quota_used``), then builds the INSERT to match.  On the legacy
-        schema the ``id`` column is omitted so SQLite auto-assigns the next
-        integer rowid; the actual assigned id is read back via
-        ``last_insert_rowid()``.
-        """
-        from sqlalchemy import text as _text
-
-        now_str = _utcnow().isoformat()
-        new_uuid = str(uuid.uuid4())
-
-        # ── Introspect the accounts table schema ───────────────────────
-        pragma_result = await self._db.execute(
-            _text("PRAGMA table_info(accounts)")
-        )
-        col_rows = pragma_result.fetchall()
-        col_types = {row[1]: (row[2] or "") for row in col_rows}
-
-        id_type_upper = col_types.get("id", "").upper()
-        is_legacy_id = "INT" in id_type_upper
-        has_quota_used = "quota_used" in col_types
-        has_quota_limit = "quota_limit" in col_types
-        has_login_count = "login_count" in col_types
-        has_error_count = "error_count" in col_types
-
-        # ── Build INSERT column/value pairs ────────────────────────────
-        # Constant values are inlined as SQL literals; variable values use
-        # named parameters (:name).
-        col_value_pairs: list[tuple[str, str]] = []
-
-        if not is_legacy_id:
-            # ORM schema: id is String/UUID NOT NULL — supply it.
-            col_value_pairs.append(("id", ":id"))
-
-        col_value_pairs.extend([
-            ("provider", ":provider"),
-            ("email", ":email"),
-            ("password", ":password"),
-            ("token", ":token"),
-            ("refresh_token", ":refresh_token"),
-            ("status", "'active'"),
-            ("display_name", ":display_name"),
-            ("api_key", ":api_key"),
-            ("registration_source", "'auto'"),
-            ("ref_code", ":ref_code"),
-            ("ref_url", ":ref_url"),
-            ("ref_used_count", "0"),
-            ("ref_max_count", ":ref_max_count"),
-            ("referred_by_id", ":referred_by_id"),
-            ("notes", ":notes"),
-            ("tags", "'[]'"),
-            ("use_count", "0"),
-            ("success_rate", "1.0"),
-            ("created_at", ":created_at"),
-        ])
-
-        if has_quota_used:
-            col_value_pairs.append(("quota_used", "0"))
-
-        if has_quota_limit:
-            col_value_pairs.append(("quota_limit", "0"))
-
-        if has_login_count:
-            col_value_pairs.append(("login_count", "0"))
-
-        if has_error_count:
-            col_value_pairs.append(("error_count", "0"))
-
-        col_names = ", ".join(pair[0] for pair in col_value_pairs)
-        col_values = ", ".join(pair[1] for pair in col_value_pairs)
-
-        params: dict[str, str | int | None] = {
-            "provider": provider,
-            "email": email,
-            "password": password or "",
-            "token": token,
-            "refresh_token": refresh_token,
-            "display_name": display_name or email,
-            "api_key": api_key,
-            "ref_code": ref_code,
-            "ref_url": ref_url,
-            "ref_max_count": ref_max_count,
-            "referred_by_id": referred_by_id,
-            "notes": (f"plan={account_type}" if account_type else None),
-            "created_at": now_str,
-        }
-        if not is_legacy_id:
-            params["id"] = new_uuid
-
-        insert_sql = (
-            f"INSERT INTO accounts ({col_names}) VALUES ({col_values})"
-        )
-        await self._db.execute(_text(insert_sql), params)
-
-        # ── Determine the actual assigned id ──────────────────────────
-        if is_legacy_id:
-            # SQLite auto-assigned the next INTEGER rowid — read it back.
-            row_result = await self._db.execute(
-                _text("SELECT last_insert_rowid()")
-            )
-            actual_id = row_result.scalar()
-        else:
-            actual_id = new_uuid
-
-        await self._db.flush()
-
-        logger.info(
-            "Registered account saved: %s (%s) id=%s referred_by=%s",
-            email, provider, actual_id, referred_by_id,
-        )
-
-        # Return a lightweight namespace — callers only need .id
-        # (Do NOT use Account.__new__ — it bypasses SQLAlchemy instrumentation
-        # and causes '_sa_instance_state' AttributeError on any attr access.)
-        from types import SimpleNamespace
-        account = SimpleNamespace(
-            id=actual_id,
-            email=email,
+        return await registered.add_registered_account(
+            self,
             provider=provider,
-            status="active",
-            display_name=display_name or email,
+            email=email,
+            password=password,
             token=token,
             refresh_token=refresh_token,
             api_key=api_key,
-            registration_source="auto",
+            display_name=display_name,
+            account_type=account_type,
             ref_code=ref_code,
             ref_url=ref_url,
-            ref_used_count=0,
             ref_max_count=ref_max_count,
             referred_by_id=referred_by_id,
         )
-        return account  # type: ignore[return-value]
 
     # ── Update ────────────────────────────────────────────────────────────────
 
@@ -492,11 +243,7 @@ class AccountService:
         self, account_id: str, *, caller_uid: int | None = None,
     ) -> None:
         account = await self.get_account(account_id)
-        # Extended delete permission: allow group owners to delete accounts
-        # shared into their groups (in addition to the standard
-        # owner/shared/desktop rules in ``_check_ownership``).  When the
-        # caller is a group role 'owner' of any group the account is shared
-        # into, the standard ownership check is skipped.
+        # Group owners may delete accounts shared into their groups, bypassing the standard _check_ownership rules.
         from stitch_backend.domains.groups.service import (
             is_group_owner_of_resource,
         )
@@ -518,9 +265,7 @@ class AccountService:
         str_ids = [str(i) for i in ids]
         stmt = delete(Account).where(Account.id.in_(str_ids))
         if caller_uid is not None:
-            # Per-user isolation + extended group-owner delete permission:
-            # delete shared (NULL), own, or accounts shared into groups
-            # where the caller has role 'owner'.
+            # Caller may delete shared (NULL), own, or accounts in groups they own.
             from sqlalchemy import and_
             from sqlalchemy import select as sa_select
 
@@ -593,98 +338,9 @@ class AccountService:
         force: bool = False,
         caller_uid: int | None = None,
     ) -> dict:
-        """Refresh the Kiro access token for *account_id*.
-
-        Uses ``provider_metadata.client_id`` + ``client_secret`` when stored
-        (v2/v3 registration flow), otherwise falls back to the legacy
-        clientIdHash approach.
-
-        Args:
-            account_id: Account whose token should be refreshed.
-            proxy: Optional proxy URL to use for the OIDC request.
-            force: Refresh even if the token has not expired yet.
-
-        Returns:
-            Dict with ``{"success": True, "expires_at": "…", "account": AccountResponse}``.
-
-        Raises:
-            ``stitch_backend.core.exceptions.AccountNotFoundError`` if the account
-            doesn't exist, or a ``TokenRefreshError`` on OIDC failure.
-        """
-        try:
-            from autoreg.providers.kiro_v2.token_refresh import (
-                TokenRefreshError,
-                refresh_from_account_metadata,
-                should_refresh_token,
-            )
-        except ImportError:  # open-core: kiro_v2 method not installed
-            return {
-                "success": False,
-                "error": "kiro_v2 method not installed — install plugin",
-            }
-
-        account = await self.get_account(account_id)
-        self._check_ownership(account, caller_uid, account_id)
-
-        if not account.refresh_token:
-            return {"success": False, "error": "no refresh_token stored for this account"}
-
-        if not force:
-            expires_at_str = (
-                account.expires_at.isoformat() if account.expires_at else None
-            )
-            if not should_refresh_token(expires_at_str, buffer_seconds=300):
-                return {
-                    "success": True,
-                    "refreshed": False,
-                    "message": "token still valid",
-                    "expires_at": expires_at_str,
-                    "account": _to_response(account),
-                }
-
-        try:
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: refresh_from_account_metadata(
-                    account.refresh_token,  # type: ignore[arg-type,unused-ignore]
-                    account.provider_metadata,
-                    proxy=proxy,
-                ),
-            )
-        except TokenRefreshError as exc:
-            logger.warning("Token refresh failed for account %s: %s", account_id, exc)
-            account.status = "expired"
-            account.updated_at = _utcnow()
-            await self._db.flush()
-            return {"success": False, "error": str(exc)}
-
-        # Persist the new tokens
-        account.token = result["access_token"]
-        if result.get("refresh_token"):
-            account.refresh_token = result["refresh_token"]
-
-        expires_at_str = result.get("expires_at")
-        if expires_at_str:
-            try:
-                from datetime import datetime
-                account.expires_at = datetime.fromisoformat(
-                    expires_at_str.replace("Z", "+00:00")
-                )
-            except ValueError:
-                pass
-
-        account.status = "active"
-        account.updated_at = _utcnow()
-        await self._db.flush()
-        await self._db.refresh(account)
-
-        logger.info("Token refreshed for account %s (%s)", account_id, account.email)
-        return {
-            "success": True,
-            "refreshed": True,
-            "expires_at": expires_at_str,
-            "account": _to_response(account),
-        }
+        return await kiro.refresh_kiro_token(
+            self, account_id, proxy=proxy, force=force, caller_uid=caller_uid
+        )
 
     async def check_kiro_account(
         self,
@@ -694,111 +350,9 @@ class AccountService:
         auto_refresh: bool = True,
         caller_uid: int | None = None,
     ) -> dict:
-        """Verify the Kiro account is alive and fetch credit usage.
-
-        Calls GET /getUsageLimits with the stored access token.  If the call
-        returns 401 and ``auto_refresh=True``, attempts a token refresh first.
-
-        Returns:
-            Dict with ``alive``, ``suspended``, ``email``, ``subscription``,
-            ``credit_used``, ``credit_limit``, ``credit_remaining`` and the
-            updated ``account`` snapshot.
-        """
-        try:
-            from autoreg.providers.kiro_v2.verify_alive import verify_alive
-        except ImportError:  # open-core: kiro_v2 method not installed
-            return {
-                "alive": False,
-                "error": "kiro_v2 method not installed — install plugin",
-            }
-
-        account = await self.get_account(account_id)
-        self._check_ownership(account, caller_uid, account_id)
-
-        if not account.token:
-            return {"alive": False, "error": "no access_token stored"}
-
-        try:
-            health = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type,unused-ignore]
-            )
-        except Exception as exc:
-            # Network/parse failure — record error, fall back to stale quota
-            account.error_count = (account.error_count or 0) + 1
-            account.last_error = str(exc)
-            account.last_checked_at = _utcnow()
-            account.updated_at = _utcnow()
-            await self._db.flush()
-            await self._db.refresh(account)
-            return {
-                "alive": False,
-                "error": str(exc),
-                "account": _to_response(account),
-            }
-
-        # Token expired — try refresh once
-        if not health.alive and "401" in health.error and auto_refresh and account.refresh_token:
-            logger.info("check_kiro_account: token expired, attempting refresh for %s", account_id)
-            refresh_result = await self.refresh_kiro_token(
-                account_id, proxy=proxy, force=True, caller_uid=caller_uid,
-            )
-            if refresh_result.get("success") and refresh_result.get("refreshed"):
-                # Re-read the updated account and retry health check
-                account = await self.get_account(account_id)
-                try:
-                    health = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: verify_alive(account.token, proxy=proxy),  # type: ignore[arg-type,unused-ignore]
-                    )
-                except Exception as exc:
-                    account.error_count = (account.error_count or 0) + 1
-                    account.last_error = str(exc)
-                    account.last_checked_at = _utcnow()
-                    account.updated_at = _utcnow()
-                    await self._db.flush()
-                    await self._db.refresh(account)
-                    return {
-                        "alive": False,
-                        "error": str(exc),
-                        "account": _to_response(account),
-                    }
-
-        # Update last_checked_at, status, quota, and error tracking
-        account.last_checked_at = _utcnow()
-        if health.suspended:
-            account.status = "banned"
-            account.error_count = (account.error_count or 0) + 1
-            account.last_error = health.error
-        elif not health.alive and "expired" in health.error:
-            account.status = "expired"
-            account.error_count = (account.error_count or 0) + 1
-            account.last_error = health.error
-        elif health.alive:
-            account.status = "active"
-            # Persist quota from the health check
-            account.quota_used = int(health.credit_used)
-            account.quota_limit = int(health.credit_limit)
-            account.quota_checked_at = _utcnow()
-            # Clear error on success
-            account.last_error = None
-        account.updated_at = _utcnow()
-        await self._db.flush()
-        await self._db.refresh(account)
-
-        return {
-            "alive": health.alive,
-            "suspended": health.suspended,
-            "email": health.email,
-            "subscription": health.subscription,
-            "credit_used": health.credit_used,
-            "credit_limit": health.credit_limit,
-            "credit_remaining": health.credit_remaining,
-            "region": health.region,
-            "error": health.error,
-            "checked_at": health.checked_at,
-            "account": _to_response(account),
-        }
+        return await kiro.check_kiro_account(
+            self, account_id, proxy=proxy, auto_refresh=auto_refresh, caller_uid=caller_uid
+        )
 
     # ── Bulk export ───────────────────────────────────────────────────────────
 
@@ -843,8 +397,7 @@ class AccountService:
         try:
             numeric_id = int(account_id)
         except (ValueError, TypeError):
-            # UUID-style id — the account_status service uses raw SQL with
-            # the id column, which works for both int and str ids.
+            # UUID-style id: account_status uses raw SQL on the id column, valid for int and str.
             numeric_id = account_id  # type: ignore[assignment]
 
         try:

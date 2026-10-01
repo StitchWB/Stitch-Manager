@@ -10,7 +10,7 @@ export interface ProviderInfo {
   name: string;
   version: string;
   activeCount: number;
-  status: 'active' | 'down' | 'maintenance';
+  status: 'active' | 'down' | 'maintenance' | 'inactive';
   color: string;
 }
 

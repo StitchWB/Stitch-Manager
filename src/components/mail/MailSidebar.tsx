@@ -32,6 +32,7 @@ import {
 } from '@/components/ui';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { t } from '@/lib/i18n';
+import { formatDate } from '@/lib/utils';
 import type { EmailFolder, EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 import type { MailProfileSyncState } from '@/stores/mail';
 import { AUTO_REG_MAILBOX_PROFILE_ID } from '@/lib/mail/runtime';
@@ -154,7 +155,7 @@ function formatRelativeTime(value: string | null | undefined): string | null {
   if (diffSec < 60) return 'now';
   if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
   if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
-  return date.toLocaleDateString();
+  return formatDate(date);
 }
 
 const ADD_SOURCE_TO_ACTION: Record<AddMailboxSource, AddMailboxAction> = {

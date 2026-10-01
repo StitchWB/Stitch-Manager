@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import logging
 import shutil
 import webbrowser
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 
 logger = logging.getLogger(__name__)
@@ -489,37 +495,32 @@ async def cmd_start_registration_v2(params: dict) -> dict:
 
 # ── Counters ────────────────────────────────────────────���──────────────────
 
-@register_command("get_next_counter")
-async def cmd_get_next_counter(params: dict) -> int:
+@command("get_next_counter")
+async def cmd_get_next_counter(db: AsyncSession, params: dict) -> int:
     """Get next counter value for email generation."""
     from sqlalchemy import text as sql_text
-
-    from stitch_backend.database import run_in_session
 
     provider = params.get("provider", "")
     strategy = params.get("strategy", "")
     key = f"{provider}:{strategy}"
 
-    async def _op(session):
-        try:
-            # Atomic upsert: insert or increment in a single statement
-            await session.execute(
-                sql_text(
-                    "INSERT INTO counters (key, value) VALUES (:k, 1) "
-                    "ON CONFLICT(key) DO UPDATE SET value = value + 1"
-                ),
-                {"k": key},
-            )
-            result = await session.execute(
-                sql_text("SELECT value FROM counters WHERE key = :k"),
-                {"k": key},
-            )
-            row = result.fetchone()
-            return int(row.value) if row else 1
-        except Exception:
-            return 1
-
-    return await run_in_session(_op)
+    try:
+        # Atomic upsert: insert or increment in a single statement
+        await db.execute(
+            sql_text(
+                "INSERT INTO counters (key, value) VALUES (:k, 1) "
+                "ON CONFLICT(key) DO UPDATE SET value = value + 1"
+            ),
+            {"k": key},
+        )
+        result = await db.execute(
+            sql_text("SELECT value FROM counters WHERE key = :k"),
+            {"k": key},
+        )
+        row = result.fetchone()
+        return int(row.value) if row else 1
+    except Exception:
+        return 1
 
 
 @register_command("check_python_autoreg", readonly=True)

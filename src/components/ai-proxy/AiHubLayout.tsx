@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
@@ -19,14 +19,11 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Badge, Tooltip } from '@/components/ui';
 import { ButtonBase } from '@/components/ui/ButtonBase';
 import { t } from '@/lib/i18n';
-import {
-  fetchServicePlugins,
-  getServicePlugins,
-  subscribeServicePlugins,
-} from '@/lib/backend/modules/servicePlugins';
+import { fetchServicePlugins } from '@/lib/backend/modules/servicePlugins';
 import { useAppStore } from '@/stores/app';
 import { useAuthStore } from '@/stores/auth';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
 import { cn } from '@/lib/utils';
 
 type AiTabId =
@@ -268,19 +265,9 @@ export function AiHubLayout() {
   const current = activeTab(location.pathname);
   const tabParam = new URLSearchParams(location.search).get('tab');
 
-  const plugins = useSyncExternalStore(
-    subscribeServicePlugins,
-    getServicePlugins,
-    getServicePlugins,
-  );
+  const plugins = useServicePlugins();
 
-  // Fetch service plugins on mount. The layout mounts on navigation to any
-  // /ai/* route, so this is the primary invalidation channel when no event
-  // bus exists. Window focus is a passive refresh for out-of-band installs.
-  useEffect(() => {
-    void fetchServicePlugins();
-  }, []);
-
+  // Window focus is a passive refresh for out-of-band installs.
   useEffect(() => {
     const onFocus = () => { void fetchServicePlugins(); };
     window.addEventListener('focus', onFocus);

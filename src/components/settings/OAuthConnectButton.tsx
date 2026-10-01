@@ -61,27 +61,14 @@ export function OAuthConnectButton({ onStatusChange }: OAuthConnectButtonProps) 
   const [phase, setPhase] = useState<Phase>('loading');
   const [email, setEmail] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [oauthSession, setOauthSession] = useState<{ state: string; popup: Window } | null>(null);
 
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollDeadlineRef = useRef<number>(0);
-  // Live refs so the interval callback sees fresh values without re-creating the interval.
-  const phaseRef = useRef<Phase>('loading');
+  // Live ref so callbacks see the latest prop without re-creating them.
   const onStatusChangeRef = useRef(onStatusChange);
-
-  useEffect(() => {
-    phaseRef.current = phase;
-  }, [phase]);
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimerRef.current !== null) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-  }, []);
 
   const applyStatus = useCallback(
     (connected: boolean, emailValue: string | null) => {
@@ -115,9 +102,53 @@ export function OAuthConnectButton({ onStatusChange }: OAuthConnectButtonProps) 
     })();
     return () => {
       cancelled = true;
-      stopPolling();
     };
-  }, [applyStatus, stopPolling]);
+  }, [applyStatus]);
+
+  useEffect(() => {
+    if (!oauthSession) return;
+    const { state: oauthState, popup } = oauthSession;
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+    const timer = setInterval(async () => {
+      // User closed popup before completing.
+      if (popup.closed) {
+        // One last callback check — the callback may have completed just before close.
+        try {
+          const callbackResult = await checkGoogleOAuthCallback(oauthState);
+          if (callbackResult.received && callbackResult.success) {
+            setOauthSession(null);
+            applyStatus(true, callbackResult.email);
+            return;
+          }
+        } catch {
+          /* fall through to timeout/disconnect */
+        }
+        setOauthSession(null);
+        setPhase('disconnected');
+        return;
+      }
+
+      if (Date.now() > deadline) {
+        setOauthSession(null);
+        setPhase('error');
+        setErrorMessage(t('settings.googleSheets.oauth.timeout'));
+        return;
+      }
+
+      try {
+        const callbackResult = await checkGoogleOAuthCallback(oauthState);
+        if (callbackResult.received && callbackResult.success) {
+          setOauthSession(null);
+          applyStatus(true, callbackResult.email);
+        }
+      } catch {
+        // Transient polling error — keep trying until deadline.
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [oauthSession, applyStatus]);
 
   const handleConnect = useCallback(async () => {
     setErrorMessage(null);
@@ -141,46 +172,8 @@ export function OAuthConnectButton({ onStatusChange }: OAuthConnectButtonProps) 
     }
 
     setPhase('connecting');
-    pollDeadlineRef.current = Date.now() + POLL_TIMEOUT_MS;
-    stopPolling();
-
-    pollTimerRef.current = setInterval(async () => {
-      // User closed popup before completing.
-      if (popup.closed && phaseRef.current === 'connecting') {
-        // One last callback check — the callback may have completed just before close.
-        try {
-          const callbackResult = await checkGoogleOAuthCallback(oauthState);
-          if (callbackResult.received && callbackResult.success) {
-            stopPolling();
-            applyStatus(true, callbackResult.email);
-            return;
-          }
-        } catch {
-          /* fall through to timeout/disconnect */
-        }
-        stopPolling();
-        setPhase('disconnected');
-        return;
-      }
-
-      if (Date.now() > pollDeadlineRef.current) {
-        stopPolling();
-        setPhase('error');
-        setErrorMessage(t('settings.googleSheets.oauth.timeout'));
-        return;
-      }
-
-      try {
-        const callbackResult = await checkGoogleOAuthCallback(oauthState);
-        if (callbackResult.received && callbackResult.success) {
-          stopPolling();
-          applyStatus(true, callbackResult.email);
-        }
-      } catch {
-        // Transient polling error — keep trying until deadline.
-      }
-    }, POLL_INTERVAL_MS);
-  }, [applyStatus, stopPolling]);
+    setOauthSession({ state: oauthState, popup });
+  }, []);
 
   const handleDisconnect = useCallback(async () => {
     setErrorMessage(null);

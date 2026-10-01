@@ -3,7 +3,7 @@ import { X, PlugZap, PenSquare, Trash2, RefreshCw, Clock, AlertTriangle } from '
 import { ButtonBase, ConfirmActionButton, ProviderLogo, StatusBadge, UsageBar } from '@/components/ui';
 
 import type { AiProxyAccount } from '../../types/generated';
-import { cn } from '../../lib/utils';
+import { cn, formatDateTime } from '../../lib/utils';
 import { useAiProxyStore } from '../../stores/aiProxy';
 import { getRequestHistorySafe } from '@/lib/backend/modules/aiProxy';
 
@@ -21,7 +21,7 @@ interface AiProxyAccountDrawerProps {
 
 function formatUnixSeconds(ts?: number | null): string {
   if (!ts) return '—';
-  return new Date(ts * 1000).toLocaleString();
+  return formatDateTime(ts * 1000);
 }
 
 function formatSecondsLeft(ts?: number | null): string | null {
@@ -253,9 +253,7 @@ export function AiProxyAccountDrawer({
                       <UsageBar used={Math.round(openAiQuota.primary.usedPercent)} limit={100} />
                       <div className="text-[11px] text-slate-500 mt-1">{t("aiHub.ai_proxy_account_drawer.resets")}
                   {' '}
-                        {openAiQuota.primary.resetAt ?
-                  new Date(openAiQuota.primary.resetAt * 1000).toLocaleString() :
-                  '—'}
+                        {formatUnixSeconds(openAiQuota.primary.resetAt)}
                       </div>
                     </div>
                     {openAiQuota.secondary ?
@@ -272,9 +270,7 @@ export function AiProxyAccountDrawer({
                 
                         <div className="text-[11px] text-slate-500 mt-1">{t("aiHub.ai_proxy_account_drawer.resets")}
                   {' '}
-                          {openAiQuota.secondary.resetAt ?
-                  new Date(openAiQuota.secondary.resetAt * 1000).toLocaleString() :
-                  '—'}
+                          {formatUnixSeconds(openAiQuota.secondary.resetAt)}
                         </div>
                       </div> :
               null}

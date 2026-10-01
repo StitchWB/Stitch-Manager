@@ -488,8 +488,8 @@ def run_package(package_dir: Path) -> int:
 
     # 2. Refresh _vendor/ (idempotent) so standalone packages are current.
     try:
-        from stitch_plugin_tools.vendoring import vendor_rpc_server
-        vendor_rpc_server(module_dir)
+        from stitch_plugin_tools.vendoring import vendor_all
+        vendor_all(module_dir)
     except Exception as exc:  # noqa: BLE001 - non-fatal
         print(
             f"warning: vendor refresh failed: {exc}", file=sys.stderr

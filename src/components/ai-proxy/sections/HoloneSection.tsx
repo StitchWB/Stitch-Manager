@@ -5,7 +5,7 @@ import { listen, type UnlistenFn } from '@/lib/events';
 import { t } from '@/lib/i18n';
 import { Eye, Shield, ShieldAlert, Volume2, VolumeX } from 'lucide-react';
 import { Button, EmptyState, GlassCard, PageHeader, RangeSlider, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Toggle } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { cn, formatTime } from '@/lib/utils';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -435,7 +435,7 @@ export function HoloneSection() {
                     {recentFindings.map((f, i) => (
                       <TableRow key={i} className="border-white/[0.02] hover:bg-white/[0.02]">
                         <TableCell className="px-0 py-1 pr-2 text-slate-400 whitespace-nowrap font-mono">
-                          {new Date(f.timestamp * 1000).toLocaleTimeString()}
+                          {formatTime(f.timestamp * 1000)}
                         </TableCell>
                         <TableCell className="px-0 py-1 pr-2 text-slate-300 font-mono whitespace-nowrap">{f.rule_id}</TableCell>
                         <TableCell className="px-0 py-1 pr-2 whitespace-nowrap">

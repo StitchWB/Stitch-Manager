@@ -20,6 +20,7 @@ import { useChatStore, type ChatSession } from '../stores/chat';
 import { useAppStore } from '../stores/app';
 import type { ContentBlock, ModelInfo } from '../types/generated';
 import { t } from '../lib/i18n';
+import { formatTime } from '../lib/utils';
 import { isZaiChatModel, resolveChatCompletionsUrl, resolveWebBridgeProvider } from './chatRouting';
 
 import {
@@ -699,7 +700,7 @@ export default function Chat() {
                           .reverse()
                           .map(m => (
                             <option key={m.id} value={m.id}>
-                              {new Date(m.timestamp).toLocaleTimeString()} •{' '}
+                              {formatTime(m.timestamp)} •{' '}
                               {m.routedProvider || t('chat.unknownProvider')}
                             </option>
                           ))}

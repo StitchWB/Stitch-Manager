@@ -19,6 +19,8 @@ import {
   isTraePatched,
   isTraeExtensionPatched,
   isTraeWorkbenchPatched,
+  startKiroProxy,
+  stopKiroProxy,
   BackendError,
 } from '../lib/backend';
 
@@ -44,6 +46,10 @@ interface PatcherState {
   traeWorkbenchPatched: boolean | null;
   traePatchLoading: boolean;
 
+  // Kiro proxy state
+  kiroProxyRunning: boolean;
+  kiroProxyLoading: boolean;
+
   // Actions
   detectIDEs: (force?: boolean) => Promise<DetectedIDE[]>;
   getAllPatchStatuses: () => Promise<void>;
@@ -53,6 +59,10 @@ interface PatcherState {
   // Trae storage patch actions
   checkTraePatched: () => Promise<boolean>;
   patchTraeFull: () => Promise<PatchResult>;
+
+  // Kiro proxy actions
+  startKiroProxy: () => Promise<void>;
+  stopKiroProxy: () => Promise<void>;
 
   // Backup management
   listBackups: (ideId?: string) => Promise<UIBackupInfo[]>;
@@ -83,6 +93,8 @@ export const usePatcherStore = create<PatcherState>()(
         traeExtensionPatched: null,
         traeWorkbenchPatched: null,
         traePatchLoading: false,
+        kiroProxyRunning: false,
+        kiroProxyLoading: false,
 
         // ============================================
         // IDE Detection
@@ -198,6 +210,28 @@ export const usePatcherStore = create<PatcherState>()(
           } catch (error) {
             const message = error instanceof BackendError ? error.message : String(error);
             set({ error: message, traePatchLoading: false });
+            throw error;
+          }
+        },
+
+        startKiroProxy: async () => {
+          set({ kiroProxyLoading: true });
+          try {
+            await startKiroProxy();
+            set({ kiroProxyRunning: true, kiroProxyLoading: false });
+          } catch (error) {
+            set({ kiroProxyLoading: false });
+            throw error;
+          }
+        },
+
+        stopKiroProxy: async () => {
+          set({ kiroProxyLoading: true });
+          try {
+            await stopKiroProxy();
+            set({ kiroProxyRunning: false, kiroProxyLoading: false });
+          } catch (error) {
+            set({ kiroProxyLoading: false });
             throw error;
           }
         },

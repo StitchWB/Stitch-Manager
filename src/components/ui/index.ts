@@ -36,6 +36,8 @@ export { ToolbarSection } from './ToolbarSection';
 
 export { StatCard } from './StatCard';
 
+export { StatItem } from './StatItem';
+
 export { TabButton } from './TabButton';
 
 export { Toggle } from './Toggle';

@@ -14,7 +14,37 @@ import { safeInvoke } from '../core';
 // Types
 // ============================================
 
-export type MarketplaceSource = 'official' | 'community';
+export type MarketplaceSource = 'official' | 'community' | 'local';
+
+export type I18nText = {
+  ru: string;
+  en: string;
+};
+
+export type MarketplaceCategory =
+  | 'autoreg'
+  | 'engine'
+  | 'ide-integration'
+  | 'ai-tools'
+  | 'productivity'
+  | 'security'
+  | 'communication'
+  | 'data';
+
+export type MarketplaceStatus = 'stable' | 'beta' | 'deprecated';
+
+export type MarketplaceFeatureStatus = 'stable' | 'beta' | 'planned';
+
+export interface MarketplaceFeature {
+  title: string | I18nText;
+  status: MarketplaceFeatureStatus;
+}
+
+export interface MarketplaceChangelogEntry {
+  version: string;
+  date: string;
+  changes: Array<string | I18nText>;
+}
 
 export interface MarketplaceItem {
   id: string;
@@ -34,11 +64,34 @@ export interface MarketplaceItem {
    * Optional for older backends that predate the badges field.
    */
   badges?: string[];
+  /**
+   * Rich manifest metadata. Optional for older backends / feed items that
+   * predate the manifest fields — the UI falls back to the plain fields.
+   */
+  description_i18n?: I18nText | null;
+  category?: MarketplaceCategory | null;
+  status?: MarketplaceStatus | null;
+  /** Single emoji from the plugin manifest. */
+  icon?: string | null;
+  features?: MarketplaceFeature[] | null;
+  changelog?: MarketplaceChangelogEntry[] | null;
+  homepage?: string | null;
+  repository?: string | null;
+}
+
+export interface MarketplaceFeeds {
+  official?: 'ok' | 'error' | 'skipped';
+  community?: 'ok' | 'error';
 }
 
 export interface GetMarketplaceResponse {
   activated: boolean;
   items: MarketplaceItem[];
+  /**
+   * Per-feed health, so the UI can tell "catalog genuinely empty" apart from
+   * "upstream unreachable". Optional for older backends.
+   */
+  feeds?: MarketplaceFeeds;
 }
 
 export interface InstallMarketplacePluginParams {

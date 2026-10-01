@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from typing import Any
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import get_session_factory, run_in_session
@@ -23,6 +24,8 @@ from stitch_backend.domains.scheduler.service import (
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 30
+TICK_FAILURE_ALERT_THRESHOLD = 3
+MAX_TICK_ERROR_LENGTH = 200
 
 
 class SchedulerWorker:
@@ -31,10 +34,27 @@ class SchedulerWorker:
     def __init__(self) -> None:
         self._running = False
         self._task: asyncio.Task[None] | None = None
+        self._consecutive_failures = 0
+        self._last_tick_error: str | None = None
 
     @property
     def is_running(self) -> bool:
         return self._running
+
+    @property
+    def consecutive_failures(self) -> int:
+        return self._consecutive_failures
+
+    @property
+    def last_tick_error(self) -> str | None:
+        return self._last_tick_error
+
+    def _status_payload(self) -> dict[str, Any]:
+        return {
+            "running": self._running,
+            "consecutive_failures": self._consecutive_failures,
+            "last_tick_error": self._last_tick_error,
+        }
 
     async def start(self) -> None:
         if self._running:
@@ -43,7 +63,7 @@ class SchedulerWorker:
         self._running = True
         self._task = asyncio.create_task(self._loop())
         logger.info("[Scheduler] Worker started (poll every %ds)", POLL_INTERVAL_SECONDS)
-        await event_bus.emit("scheduler.status_changed", {"running": True})
+        await event_bus.emit("scheduler.status_changed", self._status_payload())
 
     async def stop(self) -> None:
         self._running = False
@@ -55,14 +75,32 @@ class SchedulerWorker:
                 pass
             self._task = None
         logger.info("[Scheduler] Worker stopped")
-        await event_bus.emit("scheduler.status_changed", {"running": False})
+        await event_bus.emit("scheduler.status_changed", self._status_payload())
 
     async def _loop(self) -> None:
         while self._running:
             try:
                 await self._tick()
-            except Exception:
-                logger.exception("[Scheduler] Error in tick")
+            except Exception as exc:
+                self._consecutive_failures += 1
+                self._last_tick_error = str(exc)[:MAX_TICK_ERROR_LENGTH]
+                logger.warning(
+                    "[Scheduler] Tick failed (%d consecutive)",
+                    self._consecutive_failures,
+                    exc_info=True,
+                )
+                if self._consecutive_failures == TICK_FAILURE_ALERT_THRESHOLD:
+                    logger.error(
+                        "[Scheduler] %d consecutive tick failures — worker degraded",
+                        self._consecutive_failures,
+                    )
+                    try:
+                        await event_bus.emit("scheduler.status_changed", self._status_payload())
+                    except Exception:
+                        logger.debug("[Scheduler] failed to emit status_changed", exc_info=True)
+            else:
+                self._consecutive_failures = 0
+                self._last_tick_error = None
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     async def _tick(self) -> None:

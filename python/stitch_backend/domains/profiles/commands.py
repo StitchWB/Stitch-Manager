@@ -19,9 +19,15 @@ Commands registered here:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import logging
 from typing import Any, cast
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
@@ -83,16 +89,16 @@ async def cmd_save_profile(params: dict) -> dict:
     return {"success": True}
 
 
-@register_command("delete_profile_rust")
-async def cmd_delete_profile(params: dict) -> dict:
+@command("delete_profile_rust")
+async def cmd_delete_profile(db: AsyncSession, params: dict) -> dict:
     req = _parse(DeleteProfileRequest, params)
     owner_id = _caller_uid(params)
     FingerprintService.delete(req.email)
     # Also delete settings if they exist (owner-filtered)
-    async def _op(session):
-        svc = ProfileSettingsService(session)
-        await svc.delete_settings(req.email, owner_id=owner_id)
-    await run_in_session(_op)
+
+    svc = ProfileSettingsService(db)
+    await svc.delete_settings(req.email, owner_id=owner_id)
+
     return {"success": True}
 
 
@@ -122,28 +128,23 @@ async def cmd_list_profiles(params: dict) -> list[str]:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@register_command("get_profile_settings_rust")
-async def cmd_get_profile_settings(params: dict) -> Any:
+@command("get_profile_settings_rust")
+async def cmd_get_profile_settings(db: AsyncSession, params: dict) -> Any:
     req = _parse(GetProfileSettingsRequest, params)
     owner_id = _caller_uid(params)
 
-    async def _op(session):
-        svc = ProfileSettingsService(session)
-        return await svc.get_settings(req.alias, owner_id=owner_id)
-
-    return await run_in_session(_op)
+    svc = ProfileSettingsService(db)
+    return await svc.get_settings(req.alias, owner_id=owner_id)
 
 
-@register_command("save_profile_settings_rust")
-async def cmd_save_profile_settings(params: dict) -> dict:
+@command("save_profile_settings_rust")
+async def cmd_save_profile_settings(db: AsyncSession, params: dict) -> dict:
     req = _parse(SaveProfileSettingsRequest, params)
     owner_id = _caller_uid(params)
 
-    async def _op(session):
-        svc = ProfileSettingsService(session)
-        await svc.save_settings(req.alias, req.settings, owner_id=owner_id)
+    svc = ProfileSettingsService(db)
+    await svc.save_settings(req.alias, req.settings, owner_id=owner_id)
 
-    await run_in_session(_op)
     return {"success": True}
 
 
@@ -152,30 +153,26 @@ async def cmd_save_profile_settings(params: dict) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@register_command("rename_profile_alias_rust")
-async def cmd_rename_profile_alias(params: dict) -> dict:
+@command("rename_profile_alias_rust")
+async def cmd_rename_profile_alias(db: AsyncSession, params: dict) -> dict:
     req = _parse(RenameProfileRequest, params)
     owner_id = _caller_uid(params)
 
-    async def _op(session):
-        svc = ProfileSettingsService(session)
-        await svc.rename_alias(
-            req.current_alias, req.next_alias, owner_id=owner_id,
-        )
+    svc = ProfileSettingsService(db)
+    await svc.rename_alias(
+        req.current_alias, req.next_alias, owner_id=owner_id,
+    )
 
-    await run_in_session(_op)
     return {"success": True}
 
 
-@register_command("export_profile_bundle_rust")
-async def cmd_export_profile_bundle(params: dict) -> dict:
+@command("export_profile_bundle_rust")
+async def cmd_export_profile_bundle(db: AsyncSession, params: dict) -> dict:
     req = _parse(ExportBundleRequest, params)
 
-    async def _op(session):
-        svc = ProfileSettingsService(session)
-        await svc.export_bundle(req.alias, req.destination_path)
+    svc = ProfileSettingsService(db)
+    await svc.export_bundle(req.alias, req.destination_path)
 
-    await run_in_session(_op)
     return {"success": True}
 
 

@@ -144,8 +144,11 @@ def _domains(params: dict) -> list[str]:
 
 
 def _sub_id(params: dict) -> int | None:
+    raw = params.get("id")
+    if raw is None:
+        return None
     try:
-        return int(params.get("id"))
+        return int(raw)
     except (TypeError, ValueError):
         return None
 

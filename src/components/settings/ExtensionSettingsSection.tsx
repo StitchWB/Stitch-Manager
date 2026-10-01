@@ -3,6 +3,7 @@ import { Chrome, FolderOpen, Link2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, SectionHeader } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 import { copyToClipboard, openInBrowser, openInFileManager } from '@/lib/backend/modules/utils';
 import { useExtensionBridgeProbe } from '@/lib/scenarioRecorder/useExtensionBridgeProbe';
 
@@ -22,7 +23,7 @@ export function ExtensionSettingsSection() {
       : t('recorder.extensionBridgeDisconnected');
 
   const lastCheckedText = bridge.state.lastCheckedAt
-    ? new Date(bridge.state.lastCheckedAt).toLocaleTimeString()
+    ? formatTime(bridge.state.lastCheckedAt)
     : '—';
 
   const openExtensionsPage = async () => {

@@ -15,7 +15,7 @@ import {
   Users,
 } from 'lucide-react';
 import { t } from '@/lib/i18n';
-import { cn } from '../../lib/utils';
+import { cn, formatDateTime } from '../../lib/utils';
 import { getAccountStatusLabel } from '../../lib/accountStatus';
 import {
   ActionButtonGroup,
@@ -494,7 +494,7 @@ export function AccountsToolbar({
           <div className="text-[11px] text-slate-500">
             {t('accounts.sheetsIntegration')}
             {sheetsUpdatedAt
-              ? ` • ${t('logs.lastUpdated')} ${new Date(sheetsUpdatedAt).toLocaleString()}`
+              ? ` • ${t('logs.lastUpdated')} ${formatDateTime(sheetsUpdatedAt)}`
               : ''}
           </div>
         )}

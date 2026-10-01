@@ -13,7 +13,8 @@ import {
 import { safeInvoke } from '../../lib/backend/core';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
-import { Tooltip } from '../Tooltip';
+import { useRuntimeStore } from '@/stores/registration/runtime.store';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { ProviderName } from '../../types/ui';
 import type { LogVerbosity } from '../../constants/logging';
 import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
@@ -162,6 +163,7 @@ export function BrowserSection({
 }: BrowserSectionProps) {
   const [engines, setEngines] = useState<EngineInfo[] | null>(null);
   const [engineBusy, setEngineBusy] = useState(false);
+  const updateShardEngine = useRuntimeStore(s => s.updateShardEngine);
 
   const refreshEngines = () =>
     safeInvoke<{ engines: EngineInfo[] }>('get_browser_engines', {})
@@ -190,7 +192,7 @@ export function BrowserSection({
   const handleUpdateEngine = async () => {
     setEngineBusy(true);
     try {
-      await safeInvoke('update_shard_engine', { force: true });
+      await updateShardEngine(true);
       await refreshEngines();
     } finally {
       setEngineBusy(false);

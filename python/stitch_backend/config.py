@@ -97,8 +97,10 @@ class Settings(BaseSettings):
     # Restricted to known dev origins. "*" with allow_credentials=True lets any
     # webpage call this local API (no auth layer yet). Set STITCH_CORS_ORIGINS
     # (comma-separated) in .env to widen for production / other dev ports.
+    # WebView2 uses http://localhost:25584 as origin when loading from the backend.
     cors_origins: str = Field(
-        default="http://localhost:5173,http://localhost:5174,http://localhost:3000",
+        default="http://localhost:5173,http://localhost:5174,http://localhost:3000,"
+        "http://localhost:25584,http://127.0.0.1:25584",
         validation_alias=AliasChoices("cors_origins", "STITCH_CORS_ORIGINS"),
     )
 

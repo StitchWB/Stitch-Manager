@@ -1,5 +1,5 @@
 import { t } from '@/lib/i18n';
-import { Tooltip } from '@/components/Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Input, Button, Checkbox, FormGrid } from '@/components/ui';
 import { Filter, Search } from 'lucide-react';
 import { CollapsibleSection } from '@/components/ui';

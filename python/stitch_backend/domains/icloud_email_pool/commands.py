@@ -13,8 +13,14 @@ Commands:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import logging
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.icloud_email_pool.schemas import (
@@ -46,39 +52,33 @@ def _entry_to_dict(entry) -> dict:
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
-@register_command("icloud_pool_get_stats", readonly=True)
-async def cmd_get_stats(params: dict) -> dict:
+@command("icloud_pool_get_stats", readonly=True)
+async def cmd_get_stats(db: AsyncSession, params: dict) -> dict:
     """Return pool statistics (counts by status + rate limit info)."""
     svc = get_icloud_pool_service()
 
-    async def _op(session):
-        stats = await svc.get_stats(session)
-        return stats.model_dump(by_alias=True)
-
-    return await run_in_read_session(_op)
+    stats = await svc.get_stats(db)
+    return stats.model_dump(by_alias=True)
 
 
 # ── List entries ──────────────────────────────────────────────────────────────
 
-@register_command("icloud_pool_list_entries", readonly=True)
-async def cmd_list_entries(params: dict) -> list:
+@command("icloud_pool_list_entries", readonly=True)
+async def cmd_list_entries(db: AsyncSession, params: dict) -> list:
     """List pool entries with optional status filter and pagination."""
     status = params.get("status")
     limit = int(params.get("limit", 100))
     offset = int(params.get("offset", 0))
     svc = get_icloud_pool_service()
 
-    async def _op(session):
-        entries = await svc.list_entries(session, status=status, limit=limit, offset=offset)
-        return [_entry_to_dict(e) for e in entries]
-
-    return await run_in_read_session(_op)
+    entries = await svc.list_entries(db, status=status, limit=limit, offset=offset)
+    return [_entry_to_dict(e) for e in entries]
 
 
 # ── Fill pool ─────────────────────────────────────────────────────────────────
 
-@register_command("icloud_pool_fill")
-async def cmd_fill_pool(params: dict) -> dict:
+@command("icloud_pool_fill")
+async def cmd_fill_pool(db: AsyncSession, params: dict) -> dict:
     """
     Generate up to N new Hide My Email aliases and add them to the pool.
 
@@ -89,39 +89,31 @@ async def cmd_fill_pool(params: dict) -> dict:
     """
     req = FillPoolRequest.model_validate(params)
     svc = get_icloud_pool_service()
-
-    # Apple I/O — outside any DB session
     aliases = svc.generate_aliases(count=req.count, label_prefix=req.label_prefix)
-
     # Persist in a short write session
-    async def _op(session):
-        entries = await svc.persist_aliases(session, aliases)
-        return {
-            "created": len(entries),
-            "entries": [_entry_to_dict(e) for e in entries],
-        }
 
-    return await run_in_session(_op)
+    entries = await svc.persist_aliases(db, aliases)
+    return {
+        "created": len(entries),
+        "entries": [_entry_to_dict(e) for e in entries],
+    }
 
 
 # ── Release entry ─────────────────────────────────────────────────────────────
 
-@register_command("icloud_pool_release_entry")
-async def cmd_release_entry(params: dict) -> dict:
+@command("icloud_pool_release_entry")
+async def cmd_release_entry(db: AsyncSession, params: dict) -> dict:
     """Mark a reserved pool entry as used (success=true) or failed (success=false)."""
     req = ReleasePoolEntryRequest.model_validate(params)
     svc = get_icloud_pool_service()
 
-    async def _op(session):
-        await svc.release_entry(
-            session,
-            entry_id=req.entry_id,
-            success=req.success,
-            account_id=req.account_id,
-        )
-        return {"ok": True}
-
-    return await run_in_session(_op)
+    await svc.release_entry(
+        db,
+        entry_id=req.entry_id,
+        success=req.success,
+        account_id=req.account_id,
+    )
+    return {"ok": True}
 
 
 # ── Delete entry ──────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from './Tooltip';
 import { cn } from '../../lib/utils';
 
 export interface NumberInputProps {

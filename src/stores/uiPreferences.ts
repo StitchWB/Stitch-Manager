@@ -56,6 +56,11 @@ interface ScenariosPagePreferences {
   viewMode: 'cards' | 'list';
 }
 
+interface DashboardPreferences {
+  pinnedProviders: string[];
+  collapsedSections: string[];
+}
+
 interface UIPreferencesState {
   // Global UI preferences
   activeRoute: string;
@@ -68,6 +73,7 @@ interface UIPreferencesState {
   logsPage: LogsPagePreferences;
   autoRegPage: AutoRegPagePreferences;
   scenariosPage: ScenariosPagePreferences;
+  dashboard: DashboardPreferences;
 
   // Actions for Accounts page
   setAccountsProviderFilter: (provider: string) => void;
@@ -105,6 +111,10 @@ interface UIPreferencesState {
   // Actions for Scenarios page
   setScenariosViewMode: (mode: 'cards' | 'list') => void;
   resetScenariosPreferences: () => void;
+
+  // Actions for Dashboard
+  toggleDashboardPin: (provider: string) => void;
+  toggleDashboardSection: (section: string) => void;
 
   // Generic component preferences (for UI Kit state persistence)
   componentPreferences: Record<string, unknown>;
@@ -157,6 +167,11 @@ const defaultScenariosPreferences: ScenariosPagePreferences = {
   viewMode: 'cards',
 };
 
+const defaultDashboardPreferences: DashboardPreferences = {
+  pinnedProviders: [],
+  collapsedSections: [],
+};
+
 // ============================================
 // Store
 // ============================================
@@ -175,6 +190,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       logsPage: defaultLogsPreferences,
       autoRegPage: defaultAutoRegPreferences,
       scenariosPage: defaultScenariosPreferences,
+      dashboard: defaultDashboardPreferences,
 
       // ============================================
       // Accounts Page Actions
@@ -359,6 +375,40 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
       },
 
       // ============================================
+      // Dashboard Actions
+      // ============================================
+
+      toggleDashboardPin: provider => {
+        set(state => {
+          const pinned = state.dashboard?.pinnedProviders ?? [];
+          return {
+            dashboard: {
+              ...defaultDashboardPreferences,
+              ...state.dashboard,
+              pinnedProviders: pinned.includes(provider)
+                ? pinned.filter(id => id !== provider)
+                : [...pinned, provider],
+            },
+          };
+        });
+      },
+
+      toggleDashboardSection: section => {
+        set(state => {
+          const collapsed = state.dashboard?.collapsedSections ?? [];
+          return {
+            dashboard: {
+              ...defaultDashboardPreferences,
+              ...state.dashboard,
+              collapsedSections: collapsed.includes(section)
+                ? collapsed.filter(id => id !== section)
+                : [...collapsed, section],
+            },
+          };
+        });
+      },
+
+      // ============================================
       // ============================================
       // Generic Component Preferences
       // ============================================
@@ -389,6 +439,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
           logsPage: defaultLogsPreferences,
           autoRegPage: defaultAutoRegPreferences,
           scenariosPage: defaultScenariosPreferences,
+          dashboard: defaultDashboardPreferences,
           componentPreferences: {},
         });
       },
@@ -441,6 +492,7 @@ export const useUIPreferencesStore = create<UIPreferencesState>()(
         logsPage: state.logsPage,
         autoRegPage: state.autoRegPage,
         scenariosPage: state.scenariosPage,
+        dashboard: state.dashboard,
         componentPreferences: state.componentPreferences,
       }),
     }

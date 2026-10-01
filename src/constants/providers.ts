@@ -1,8 +1,5 @@
 import type { ProviderName } from '../types/ui';
-
-// ============================================
-// Unified Provider Configuration
-// ============================================
+import { PROVIDER_META, isValidProviderId, type ProviderMeta } from './providerIds';
 
 export interface ProviderConfig {
   id: ProviderName;
@@ -22,216 +19,169 @@ export interface ProviderConfig {
   webSession?: boolean;
 }
 
-export const PROVIDERS: ProviderConfig[] = [
-  {
-    id: 'kiro',
-    name: 'Kiro',
+type ProviderUIDecoration = {
+  icon: string;
+  color: string;
+  gradient: string;
+  hexColor: string;
+  disabled?: boolean;
+  webSession?: boolean;
+  // name/category only for providers missing from the Python registry (web-session adapters).
+  name?: string;
+  category?: ProviderConfig['category'];
+};
+
+const PROVIDER_UI = {
+  kiro: {
     icon: 'K',
     color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
     gradient: 'from-indigo-500/20 to-purple-500/20 text-indigo-400',
     hexColor: '#6366f1',
-    disabled: false,
-    category: 'ide',
   },
-  {
-    id: 'kiro_v2',
-    name: 'Kiro v2',
+  kiro_v2: {
     icon: 'K2',
     color: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
     gradient: 'from-violet-500/20 to-fuchsia-500/20 text-violet-400',
     hexColor: '#8b5cf6',
-    disabled: false,
-    category: 'ide',
   },
-  {
-    id: 'windsurf',
-    name: 'Windsurf',
+  windsurf: {
     icon: 'W',
     color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
     gradient: 'from-cyan-500/20 to-blue-500/20 text-cyan-400',
     hexColor: '#8b5cf6',
-    disabled: false,
-    category: 'ide',
   },
-  {
-    id: 'trae',
-    name: 'Trae',
+  trae: {
     icon: 'T',
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     gradient: 'from-orange-500/20 to-amber-500/20 text-orange-400',
     hexColor: '#ec4899',
-    disabled: false,
-    category: 'ide',
   },
-  {
-    id: 'github',
-    name: 'GitHub',
+  github: {
     icon: 'GH',
     color: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
     gradient: 'from-gray-500/20 to-slate-500/20 text-gray-400',
     hexColor: '#64748b',
-    disabled: false,
-    category: 'git',
   },
-  {
-    id: 'aws',
-    name: 'AWS',
+  aws: {
     icon: 'AWS',
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     gradient: 'from-orange-500/20 to-amber-500/20 text-orange-400',
     hexColor: '#f59e0b',
-    disabled: false,
-    category: 'cloud',
   },
-  {
-    id: 'openai',
-    name: 'OpenAI',
+  openai: {
     icon: 'AI',
     color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     gradient: 'from-emerald-500/20 to-teal-500/20 text-emerald-400',
     hexColor: '#10b981',
-    disabled: false,
-    category: 'ai',
   },
-  {
-    id: 'copilot',
-    name: 'Copilot',
+  copilot: {
     icon: 'CP',
     color: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
     gradient: 'from-gray-500/20 to-slate-500/20 text-gray-400',
     hexColor: '#6b7280',
     disabled: true,
-    category: 'ai',
   },
-  {
-    id: 'fireworks',
-    name: 'Fireworks AI',
+  fireworks: {
     icon: 'FW',
     color: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
     gradient: 'from-rose-500/20 to-orange-500/20 text-rose-400',
     hexColor: '#f43f5e',
-    disabled: false,
-    category: 'ai',
   },
-  {
-    id: 'qoder',
-    name: 'Qoder',
+  qoder: {
     icon: 'Q',
     color: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
     gradient: 'from-teal-500/20 to-cyan-500/20 text-teal-400',
     hexColor: '#14b8a6',
-    disabled: false,
-    category: 'ide',
   },
-  {
-    id: 'bitbucket',
-    name: 'Bitbucket',
+  bitbucket: {
     icon: 'BB',
     color: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     gradient: 'from-blue-500/20 to-sky-500/20 text-blue-400',
     hexColor: '#2684ff',
-    disabled: false,
-    category: 'git',
   },
-  {
-    id: 'v0_app',
-    name: 'v0',
+  v0_app: {
     icon: 'v0',
     color: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
     gradient: 'from-slate-500/20 to-zinc-500/20 text-slate-300',
     hexColor: '#94a3b8',
-    disabled: false,
-    category: 'ide',
   },
-  {
-    id: 'claude',
-    name: 'Claude',
+  claude: {
     icon: 'C',
     color: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     gradient: 'from-amber-500/20 to-yellow-500/20 text-amber-400',
     hexColor: '#d97706',
-    disabled: false,
-    category: 'ai',
   },
-  {
-    id: 'gemini',
-    name: 'Gemini',
+  gemini: {
     icon: 'G',
     color: 'bg-blue-600/20 text-blue-500 border-blue-600/30',
     gradient: 'from-blue-600/20 to-indigo-500/20 text-blue-500',
     hexColor: '#2563eb',
-    disabled: false,
-    category: 'ai',
   },
-  {
-    id: 'antigravity',
-    name: 'Antigravity',
+  antigravity: {
     icon: 'AG',
     color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
     gradient: 'from-purple-500/20 to-pink-500/20 text-purple-400',
     hexColor: '#9333ea',
-    disabled: false,
-    category: 'ai',
   },
-  {
-    id: 'aws_builder_id',
-    name: 'AWS Builder ID',
+  aws_builder_id: {
     icon: 'AWS',
     color: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
     gradient: 'from-orange-500/20 to-amber-500/20 text-orange-400',
     hexColor: '#f59e0b',
-    disabled: false,
-    category: 'cloud',
   },
-  {
-    id: 'web-gemini',
-    name: 'Gemini Web',
+  'web-gemini': {
     icon: 'GW',
     color: 'bg-sky-500/20 text-sky-400 border-sky-500/30',
     gradient: 'from-sky-500/20 to-blue-500/20 text-sky-400',
     hexColor: '#0ea5e9',
-    disabled: false,
-    category: 'ai',
     webSession: true,
+    name: 'Gemini Web',
+    category: 'ai',
   },
-  {
-    id: 'web-deepseek',
-    name: 'DeepSeek Web',
+  'web-deepseek': {
     icon: 'DS',
     color: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     gradient: 'from-blue-500/20 to-indigo-500/20 text-blue-400',
     hexColor: '#4d6bfe',
-    disabled: false,
-    category: 'ai',
     webSession: true,
+    name: 'DeepSeek Web',
+    category: 'ai',
   },
-  {
-    id: 'web-qwen',
-    name: 'Qwen Web',
+  'web-qwen': {
     icon: 'QW',
     color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
     gradient: 'from-indigo-500/20 to-purple-500/20 text-indigo-400',
     hexColor: '#6366f1',
-    disabled: false,
-    category: 'ai',
     webSession: true,
+    name: 'Qwen Web',
+    category: 'ai',
   },
-  {
-    id: 'web-notebooklm',
-    name: 'NotebookLM',
+  'web-notebooklm': {
     icon: 'NL',
     color: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
     gradient: 'from-teal-500/20 to-cyan-500/20 text-teal-400',
     hexColor: '#14b8a6',
-    disabled: false,
-    category: 'ai',
     webSession: true,
+    name: 'NotebookLM',
+    category: 'ai',
   },
-] as const;
+} satisfies Record<string, ProviderUIDecoration>;
 
-// ============================================
-// Helper Maps (derived from PROVIDERS)
-// ============================================
+export const PROVIDERS: ProviderConfig[] = (Object.keys(PROVIDER_UI) as (keyof typeof PROVIDER_UI)[]).map(id => {
+  const ui: ProviderUIDecoration = PROVIDER_UI[id];
+  const meta: ProviderMeta | undefined = isValidProviderId(id) ? PROVIDER_META[id] : undefined;
+  return {
+    id,
+    name: meta?.displayName ?? ui.name ?? id,
+    icon: ui.icon,
+    color: ui.color,
+    gradient: ui.gradient,
+    hexColor: ui.hexColor,
+    disabled: ui.disabled ?? false,
+    category: meta?.category ?? ui.category,
+    ...(ui.webSession ? { webSession: true } : {}),
+  };
+});
 
 export const PROVIDER_ICONS: Record<ProviderName, string> = Object.fromEntries(
   PROVIDERS.map(p => [p.id, p.icon])
@@ -250,10 +200,6 @@ export const PROVIDER_HEX_COLORS: Record<ProviderName, string> = Object.fromEntr
 ) as Record<ProviderName, string>;
 
 export const SUPPORTED_PROVIDERS: ProviderName[] = PROVIDERS.map(p => p.id);
-
-// ============================================
-// Helper Functions
-// ============================================
 
 export function getProvider(id: ProviderName): ProviderConfig | undefined {
   return PROVIDERS.find(p => p.id === id);

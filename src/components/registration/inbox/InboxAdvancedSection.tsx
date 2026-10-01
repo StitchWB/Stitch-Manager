@@ -1,4 +1,4 @@
-import { Tooltip } from '@/components/Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Input, Button, NumberInput, FormGrid } from '@/components/ui';
 import { Settings, Timer } from 'lucide-react';
 import { CollapsibleSection } from '@/components/ui';

@@ -6,9 +6,9 @@
  *   - required + !hasUsers → setup renders (mandatory)
  *   - required + hasUsers + !user → login renders (mandatory)
  *   - required + hasUsers + user → app renders
- *   - !required + !hasUsers + !user → welcome gate renders (guest path)
+ *   - !required + !hasUsers + !user → merged auth screen renders (guest path)
  *   - !required + !user, click "continue without login" → app renders (guest)
- *   - !required + hasUsers + !user → welcome gate renders with Login secondary
+ *   - !required + hasUsers + !user → merged screen renders with password login
  *
  * Mocks the auth backend module (fetch-based) rather than the store, so the
  * store's real init() logic is exercised.
@@ -28,9 +28,12 @@ jest.mock('../../lib/backend/modules/auth', () => ({
   setPermission: jest.fn(),
   loginUser: jest.fn(),
   loginTelegram: jest.fn(),
+  loginTelegramDeeplink: jest.fn(),
   loginTelegramOidc: jest.fn(),
   logoutUser: jest.fn(),
   setupUser: jest.fn(),
+  startTelegramDeeplink: jest.fn(),
+  getTelegramDeeplinkStatus: jest.fn(),
   listUsers: jest.fn(),
   createUser: jest.fn(),
   deleteUser: jest.fn(),
@@ -69,7 +72,6 @@ const mockAppStoreState = {
   language: 'en' as const,
   sidebarCollapsed: false,
   toggleSidebar: jest.fn(),
-  addNotification: jest.fn(),
 };
 jest.mock('../../stores/app', () => ({
   useAppStore: Object.assign(
@@ -184,6 +186,7 @@ jest.mock('../../pages/Accounts', () => ({
 
 // Import App AFTER all mocks are set up.
 import App from '../../App';
+import { stitchBotDeeplinkUrl } from '../../lib/links';
 
 const authModule = jest.requireMock('../../lib/backend/modules/auth') as {
   getAuthStatus: jest.Mock;
@@ -193,6 +196,8 @@ const authModule = jest.requireMock('../../lib/backend/modules/auth') as {
   loginTelegram: jest.Mock;
   logoutUser: jest.Mock;
   setupUser: jest.Mock;
+  startTelegramDeeplink: jest.Mock;
+  getTelegramDeeplinkStatus: jest.Mock;
 };
 
 describe('Auth gate', () => {
@@ -293,7 +298,7 @@ describe('Auth gate', () => {
     });
   });
 
-  it('renders WelcomeGate when auth enabled, not required, no users, no guest', async () => {
+  it('renders the merged auth screen when auth enabled, not required, no users, no guest', async () => {
     window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
@@ -307,8 +312,8 @@ describe('Auth gate', () => {
     await waitFor(() => {
       expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
     });
-    // Three buttons: TG (primary), password login (always visible), continue.
-    expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    // ONE screen: Telegram deep-link CTA + password login + guest continue.
+    expect(screen.getByTestId('telegram-deeplink-btn')).toBeTruthy();
     expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
     // No users → hint link to create a local account (replaces old setup button).
     expect(screen.getByTestId('guest-no-account-hint')).toBeTruthy();
@@ -319,7 +324,7 @@ describe('Auth gate', () => {
     expect(screen.queryByTestId('login-page')).toBeNull();
   });
 
-  it('renders WelcomeGate with Login secondary when auth not required and users exist', async () => {
+  it('renders the merged screen with password login when auth not required and users exist', async () => {
     window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
@@ -333,8 +338,7 @@ describe('Auth gate', () => {
     await waitFor(() => {
       expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
     });
-    // Three buttons always present; TG + password login + continue.
-    expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+    expect(screen.getByTestId('telegram-deeplink-btn')).toBeTruthy();
     expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
     // Users exist → no "create local account" hint link.
     expect(screen.queryByTestId('guest-no-account-hint')).toBeNull();
@@ -437,10 +441,9 @@ describe('Auth gate', () => {
     expect(screen.queryByTestId('guest-continue-btn')).toBeNull();
     expect(screen.queryByTestId('guest-setup-btn')).toBeNull();
     expect(screen.queryByTestId('guest-login-btn')).toBeNull();
-    expect(screen.queryByTestId('guest-telegram-btn')).toBeNull();
   });
 
-  it('welcome gate shows three buttons (Telegram, password, continue)', async () => {
+  it('merged screen shows Telegram CTA, password login and continue', async () => {
     window.history.pushState({}, '', '/?platform=web');
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: true, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
@@ -452,13 +455,13 @@ describe('Auth gate', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+      expect(screen.getByTestId('telegram-deeplink-btn')).toBeTruthy();
     });
     expect(screen.getByTestId('guest-login-btn')).toBeTruthy();
     expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
   });
 
-  it('desktop welcome gate shows only Telegram + guest (no local account surfaces)', async () => {
+  it('desktop merged screen shows only Telegram CTA + guest (no local account surfaces)', async () => {
     // jsdom default URL is localhost → isDesktopApp() is true (no override).
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
@@ -470,7 +473,7 @@ describe('Auth gate', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+      expect(screen.getByTestId('telegram-deeplink-btn')).toBeTruthy();
     });
     expect(screen.getByTestId('guest-continue-btn')).toBeTruthy();
     // No password login, no "create local account" hint on desktop.
@@ -528,9 +531,11 @@ describe('Auth gate', () => {
     expect(screen.queryByTestId('login-page')).toBeNull();
   });
 
-  it('navigates to TelegramLogin when TG button is clicked', async () => {
+  it('starts the Telegram deep-link flow when the CTA is clicked (no view change)', async () => {
     authModule.getAuthStatus.mockResolvedValue({ enabled: true, has_users: false, required: false });
     authModule.getCurrentUser.mockResolvedValue(null);
+    authModule.startTelegramDeeplink.mockResolvedValue({ token: 'tok1', expires_in: 300 });
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
 
     render(
       <MemoryRouter>
@@ -539,17 +544,24 @@ describe('Auth gate', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
+      expect(screen.getByTestId('telegram-deeplink-btn')).toBeTruthy();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByTestId('guest-telegram-btn'));
+      fireEvent.click(screen.getByTestId('telegram-deeplink-btn'));
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('telegram-page')).toBeTruthy();
+      expect(authModule.startTelegramDeeplink).toHaveBeenCalledTimes(1);
     });
-    expect(useAuthStore.getState().authView).toBe('telegram');
+    expect(openSpy).toHaveBeenCalledWith(
+      stitchBotDeeplinkUrl('tok1'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    // The merged screen IS the telegram surface — no navigation happens.
+    expect(useAuthStore.getState().authView).toBe('welcome');
+    openSpy.mockRestore();
   });
 
   it('login page shows Telegram link', () => {
@@ -590,18 +602,9 @@ describe('Auth gate', () => {
       </MemoryRouter>
     );
 
-    // Wait for welcome gate
+    // The merged optional root screen already contains the code form.
     await waitFor(() => {
-      expect(screen.getByTestId('guest-telegram-btn')).toBeTruthy();
-    });
-
-    // Click TG button → TelegramLogin renders
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('guest-telegram-btn'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('telegram-page')).toBeTruthy();
+      expect(screen.getByTestId('telegram-code-input')).toBeTruthy();
     });
 
     // Type code and submit

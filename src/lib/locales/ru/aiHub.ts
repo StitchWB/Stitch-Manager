@@ -1,0 +1,634 @@
+import type { AiHubTranslations } from '../../i18n/types/aiHub';
+
+export const aiHub: AiHubTranslations = {
+  aiHub: {
+    debugTitle: "Логи отладки прокси",
+    auto: "Авто",
+    debugMethod: "Метод",
+    debugPath: "Путь",
+    debugStatus: "Статус",
+    debugTime: "Время",
+    request: "Запрос",
+    response: "Ответ",
+    statusValue: "Статус: {status}",
+    errorValue: "Ошибка: {msg}",
+    selectLog: "Выберите запись лога, чтобы увидеть детали",
+    loadingKeys: "Загрузка ключей...",
+    apiKeysTitle: "API-ключи",
+    keysConfigured: "Настроено ключей: {count}",
+    addKey: "Добавить ключ",
+    bulkAdd: "Массовое добавление",
+    addKeyTitle: "Добавить ключ в {provider}",
+    saveKeysFailed: "Не удалось сохранить API-ключи",
+    keyValid: "Ключ валиден",
+    keyInvalid: "Ключ невалиден",
+    testFailed: "Ошибка теста",
+    keyHealth: "Здоровье ключей:",
+    healthHealthy: "здоровых: {count}",
+    healthFlaky: "нестабильных: {count}",
+    healthBroken: "сломанных: {count}",
+    healthExpired: "истёкших: {count}",
+    healthUnknown: "неизвестных: {count}",
+    noData: "Пока нет данных",
+    customProviders: "Кастомные провайдеры",
+    customProvidersDesc: "Добавьте любого OpenAI-совместимого провайдера с кастомным base URL",
+    healthToggle: "Здоровье",
+    healthToggleTip: "Автообновление здоровья ключей каждые 30 сек",
+    smartPasteFromPost: "Smart Paste из поста",
+    addProvider: "Добавить провайдера",
+    noCustom: "Пока нет кастомных провайдеров",
+    customEmpty: "Используйте {smart}, чтобы добавить из поста, или {add} вручную",
+    providerCreatedWithKeys: "Провайдер \"{name}\" создан с ключами: {count}",
+    failedGeneric: "Ошибка: {msg}",
+    clipboardNoUrlKeys: "Не удалось найти URL или ключи в буфере обмена",
+    existingProviderFound: "Найден существующий провайдер: {name}",
+    providerCreateFailed: "Не удалось создать провайдера",
+    providerCreated: "Создан провайдер: {name}",
+    fmTitle: "FreeModel Bridge",
+    fmDesc: "Доступ к моделям Claude через FreeModel. Укажите API-ключ, чтобы включить FM-* модели в прокси.",
+    apiKeyLabel: "API Key",
+    fmModelsAvailable: "Доступно моделей FreeModel: {count}",
+    fmAvailableModels: "Доступные модели: FM-claude-sonnet-4-6, FM-claude-opus-4-8, FM-claude-haiku-4-5",
+    fmGateway: "Gateway: http://127.0.0.1:25583",
+    account_modal: {
+      account_name: "Имя аккаунта",
+      account_type: "Тип аккаунта",
+      accountType: {
+        enterprise: "Enterprise",
+        free: "Free",
+        pro: "Pro",
+        team: "Team"
+      },
+      account_will_be_available_for_routing: "Аккаунт будет доступен для маршрутизации",
+      add_title: "Добавить аккаунт",
+      api_key: "API-ключ",
+      authMethod: {
+        api_key: "API-ключ",
+        oauth: "OAuth-токен",
+        session: "Токен сессии"
+      },
+      authenticate_via_browser_recommended: "Рекомендуется авторизоваться через браузер",
+      authentication_method: "Способ авторизации",
+      cancel: "Отмена",
+      create: "Создать",
+      created_success: "Аккаунт создан",
+      credential_required: "Укажите учётные данные",
+      edit_title: "Редактировать аккаунт",
+      enable_account: "Включить аккаунт",
+      login_with_oauth: "Войти через OAuth",
+      name_placeholder: "Мой аккаунт OpenAI",
+      name_required: "Укажите имя аккаунта",
+      oauth_completed: "OAuth завершён! Токен будет сохранён автоматически.",
+      oauth_token: "OAuth-токен",
+      oauth_token_placeholder: "Введите OAuth-токен",
+      optional_placeholder: "Необязательно",
+      positive_integer_error: "{label} должно быть положительным целым числом",
+      provider: "Провайдер",
+      save_failed: "Не удалось сохранить аккаунт: {error}",
+      saving: "Сохранение...",
+      session_token: "Токен сессии",
+      session_token_placeholder: "Введите токен сессии",
+      soft_daily_request_quota: "Мягкий дневной лимит запросов",
+      soft_daily_token_quota: "Мягкий дневной лимит токенов",
+      update: "Обновить",
+      updated_success: "Аккаунт обновлён",
+      use_oauth_login: "Войти через OAuth"
+    },
+    actions: {
+      addAccount: "Добавить аккаунт",
+      addMapping: "Добавить правило",
+      cancel: "Отмена",
+      close: "Закрыть",
+      configureIde: "Настроить IDE/CLI",
+      copy: "Копировать",
+      download: "Скачать",
+      generate: "Сгенерировать",
+      generating: "Генерация…",
+      import: "Импорт",
+      importAllFromScan: "Импортировать всё из скана",
+      importJson: "Импорт JSON",
+      importing: "Импорт…",
+      openAnalytics: "Открыть аналитику запросов",
+      openDebugChat: "Открыть Debug чат",
+      openDetailedAnalytics: "Открыть подробную аналитику",
+      prepareFromScan: "Подготовить JSON из скана",
+      refresh: "Обновить",
+      reset: "Сброс",
+      runMigration: "Debug: миграция",
+      save: "Сохранить",
+      saveSettings: "Сохранить настройки",
+      saving: "Сохранение...",
+      scanAuthFiles: "Сканировать auth файлы",
+      scanningAuthFiles: "Сканирование...",
+      startProxy: "Запустить прокси",
+      stopProxy: "Остановить прокси",
+      working: "Выполняется..."
+    },
+    ai_proxy_account_drawer: {
+      advanced: "Расширенное",
+      connected: "Подключено",
+      connection_error: "Ошибка соединения",
+      cooldown: "Остывание",
+      disabled: "Отключено",
+      edit: "Изменить",
+      id: "ID",
+      left: "Осталось",
+      loading: "Загрузка",
+      no_quota_fetched_yet: "Квота ещё не загружена",
+      no_requests_yet: "Запросов пока нет",
+      primary: "Основной",
+      quota: "Квота",
+      recent_requests: "Недавние запросы",
+      refresh: "Обновить",
+      refresh_error: "Ошибка обновления",
+      resets: "Сброс",
+      test: "Проверить",
+      weekly: "За неделю"
+    },
+    analytics: {
+      durationMs: "{count}мс",
+      emptyDescription: "Данных пока нет — запустите прокси и сделайте несколько запросов.",
+      emptyTitle: "Нет данных аналитики",
+      openMonitor: "Открыть мониторинг",
+      recentRequestsTitle: "Недавние запросы",
+      refreshTooltip: "Обновить аналитику",
+      requestsCount: "{count} запросов",
+      subtitle: "Подробный обзор трафика AI Proxy, моделей и последних вызовов.",
+      title: "Подробная аналитика",
+      todayErrors: "Ошибки сегодня",
+      todayRequests: "Запросы сегодня",
+      tokensCount: "{count} токенов",
+      topModelsTitle: "Топ моделей",
+      weeklyErrors: "Ошибки за 7 дней",
+      weeklyRequests: "Запросы за 7 дней"
+    },
+    holone: {
+      activeRules: "Активных правил",
+      block: "Блокировка",
+      blockMode: "Блокировка",
+      blockModeDescription: "Активно блокировать угрозы высокой серьёзности и удалять вредоносные tool calls. Рекомендуется для продакшена.",
+      enabled: "Включено",
+      excerpt: "Фрагмент",
+      findings: "Обнаружения",
+      findingsLastHour: "Находок (последний час)",
+      highSeverityBlocked: "Высокая серьёзность (заблокировано)",
+      monitor: "Мониторинг",
+      monitorMode: "Мониторинг",
+      monitorModeDescription: "Логировать всю подозрительную активность, но пропускать запросы. Используйте для тестирования и наблюдения.",
+      noFindings: "Инциденты безопасности не обнаружены",
+      notConfigured: "Не настроено",
+      protectionDescription: "HoloNe проверяет все запросы и ответы ИИ на prompt injection, jailbreak-атаки и подозрительные tool calls. Защищает от вредоносного контента от провайдеров ИИ.",
+      protectionMode: "Режим защиты",
+      protectionTitle: "Защита ИИ",
+      recentFindings: "Последние обнаружения",
+      rule: "Правило",
+      save: "Сохранить",
+      saveChanges: "Сохранить изменения",
+      severity: "Серьёзность",
+      soundDescription: "Воспроизводить звук при обнаружении угроз высокой серьёзности",
+      soundEnabled: "Звуковые оповещения",
+      soundNotifications: "Звуковые уведомления",
+      testSound: "Проверить звук",
+      timestamp: "Время",
+      toasts: {
+        configSaved: "Настройки HoloNe сохранены",
+        configSaveFailed: "Не удалось сохранить настройки HoloNe",
+      },
+      unsavedChanges: "Есть несохранённые изменения",
+      volume: "Громкость",
+    },
+    compression: {
+      advancedSettings: "Расширенные настройки",
+      autoTriggerThreshold: "Порог автозапуска",
+      autoTriggerThresholdDescription: "Пропускать сжатие для промптов меньше этого (токены)",
+      avgSavings: "Средняя экономия",
+      badgeStdout: "stdout",
+      badgeTokens: "токены",
+      caveman: "Caveman",
+      cavemanEnabled: "Caveman включён",
+      enabled: "Включено",
+      inputCompression: "Сжатие входных данных",
+      inputCompressionEnabled: "Вход включён",
+      level: "Уровень",
+      levelFull: "Полный",
+      levelLite: "Лёгкий",
+      levelUltra: "Ультра",
+      notConfigured: "Сервис сжатия не настроен",
+      outputCompression: "Сжатие выходных данных",
+      outputCompressionEnabled: "Выход включён",
+      preserveSystemPrompt: "Сохранять системный промпт",
+      preserveSystemPromptDescription: "Оставлять системные сообщения без изменений, чтобы не ломать поведение LLM",
+      preserveSystemPromptEnabled: "Сохранение включено",
+      rtkEnabled: "RTK включён",
+      rtkFilters: "RTK фильтры",
+      subtitle: "Сжатие токенов и оптимизация промптов",
+      title: "Сжатие",
+      tokensSaved: "Сохранено токенов",
+      toasts: {
+        configSaved: "Настройки сжатия сохранены",
+        configSaveFailed: "Не удалось сохранить настройки сжатия",
+      },
+    },
+    apiKeys: {
+      errors: {
+        addFailed: "Не удалось добавить ключ: {msg}",
+        apiKeyRequired: "API ключ обязателен",
+        loadFailed: "Не удалось загрузить API ключи: {msg}"
+      },
+      fireworks: {
+        account: "Аккаунт",
+        checkKey: "Проверить ключ",
+        checkKeyRequired: "Введите ключ Fireworks для проверки",
+        checkPlaceholder: "fw_...",
+        email: "Email",
+        historyEmpty: "Запустите проверку, чтобы увидеть историю.",
+        historyTitle: "Последние проверки",
+        keyTail: "…{tail}",
+        monthlyRemaining: "Остаток на месяц",
+        monthlySpendLimit: "Лимит на месяц",
+        noResultYet: "Запустите проверку, чтобы увидеть результат.",
+        prepaidCreditsNote: "Fireworks работает на предоплаченных кредитах: следите за остатком, чтобы не отвалиться.",
+        result: "Результат проверки",
+        statusActive: "Активен",
+        statusFrozen: "Заморожен",
+        statusInvalid: "Невалидный",
+        statusLimit: "Лимит исчерпан",
+        suspendState: "Состояние блокировки",
+        tier: "Тариф",
+        totalSpent: "Потрачено за месяц"
+      },
+      metrics: {
+        configuredKeys: "Ключи в настройках",
+        linkedAccounts: "Связанные аккаунты"
+      },
+      modals: {
+        fields: {
+          apiKeyLabel: "API ключ",
+          baseUrlLabel: "Base URL (необязательно)",
+          modelPrefixLabel: "Префикс моделей (необязательно)",
+        }
+      },
+      sections: {
+        checkerTitle: "Проверка ключа",
+      },
+      toasts: {
+        keyAdded: "Ключ {provider} добавлен",
+        keyCopied: "Ключ скопирован в буфер обмена",
+        keyDeleted: "Ключ {provider} удалён"
+      }
+    },
+    authScan: {
+      failed: "Ошибка сканирования: {msg}",
+      found: "Найдено auth файлов: {count}"
+    },
+    cards: {
+      accountCoverageTitle: "Покрытие аккаунтов",
+      errors: "Ошибки",
+      last20Requests: "Последние 20 запросов",
+      modelInventoryTitle: "Доступные модели",
+      providerCounts: "{active} активн. / {total} акк. / {keys} ключей",
+      providersTitle: "Провайдеры",
+      requestHistoryTitle: "История запросов"
+    },
+    controller: {
+      confirm: {
+        importAllFromScan: "Импортировать {count} найденных credential(ов)? Дубликаты будут пропущены.",
+        importPayload: "Импортировать аккаунты из payload? Возможны дубликаты. Продолжить?",
+        prepareFromScan: "Подготовить import payload из {count} найденных credential(ов)? Перед импортом можно будет проверить данные."
+      },
+      errors: {
+        connectionTestFailed: "Тест соединения не прошёл: {msg}",
+        deleteAccountFailed: "Не удалось удалить аккаунт: {msg}",
+        downloadFailed: "Не удалось скачать файл",
+        exportFailed: "Ошибка экспорта: {msg}",
+        importFailed: "Ошибка импорта: {msg}",
+        importPayloadRequired: "Сначала вставьте JSON payload",
+        invalidImportPayload: "Некорректный payload для импорта",
+        loadAccountsFailed: "Не удалось загрузить аккаунты: {msg}",
+        migrationFailed: "Миграция завершилась с ошибкой: {msg}",
+        noScanResultsToImport: "Нет результатов сканирования для импорта",
+        saveMappingsFailed: "Не удалось сохранить сопоставления: {msg}",
+        updateAccountFailed: "Не удалось обновить аккаунт: {msg}"
+      },
+      importValidation: {
+        invalidJson: "Некорректный JSON. Проверьте синтаксис.",
+        payloadAccountsRequired: "Payload должен содержать массив accounts.",
+        payloadMustBeObject: "Payload должен быть JSON-объектом.",
+        payloadVersionRequired: "Payload должен содержать числовое поле version."
+      },
+      toasts: {
+        accountDeleted: "Аккаунт успешно удалён",
+        accountDisabled: "Аккаунт отключён",
+        accountEnabled: "Аккаунт включён",
+        connectionOk: "Соединение с {provider} успешно",
+        downloadStarted: "Скачивание началось",
+        exportGenerated: "Экспорт сформирован",
+        importedAccounts: "Импортировано аккаунтов: {count}",
+        importedAccountsWithSkipped: "Импортировано: {imported}, пропущено дубликатов: {skipped}",
+        mappingsSaved: "Сопоставления моделей провайдеров сохранены",
+        migrationCompleted: "Миграция завершена! Подробности смотрите в консоли.",
+        migrationRunning: "Запуск миграции...",
+        preparedImportFromScan: "Подготовлен JSON для импорта из скана (проверьте и импортируйте)",
+      }
+    },
+    copy: {
+      empty: "Нечего копировать",
+      fail: "Не удалось скопировать {label}",
+      success: "{label} скопирован"
+    },
+    diagnostics: {
+      healthTitle: "Здоровье прокси",
+      latestReason: "Последняя причина ожидания/лимита",
+      noRecentReasons: "Нет недавних сообщений о cooldown/лимитах.",
+    },
+    empty: {
+      capabilities: "Данных по провайдерам пока нет.",
+      modelsNoAccounts: "Добавьте аккаунты, чтобы получить доступ к моделям.",
+      modelsProxyStopped: "Запустите прокси, чтобы загрузить список моделей.",
+      modelsUnavailable: "Пока нет доступных моделей.",
+      noAuthFiles: "Auth файлы не найдены.",
+      noExportPayload: "Сгенерируйте экспорт, чтобы увидеть данные.",
+      noMappings: "Правила не настроены"
+    },
+    groups: {
+      plugins: "Плагины",
+      processing: "Обработка",
+      sources: "Источники",
+      usage: "Использование"
+    },
+    integrations: {
+      baseUrl: "Base URL",
+      apiKey: "API ключ",
+    },
+    labels: {
+      providers: "Провайдеры",
+      providersHint: "Счётчики — число аккаунтов."
+    },
+    modals: {
+      csvNoSecrets: "CSV экспорт никогда не включает секреты.",
+      expiresShort: "истекает {date}",
+      exportDescription: "Экспорт по умолчанию скрывает секреты. «Включить секреты» экспортирует токены в открытом виде.",
+      exportFormatCsv: "CSV",
+      exportFormatJson: "JSON",
+      exportPayloadLabel: "Экспорт payload",
+      exportTitle: "Экспорт",
+      importDescription: "Импортируйте данные из auth файлов (legacy) или вставьте JSON экспорт.",
+      importPayloadLabel: "Импорт payload (JSON)",
+      importPayloadPlaceholder: "Вставьте экспорт JSON…",
+      importTitle: "Импорт",
+      importWarningDescription: "Этот payload содержит секреты (токены/ключи). При импорте они будут сохранены локально.",
+      importWarningTitle: "Внимание",
+      includeSecrets: "Включить секреты",
+      mappingPatternPlaceholder: "^gpt-",
+      mappingTargetPlaceholder: "id целевой модели",
+      mappingsTitle: "Сопоставления моделей провайдеров",
+      noExpiry: "без срока",
+      scanReportLabel: "Отчёт скана",
+      scanResultsTitle: "Результаты сканирования",
+      transferExportTitle: "Экспорт аккаунтов AI Proxy",
+      transferFooter: "Экспорт по умолчанию скрывает секреты. «Включить секреты» экспортирует токены в открытом виде.",
+      transferImportTitle: "Импорт аккаунтов AI Proxy"
+    },
+    o_auth_modal: {
+      click_the_button_below_to_open_the_authorization_p: "Нажмите кнопку ниже, чтобы открыть страницу авторизации",
+      device_code_authorization: "Авторизация по коду устройства",
+      enter_the_user_code_shown_above: "Введите показанный выше user code",
+      enter_this_code_on_the_verification_page: "Введите этот код на странице верификации",
+      open_the_verification_page_using_the_button_below: "Откройте страницу верификации кнопкой ниже",
+      return_here_authorization_completes_automatically: "Вернитесь сюда — авторизация завершится автоматически",
+      sign_in_with_your_aws_builder_id: "Войдите через AWS Builder ID",
+      waiting_for_authorization: "Ожидание авторизации"
+    },
+    oauthWizard: {
+      authUrlLabel: "URL авторизации",
+      copyUrl: "Скопировать URL",
+      failed: "Вход не удался: {msg}",
+      notConfigured: "OAuth не настроен для {provider}. Поместите client credentials в oauth_config.json плагина.",
+      openAgain: "Открыть страницу входа",
+      retry: "Повторить",
+      start: "Войти через {oauthProvider}",
+      starting: "Запуск…",
+      success: "Вход завершён.",
+      timedOut: "Вход не завершился вовремя.",
+      title: "Вход в {provider}",
+      waiting: "Ожидание авторизации — завершите вход в браузере."
+    },
+    proxy: {
+      activePortLabel: "Активный порт",
+      autoStart: "Авто-старт",
+      baseUrl: "Base URL",
+      clientApiKey: "Client API key",
+      error: "Ошибка прокси",
+      errors: {
+        emptyManagementKey: "Ключ управления не может быть пустым",
+        invalidPort: "Порт должен быть целым числом от 1024 до 65535",
+        notLoaded: "Настройки прокси ещё не загружены"
+      },
+      keyPreviewLabel: "Превью ключа",
+      managementKey: "Ключ управления",
+      managementKeyPlaceholder: "Ключ управления",
+      modeFull: "Полный",
+      modeLabel: "Режим",
+      modeQuota: "Только квоты",
+      portLabel: "Порт",
+      portPlaceholder: "25583",
+      reachabilityLabel: "Доступность",
+      reachable: "Доступен",
+      routingFillFirst: "Заполнять первым",
+      routingLabel: "Маршрутизация",
+      routingRoundRobin: "Round robin",
+      running: "Работает",
+      stopped: "Остановлен",
+      title: "IDE Прокси",
+      toasts: {
+        saveFailed: "Не удалось сохранить настройки прокси: {msg}",
+        saved: "Настройки прокси сохранены",
+        started: "Прокси запущен",
+        stopped: "Прокси остановлен"
+      },
+      unreachable: "Недоступен",
+      unsavedChanges: "Есть несохранённые изменения прокси"
+    },
+    readiness: {
+      cooldown: "В cooldown",
+      enabled: "Включено",
+      ready: "Готово",
+      weeklyLimit: "Упёрлись в недельный лимит",
+      weeklyLimitShort: "Недельный лимит"
+    },
+    rotation: {
+      checkIntervalLabel: "Интервал проверки",
+      secondsUnit: "сек",
+      switchOnZeroHint: "Выбирать следующий аккаунт, когда кредиты на нуле",
+      switchOnZeroLabel: "Переключать при нуле кредитов",
+      toasts: {
+        saveFailed: "Не удалось сохранить настройки ротации",
+        strategySaved: "Стратегия ротации сохранена"
+      },
+      strategy: {
+        title: "Стратегия ротации",
+        description: "Выберите способ выбора следующего аккаунта при переключении"
+      },
+      strategies: {
+        roundRobin: {
+          title: "По кругу",
+          description: "Перебирать аккаунты по порядку"
+        },
+        random: {
+          title: "Случайно",
+          description: "Выбирать случайный аккаунт"
+        },
+        leastUsed: {
+          title: "Наименее используемый",
+          description: "Выбирать аккаунт с наибольшим остатком кредитов"
+        },
+        priority: {
+          title: "По приоритету",
+          description: "Использовать аккаунты в порядке приоритета (перетащите для изменения порядка)"
+        }
+      },
+      priority: {
+        title: "Приоритет провайдеров",
+        description: "Перетащите провайдеров чтобы установить порядок их использования"
+      }
+    },
+    topology: {
+      keys: "ключей",
+    },
+    healthCheck: {
+      title: "Проверка здоровья",
+      description: "Автоматически проверять здоровье провайдеров и отключать нерабочие ключи",
+      intervalLabel: "Интервал проверки",
+      intervalHint: "Как часто проверять здоровье провайдеров",
+      autoDisableLabel: "Автоотключение нерабочих",
+      autoDisableHint: "Автоматически отключать ключи, не прошедшие проверку",
+      showAdvanced: "Показать расширенные настройки",
+      hideAdvanced: "Скрыть расширенные настройки",
+      testEndpointLabel: "Тестовый эндпоинт",
+      testEndpointHint: "Эндпоинт для проверки здоровья",
+      cooldownLabel: "Длительность охлаждения",
+      cooldownHint: "Как долго отключать ключ после сбоя",
+      exponentialBackoffLabel: "Экспоненциальная задержка",
+      exponentialBackoffHint: "Удваивать длительность охлаждения при каждом сбое"
+    },
+    search: {
+      placeholder: "Провайдер, аккаунт или модель…"
+    },
+    sections: {
+      monitor: {
+        subtitle: "Покрытие аккаунтов, здоровье прокси и сигналы запросов.",
+        title: "Мониторинг"
+      },
+      providers: {
+        subtitle: "Аккаунты, запас квоты и здоровье прокси — в одном месте.",
+        title: "AI Провайдеры"
+      },
+holone: {
+        subtitle: "AI-защита от prompt injection и jailbreak",
+        title: "HoloNe Защита"
+      },
+      routing: {
+        title: "Маршрутизация"
+      },
+    },
+    table: {
+      delete: "Удалить",
+      edit: "Редактировать",
+      emptyValue: "—",
+      requestsLine: "{requests} запросов · {tokens} токенов",
+      status: "Статус",
+      testConnection: "Проверить соединение",
+    },
+tabs: {
+      compression: "Сжатие",
+      holone: "HoloNe Security",
+      tools: "Инструменты",
+      chat: "Чат",
+      integrations: "Интеграции",
+      monitor: "Мониторинг",
+      notebooklm: "NotebookLM",
+      providers: "Провайдеры",
+      routing: "Маршрутизация",
+    },
+    warnings: {
+      copySensitiveConfirm: "Скопировать {label} в буфер? Это чувствительные данные и они могут быть видны другим приложениям.",
+      serverOffline: "Сервер оффлайн — данные могут быть устаревшими"
+    },
+    wizard: {
+      actions: {
+        applyConfiguration: "Применить конфигурацию",
+        back: "Назад",
+        done: "Готово",
+        next: "Далее",
+        restoreBackup: "Восстановить бэкап",
+        runSmoke: "Запустить smoke-проверку"
+      },
+      alreadyConfigured: "Уже настроено",
+      applying: "Применение конфигурации...",
+      autoImport: {
+        dryRun: "Пробный запуск",
+        hint: "Опционально. Импортирует найденные локальные токены в AI Proxy аккаунты с защитой от дублей.",
+        importNow: "Импортировать сейчас",
+        imported: "Импортировано",
+        modeDryRun: "Пробный запуск",
+        modeLabel: "Режим",
+        modeWrite: "Запись",
+        noDiscovered: "Auth-файлы не обнаружены",
+        scanned: "Просканировано",
+        skipped: "Пропущено",
+        title: "Авто-импорт аккаунтов из локальных auth-файлов IDE"
+      },
+      detecting: "Поиск установленных IDE...",
+      errors: {
+        autoImportFailed: "Не удалось авто-импортировать auth файлы",
+        autoSmokeFailed: "Автоматическая smoke-проверка не удалась",
+        configurationFailed: "Ошибка настройки",
+        detectFailed: "Не удалось обнаружить IDE",
+        previewFailed: "Не удалось сформировать предпросмотр",
+        restoreFailed: "Ошибка восстановления",
+        smokeFailed: "Smoke-проверка не удалась",
+        startProxyFailed: "Не удалось запустить AI Proxy из мастера"
+      },
+      manual: {
+        copied: "Значения ручной настройки скопированы",
+        copyButton: "Копировать endpoint + key",
+        copyFailed: "Не удалось скопировать значения ручной настройки",
+        hint: "Используйте эти значения, если авто-настройка IDE не применилась корректно:",
+        openaiApiKey: "OpenAI API Key",
+        openaiBaseUrl: "OpenAI Base URL",
+        title: "Ручная настройка (fallback)"
+      },
+      nextSteps: {
+        ensureProxy: "Убедитесь, что AI Proxy запущен в режиме Full",
+        restartIde: "Перезапустите IDE, чтобы применить изменения",
+        runSmoke: "Запустите smoke-проверку для каждой IDE",
+        testRequest: "Проверьте соединение реальным AI-запросом",
+        title: "Дальнейшие шаги:"
+      },
+      noIdesHint: "Убедитесь, что установлены Cursor, Windsurf, Continue, Cline или OpenCode.",
+      noIdesTitle: "Поддерживаемые IDE не найдены",
+      opencodeLabel: "Opencode",
+      previewHint: "Конфигурация будет объединена с текущими настройками IDE. Резервная копия создаётся автоматически.",
+      previewTitle: "Предпросмотр конфигурации для выбранных IDE:",
+      providerProfile: "Профиль провайдера",
+      proxyStoppedHint: "AI Proxy сейчас остановлен. Вы можете подготовить конфиги IDE и запустить прокси позже, перед тестом запросов.",
+      results: {
+        configuredPending: "Настроено (проверка в ожидании)",
+        configuredVerified: "Настроено и проверено",
+        restored: "Восстановлено из бэкапа",
+        restoredVerified: "Восстановлено из бэкапа и проверено",
+        smokeAttention: "Smoke-проверка: внимание",
+        smokeOk: "Smoke-проверка: OK"
+      },
+      runningAutoSmoke: "Выполняются автоматические smoke-проверки для настроенных IDE...",
+      selectDescription: "Выберите IDE, которые нужно настроить для работы через AI Proxy:",
+      smoke: {
+        noModels: "AI Proxy запущен, но модели недоступны",
+        notConfigured: "Конфигурация IDE пока не выглядит применённой",
+        passed: "Smoke-проверка пройдена",
+        proxyNotRunning: "AI Proxy не запущен"
+      },
+      title: "Настройка IDE для AI Proxy"
+    }
+  }
+};

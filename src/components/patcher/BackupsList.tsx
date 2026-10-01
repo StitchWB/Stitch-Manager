@@ -3,7 +3,7 @@ import { t } from '@/lib/i18n';
 import { formatDate, formatSize } from '../../lib/patcher';
 
 import type { UIBackupInfo } from '../../types/ui';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Button, ButtonBase, LoadingSpinner } from '@/components/ui';
 
 interface BackupsListProps {

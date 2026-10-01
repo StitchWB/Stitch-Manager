@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, Square, Paperclip, X } from 'lucide-react';
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 import type { ContentBlock } from '../../types/generated';
 import { ButtonBase, LoadingSpinner, Textarea } from '@/components/ui';

@@ -21,7 +21,7 @@ KNOWN SCOPE BOUNDARY — read before touching this file
 This migration intentionally does **not** populate ``UpstreamModel`` or
 ``CredentialModelAccess``. None of the three legacy sources carry real
 per-model granularity — they represent wildcard ``provider/*`` deployments
-today (see ``litellm_gateway.py::_LITELLM_PROVIDER_MODELS``), so there is no
+today, so there is no
 static data here from which to derive genuine upstream model IDs. Fabricating
 placeholder ``UpstreamModel`` rows from guesses would poison the catalog with
 data that was never actually verified against a live endpoint. Populating

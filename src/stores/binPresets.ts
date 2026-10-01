@@ -1,5 +1,4 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createAsyncStore } from '@/lib/store/createAsyncStore';
 
 export interface BinPreset {
   id: string;
@@ -24,39 +23,37 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export const useBinPresetsStore = create<BinPresetsState>()(
-  persist(
-    (set, get) => ({
-      presets: [],
+export const useBinPresetsStore = createAsyncStore<BinPresetsState>({
+  name: 'stitch-bin-presets',
+  persist: true,
+  initial: {
+    presets: [],
+  },
+  actions: (set, get) => ({
+    addPreset: preset =>
+      set(state => ({
+        presets: [
+          ...state.presets,
+          {
+            ...preset,
+            id: generateId(),
+            createdAt: Date.now(),
+          },
+        ],
+      })),
 
-      addPreset: preset =>
-        set(state => ({
-          presets: [
-            ...state.presets,
-            {
-              ...preset,
-              id: generateId(),
-              createdAt: Date.now(),
-            },
-          ],
-        })),
+    removePreset: id =>
+      set(state => ({
+        presets: state.presets.filter(p => p.id !== id),
+      })),
 
-      removePreset: id =>
-        set(state => ({
-          presets: state.presets.filter(p => p.id !== id),
-        })),
+    updatePreset: (id, updates) =>
+      set(state => ({
+        presets: state.presets.map(p =>
+          p.id === id ? { ...p, ...updates } : p
+        ),
+      })),
 
-      updatePreset: (id, updates) =>
-        set(state => ({
-          presets: state.presets.map(p =>
-            p.id === id ? { ...p, ...updates } : p
-          ),
-        })),
-
-      getPreset: id => get().presets.find(p => p.id === id),
-    }),
-    {
-      name: 'stitch-bin-presets',
-    }
-  )
-);
+    getPreset: id => get().presets.find(p => p.id === id),
+  }),
+});

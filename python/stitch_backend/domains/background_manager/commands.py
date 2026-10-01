@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import json
 from typing import cast
 
 from sqlalchemy import text
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.database import run_in_read_session
 from stitch_backend.domains.background_manager.schemas import (
     BackgroundManagerConfig,
     normalise_background_manager_config,
@@ -61,20 +67,17 @@ async def cmd_get_background_manager_config(params: dict) -> dict:
     return config.model_dump(mode="json", by_alias=True)
 
 
-@register_command("update_background_manager_config")
-async def cmd_update_background_manager_config(params: dict) -> None:
+@command("update_background_manager_config")
+async def cmd_update_background_manager_config(db: AsyncSession, params: dict) -> None:
     """Persist frontend ``{config}`` envelopes and legacy raw config bodies."""
     raw_config = params.get("config", params)
     config = BackgroundManagerConfig.model_validate(raw_config)
     config_json = config.model_dump_json(by_alias=True)
 
-    async def _op(session):
-        await session.execute(
-            text(
-                "INSERT INTO settings (key, value) VALUES ('background_manager_config', :v) "
-                "ON CONFLICT(key) DO UPDATE SET value = :v"
-            ),
-            {"v": config_json},
-        )
-
-    await run_in_session(_op)
+    await db.execute(
+        text(
+            "INSERT INTO settings (key, value) VALUES ('background_manager_config', :v) "
+            "ON CONFLICT(key) DO UPDATE SET value = :v"
+        ),
+        {"v": config_json},
+    )

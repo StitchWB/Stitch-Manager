@@ -37,6 +37,7 @@ import {
 } from './Scheduler/components/SchedulerTaskForm';
 import { formatDistanceToNow } from 'date-fns';
 import type { SchedulerTemplate } from '../lib/backend/modules/scheduler';
+import { formatDateTime } from '@/lib/utils';
 import { Button, ConfirmActionButton, EmptyState, GlassCard, IconButton, Modal, ProgressBar, StatCard, StatusBadge, Toggle } from '@/components/ui';
 
 function parseJsonObject(raw: string): Record<string, unknown> {
@@ -197,6 +198,7 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
     templates,
     templatesLoading,
     isRunning,
+    statusError,
     loading,
     fetchTasks,
     fetchTemplates,
@@ -293,7 +295,7 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
 
   const getScheduleLabel = (schedule: Schedule): string => {
     if ('once' in schedule) {
-      return t('scheduler.scheduleOnceAt', { time: new Date(schedule.once.timestamp * 1000).toLocaleString() });
+      return t('scheduler.scheduleOnceAt', { time: formatDateTime(schedule.once.timestamp * 1000) });
     }
     if ('interval' in schedule) {
       const hours = Math.floor(schedule.interval.seconds / 3600);
@@ -546,7 +548,7 @@ export default function Scheduler({ embedded = false }: SchedulerProps = {}) {
           <StatCard
             icon={<Zap size={20} />}
             label={t('scheduler.schedulerStatusLabel')}
-            value={isRunning ? t('scheduler.statusRunning') : t('scheduler.statusStopped')}
+            value={statusError !== null ? t('scheduler.statusUnknown') : isRunning ? t('scheduler.statusRunning') : t('scheduler.statusStopped')}
           />
           <StatCard
             icon={<TrendingUp size={20} />}

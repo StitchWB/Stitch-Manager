@@ -27,8 +27,8 @@ from typing import Any
 import httpx
 
 from autoreg.plugin.install import list_installed_versions
-from autoreg.plugin.layout import plugins_cache_dir
-from autoreg.plugin.manifest import parse_semver
+from autoreg.plugin.layout import plugins_cache_dir, plugins_local_dir, resolve_link
+from autoreg.plugin.manifest import parse_semver, resolve_i18n, validate_manifest
 from stitch_backend.core.command_registry import register_command
 
 from .activation import ActivationService
@@ -86,6 +86,82 @@ def _badges_of(entry: dict[str, Any]) -> list[str]:
     return [str(b) for b in raw]
 
 
+def _rich_metadata(entry: dict[str, Any]) -> dict[str, Any]:
+    """Rich marketplace metadata (stitch.plugin/v2) from a feed entry.
+
+    Every key is always present in the returned dict; entries lacking a
+    field (community/old rows) emit None so the shape is stable for the UI.
+    """
+    return {
+        "description_i18n": entry.get("description_i18n"),
+        "category": entry.get("category"),
+        "status": entry.get("status"),
+        "icon": entry.get("icon"),
+        "features": entry.get("features"),
+        "changelog": entry.get("changelog"),
+        "homepage": entry.get("homepage"),
+        "repository": entry.get("repository"),
+    }
+
+
+def _dev_mode_on() -> bool:
+    """True when STITCH_DEV_MODE is set (same semantics as plugin discovery)."""
+    import os
+
+    return os.environ.get("STITCH_DEV_MODE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _local_service_manifests() -> list[dict[str, Any]]:
+    """Dev-installed service plugins in plugins-local, with manifest metadata.
+
+    Resolves ``.stitch-link`` pointer dirs (dev-install --link).  Only
+    consulted in dev mode — production installs never carry unsigned local
+    packages, and discovery rejects them there anyway.
+    """
+    import json
+
+    root = plugins_local_dir()
+    if not root.is_dir():
+        return []
+    out: list[dict[str, Any]] = []
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir():
+            continue
+        entry = resolve_link(entry)
+        manifest_path = entry / "plugin.json"
+        if not manifest_path.is_file():
+            continue
+        try:
+            manifest = validate_manifest(
+                json.loads(manifest_path.read_text(encoding="utf-8"))
+            )
+        except Exception:  # noqa: BLE001 — a broken local package must not break the marketplace
+            continue
+        if manifest.kind != "service":
+            continue
+        extras = manifest.extras
+        description = extras.get("description")
+        rich = _rich_metadata(extras)
+        rich["description_i18n"] = description if isinstance(description, dict) else None
+        author = extras.get("author")
+        out.append(
+            {
+                "id": manifest.id,
+                "name": manifest.name,
+                "version": manifest.version,
+                "author": author if isinstance(author, str) else None,
+                "description": resolve_i18n(description) or None,
+                "rich": rich,
+            }
+        )
+    return out
+
+
 def _is_community_approved(entry: dict[str, Any]) -> bool:
     """True for server-catalog entries merged from approved submissions.
 
@@ -132,6 +208,7 @@ def _community_item(
         "can_download": True,
         "required_tier": None,
         "badges": _badges_of(entry),
+        **_rich_metadata(entry),
     }
 
 
@@ -165,7 +242,7 @@ async def _fetch_manifest_cached(activation: ActivationService, token: str) -> d
     cached = _cache_get("manifest")
     if cached is not None:
         return cached
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=5.0) as client:
         sync = PluginSyncService(activation, client=client)
         manifest = await sync.fetch_manifest(token)
     _cache_set("manifest", manifest)
@@ -187,7 +264,7 @@ async def _fetch_public_catalog_cached(activation: ActivationService) -> dict:
     cached = _cache_get("catalog_public")
     if cached is not None:
         return cached
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=5.0) as client:
         sync = PluginSyncService(activation, client=client)
         catalog = await sync.fetch_public_catalog()
     _cache_set("catalog_public", catalog)
@@ -198,8 +275,10 @@ async def _fetch_public_catalog_cached(activation: ActivationService) -> dict:
 async def cmd_get_marketplace(params: dict) -> dict:
     """Merge official + community + installed state into one list.
 
-    Returns ``{"activated": bool, "items": [...]}``.
-    Never raises — server/catalog failures degrade to empty lists.
+    Returns ``{"activated": bool, "items": [...], "feeds": {...}}``.
+    Never raises — server/catalog failures degrade to empty lists, with the
+    per-feed status surfaced in ``feeds`` so the UI can show an honest
+    "server unavailable" state instead of a fake "no matches" one.
 
     Entitlement dual-path:
       - Auth enabled (caller context) → ``get_effective_entitlements``.
@@ -207,6 +286,10 @@ async def cmd_get_marketplace(params: dict) -> dict:
     Community items are always entitled (unchanged).
     """
     items: list[dict[str, Any]] = []
+    # Feed health for the UI: "ok" fetched, "error" upstream failed,
+    # "skipped" not attempted (activated-but-degraded activation).
+    official_feed = "skipped"
+    community_feed = "ok"
 
     activation = ActivationService()
     state = activation.load()
@@ -239,6 +322,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
     if state is not None and not state.degraded:
         try:
             manifest = await _fetch_manifest_cached(activation, state.token)
+            official_feed = "ok"
             # FIX 5 (P1): bulk-fetch required tiers in a single DB query
             # instead of N+1 per-plugin get_required_tier calls.
             manifest_plugin_ids = [
@@ -282,16 +366,19 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "can_download": entitled,
                         "required_tier": required_tiers.get(plugin_id),
                         "badges": _badges_of(entry),
+                        **_rich_metadata(entry),
                     }
                 )
         except Exception as exc:  # noqa: BLE001 — marketplace must not crash
             logger.warning("Marketplace: official manifest fetch failed: %s", exc)
+            official_feed = "error"
             activated = False
     elif state is None:
         # No activation: official plugins stay VISIBLE but locked — the
         # marketplace is the funnel; downloads require activation.
         try:
             public_catalog = await server_catalog_task
+            official_feed = "ok"
             public_ids = [
                 str(e.get("id", ""))
                 for e in public_catalog.get("plugins", [])
@@ -324,10 +411,12 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "can_download": False,
                         "required_tier": public_tiers.get(plugin_id),
                         "badges": _badges_of(entry),
+                        **_rich_metadata(entry),
                     }
                 )
         except Exception as exc:  # noqa: BLE001 — marketplace must not crash
             logger.warning("Marketplace: public catalog fetch failed: %s", exc)
+            official_feed = "error"
 
     # ── Feature 2: server-approved community plugins ──────────────────────
     # Approved submissions live only in the server /catalog (unsigned, served
@@ -344,6 +433,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
 
     try:
         catalog = await catalog_task
+        if catalog.get("_fetch_error"):
+            community_feed = "error"
         for entry in catalog.get("plugins", []):
             if not isinstance(entry, dict):
                 continue
@@ -366,12 +457,57 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     "installed_version": version if is_installed else None,
                     "can_download": True,
                     "badges": _badges_of(entry),
+                    **_rich_metadata(entry),
                 }
             )
     except Exception as exc:  # noqa: BLE001 — marketplace must not crash
         logger.warning("Marketplace: community catalog fetch failed: %s", exc)
+        community_feed = "error"
 
-    return {"activated": activated, "items": items}
+    # Dev installs (plugins-local) — merged last so they stay visible even
+    # when every upstream feed is down.  Dev mode only: production never has
+    # unsigned local packages (discovery rejects them).
+    if _dev_mode_on():
+        seen = {str(i.get("id", "")) for i in items}
+        for local in _local_service_manifests():
+            plugin_id = str(local["id"])
+            version = str(local["version"])
+            if plugin_id in seen:
+                for i in items:
+                    if i.get("id") == plugin_id:
+                        i["installed"] = True
+                        i["installed_version"] = version
+                        # Feed rows predating the manifest fields shadow the on-disk dev manifest; backfill from it.
+                        if i.get("description_i18n") is None:
+                            i.update(local["rich"])
+                        if not i.get("description"):
+                            i["description"] = local["description"]
+                        if not i.get("author"):
+                            i["author"] = local["author"]
+                continue
+            items.append(
+                {
+                    "id": plugin_id,
+                    "name": local["name"],
+                    "description": local["description"],
+                    "author": local["author"],
+                    "version": version,
+                    "source": "local",
+                    "entitled": True,
+                    "installed": True,
+                    "installed_version": version,
+                    "can_download": False,
+                    "required_tier": None,
+                    "badges": [],
+                    **local["rich"],
+                }
+            )
+
+    return {
+        "activated": activated,
+        "items": items,
+        "feeds": {"official": official_feed, "community": community_feed},
+    }
 
 
 @register_command("install_marketplace_plugin")
@@ -447,10 +583,19 @@ async def _install_official(plugin_id: str, params: dict | None = None) -> dict[
             )
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
+            logger.error(
+                "HTTP %d downloading official plugin %s v%s from %s: %s",
+                status,
+                plugin_id,
+                version,
+                exc.request.url,
+                exc.response.text[:500] if exc.response.text else "(no body)",
+            )
             if status == 403:
                 return {"success": False, "error": "server denied download (403)"}
             return {"success": False, "error": f"download failed ({status}): {exc}"}
         except Exception as exc:  # noqa: BLE001 — surface as command error
+            logger.exception("Install failed for plugin %s v%s", plugin_id, version)
             return {"success": False, "error": f"install failed: {exc}"}
 
     return {"success": True, "error": None}
@@ -491,6 +636,8 @@ async def cmd_uninstall_marketplace_plugin(params: dict) -> dict:
         return _uninstall_official(plugin_id)
     if source == "community":
         return _uninstall_community(plugin_id)
+    if source == "local":
+        return _uninstall_local(plugin_id)
     return {"success": False, "error": f"unknown source: {source}"}
 
 
@@ -502,6 +649,17 @@ def _uninstall_official(plugin_id: str) -> dict[str, Any]:
     shutil.rmtree(plugin_root, ignore_errors=True)
     if plugin_root.is_dir():
         return {"success": False, "error": "failed to remove plugin directory"}
+    return {"success": True, "error": None}
+
+
+def _uninstall_local(plugin_id: str) -> dict[str, Any]:
+    """Remove a dev-installed package (copy or .stitch-link pointer dir)."""
+    root = plugins_local_dir() / plugin_id
+    if not root.is_dir():
+        return {"success": False, "error": "not installed"}
+    shutil.rmtree(root, ignore_errors=True)
+    if root.is_dir():
+        return {"success": False, "error": "failed to remove local plugin directory"}
     return {"success": True, "error": None}
 
 

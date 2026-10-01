@@ -31,590 +31,105 @@ extending the registry.
 
 from __future__ import annotations
 
-import ast
 import difflib
-import json
 import os
-import re
 import shutil
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from autoreg.plugin.manifest import MANIFEST_FILENAME
-from stitch_plugin_tools.scaffold import (
-    _MAIN_TEMPLATE,
-    CANONICAL_ENGINE,
-    MARKER_PREFIX,
-    SCAFFOLD_VERSION,
-    generated_by_field,
-    marker_line,
+from stitch_plugin_tools.scaffold import SCAFFOLD_VERSION
+from stitch_plugin_tools.upgrade_detect import (
+    _MARKER_RE as _MARKER_RE,
 )
-from stitch_plugin_tools.vendoring import canonical_rpc_server_text
+from stitch_plugin_tools.upgrade_detect import (
+    _V3_TRY_IMPORT as _V3_TRY_IMPORT,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _V3_TRY_IMPORT_FALLBACK as _V3_TRY_IMPORT_FALLBACK,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    CURRENT_VERSION_KEY as CURRENT_VERSION_KEY,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    DetectedVersion as DetectedVersion,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _extract_v3_try_import_from_template as _extract_v3_try_import_from_template,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _find_fallback_try as _find_fallback_try,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _find_module_docstring as _find_module_docstring,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _is_importerror_handler as _is_importerror_handler,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _is_v2_fallback as _is_v2_fallback,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _line_start_offsets as _line_start_offsets,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _package_module_dir as _package_module_dir,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _try_body_imports_rpc_server as _try_body_imports_rpc_server,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    _version_key as _version_key,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    detect_scaffold_version as detect_scaffold_version,
+)
+from stitch_plugin_tools.upgrade_detect import (
+    format_version as format_version,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _VENDOR_INIT_TEXT as _VENDOR_INIT_TEXT,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    REGION_REGISTRY as REGION_REGISTRY,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    SKIPPED_AUTHOR_REGIONS as SKIPPED_AUTHOR_REGIONS,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    RegionResult as RegionResult,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    RegionSpec as RegionSpec,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _canonicalize_manifest as _canonicalize_manifest,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _generation_migration as _generation_migration,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _marker_regex as _marker_regex,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _read_lf as _read_lf,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _replace_fallback_with_try_import as _replace_fallback_with_try_import,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _swap_vendor as _swap_vendor,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    _update_marker as _update_marker,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 UPGRADE_DIFF_FILENAME = "upgrade.diff"
 
-#: Staging directory for atomic apply.  All updated files are written here
-#: first, then ``os.replace``-d into place one by one.  On any failure
-#: during staging, the originals are untouched and the staging dir is
-#: cleaned up.  If this dir exists at the start of an apply, it signals an
-#: interrupted previous run — it is auto-cleaned with a warning.
+#: Staging dir for atomic apply; if present at start an interrupted run left it and it is auto-cleaned.
 UPGRADE_STAGING_DIR = ".upgrade-staging"
-
-# Marker: ``# _generated_by: stitch_plugin_tools scaffold v<N>[-<tag>]``.
-# A prerelease tag (e.g. ``v2-alpha``) sorts BEFORE the release of the
-# same number: v2-alpha < v2 < v3-alpha < v3.
-_MARKER_RE = re.compile(
-    rf"^{re.escape(MARKER_PREFIX)}(\d+)(?:-([0-9A-Za-z._]+))?[ \t]*$",
-    re.MULTILINE,
-)
-
-# ── AST-based fallback block detection ────────────────────────────────────
-#
-# The v2→v3 generation migration replaces the inline ``RpcPluginServer``
-# fallback block in ``__main__.py`` with a 3-line try-import + vendored
-# ``_vendor/rpc_server.py``.  Detection uses ``ast.parse`` to find the
-# top-level ``Try`` whose body imports ``RpcPluginServer`` from
-# ``autoreg.plugin.rpc`` and whose handler catches ``ImportError``.
-# The block spans from that ``Try`` to the next top-level def/class.
-#
-# v2-era blocks are identified by the except handler containing a
-# ``ClassDef`` (the inline ``RpcPluginServer`` class).  v3 blocks have a
-# single ``ImportFrom`` from ``._vendor.rpc_server`` in the handler.
-
-# Fallback constant for the v3 try-import block.  Used only if extraction
-# from scaffold's ``_MAIN_TEMPLATE`` fails (e.g. template changed shape).
-# A test (``test_v3_try_import_matches_template``) verifies the two match.
-_V3_TRY_IMPORT_FALLBACK = (
-    "try:\n"
-    "    from autoreg.plugin.rpc import RpcPluginServer\n"
-    "except ImportError:\n"
-    "    from ._vendor.rpc_server import RpcPluginServer"
-)
-
-
-def _extract_v3_try_import_from_template() -> str:
-    """Extract the v3 try-import block from scaffold's ``_MAIN_TEMPLATE``.
-
-    Formats the template (to resolve ``{placeholder}``s), parses it with
-    ``ast.parse``, finds the top-level ``Try`` with an ``ImportError``
-    handler whose body imports ``RpcPluginServer`` from
-    ``autoreg.plugin.rpc``, and returns its source text.  Returns the
-    fallback constant on any failure.
-    """
-    try:
-        formatted = _MAIN_TEMPLATE.format(
-            plugin_id="_extract",
-            pkg_name="_extract",
-            scaffold_version=SCAFFOLD_VERSION,
-        )
-        tree = ast.parse(formatted)
-    except Exception:  # noqa: BLE001 — best-effort extraction
-        return _V3_TRY_IMPORT_FALLBACK
-    for node in tree.body:
-        if not isinstance(node, ast.Try):
-            continue
-        if not _try_body_imports_rpc_server(node):
-            continue
-        if not any(_is_importerror_handler(h) for h in node.handlers):
-            continue
-        segment = ast.get_source_segment(formatted, node)
-        if segment is not None:
-            return segment.rstrip("\n")
-    return _V3_TRY_IMPORT_FALLBACK
-
-
-# Content of _vendor/__init__.py (empty marker so _vendor is a subpackage).
-_VENDOR_INIT_TEXT = (
-    '"""Vendored RPC server — regenerated by stitch_plugin_tools."""\n'
-)
-
-
-# ── AST helpers ───────────────────────────────────────────────────────────
-
-
-def _is_importerror_handler(handler: ast.ExceptHandler) -> bool:
-    """True if the handler catches ``ImportError`` (or a tuple containing it)."""
-    exc = handler.type
-    if exc is None:
-        return False
-    if isinstance(exc, ast.Name) and exc.id == "ImportError":
-        return True
-    if isinstance(exc, ast.Tuple):
-        return any(
-            isinstance(e, ast.Name) and e.id == "ImportError" for e in exc.elts
-        )
-    return False
-
-
-def _try_body_imports_rpc_server(node: ast.Try) -> bool:
-    """True if the try body imports ``RpcPluginServer`` from ``autoreg.plugin.rpc``."""
-    for stmt in node.body:
-        if (
-            isinstance(stmt, ast.ImportFrom)
-            and stmt.module == "autoreg.plugin.rpc"
-            and any(a.name == "RpcPluginServer" for a in stmt.names)
-        ):
-            return True
-    return False
-
-
-def _is_v2_fallback(node: ast.Try) -> bool:
-    """True if the Try's except handler contains a ``ClassDef`` (inline class).
-
-    v2-era blocks carry the inline ``RpcPluginServer`` class in the
-    ``except ImportError`` handler.  v3 blocks have a single
-    ``ImportFrom`` from ``._vendor.rpc_server`` instead.
-    """
-    for handler in node.handlers:
-        if not _is_importerror_handler(handler):
-            continue
-        for stmt in handler.body:
-            if isinstance(stmt, ast.ClassDef):
-                return True
-    return False
-
-
-def _line_start_offsets(text: str) -> list[int]:
-    """Return a list where ``offsets[i]`` is the byte offset of line ``i+1``.
-
-    ``offsets[0]`` is always 0 (start of line 1).  The length of the list
-    equals the number of lines (including a trailing empty line if the
-    text ends with ``\\n``).
-    """
-    offsets = [0]
-    for i, ch in enumerate(text):
-        if ch == "\n":
-            offsets.append(i + 1)
-    return offsets
-
-
-def _find_fallback_try(text: str) -> tuple[int, int, ast.Try] | None:
-    """Find the top-level ``Try`` with ``ImportError`` handler + RPC import.
-
-    Returns ``(start_offset, end_offset, try_node)`` where:
-    - ``start_offset`` = byte offset of the ``Try``'s first line
-    - ``end_offset`` = byte offset of the next top-level def/class after
-      the ``Try`` (or ``len(text)`` if none)
-    - ``try_node`` = the ``ast.Try`` node
-
-    Returns ``None`` when no such ``Try`` exists or the text is not
-    valid Python.
-    """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return None
-    offsets = _line_start_offsets(text)
-    for i, node in enumerate(tree.body):
-        if not isinstance(node, ast.Try):
-            continue
-        if not _try_body_imports_rpc_server(node):
-            continue
-        if not any(_is_importerror_handler(h) for h in node.handlers):
-            continue
-        start = offsets[node.lineno - 1] if node.lineno - 1 < len(offsets) else 0
-        # Find the next top-level def/class after this Try.
-        end = len(text)
-        for j in range(i + 1, len(tree.body)):
-            nxt = tree.body[j]
-            if isinstance(
-                nxt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
-                end = offsets[nxt.lineno - 1] if nxt.lineno - 1 < len(offsets) else len(text)
-                break
-        return start, end, node
-    return None
-
-
-def _find_module_docstring(text: str) -> tuple[int, int] | None:
-    """Find the real module docstring via AST.
-
-    Returns ``(start_offset, end_offset)`` where ``start_offset`` is the
-    byte offset of the docstring's first line and ``end_offset`` is the
-    byte offset of the line AFTER the docstring's last line (i.e. the
-    point where the marker should be inserted).
-
-    Returns ``None`` when the file is not valid Python or has no module
-    docstring (``tree.body[0]`` is not an ``Expr`` with a ``Constant`` str).
-    """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return None
-    if not tree.body or not isinstance(tree.body[0], ast.Expr):
-        return None
-    doc_node = tree.body[0]
-    if not isinstance(doc_node.value, ast.Constant) or not isinstance(
-        doc_node.value.value, str
-    ):
-        return None
-    offsets = _line_start_offsets(text)
-    start = offsets[doc_node.lineno - 1] if doc_node.lineno - 1 < len(offsets) else 0
-    after = (
-        offsets[doc_node.end_lineno]
-        if doc_node.end_lineno is not None and doc_node.end_lineno < len(offsets)
-        else len(text)
-    )
-    return start, after
-
-
-# The v3 try-import block that replaces the v2 inline fallback.  Derived
-# from scaffold's ``_MAIN_TEMPLATE`` so the two never drift.  Assigned
-# here (after all AST helpers are defined) because extraction calls them.
-_V3_TRY_IMPORT = _extract_v3_try_import_from_template()
-
-
-def _version_key(major: int, prerelease: str | None) -> tuple[int, int, str]:
-    """Sortable key: release of N beats any prerelease of N."""
-    return (major, 0 if prerelease else 1, prerelease or "")
-
-
-CURRENT_VERSION_KEY = _version_key(SCAFFOLD_VERSION, None)
-
-
-def format_version(major: int, prerelease: str | None) -> str:
-    """Human-readable scaffold version (``v2``, ``v2-alpha``)."""
-    return f"v{major}" + (f"-{prerelease}" if prerelease else "")
-
-
-# ── Detection ────────────────────────────────────────────────────────────
-
-
-@dataclass
-class DetectedVersion:
-    """Scaffold generation a package was generated by (or None = legacy)."""
-
-    major: int
-    prerelease: str | None
-    source: str  # "marker" | "manifest" | "fallback_block"
-
-    @property
-    def key(self) -> tuple[int, int, str]:
-        return _version_key(self.major, self.prerelease)
-
-    @property
-    def label(self) -> str:
-        return format_version(self.major, self.prerelease)
-
-
-def _package_module_dir(package_dir: Path) -> Path | None:
-    """Resolve the Python package dir (the dir holding ``__main__.py``).
-
-    Prefers ``entry.module`` from the manifest; falls back to the single
-    subdirectory containing ``__main__.py``.
-    """
-    manifest_path = package_dir / MANIFEST_FILENAME
-    if manifest_path.is_file():
-        try:
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            raw = None
-        if isinstance(raw, dict):
-            module = (raw.get("entry") or {}).get("module")
-            if isinstance(module, str) and (package_dir / module).is_dir():
-                return package_dir / module
-    candidates = [
-        d for d in package_dir.iterdir()
-        if d.is_dir() and (d / "__main__.py").is_file()
-    ]
-    if len(candidates) == 1:
-        return candidates[0]
-    return None
-
-
-def detect_scaffold_version(package_dir: Path) -> DetectedVersion | None:
-    """Detect the scaffold generation of a package (None = legacy/unmarked).
-
-    Reads the ``_generated_by`` marker from ``__main__.py`` (then
-    ``service.py`` / ``storage.py``); falls back to the manifest
-    ``generated_by`` extra; falls back to the v2-era inline fallback
-    block pattern in ``__main__.py`` (for packages that predate the
-    marker convention but carry the v2 fallback class).
-    """
-    module_dir = _package_module_dir(package_dir)
-    if module_dir is not None:
-        for name in ("__main__.py", "service.py", "storage.py"):
-            path = module_dir / name
-            if not path.is_file():
-                continue
-            text = path.read_bytes().decode("utf-8", errors="replace")
-            match = _MARKER_RE.search(text.replace("\r\n", "\n"))
-            if match:
-                return DetectedVersion(
-                    major=int(match.group(1)),
-                    prerelease=match.group(2),
-                    source="marker",
-                )
-    manifest_path = package_dir / MANIFEST_FILENAME
-    if manifest_path.is_file():
-        try:
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            raw = None
-        if isinstance(raw, dict):
-            generated = raw.get("generated_by")
-            if (
-                isinstance(generated, dict)
-                and generated.get("tool") == "stitch_plugin_tools"
-                and isinstance(generated.get("scaffold"), int)
-            ):
-                return DetectedVersion(
-                    major=generated["scaffold"], prerelease=None, source="manifest"
-                )
-    # v2-era fallback: no marker, no generated_by, but __main__.py has
-    # the inline fallback block pattern.  These are v2 packages that
-    # predate the marker convention (the 7 repo plugins).  AST-based:
-    # find the top-level Try with ImportError handler + RpcPluginServer
-    # import whose except handler contains a ClassDef (the inline class).
-    if module_dir is not None:
-        main_path = module_dir / "__main__.py"
-        if main_path.is_file():
-            text = main_path.read_bytes().decode("utf-8", errors="replace")
-            text_lf = text.replace("\r\n", "\n")
-            found = _find_fallback_try(text_lf)
-            if found is not None:
-                _, _, try_node = found
-                if _is_v2_fallback(try_node):
-                    return DetectedVersion(
-                        major=2, prerelease=None, source="fallback_block"
-                    )
-    return None
-
-
-# ── Region registry ──────────────────────────────────────────────────────
-#
-# Each region rewrites ONE canonical (tool-generated) slice of a file and
-# leaves everything else byte-for-byte untouched.  A region callable
-# receives the LF-normalized file text and returns ``(new_text, note)``;
-# ``new_text is None`` means "region not found / nothing to do".
-
-
-@dataclass
-class RegionResult:
-    """Outcome of one canonical region during an upgrade run."""
-
-    region: str
-    file: str
-    changed: bool
-    note: str = ""
-
-
-def _swap_vendor(text: str) -> tuple[str | None, str]:
-    """Byte-compare ``_vendor/rpc_server.py`` against the canonical text.
-
-    Swaps on drift; returns None when already canonical.  The canonical
-    text is extracted from ``autoreg/plugin/rpc.py`` at upgrade time.
-    """
-    canonical = canonical_rpc_server_text()
-    if text.replace("\r\n", "\n") == canonical:
-        return None, "vendor file already canonical"
-    return canonical, "vendor file drifted — swapped to canonical"
-
-
-def _marker_regex() -> re.Pattern[str]:
-    return re.compile(
-        rf"^{re.escape(MARKER_PREFIX)}\S+[ \t]*$", re.MULTILINE
-    )
-
-
-def _update_marker(text: str) -> tuple[str | None, str]:
-    """Rewrite or insert the ``_generated_by`` marker line to the current version.
-
-    When a marker exists, it is updated in place.  When no marker exists,
-    one is inserted after the module docstring — found via ``ast.parse``
-    (``tree.body[0]`` ``Expr`` ``Constant`` str) rather than the
-    first-triple-quote heuristic, so a non-docstring leading string literal
-    (e.g. inside a comment or assignment) does not mislead the insertion
-    point.
-    """
-    match = _marker_regex().search(text)
-    current = marker_line()
-    if match is not None:
-        line = text[match.start() : match.end()]
-        if line.rstrip("\n") == current:
-            return None, "marker already current"
-        return (
-            text[: match.start()] + current + text[match.end() :],
-            f"marker updated to {current!r}",
-        )
-    # No marker found — insert one after the module docstring (AST-based).
-    doc_span = _find_module_docstring(text)
-    if doc_span is None:
-        return None, "no marker and no module docstring to insert after"
-    _, after_close = doc_span
-    # Skip newlines after the closing """ to find the next non-blank line.
-    pos = after_close
-    while pos < len(text) and text[pos] == "\n":
-        pos += 1
-    # Insert: marker + blank line before the next non-blank line.
-    insertion = current + "\n\n"
-    return (
-        text[:pos] + insertion + text[pos:],
-        f"marker inserted (was missing) at {current!r}",
-    )
-
-
-def _canonicalize_manifest(text: str) -> tuple[str | None, str]:
-    """Rewrite only the generated manifest fields (engine, generated_by)."""
-    try:
-        raw = json.loads(text)
-    except ValueError:
-        return None, "manifest is not valid JSON"
-    if not isinstance(raw, dict):
-        return None, "manifest root is not an object"
-    changed = False
-    engine = raw.get("engine")
-    if not isinstance(engine, dict) or engine != CANONICAL_ENGINE:
-        raw["engine"] = dict(CANONICAL_ENGINE)
-        changed = True
-    generated = raw.get("generated_by")
-    if generated != generated_by_field():
-        raw["generated_by"] = generated_by_field()
-        changed = True
-    if not changed:
-        return None, "engine/generated_by already canonical"
-    return (
-        json.dumps(raw, indent=2, ensure_ascii=False) + "\n",
-        "manifest engine + generated_by updated",
-    )
-
-
-# Region registry: (region name, relative file, rewrite callable).
-# File paths may use ``{module}`` — resolved to the package's module dir.
-RegionSpec = tuple[str, str, Callable[[str], tuple[str | None, str]]]
-
-REGION_REGISTRY: list[RegionSpec] = [
-    ("vendor", "{module}/_vendor/rpc_server.py", _swap_vendor),
-    ("marker", "{module}/__main__.py", _update_marker),
-    ("marker", "{module}/service.py", _update_marker),
-    ("marker", "{module}/storage.py", _update_marker),
-    ("manifest", MANIFEST_FILENAME, _canonicalize_manifest),
-]
-
-# Author-owned regions the upgrade NEVER touches (summary output).
-SKIPPED_AUTHOR_REGIONS = (
-    "__main__.py handlers (everything outside the try-import + marker)",
-    "service.py domain logic",
-    "storage.py schema and helpers",
-    "plugin.json contributions/ui/i18n/commands/signature",
-    "README.md and any extra files",
-)
-
-
-# ── Generation migration (v2→v3) ─────────────────────────────────────────
-#
-# Runs BEFORE region normalization when detected < current.  Replaces the
-# inline fallback block with the 3-line try-import and creates _vendor/.
-
-
-def _replace_fallback_with_try_import(text: str) -> tuple[str | None, str]:
-    """Replace the inline fallback block with the v3 3-line try-import.
-
-    Uses ``ast.parse`` to find the top-level ``Try`` whose body imports
-    ``RpcPluginServer`` from ``autoreg.plugin.rpc`` and whose handler
-    catches ``ImportError``.  The block spans from that ``Try`` to the
-    next top-level def/class after it.  The v3 try-import replaces the
-    ``Try`` block; the trailing content (blank lines, section comments)
-    between the ``Try`` and the next def/class is preserved.
-
-    Returns ``(new_text, note)`` or ``(None, note)`` when no block found
-    or the block is already at v3 (no inline class in the handler).
-    """
-    found = _find_fallback_try(text)
-    if found is None:
-        return None, "fallback block start anchor not found"
-    start, end, try_node = found
-    if not _is_v2_fallback(try_node):
-        return None, "fallback block already at v3 (try-import only)"
-    # Compute the offset of the line after the Try's last line.
-    offsets = _line_start_offsets(text)
-    try_end = (
-        offsets[try_node.end_lineno]
-        if try_node.end_lineno is not None and try_node.end_lineno < len(offsets)
-        else len(text)
-    )
-    # Trailing content between the Try block and the next def/class
-    # (blank lines, section comments, more blank lines) — preserved.
-    trailing = text[try_end:end]
-    # The v3 try-import string doesn't end with \n; the Try block's last
-    # line did.  Add \n to account for the Try block's line terminator.
-    new_block = _V3_TRY_IMPORT + "\n" + trailing
-    return text[:start] + new_block + text[end:], (
-        "inline RpcPluginServer fallback replaced with v3 try-import"
-    )
-
-
-def _generation_migration(
-    package_dir: Path,
-    module_dir: Path,
-    module_rel: str,
-    originals: dict[str, str],
-    updated: dict[str, str],
-    results: list[RegionResult],
-) -> None:
-    """Run the v2→v3 generation migration (inline block → try-import + vendor).
-
-    Modifies ``updated`` and ``results`` in place.  Reads ``__main__.py``
-    into ``originals`` if not already present, applies the fallback
-    replacement, and creates ``_vendor/rpc_server.py`` + ``__init__.py``.
-    """
-    main_rel = f"{module_rel}/__main__.py"
-    main_path = package_dir / main_rel
-    if main_rel not in originals:
-        originals[main_rel] = _read_lf(main_path)
-        updated[main_rel] = originals[main_rel]
-
-    new_main, note = _replace_fallback_with_try_import(updated[main_rel])
-    if new_main is not None:
-        updated[main_rel] = new_main
-        results.append(RegionResult(
-            region="generation_migration", file=main_rel, changed=True, note=note,
-        ))
-    else:
-        results.append(RegionResult(
-            region="generation_migration", file=main_rel, changed=False, note=note,
-        ))
-
-    # Create _vendor/rpc_server.py (new file).
-    vendor_rel = f"{module_rel}/_vendor/rpc_server.py"
-    vendor_path = package_dir / vendor_rel
-    canonical = canonical_rpc_server_text()
-    if vendor_path.is_file():
-        existing = _read_lf(vendor_path)
-        if existing == canonical:
-            results.append(RegionResult(
-                region="generation_migration", file=vendor_rel, changed=False,
-                note="vendor file already canonical",
-            ))
-        else:
-            originals[vendor_rel] = existing
-            updated[vendor_rel] = canonical
-            results.append(RegionResult(
-                region="generation_migration", file=vendor_rel, changed=True,
-                note="vendor file drifted — refreshed to canonical",
-            ))
-    else:
-        originals[vendor_rel] = ""
-        updated[vendor_rel] = canonical
-        results.append(RegionResult(
-            region="generation_migration", file=vendor_rel, changed=True,
-            note="vendor file created from canonical rpc.py",
-        ))
-
-    # Create _vendor/__init__.py (new file, empty marker).
-    init_rel = f"{module_rel}/_vendor/__init__.py"
-    init_path = package_dir / init_rel
-    if not init_path.is_file():
-        originals[init_rel] = ""
-        updated[init_rel] = _VENDOR_INIT_TEXT
-        results.append(RegionResult(
-            region="generation_migration", file=init_rel, changed=True,
-            note="vendor __init__.py created",
-        ))
 
 
 # ── Merge engine ─────────────────────────────────────────────────────────
@@ -635,10 +150,6 @@ class UpgradeReport:
     @property
     def changed_any(self) -> bool:
         return any(r.changed for r in self.results)
-
-
-def _read_lf(path: Path) -> str:
-    return path.read_bytes().decode("utf-8").replace("\r\n", "\n")
 
 
 def _write_preserve_eol(path: Path, lf_text: str, original: str) -> None:
@@ -674,9 +185,7 @@ def _apply_upgraded_files(
     warnings: list[str] = []
     staging_dir = package_dir / UPGRADE_STAGING_DIR
 
-    # Resume guard: an existing staging dir means a previous apply was
-    # interrupted.  Auto-clean it with a warning — the user already passed
-    # --apply, so proceeding is the right call (re-stage from scratch).
+    # An existing staging dir means an interrupted apply; auto-clean and re-stage (user passed --apply).
     if staging_dir.is_dir():
         shutil.rmtree(staging_dir, ignore_errors=True)
         warnings.append(
@@ -712,8 +221,7 @@ def _apply_upgraded_files(
             target.parent.mkdir(parents=True, exist_ok=True)
             os.replace(staged_path, target)
     except OSError as exc:
-        # A move failed.  Previous moves are already done (atomic); the
-        # failing file's original is untouched.  Clean up remaining staging.
+        # A move failed; earlier moves are already atomic and the failing file's original is untouched.
         shutil.rmtree(staging_dir, ignore_errors=True)
         rel = str(target.relative_to(package_dir))
         return False, f"move failed for {rel}: {exc}", warnings
@@ -786,8 +294,7 @@ def upgrade_package(package_dir: Path, *, apply: bool = False) -> UpgradeReport:
         path = package_dir / rel
         # New files created by generation migration are already in updated.
         if not path.is_file() and rel in updated:
-            # Vendor file was just created by generation migration —
-            # check it against canonical (should be a no-op).
+            # Vendor file just created by generation migration — check against canonical (no-op).
             new_text, note = rewrite(updated[rel])
             changed = new_text is not None
             if changed:

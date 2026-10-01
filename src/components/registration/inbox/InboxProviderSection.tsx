@@ -1,5 +1,5 @@
 import { t } from '@/lib/i18n';
-import { Tooltip } from '@/components/Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Input, Select, Button } from '@/components/ui';
 import { Mail, Info } from 'lucide-react';
 import {

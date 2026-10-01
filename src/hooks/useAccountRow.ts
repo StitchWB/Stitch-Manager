@@ -4,6 +4,7 @@ import { ru as dateFnsRu } from 'date-fns/locale';
 import type { Account } from '@/types/generated';
 import { formatProfileAlias } from '@/lib/profiles/displayName';
 import { getLocale, t } from '@/lib/i18n';
+import { formatDate, formatDateTime } from '@/lib/utils';
 import {
   providerLabelToKey,
   type AccountRelationEdge,
@@ -88,7 +89,7 @@ function formatLastLogin(account: Account): string {
   if (!rawDate) return '—';
   const parsedDate = new Date(rawDate);
   if (Number.isNaN(parsedDate.getTime())) return '—';
-  return parsedDate.toLocaleString('ru-RU', {
+  return formatDateTime(parsedDate, {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
@@ -113,7 +114,7 @@ function formatCreatedDateShort(account: Account): string {
   if (!rawDate) return '';
   const parsedDate = new Date(rawDate);
   if (Number.isNaN(parsedDate.getTime())) return '';
-  return parsedDate.toLocaleDateString(getLocale() === 'ru' ? 'ru-RU' : 'en-US', {
+  return formatDate(parsedDate, {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',

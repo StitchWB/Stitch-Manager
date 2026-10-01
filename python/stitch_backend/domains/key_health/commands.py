@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.database import run_in_session
 from stitch_backend.domains.key_health.schemas import (
     TestProviderKeysRequest,
     UpdateKeyHealthSettingsRequest,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +66,8 @@ async def _save_settings(settings: dict[str, Any]) -> None:
 # ── Commands ────────────────────────────────────────────────────────────────────
 
 
-@register_command("get_key_health", readonly=True)
-async def cmd_get_key_health(params: dict) -> list[dict[str, Any]]:
+@command("get_key_health", readonly=True)
+async def cmd_get_key_health(db: AsyncSession, params: dict) -> list[dict[str, Any]]:
     """Return all key health records, optionally filtered by provider.
 
     Params:
@@ -73,15 +77,12 @@ async def cmd_get_key_health(params: dict) -> list[dict[str, Any]]:
 
     provider_id = params.get("providerId") or params.get("provider_id")
 
-    async def _op(session):
-        svc = KeyHealthService(session)
-        if provider_id:
-            records = await svc.get_provider_health(provider_id)
-        else:
-            records = await svc.get_all_health()
-        return [KeyHealthService.to_dict(r) for r in records]
-
-    return await run_in_read_session(_op)
+    svc = KeyHealthService(db)
+    if provider_id:
+        records = await svc.get_provider_health(provider_id)
+    else:
+        records = await svc.get_all_health()
+    return [KeyHealthService.to_dict(r) for r in records]
 
 
 @register_command("test_provider_keys")
@@ -227,8 +228,8 @@ async def _test_single_provider(provider_id: str) -> None:
         )
 
 
-@register_command("get_key_models", readonly=True)
-async def cmd_get_key_models(params: dict) -> dict[str, Any]:
+@command("get_key_models", readonly=True)
+async def cmd_get_key_models(db: AsyncSession, params: dict) -> dict[str, Any]:
     """Return discovered models for a specific key hash.
 
     Params:
@@ -243,20 +244,17 @@ async def cmd_get_key_models(params: dict) -> dict[str, Any]:
     if not key_hash:
         return {"error": "keyHash is required"}
 
-    async def _op(session):
-        svc = KeyHealthService(session)
-        record = await svc.get_health(key_hash)
-        if record is None:
-            return {"error": "Key not found"}
-        return {
-            "models": record.models_available or [],
-            "providerId": record.provider_id,
-            "status": record.status,
-            "lastTestedAt": record.last_tested_at.isoformat()
-            if record.last_tested_at else None,
-        }
-
-    return await run_in_read_session(_op)
+    svc = KeyHealthService(db)
+    record = await svc.get_health(key_hash)
+    if record is None:
+        return {"error": "Key not found"}
+    return {
+        "models": record.models_available or [],
+        "providerId": record.provider_id,
+        "status": record.status,
+        "lastTestedAt": record.last_tested_at.isoformat()
+        if record.last_tested_at else None,
+    }
 
 
 @register_command("update_key_health_settings")

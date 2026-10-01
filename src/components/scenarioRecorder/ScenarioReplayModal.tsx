@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, LayoutGrid, ScrollText, Stethoscope } from 'lucide-react';
 import { useUIState } from '@/hooks/useUIState';
-import { Button, Checkbox, Modal, SegmentedControl } from '@/components/ui';
+import { Button, Modal, SegmentedControl } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
 import { getProfileSettings } from '@/lib/backend/modules/profiles';
 import { useScenarioReplay } from '@/lib/scenarioRecorder/useScenarioReplay';
 import { BrowserRuntimeInstallModal } from './BrowserRuntimeInstallModal';
@@ -27,6 +28,8 @@ import { ReplayFooterActions } from './replay/ReplayFooterActions';
 import { ReplayRunHistoryPanel } from './replay/ReplayRunHistoryPanel';
 import { ReplayPresetsPanel } from './replay/ReplayPresetsPanel';
 import { ReplayVersionPanel } from './replay/ReplayVersionPanel';
+import { StepDetailPane } from './replay/StepDetailPane';
+import { PlaybackControls } from './replay/PlaybackControls';
 import {
   readReplayListPrefs,
   readReplayListQuery,
@@ -724,7 +727,7 @@ function ScenarioReplayForm({
           }
           quickRunLabel={
           quickRunTarget?.startedAt ?
-          new Date(quickRunTarget.startedAt * 1000).toLocaleString() :
+          formatDateTime(quickRunTarget.startedAt * 1000) :
           null
           }
           onResume={() => void replay.sendControl('resume')}
@@ -898,35 +901,14 @@ function ScenarioReplayForm({
                   onRefreshRuntime={refreshRuntime}
                   runnerMode={runnerMode} />
 
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Checkbox
-                        label={t('recorder.replay.retryFromFailedStep')}
-                        checked={retryFromFailedStep}
-                        onChange={(e) => setRetryFromFailedStep(e.target.checked)}
-                        className="text-xs text-slate-300"
-                      />
-                      <Button
-                      size="xs"
-                      variant="ghost"
-                      className="text-xs text-indigo-300 hover:text-indigo-200 disabled:text-slate-500"
-                      disabled={!lastFailedStep?.index || lastFailedStep.index <= 1}
-                      onClick={() => {
-                        if (!lastFailedStep?.index || lastFailedStep.index <= 1) return;
-                        setExplicitRetryStep(lastFailedStep.index);
-                      }}>
+                  <PlaybackControls
+                  retryFromFailedStep={retryFromFailedStep}
+                  onRetryFromFailedStepChange={setRetryFromFailedStep}
+                  lastFailedStep={lastFailedStep}
+                  explicitRetryStep={explicitRetryStep}
+                  onSelectExplicitRetryStep={setExplicitRetryStep} />
 
-                        {lastFailedStep?.index && lastFailedStep.index > 1 ?
-                      t('recorder.replay.retryFromStepAction', { step: lastFailedStep.index }) :
-                      t('recorder.replay.retryFromStepUnavailable')}
-                      </Button>
-                    </div>
-                    {explicitRetryStep ?
-                  <div className="mt-2 text-[11px] text-indigo-300">
-                        {t('recorder.replay.retryFromStepSelected', { step: explicitRetryStep })}
-                      </div> :
-                  null}
-                  </div>
+
                   <ReplayVersionPanel
                   loading={versionsLoading}
                   error={versionsError}
@@ -1014,49 +996,13 @@ function ScenarioReplayForm({
               }
 
               {activeTab === 'details' &&
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-3">
-                  <div>
-                    <div className="text-xs text-slate-400">
-                      {t('recorder.replay.selectedScenario')}
-                    </div>
-                    <div className="text-sm text-slate-200">
-                      {deriveScenarioNameFromPath(scenarioPath)}
-                    </div>
-                    {scenarioPath ?
-                  <div className="text-[11px] text-slate-500 font-mono break-all">
-                        {scenarioPath}
-                      </div> :
+              <StepDetailPane
+                scenarioPath={scenarioPath}
+                scenarioName={deriveScenarioNameFromPath(scenarioPath)}
+                preflight={preflight}
+                lastEvent={replay.state.lastEvent}
+                progressLabel={progressLabel} />
 
-                  <div className="text-[11px] text-slate-500">
-                        {t('recorder.replay.noScenarioLoaded')}
-                      </div>
-                  }
-                  </div>
-                  <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-slate-400">{t('recorder.replay.stepsLabel')}</div>
-                        <div className="text-slate-200">{preflight?.totalSteps ?? '—'}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400">
-                          {t('recorder.replay.healthScoreLabel')}
-                        </div>
-                        <div className="text-slate-200">{preflight?.healthScore ?? '—'}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400">{t('recorder.replay.lastEvent')}</div>
-                        <div className="text-slate-200 truncate">
-                          {replay.state.lastEvent ?? '—'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400">{t('recorder.replay.progressLabel')}</div>
-                        <div className="text-slate-200">{progressLabel}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               }
 
               {activeTab === 'diagnostics' &&

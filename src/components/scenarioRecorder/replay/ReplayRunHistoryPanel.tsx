@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { SegmentedControl, Button } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
 import type { ScenarioRunItem } from '@/lib/backend/modules/pythonJobs';
 import {
   isScenarioRunFailure,
@@ -18,8 +19,7 @@ type ReplayRunHistoryPanelProps = {
 
 function formatRunTime(ts?: number | null): string {
   if (!ts) return '—';
-  const d = new Date(ts * 1000);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  return formatDateTime(ts * 1000);
 }
 
 function formatDuration(durationMs?: number | null): string {

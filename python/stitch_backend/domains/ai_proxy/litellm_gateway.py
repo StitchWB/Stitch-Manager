@@ -9,6 +9,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from stitch_backend.core.provider_defaults import PROVIDER_DEFAULTS
 from stitch_backend.domains.ai_gateway.routing_engine import PoolScope
 
 if TYPE_CHECKING:
@@ -72,14 +73,6 @@ class LiteLLMDeployment(TypedDict):
 
 
 _UNSUPPORTED_ADAPTERS = frozenset({"kiro", "windsurf"})
-_LITELLM_PROVIDER_MODELS = {
-    "openai": "openai/*",
-    "anthropic": "anthropic/*",
-    "gemini": "gemini/*",
-    "fireworks": "fireworks_ai/*",
-    "antigravity": "openai/*",
-    "dashscope": "openai/*",
-}
 
 
 def _deployment_configs(
@@ -94,7 +87,8 @@ def _deployment_configs(
     for provider, keys in provider_keys.items():
         if provider.startswith("custom_"):
             continue  # Skip custom provider keys in built-in loop
-        model = _LITELLM_PROVIDER_MODELS.get(provider)
+        defaults = PROVIDER_DEFAULTS.get(provider)
+        model = defaults.litellm_model_prefix if defaults else None
         if model is None:
             continue
         for stored in keys:

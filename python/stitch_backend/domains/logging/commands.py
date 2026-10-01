@@ -7,11 +7,15 @@ defined in legacy frontend logging module.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
-from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.database import run_in_read_session
 from stitch_backend.domains.auth.permissions import ensure_permission
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 # ── Query operations ─────────────────────────────────────────────────────────
 
@@ -31,23 +35,21 @@ async def cmd_get_logs(params: dict) -> dict:
     )
 
 
-@register_command("get_log_stats", readonly=True)
-async def cmd_get_log_stats(params: dict) -> dict:
+@command("get_log_stats", readonly=True)
+async def cmd_get_log_stats(db: AsyncSession, params: dict) -> dict:
     """Get log statistics.
 
     Returns: ``LogStats`` {total, byLevel, bySource, byChannel}
     """
     from stitch_backend.domains.logging.service import LoggingService
 
-    return await run_in_read_session(
-        lambda s: LoggingService(s).get_stats()
-    )
+    return await LoggingService(db).get_stats()
 
 
 # ── Add operations ───────────────────────────────────────────────────────────
 
-@register_command("add_log")
-async def cmd_add_log(params: dict) -> dict:
+@command("add_log")
+async def cmd_add_log(db: AsyncSession, params: dict) -> dict:
     """Add a log entry from frontend.
 
     Params: level, source, message, details?, channel?, correlationId?,
@@ -56,17 +58,15 @@ async def cmd_add_log(params: dict) -> dict:
     """
     from stitch_backend.domains.logging.service import LoggingService
 
-    return await run_in_session(
-        lambda s: LoggingService(s).add_log(
-            level=params.get("level", "info"),
-            source=params.get("source", "frontend"),
-            message=params.get("message", ""),
-            details=params.get("details"),
-            channel=params.get("channel"),
-            correlation_id=params.get("correlationId"),
-            session_id=params.get("sessionId"),
-            context=params.get("context"),
-        )
+    return await LoggingService(db).add_log(
+        level=params.get("level", "info"),
+        source=params.get("source", "frontend"),
+        message=params.get("message", ""),
+        details=params.get("details"),
+        channel=params.get("channel"),
+        correlation_id=params.get("correlationId"),
+        session_id=params.get("sessionId"),
+        context=params.get("context"),
     )
 
 
@@ -78,8 +78,8 @@ async def cmd_add_app_log(params: dict) -> dict:
 
 # ── Clear operations ─────────────────────────────────────────────────────────
 
-@register_command("clear_logs")
-async def cmd_clear_logs(params: dict) -> int:
+@command("clear_logs")
+async def cmd_clear_logs(db: AsyncSession, params: dict) -> int:
     """Clear logs, optionally before a specific date.
 
     Params: ``beforeDate`` (ISO 8601 string, optional)
@@ -88,9 +88,7 @@ async def cmd_clear_logs(params: dict) -> int:
     from stitch_backend.domains.logging.service import LoggingService
 
     before_date = params.get("beforeDate")
-    return await run_in_session(
-        lambda s: LoggingService(s).clear_logs(before_date)
-    )
+    return await LoggingService(db).clear_logs(before_date)
 
 
 @register_command("clear_app_logs")
@@ -101,8 +99,8 @@ async def cmd_clear_app_logs(params: dict) -> int:
 
 # ── Export operations ────────────────────────────────────────────────────────
 
-@register_command("export_logs", readonly=True)
-async def cmd_export_logs(params: dict) -> str:
+@command("export_logs", readonly=True)
+async def cmd_export_logs(db: AsyncSession, params: dict) -> str:
     """Export logs to string (JSON, CSV, or TXT format).
 
     Params: ``filter`` (LogFilter dict), ``format`` ('json'|'csv'|'txt')
@@ -112,9 +110,7 @@ async def cmd_export_logs(params: dict) -> str:
 
     filter_ = params.get("filter")
     fmt = params.get("format", "json")
-    return await run_in_read_session(
-        lambda s: LoggingService(s).export_logs(filter_, fmt)
-    )
+    return await LoggingService(db).export_logs(filter_, fmt)
 
 
 @register_command("export_app_logs", readonly=True)

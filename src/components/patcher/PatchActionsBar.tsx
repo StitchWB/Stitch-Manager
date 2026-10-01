@@ -1,7 +1,6 @@
 import { Download, Trash2, Globe } from 'lucide-react';
 import { t } from '@/lib/i18n';
-import { useState } from 'react';
-import { safeInvoke } from '@/lib/backend';
+import { usePatcherStore } from '@/stores/patcher';
 import { cn } from '@/lib/utils';
 
 import PatchVersionSelector from './PatchVersionSelector';
@@ -52,23 +51,20 @@ export default function PatchActionsBar({
   onToggleOption,
   onToggleAllOptions,
 }: PatchActionsBarProps) {
-  const [proxyRunning, setProxyRunning] = useState(false);
-  const [proxyLoading, setProxyLoading] = useState(false);
+  const proxyRunning = usePatcherStore(s => s.kiroProxyRunning);
+  const proxyLoading = usePatcherStore(s => s.kiroProxyLoading);
+  const startKiroProxy = usePatcherStore(s => s.startKiroProxy);
+  const stopKiroProxy = usePatcherStore(s => s.stopKiroProxy);
 
   const handleToggleProxy = async () => {
-    setProxyLoading(true);
     try {
       if (proxyRunning) {
-        await safeInvoke('stop_kiro_proxy', {});
-        setProxyRunning(false);
+        await stopKiroProxy();
       } else {
-        await safeInvoke('start_kiro_proxy', {});
-        setProxyRunning(true);
+        await startKiroProxy();
       }
     } catch (err) {
       console.error('Failed to toggle proxy:', err);
-    } finally {
-      setProxyLoading(false);
     }
   };
 

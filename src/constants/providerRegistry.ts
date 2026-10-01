@@ -1,3 +1,5 @@
+import { PROVIDER_META, isValidProviderId, type ProviderMeta } from './providerIds';
+
 export type ProviderBadgeColors = {
   bg: string;
   text: string;
@@ -45,224 +47,199 @@ export type ProviderRegistryEntry = {
   };
 };
 
-export const PROVIDER_REGISTRY: Record<ProviderRegistryId, ProviderRegistryEntry> = {
-  // Accounts providers
+type ProviderUIEntry = {
+  badge: ProviderBadgeColors;
+  matchProviders?: readonly string[];
+  // label/aiProxy only for ids missing from the Python registry (freemodel/custom/web-*).
+  label?: string;
+  aiProxy?: boolean;
+};
+
+const PROVIDER_UI: Record<ProviderRegistryId, ProviderUIEntry> = {
   kiro: {
-    id: 'kiro',
-    label: 'Kiro',
     badge: {
       bg: 'bg-indigo-500/10',
       text: 'text-indigo-400',
       border: 'border-indigo-500/20',
     },
-    accounts: { matchProviders: ['kiro', 'kiro_v2'] },
-    aiProxy: { enabled: true },
+    matchProviders: ['kiro', 'kiro_v2'],
   },
   windsurf: {
-    id: 'windsurf',
-    label: 'Windsurf',
     badge: {
       bg: 'bg-cyan-500/10',
       text: 'text-cyan-400',
       border: 'border-cyan-500/20',
     },
-    accounts: { matchProviders: ['windsurf'] },
+    matchProviders: ['windsurf'],
   },
   trae: {
-    id: 'trae',
-    label: 'Trae',
     badge: {
       bg: 'bg-orange-500/10',
       text: 'text-orange-400',
       border: 'border-orange-500/20',
     },
-    accounts: { matchProviders: ['trae'] },
+    matchProviders: ['trae'],
   },
   aws: {
-    id: 'aws',
-    label: 'AWS Builder ID',
     badge: {
       bg: 'bg-amber-500/10',
       text: 'text-amber-400',
       border: 'border-amber-500/20',
     },
     // Historically stored as aws_builder_id in Account.provider
-    accounts: { matchProviders: ['aws_builder_id', 'aws'] },
+    matchProviders: ['aws_builder_id', 'aws'],
   },
   github: {
-    id: 'github',
-    label: 'GitHub',
     badge: {
       bg: 'bg-slate-500/10',
       text: 'text-slate-400',
       border: 'border-slate-500/20',
     },
-    accounts: { matchProviders: ['github'] },
+    matchProviders: ['github'],
   },
   openai: {
-    id: 'openai',
-    label: 'OpenAI',
     badge: {
       bg: 'bg-emerald-500/10',
       text: 'text-emerald-400',
       border: 'border-emerald-500/20',
     },
-    accounts: { matchProviders: ['openai'] },
-    aiProxy: { enabled: true },
+    matchProviders: ['openai'],
   },
-
-  // AI Proxy-only providers
   claude: {
-    id: 'claude',
-    label: 'Claude',
     badge: {
       bg: 'bg-purple-500/10',
       text: 'text-purple-400',
       border: 'border-purple-500/20',
     },
-    aiProxy: { enabled: true },
   },
   anthropic: {
-    id: 'anthropic',
-    label: 'Anthropic',
     badge: {
       bg: 'bg-violet-500/10',
       text: 'text-violet-400',
       border: 'border-violet-500/20',
     },
-    aiProxy: { enabled: true },
   },
   gemini: {
-    id: 'gemini',
-    label: 'Gemini',
     badge: {
       bg: 'bg-blue-500/10',
       text: 'text-blue-400',
       border: 'border-blue-500/20',
     },
-    aiProxy: { enabled: true },
   },
   antigravity: {
-    id: 'antigravity',
-    label: 'Antigravity',
     badge: {
       bg: 'bg-pink-500/10',
       text: 'text-pink-400',
       border: 'border-pink-500/20',
     },
-    aiProxy: { enabled: true },
   },
   fireworks: {
-    id: 'fireworks',
-    label: 'Fireworks',
     badge: {
       bg: 'bg-rose-500/10',
       text: 'text-rose-400',
       border: 'border-rose-500/20',
     },
-    accounts: { matchProviders: ['fireworks'] },
-    aiProxy: { enabled: true },
+    matchProviders: ['fireworks'],
   },
   zai: {
-    id: 'zai',
-    label: 'Z.AI / GLM',
     badge: {
       bg: 'bg-cyan-500/10',
       text: 'text-cyan-400',
       border: 'border-cyan-500/20',
     },
-    accounts: { matchProviders: ['zai'] },
-    aiProxy: { enabled: true },
+    matchProviders: ['zai'],
   },
   freemodel: {
-    id: 'freemodel',
-    label: 'FreeModel',
     badge: {
       bg: 'bg-emerald-500/10',
       text: 'text-emerald-400',
       border: 'border-emerald-500/20',
     },
-    aiProxy: { enabled: true },
+    label: 'FreeModel',
+    aiProxy: true,
   },
   custom: {
-    id: 'custom',
-    label: 'Custom',
     badge: {
       bg: 'bg-slate-500/10',
       text: 'text-slate-400',
       border: 'border-slate-500/20',
     },
-    aiProxy: { enabled: true },
+    label: 'Custom',
+    aiProxy: true,
   },
   qoder: {
-    id: 'qoder',
-    label: 'Qoder',
     badge: {
       bg: 'bg-teal-500/10',
       text: 'text-teal-400',
       border: 'border-teal-500/20',
     },
-    accounts: { matchProviders: ['qoder'] },
+    matchProviders: ['qoder'],
   },
   v0_app: {
-    id: 'v0_app',
-    label: 'v0',
     badge: {
       bg: 'bg-slate-500/10',
       text: 'text-slate-300',
       border: 'border-slate-500/20',
     },
-    accounts: { matchProviders: ['v0_app'] },
+    matchProviders: ['v0_app'],
   },
   'web-gemini': {
-    id: 'web-gemini',
-    label: 'Gemini Web',
     badge: {
       bg: 'bg-sky-500/10',
       text: 'text-sky-400',
       border: 'border-sky-500/20',
     },
-    accounts: { matchProviders: ['web-gemini'] },
-    aiProxy: { enabled: true },
+    matchProviders: ['web-gemini'],
+    label: 'Gemini Web',
+    aiProxy: true,
   },
   'web-deepseek': {
-    id: 'web-deepseek',
-    label: 'DeepSeek Web',
     badge: {
       bg: 'bg-blue-500/10',
       text: 'text-blue-400',
       border: 'border-blue-500/20',
     },
-    accounts: { matchProviders: ['web-deepseek'] },
-    aiProxy: { enabled: true },
+    matchProviders: ['web-deepseek'],
+    label: 'DeepSeek Web',
+    aiProxy: true,
   },
   'web-qwen': {
-    id: 'web-qwen',
-    label: 'Qwen Web',
     badge: {
       bg: 'bg-indigo-500/10',
       text: 'text-indigo-400',
       border: 'border-indigo-500/20',
     },
-    accounts: { matchProviders: ['web-qwen'] },
-    aiProxy: { enabled: true },
+    matchProviders: ['web-qwen'],
+    label: 'Qwen Web',
+    aiProxy: true,
   },
   'web-notebooklm': {
-    id: 'web-notebooklm',
-    label: 'NotebookLM',
     badge: {
       bg: 'bg-teal-500/10',
       text: 'text-teal-400',
       border: 'border-teal-500/20',
     },
-    accounts: { matchProviders: ['web-notebooklm'] },
-    // Own surface (notebooks/artifacts), not the chat proxy hub.
+    matchProviders: ['web-notebooklm'],
+    label: 'NotebookLM',
   },
 };
 
-// =============================
-// Accounts filters
-// =============================
+function buildEntry(id: ProviderRegistryId): ProviderRegistryEntry {
+  const ui = PROVIDER_UI[id];
+  const meta: ProviderMeta | undefined = isValidProviderId(id) ? PROVIDER_META[id] : undefined;
+  const aiProxy = meta ? meta.isAiProxy : (ui.aiProxy ?? false);
+  return {
+    id,
+    label: meta?.displayName ?? ui.label ?? id,
+    badge: ui.badge,
+    ...(ui.matchProviders ? { accounts: { matchProviders: ui.matchProviders } } : {}),
+    ...(aiProxy ? { aiProxy: { enabled: true } } : {}),
+  };
+}
+
+export const PROVIDER_REGISTRY = Object.fromEntries(
+  (Object.keys(PROVIDER_UI) as ProviderRegistryId[]).map(id => [id, buildEntry(id)])
+) as Record<ProviderRegistryId, ProviderRegistryEntry>;
 
 export const ACCOUNT_PROVIDER_FILTER_IDS = [
   'kiro',
@@ -297,10 +274,6 @@ export function getAccountProviderMatchProviders(
 ): readonly string[] {
   return PROVIDER_REGISTRY[provider]?.accounts?.matchProviders ?? [provider];
 }
-
-// =============================
-// AI Proxy provider meta
-// =============================
 
 export const AI_PROXY_PROVIDER_LIST = [
   'openai',

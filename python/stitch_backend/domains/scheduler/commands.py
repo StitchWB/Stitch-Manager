@@ -6,12 +6,18 @@ to the frontend via the command registry.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 import logging
 from typing import Any, cast
 
+from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.event_bus import event_bus
-from stitch_backend.database import run_in_read_session, run_in_session
+from stitch_backend.database import run_in_session
 from stitch_backend.domains.scheduler.service import (
     Schedule,
     TaskType,
@@ -69,13 +75,12 @@ def _parse_task_type(d: dict[str, Any] | Any) -> TaskType:
 # ── Task CRUD ─────────────────────────────────────────────────────────────────
 
 
-@register_command("get_scheduled_tasks", readonly=True)
-async def cmd_get_tasks(params: dict) -> list[dict]:
+@command("get_scheduled_tasks", readonly=True)
+async def cmd_get_tasks(db: AsyncSession, params: dict) -> list[dict]:
     """Get all scheduled tasks."""
-    async def _op(db):
-        tasks = await get_tasks(db)
-        return [task_to_dict(t) for t in tasks]
-    return await run_in_read_session(_op)
+
+    tasks = await get_tasks(db)
+    return [task_to_dict(t) for t in tasks]
 
 
 @register_command("create_scheduled_task")
@@ -192,16 +197,14 @@ async def cmd_execute_now(params: dict) -> str:
     return result
 
 
-@register_command("get_task_executions", readonly=True)
-async def cmd_get_executions(params: dict) -> list[dict]:
+@command("get_task_executions", readonly=True)
+async def cmd_get_executions(db: AsyncSession, params: dict) -> list[dict]:
     """Get execution history for a task."""
     task_id = int(params.get("taskId", params.get("task_id", 0)))
     limit = int(params.get("limit", 50))
 
-    async def _op(db):
-        execs = await get_executions(db, task_id, limit)
-        return [execution_to_dict(e) for e in execs]
-    return await run_in_read_session(_op)
+    execs = await get_executions(db, task_id, limit)
+    return [execution_to_dict(e) for e in execs]
 
 
 # ── Scheduler service control ─────────────────────────────────────────────────
@@ -232,17 +235,16 @@ async def cmd_scheduler_status(params: dict) -> bool:
 # ── Templates ─────────────────────────────────────────────────────────────────
 
 
-@register_command("get_scheduler_templates", readonly=True)
-async def cmd_get_templates(params: dict) -> list[dict]:
+@command("get_scheduler_templates", readonly=True)
+async def cmd_get_templates(db: AsyncSession, params: dict) -> list[dict]:
     """Get all scheduler templates."""
-    async def _op(db):
-        templates = await get_templates(db)
-        return [template_to_dict(t) for t in templates]
-    return await run_in_read_session(_op)
+
+    templates = await get_templates(db)
+    return [template_to_dict(t) for t in templates]
 
 
-@register_command("create_scheduler_template")
-async def cmd_create_template(params: dict) -> int:
+@command("create_scheduler_template")
+async def cmd_create_template(db: AsyncSession, params: dict) -> int:
     """Create a new scheduler template."""
     name = str(params.get("name", ""))
     description = params.get("description")
@@ -250,47 +252,40 @@ async def cmd_create_template(params: dict) -> int:
     schedule = _parse_schedule(params.get("schedule", {}))
     config = str(params.get("config", "{}"))
 
-    async def _op(db):
-        return await create_template(db, name, description, task_type, schedule, config)
-    return await run_in_session(_op)
+    return await create_template(db, name, description, task_type, schedule, config)
 
 
-@register_command("update_scheduler_template")
-async def cmd_update_template(params: dict) -> dict:
+@command("update_scheduler_template")
+async def cmd_update_template(db: AsyncSession, params: dict) -> dict:
     """Update an existing scheduler template."""
     tmpl_data = params.get("template", params)
 
-    async def _op(db):
-        tmpl_id = int(tmpl_data.get("id", 0))
-        templates = await get_templates(db)
-        existing = next((t for t in templates if t.id == tmpl_id), None)
-        if not existing:
-            raise ValueError(f"Template {tmpl_id} not found")
+    tmpl_id = int(tmpl_data.get("id", 0))
+    templates = await get_templates(db)
+    existing = next((t for t in templates if t.id == tmpl_id), None)
+    if not existing:
+        raise ValueError(f"Template {tmpl_id} not found")
 
-        existing.name = tmpl_data.get("name", existing.name)
-        existing.description = tmpl_data.get("description", existing.description)
-        if "taskType" in tmpl_data or "task_type" in tmpl_data:
-            existing.task_type = _parse_task_type(tmpl_data.get("taskType", tmpl_data.get("task_type")))
-        if "schedule" in tmpl_data:
-            existing.schedule = _parse_schedule(tmpl_data["schedule"])
-        if "config" in tmpl_data:
-            existing.config = str(tmpl_data["config"])
+    existing.name = tmpl_data.get("name", existing.name)
+    existing.description = tmpl_data.get("description", existing.description)
+    if "taskType" in tmpl_data or "task_type" in tmpl_data:
+        existing.task_type = _parse_task_type(tmpl_data.get("taskType", tmpl_data.get("task_type")))
+    if "schedule" in tmpl_data:
+        existing.schedule = _parse_schedule(tmpl_data["schedule"])
+    if "config" in tmpl_data:
+        existing.config = str(tmpl_data["config"])
 
-        await update_template(db, existing)
-        return template_to_dict(existing)
-
-    return await run_in_session(_op)
+    await update_template(db, existing)
+    return template_to_dict(existing)
 
 
-@register_command("delete_scheduler_template")
-async def cmd_delete_template(params: dict) -> dict:
+@command("delete_scheduler_template")
+async def cmd_delete_template(db: AsyncSession, params: dict) -> dict:
     """Delete a scheduler template."""
     template_id = int(params.get("templateId", params.get("template_id", 0)))
 
-    async def _op(db):
-        await delete_template(db, template_id)
-        return {"deleted": template_id}
-    return await run_in_session(_op)
+    await delete_template(db, template_id)
+    return {"deleted": template_id}
 
 
 @register_command("create_scheduled_task_from_template")

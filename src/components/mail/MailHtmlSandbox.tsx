@@ -132,7 +132,27 @@ export function MailHtmlSandbox({ html, showRemoteImages, className }: MailHtmlS
         if (window.ResizeObserver) {
           new ResizeObserver(postHeight).observe(document.body);
         } else {
-          window.setInterval(postHeight, 500);
+          // Capped: 600 ticks ≈ 5 min, or 30 ticks without height change.
+          var fallbackTicks = 0;
+          var fallbackStableTicks = 0;
+          var fallbackLastHeight = -1;
+          var fallbackTimer = window.setInterval(function () {
+            fallbackTicks += 1;
+            var h = Math.max(
+              document.documentElement.scrollHeight,
+              document.body.scrollHeight
+            );
+            if (h === fallbackLastHeight) {
+              fallbackStableTicks += 1;
+            } else {
+              fallbackStableTicks = 0;
+              fallbackLastHeight = h;
+            }
+            postHeight();
+            if (fallbackTicks >= 600 || fallbackStableTicks >= 30) {
+              window.clearInterval(fallbackTimer);
+            }
+          }, 500);
         }
       })();
     </script></body>

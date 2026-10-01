@@ -325,6 +325,16 @@ def main() -> None:
         try:
             import clr  # noqa: F401 — pythonnet availability test (import itself is the check)
             start_kwargs["gui"] = "edgechromium"
+            # WebView2 defaults to a temp user-data dir that Windows may clear
+            storage_dir = os.path.join(
+                os.environ.get(
+                    "LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local")
+                ),
+                "stitch-manager",
+                "webview",
+            )
+            os.makedirs(storage_dir, exist_ok=True)
+            start_kwargs["storage_path"] = storage_dir
             print("[run_gui] Using EdgeChromium (WebView2) for fast startup", flush=True)
         except ImportError:
             print("[run_gui] WARNING: pythonnet not installed, falling back to CEF (slow)", flush=True)

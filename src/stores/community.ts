@@ -1,5 +1,3 @@
-import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
 import {
   getFriends,
   getRadarOffers,
@@ -10,10 +8,7 @@ import {
   type RadarStats,
   type RadarEffort,
 } from '../lib/backend';
-
-// ============================================
-// Types
-// ============================================
+import { createAsyncStore } from '../lib/store/createAsyncStore';
 
 export type RadarTab = 'all' | 'easy' | 'medium' | 'hard' | 'dead';
 export type RadarSort = 'top' | 'new' | 'amount';
@@ -27,12 +22,11 @@ export interface CommunityFilters {
 }
 
 interface CommunityState {
-  // Friends
   friends: FriendItem[];
   friendsLoading: boolean;
   friendsError: string | null;
 
-  // Radar offers (accumulated for infinite scroll)
+  // Offers are accumulated for infinite scroll
   offers: RadarOffer[];
   totalCount: number;
   offersLoading: boolean;
@@ -41,23 +35,16 @@ interface CommunityState {
   offersError: string | null;
   hasMore: boolean;
 
-  // Stats
   stats: RadarStats | null;
   statsLoading: boolean;
 
-  // Filters
   filters: CommunityFilters;
 
-  // Actions
   fetchFriends: () => Promise<void>;
   fetchStats: () => Promise<void>;
   fetchOffers: (reset?: boolean) => Promise<void>;
   setFilter: (patch: Partial<CommunityFilters>) => void;
 }
-
-// ============================================
-// Constants
-// ============================================
 
 const PAGE_SIZE = 150;
 
@@ -68,155 +55,127 @@ const PERIOD_HOURS: Record<RadarPeriod, number | undefined> = {
   '30d': 720,
 };
 
-// ============================================
-// Store
-// ============================================
+export const useCommunityStore = createAsyncStore<CommunityState>({
+  name: 'community-store',
+  devtools: true,
+  initial: {
+    friends: [],
+    friendsLoading: false,
+    friendsError: null,
 
-export const useCommunityStore = create<CommunityState>()(
-  devtools(
-    (set, get) => ({
-      // Initial state
-      friends: [],
-      friendsLoading: false,
-      friendsError: null,
+    offers: [],
+    totalCount: 0,
+    offersLoading: false,
+    refreshing: false,
+    loadingMore: false,
+    offersError: null,
+    hasMore: true,
 
-  offers: [],
-  totalCount: 0,
-  offersLoading: false,
-  refreshing: false,
-  loadingMore: false,
-  offersError: null,
-  hasMore: true,
+    stats: null,
+    statsLoading: false,
 
-      stats: null,
-      statsLoading: false,
+    filters: {
+      tab: 'all',
+      q: '',
+      sort: 'top',
+      period: 'all',
+    },
+  },
+  actions: (set, get) => ({
+    fetchFriends: async () => {
+      set({ friendsLoading: true, friendsError: null });
+      try {
+        const { items } = await getFriends();
+        set({ friends: items, friendsLoading: false });
+      } catch (error) {
+        const message = error instanceof BackendError ? error.message : String(error);
+        set({ friendsError: message, friendsLoading: false });
+      }
+    },
 
-      filters: {
-        tab: 'all',
-        q: '',
-        sort: 'top',
-        period: 'all',
-      },
-
-      // ============================================
-      // Friends
-      // ============================================
-
-      fetchFriends: async () => {
-        set({ friendsLoading: true, friendsError: null });
-        try {
-          const { items } = await getFriends();
-          set({ friends: items, friendsLoading: false });
-        } catch (error) {
-          const message = error instanceof BackendError ? error.message : String(error);
-          set({ friendsError: message, friendsLoading: false });
+    fetchStats: async () => {
+      set({ statsLoading: true });
+      try {
+        const stats = await getRadarStats();
+        set({ stats, statsLoading: false });
+      } catch (error) {
+        const message = error instanceof BackendError ? error.message : String(error);
+        set({ statsLoading: false });
+        // Stats are non-fatal — surface via offersError only if there is no richer offers error already.
+        if (!get().offersError) {
+          set({ offersError: message });
         }
-      },
+      }
+    },
 
-      // ============================================
-      // Stats
-      // ============================================
+    fetchOffers: async (reset = false) => {
+      const { filters, offers, loadingMore, offersLoading, refreshing } = get();
 
-      fetchStats: async () => {
-        set({ statsLoading: true });
-        try {
-          const stats = await getRadarStats();
-          set({ stats, statsLoading: false });
-        } catch (error) {
-          const message = error instanceof BackendError ? error.message : String(error);
-          set({ statsLoading: false });
-          // Stats are non-fatal — surface the message via offersError only if
-          // there is no richer offers error already.
-          if (!get().offersError) {
-            set({ offersError: message });
-          }
-        }
-      },
+      // An in-flight refresh blocks concurrent reset and load-more until it settles.
+      if (refreshing || (reset ? offersLoading : loadingMore)) return;
 
-      // ============================================
-      // Offers (paginated, accumulated for infinite scroll)
-      // ============================================
+      const offset = reset ? 0 : offers.length;
+      // A refresh keeps existing offers visible (stale-while-revalidate); only a true first load sets offersLoading.
+      const isRefresh = reset && offers.length > 0;
 
-      fetchOffers: async (reset = false) => {
-        const { filters, offers, loadingMore, offersLoading, refreshing } = get();
+      set(
+        isRefresh
+          ? { refreshing: true, offersError: null }
+          : reset
+            ? { offersLoading: true, offersError: null, hasMore: true }
+            : { loadingMore: true }
+      );
 
-        // Guard against concurrent fetches of the same kind. A refresh (reset
-        // with existing rows) blocks both reset and load-more until it settles.
-        if (refreshing || (reset ? offersLoading : loadingMore)) return;
+      const params: Record<string, unknown> = {
+        limit: PAGE_SIZE,
+        offset,
+      };
 
-        const offset = reset ? 0 : offers.length;
-        // A "refresh" is a reset that runs while rows are already on screen —
-        // keep the existing offers visible (stale-while-revalidate) instead of
-        // clearing them to a skeleton. Only a true first load (no rows yet)
-        // sets offersLoading, which drives the skeleton.
-        const isRefresh = reset && offers.length > 0;
+      if (filters.tab === 'dead') {
+        params.status = 'dead';
+      } else if (filters.tab !== 'all') {
+        params.effort = filters.tab as RadarEffort;
+      }
 
-        set(
-          isRefresh
-            ? { refreshing: true, offersError: null }
-            : reset
-              ? { offersLoading: true, offersError: null, hasMore: true }
-              : { loadingMore: true }
-        );
+      if (filters.sort !== 'top') {
+        params.sort = filters.sort;
+      }
 
-        // Build query params from filters.
-        const params: Record<string, unknown> = {
-          limit: PAGE_SIZE,
-          offset,
-        };
+      const sinceHours = PERIOD_HOURS[filters.period];
+      if (sinceHours !== undefined) {
+        params.since_hours = sinceHours;
+      }
 
-        if (filters.tab === 'dead') {
-          params.status = 'dead';
-        } else if (filters.tab !== 'all') {
-          params.effort = filters.tab as RadarEffort;
-        }
+      if (filters.q.trim()) {
+        params.q = filters.q.trim();
+      }
 
-        if (filters.sort !== 'top') {
-          params.sort = filters.sort;
-        }
+      try {
+        const { count, items } = await getRadarOffers(params);
+        const totalLoaded = offset + items.length;
+        set(state => ({
+          offers: reset ? items : [...state.offers, ...items],
+          totalCount: count,
+          // Stop paging on an empty batch — guards against an infinite loop when count is stale or the page is short.
+          hasMore: items.length > 0 && totalLoaded < count,
+          offersLoading: false,
+          loadingMore: false,
+          refreshing: false,
+          offersError: null,
+        }));
+      } catch (error) {
+        const message = error instanceof BackendError ? error.message : String(error);
+        set({
+          offersLoading: false,
+          loadingMore: false,
+          refreshing: false,
+          offersError: message,
+        });
+      }
+    },
 
-        const sinceHours = PERIOD_HOURS[filters.period];
-        if (sinceHours !== undefined) {
-          params.since_hours = sinceHours;
-        }
-
-        if (filters.q.trim()) {
-          params.q = filters.q.trim();
-        }
-
-        try {
-          const { count, items } = await getRadarOffers(params);
-          const totalLoaded = offset + items.length;
-          set(state => ({
-            offers: reset ? items : [...state.offers, ...items],
-            totalCount: count,
-            // Stop paging when the batch was empty (guard against infinite loop
-            // when count is stale or the backend returns a short page).
-            hasMore: items.length > 0 && totalLoaded < count,
-            offersLoading: false,
-            loadingMore: false,
-            refreshing: false,
-            offersError: null,
-          }));
-        } catch (error) {
-          const message = error instanceof BackendError ? error.message : String(error);
-          set({
-            offersLoading: false,
-            loadingMore: false,
-            refreshing: false,
-            offersError: message,
-          });
-        }
-      },
-
-      // ============================================
-      // Filters
-      // ============================================
-
-      setFilter: patch => {
-        set(state => ({ filters: { ...state.filters, ...patch } }));
-      },
-    }),
-    { name: 'community-store' }
-  )
-);
+    setFilter: patch => {
+      set(state => ({ filters: { ...state.filters, ...patch } }));
+    },
+  }),
+});

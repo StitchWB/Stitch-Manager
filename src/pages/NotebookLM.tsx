@@ -1,15 +1,10 @@
-import { useEffect, useSyncExternalStore } from 'react';
 import { BookOpen, Zap } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { t } from '@/lib/i18n';
 import DeclarativePage from '@/components/plugin-ui/DeclarativePage';
 import type { PluginPageSchema } from '@/components/plugin-ui/schema';
 import { EmptyState } from '@/components/ui/EmptyState';
-import {
-  fetchServicePlugins,
-  getServicePlugins,
-  subscribeServicePlugins,
-} from '@/lib/backend/modules/servicePlugins';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
 
 const NOTEBOOKLM_PLUGIN_ID = 'stitch-notebooklm';
 
@@ -28,15 +23,7 @@ const NOTEBOOKLM_PLUGIN_ID = 'stitch-notebooklm';
  * and triggers a refetch that re-renders this component.
  */
 export default function NotebookLM() {
-  const plugins = useSyncExternalStore(
-    subscribeServicePlugins,
-    getServicePlugins,
-    getServicePlugins,
-  );
-
-  useEffect(() => {
-    void fetchServicePlugins();
-  }, []);
+  const plugins = useServicePlugins();
 
   const plugin = plugins.find(p => p.id === NOTEBOOKLM_PLUGIN_ID);
   const ui = plugin?.ui;

@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import json
 import logging
-import time
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy import exc as sqlalchemy_exc
 
 from stitch_backend.database import run_in_session
@@ -24,14 +19,31 @@ from stitch_backend.domains.ai_gateway.routing_engine import (
 from stitch_backend.domains.ai_gateway.usage_tracker import record_usage as _record_group_usage
 from stitch_backend.domains.ai_proxy.compression.service import get_compression_service
 from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
-from stitch_backend.domains.ai_proxy.holone_inspector import (
-    default_engine as _holone_default_engine,
-)
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
 from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
-from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
+from stitch_backend.domains.ai_proxy.litellm_invoke_pipeline import (
+    invoke_via_gateway,
+    invoke_via_gateway_messages,
+    invoke_via_gateway_responses,
+)
+from stitch_backend.domains.ai_proxy.litellm_public_models import (
+    ConfigLoader,
+    _default_config,
+    _public_models_auto_created,
+    auto_create_public_models_from_config,
+)
+from stitch_backend.domains.ai_proxy.litellm_streaming import (
+    stream_anthropic_response,
+    stream_anthropic_response_buffered,
+    stream_openai_response,
+    stream_openai_response_buffered,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from fastapi.responses import StreamingResponse
+    from pydantic import BaseModel
     from starlette.responses import Response
 
     from stitch_backend.domains.ai_proxy.litellm_gateway import (
@@ -39,17 +51,24 @@ if TYPE_CHECKING:
         JsonObject,
         JsonValue,
     )
+    from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "CompletionRouter",
+    "ConfigLoader",
+    "LiteLLMExecutor",
+    "_public_models_auto_created",
+    "auto_create_public_models_from_config",
+]
 
 
 class CompletionRouter(Protocol):
     """Structural protocol for a LiteLLM-compatible completion router.
 
-    Kept as a documentation anchor for the adapter seam (see
-    ``ai_gateway/adapters/base.py``). The executor no longer instantiates
-    a LiteLLM Router — all routing goes through the AI Gateway
-    :class:`RoutingEngine`.
+    Documentation anchor for the adapter seam (see ``ai_gateway/adapters/base.py``).
+    All routing goes through the AI Gateway :class:`RoutingEngine`.
     """
 
     async def acompletion(
@@ -77,18 +96,11 @@ class CompletionRouter(Protocol):
     ) -> JsonObject | BaseModel: ...
 
 
-ConfigLoader = Callable[[], Awaitable[BackgroundManagerConfig]]
-
-
 class LiteLLMExecutor:
     """AI Gateway routing executor.
 
     All request routing goes through the AI Gateway :class:`RoutingEngine`.
-    The LiteLLM Router config path (``_current_router``, ``_providers``,
-    ``build_router``) was removed in the L2 final wave — the executor no
-    longer instantiates or falls back to a LiteLLM Router.
-
-    Keeps: cost tracker, holone, compression, adapters, circuit breaker,
+    Owns: cost tracker, holone, compression, adapters, circuit breaker,
     and the startup PublicModel auto-create from BackgroundManagerConfig.
     """
 
@@ -137,8 +149,6 @@ class LiteLLMExecutor:
             )
             return cast("list[Any] | None", routing_results)
         except QuotaExceededError as e:
-            # Group quota exhausted — 429 so clients can distinguish it
-            # from a generic "no route" 503 and back off accordingly.
             logger.info("Group quota exceeded for %s: %s", payload.model, e)
             raise HTTPException(
                 status_code=429,
@@ -154,8 +164,6 @@ class LiteLLMExecutor:
             logger.debug("AI Gateway route unavailable for %s: %s", payload.model, e)
             return None
         except Exception as e:
-            # DB-level failures (connection, locked, etc.) are operator errors —
-            # log at error so they surface above routine routing misses.
             if isinstance(e, sqlalchemy_exc.DBAPIError):
                 logger.error("AI Gateway DB error for %s: %s", payload.model, e)
             else:
@@ -214,7 +222,6 @@ class LiteLLMExecutor:
                     continue
                 return result
 
-        # No route available — LiteLLM Router fallback removed (L2 final wave).
         raise HTTPException(
             status_code=503,
             detail={"error": {"message": f"No route available for model: {payload.model}"}},
@@ -225,128 +232,12 @@ class LiteLLMExecutor:
         pool: PoolScope | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result."""
-        metrics_tracker = get_metrics_tracker()
-        cost_tracker = get_cost_tracker()
-
-        holone_service, compression_service = self._sync_pipeline_config(config)
-
-        # HoloNe request inspection
-        if holone_service.config.enabled:
-            request_findings = holone_service.inspect_request(_required_messages(payload))
-            if request_findings and holone_service.config.mode == "block":
-                logger.warning("HoloNe blocked request: %s", [f.rule_id for f in request_findings])
-                raise HTTPException(status_code=403, detail="Blocked by HoloNe")
-
-        # Compression: compress input messages
-        messages = _required_messages(payload)
-        if compression_service.config.enabled:
-            messages = compression_service.compress_input(messages)
-
-        client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
-        start_time = time.time()
-
-        try:
-            response = await routing_result.adapter.invoke(
-                base_url=routing_result.endpoint.base_url,
-                secret=routing_result.secret,
-                model=routing_result.upstream_model.upstream_model_id,
-                messages=messages,
-                stream=payload.stream,
-                default_headers=routing_result.default_headers,
-            )
-
-            latency = time.time() - start_time
-
-            # Extract tokens from response (if available)
-            input_tokens = 0
-            output_tokens = 0
-            if not payload.stream and hasattr(response, "usage"):
-                usage = response.usage
-                input_tokens = getattr(usage, "prompt_tokens", 0)
-                output_tokens = getattr(usage, "completion_tokens", 0)
-
-            # Record metrics and cost (per-credential, per-endpoint granularity)
-            await metrics_tracker.record_success(
-                key_id=routing_result.credential.id,
-                provider=routing_result.endpoint.name,
-                latency=latency,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-            await cost_tracker.record_usage(
-                key_id=routing_result.credential.id,
-                model=routing_result.upstream_model.upstream_model_id,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            logger.info(
-                "✅ AI Gateway %s | latency=%.2fs | tokens=%d/%d",
-                routing_result.upstream_model.upstream_model_id, latency, input_tokens, output_tokens,
-            )
-
-            # Record success (non-fatal if DB is unavailable)
-            try:
-                async def _record_success(session):
-                    await self._routing_engine.record_result(
-                        session,
-                        credential_id=routing_result.credential.id,
-                        endpoint_id=routing_result.endpoint.id,
-                        error=None,
-                        http_status=200,
-                    )
-                await run_in_session(_record_success)
-            except Exception:
-                logger.warning("Failed to record gateway success to routing engine", exc_info=True)
-
-            if payload.stream:
-                result = await self._stream_response(
-                    self._guard_stream(response, routing_result),
-                    client_has_tools=client_has_tools,
-                    on_complete=lambda tokens: self._record_group_usage_for(
-                        pool, routing_result, payload.model, tokens,
-                    ),
-                )
-            else:
-                result = cast("Any", _json_object(response))
-                if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_openai(
-                        result, client_has_tools=client_has_tools
-                    )
-                    if findings:
-                        logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-                await self._record_group_usage_for(
-                    pool, routing_result, payload.model, input_tokens + output_tokens,
-                )
-            return result
-
-        except Exception as e:
-            latency = time.time() - start_time
-            sanitized = _sanitize_error(e, secret=routing_result.secret)
-            await metrics_tracker.record_error(
-                key_id=routing_result.credential.id,
-                provider=routing_result.endpoint.name,
-                error=sanitized,
-            )
-            logger.error(
-                "❌ AI Gateway %s | latency=%.2fs | error=%s",
-                routing_result.upstream_model.upstream_model_id, latency, sanitized,
-            )
-            # Record failure to routing engine (non-fatal if DB is unavailable)
-            exc = e  # capture for closure — PEP 3110 deletes `e` after except block
-            try:
-                async def _record_failure(session):
-                    await self._routing_engine.record_result(
-                        session,
-                        credential_id=routing_result.credential.id,
-                        endpoint_id=routing_result.endpoint.id,
-                        error=routing_result.adapter.classify_error(exc),
-                        http_status=None,
-                    )
-                await run_in_session(_record_failure)
-            except Exception:
-                logger.warning("Failed to record gateway failure to routing engine", exc_info=True)
-            raise
+        return await invoke_via_gateway(
+            self, payload, routing_result, config, pool,
+            get_metrics_tracker=get_metrics_tracker,
+            get_cost_tracker=get_cost_tracker,
+            run_in_session=run_in_session,
+        )
 
     async def messages(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
@@ -371,7 +262,6 @@ class LiteLLMExecutor:
                     continue
                 return result
 
-        # No route available — LiteLLM Router fallback removed (L2 final wave).
         raise HTTPException(
             status_code=503,
             detail={"error": {"message": f"No route available for model: {payload.model}"}},
@@ -382,130 +272,12 @@ class LiteLLMExecutor:
         pool: PoolScope | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result (Anthropic Messages API)."""
-        metrics_tracker = get_metrics_tracker()
-        cost_tracker = get_cost_tracker()
-
-        holone_service, compression_service = self._sync_pipeline_config(config)
-
-        # HoloNe request inspection
-        if holone_service.config.enabled:
-            request_findings = holone_service.inspect_request(_required_messages(payload))
-            if request_findings and holone_service.config.mode == "block":
-                logger.warning("HoloNe blocked request: %s", [f.rule_id for f in request_findings])
-                raise HTTPException(status_code=403, detail="Blocked by HoloNe")
-
-        # Compression: compress input messages
-        messages = _required_messages(payload)
-        if compression_service.config.enabled:
-            messages = compression_service.compress_input(messages)
-
-        client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
-        start_time = time.time()
-
-        try:
-            response = await routing_result.adapter.invoke(
-                base_url=routing_result.endpoint.base_url,
-                secret=routing_result.secret,
-                model=routing_result.upstream_model.upstream_model_id,
-                messages=messages,
-                stream=payload.stream,
-                default_headers=routing_result.default_headers,
-            )
-
-            latency = time.time() - start_time
-
-            # Extract tokens from response (if available)
-            input_tokens = 0
-            output_tokens = 0
-            if not payload.stream and hasattr(response, "usage"):
-                usage = response.usage
-                input_tokens = getattr(usage, "input_tokens", 0)
-                output_tokens = getattr(usage, "output_tokens", 0)
-
-            # Record metrics and cost (per-credential, per-endpoint granularity)
-            await metrics_tracker.record_success(
-                key_id=routing_result.credential.id,
-                provider=routing_result.endpoint.name,
-                latency=latency,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-            await cost_tracker.record_usage(
-                key_id=routing_result.credential.id,
-                model=routing_result.upstream_model.upstream_model_id,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            logger.info(
-                "✅ AI Gateway messages %s | latency=%.2fs | tokens=%d/%d",
-                routing_result.upstream_model.upstream_model_id, latency, input_tokens, output_tokens,
-            )
-
-            # Record success (non-fatal if DB is unavailable)
-            try:
-                async def _record_success(session):
-                    await self._routing_engine.record_result(
-                        session,
-                        credential_id=routing_result.credential.id,
-                        endpoint_id=routing_result.endpoint.id,
-                        error=None,
-                        http_status=200,
-                    )
-                await run_in_session(_record_success)
-            except Exception:
-                logger.warning("Failed to record gateway success to routing engine", exc_info=True)
-
-            if payload.stream:
-                result = await self._stream_anthropic_response(
-                    self._guard_stream(response, routing_result),
-                    client_has_tools=client_has_tools,
-                    on_complete=lambda tokens: self._record_group_usage_for(
-                        pool, routing_result, payload.model, tokens,
-                    ),
-                )
-            else:
-                result = cast("Any", _json_object(response))
-                if compression_service.config.enabled:
-                    result = compression_service.compress_output(result)
-                if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_anthropic(
-                        result, client_has_tools=client_has_tools
-                    )
-                    if findings:
-                        logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-                await self._record_group_usage_for(
-                    pool, routing_result, payload.model, input_tokens + output_tokens,
-                )
-            return result
-
-        except Exception as e:
-            latency = time.time() - start_time
-            sanitized = _sanitize_error(e, secret=routing_result.secret)
-            await metrics_tracker.record_error(
-                key_id=routing_result.credential.id,
-                provider=routing_result.endpoint.name,
-                error=sanitized,
-            )
-            logger.error(
-                "❌ AI Gateway messages %s | latency=%.2fs | error=%s",
-                routing_result.upstream_model.upstream_model_id, latency, sanitized,
-            )
-            # Record failure to routing engine (non-fatal if DB is unavailable)
-            exc = e  # capture for closure — PEP 3110 deletes `e` after except block
-            try:
-                async def _record_failure(session):
-                    await self._routing_engine.record_result(
-                        session,
-                        credential_id=routing_result.credential.id,
-                        endpoint_id=routing_result.endpoint.id,
-                        error=routing_result.adapter.classify_error(exc),
-                        http_status=None,
-                    )
-                await run_in_session(_record_failure)
-            except Exception:
-                logger.warning("Failed to record gateway failure to routing engine", exc_info=True)
-            raise
+        return await invoke_via_gateway_messages(
+            self, payload, routing_result, config, pool,
+            get_metrics_tracker=get_metrics_tracker,
+            get_cost_tracker=get_cost_tracker,
+            run_in_session=run_in_session,
+        )
 
     async def responses(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
@@ -530,7 +302,6 @@ class LiteLLMExecutor:
                     continue
                 return result
 
-        # No route available — LiteLLM Router fallback removed (L2 final wave).
         raise HTTPException(
             status_code=503,
             detail={"error": {"message": f"No route available for model: {payload.model}"}},
@@ -541,150 +312,19 @@ class LiteLLMExecutor:
         pool: PoolScope | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result (Responses API)."""
-        metrics_tracker = get_metrics_tracker()
-        cost_tracker = get_cost_tracker()
-
-        holone_service, compression_service = self._sync_pipeline_config(config)
-
-        # HoloNe request inspection (responses API uses input field)
-        if holone_service.config.enabled and payload.input:
-            text = json.dumps(payload.input) if isinstance(payload.input, (dict, list)) else str(payload.input)
-            request_findings = _holone_default_engine().inspect(text, source="request")
-            if request_findings and holone_service.config.mode == "block":
-                logger.warning("HoloNe blocked request: %s", [f.rule_id for f in request_findings])
-                raise HTTPException(status_code=403, detail="Blocked by HoloNe")
-
-        # Compression: compress input (responses API uses input field).
-        # Mirror the messages path (compress_input) flags: only compress
-        # when config.enabled AND config.caveman_enabled AND
-        # config.input_compression_enabled.  config.level is the
-        # @property returning CompressionLevel enum (derived from
-        # config.caveman_level string) — compress_text expects the enum.
-        input_data = payload.input
-        if (
-            compression_service.config.enabled
-            and compression_service.config.caveman_enabled
-            and compression_service.config.input_compression_enabled
-            and isinstance(input_data, str)
-        ):
-            from stitch_backend.domains.ai_proxy.compression.caveman import compress_text
-            input_data = compress_text(input_data, level=compression_service.config.level)
-
-        client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
-        start_time = time.time()
-
-        try:
-            response = await routing_result.adapter.invoke_responses(
-                base_url=routing_result.endpoint.base_url,
-                secret=routing_result.secret,
-                model=routing_result.upstream_model.upstream_model_id,
-                input=input_data,
-                stream=payload.stream,
-                default_headers=routing_result.default_headers,
-            )
-
-            latency = time.time() - start_time
-
-            # Extract tokens from response (if available)
-            input_tokens = 0
-            output_tokens = 0
-            if not payload.stream and hasattr(response, "usage"):
-                usage = response.usage
-                input_tokens = getattr(usage, "prompt_tokens", 0)
-                output_tokens = getattr(usage, "completion_tokens", 0)
-
-            # Record metrics and cost (per-credential, per-endpoint granularity)
-            await metrics_tracker.record_success(
-                key_id=routing_result.credential.id,
-                provider=routing_result.endpoint.name,
-                latency=latency,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-            await cost_tracker.record_usage(
-                key_id=routing_result.credential.id,
-                model=routing_result.upstream_model.upstream_model_id,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-
-            logger.info(
-                "✅ AI Gateway responses %s | latency=%.2fs | tokens=%d/%d",
-                routing_result.upstream_model.upstream_model_id, latency, input_tokens, output_tokens,
-            )
-
-            # Record success (non-fatal if DB is unavailable)
-            try:
-                async def _record_success(session):
-                    await self._routing_engine.record_result(
-                        session,
-                        credential_id=routing_result.credential.id,
-                        endpoint_id=routing_result.endpoint.id,
-                        error=None,
-                        http_status=200,
-                    )
-                await run_in_session(_record_success)
-            except Exception:
-                logger.warning("Failed to record gateway success to routing engine", exc_info=True)
-
-            if payload.stream:
-                result = await self._stream_response(
-                    self._guard_stream(response, routing_result),
-                    client_has_tools=client_has_tools,
-                    on_complete=lambda tokens: self._record_group_usage_for(
-                        pool, routing_result, payload.model, tokens,
-                    ),
-                )
-            else:
-                result = cast("Any", _json_object(response))
-                if compression_service.config.enabled:
-                    result = compression_service.compress_output(result)
-                if holone_service.config.enabled:
-                    result, findings, blocked = holone_service.inspect_response_responses(
-                        result, client_has_tools=client_has_tools
-                    )
-                    if findings:
-                        logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-                await self._record_group_usage_for(
-                    pool, routing_result, payload.model, input_tokens + output_tokens,
-                )
-            return result
-
-        except Exception as e:
-            latency = time.time() - start_time
-            sanitized = _sanitize_error(e, secret=routing_result.secret)
-            await metrics_tracker.record_error(
-                key_id=routing_result.credential.id,
-                provider=routing_result.endpoint.name,
-                error=sanitized,
-            )
-            logger.error(
-                "❌ AI Gateway responses %s | latency=%.2fs | error=%s",
-                routing_result.upstream_model.upstream_model_id, latency, sanitized,
-            )
-            # Record failure to routing engine (non-fatal if DB is unavailable)
-            exc = e  # capture for closure — PEP 3110 deletes `e` after except block
-            try:
-                async def _record_failure(session):
-                    await self._routing_engine.record_result(
-                        session,
-                        credential_id=routing_result.credential.id,
-                        endpoint_id=routing_result.endpoint.id,
-                        error=routing_result.adapter.classify_error(exc),
-                        http_status=None,
-                    )
-                await run_in_session(_record_failure)
-            except Exception:
-                logger.warning("Failed to record gateway failure to routing engine", exc_info=True)
-            raise
+        return await invoke_via_gateway_responses(
+            self, payload, routing_result, config, pool,
+            get_metrics_tracker=get_metrics_tracker,
+            get_cost_tracker=get_cost_tracker,
+            run_in_session=run_in_session,
+        )
 
     async def models(self, pool: PoolScope | None = None) -> JsonObject:
         """Return available models from the AI Gateway PublicModel catalog.
 
-        LiteLLM Router fallback removed (L2 final wave) — the gateway
-        PublicModel table is the sole source of model listings. The startup
-        :func:`auto_create_public_models_from_config` step ensures the
-        catalog is populated from BackgroundManagerConfig providers.
+        The gateway PublicModel table is the sole source of model listings;
+        the startup :func:`auto_create_public_models_from_config` step
+        populates it from BackgroundManagerConfig providers.
         """
         try:
             async def _get_models(session):
@@ -776,32 +416,12 @@ class LiteLLMExecutor:
         the total token count (``None`` when unknown) after the upstream
         stream ends.
         """
-        holone_service = get_holone_service()
-        if holone_service.config.enabled:
-            return await self._stream_response_buffered(
-                response, client_has_tools=client_has_tools, on_complete=on_complete,
-            )
-
-        actual_tokens: int | None = None
-
-        async def body_gen():
-            nonlocal actual_tokens
-            saw_done = False
-            async for line in response:
-                if not line:
-                    continue
-                if line.strip() == "data: [DONE]":
-                    saw_done = True
-                tokens = _tokens_from_sse_line(line)
-                if tokens is not None:
-                    actual_tokens = max(actual_tokens or 0, tokens)
-                yield f"{line}\n\n"
-            if not saw_done:
-                yield "data: [DONE]\n\n"
-            if on_complete is not None:
-                await on_complete(actual_tokens)
-
-        return StreamingResponse(body_gen(), media_type="text/event-stream")
+        return await stream_openai_response(
+            response,
+            holone_service=get_holone_service(),
+            client_has_tools=client_has_tools,
+            on_complete=on_complete,
+        )
 
     async def _stream_response_buffered(
         self,
@@ -811,29 +431,12 @@ class LiteLLMExecutor:
         on_complete: Callable[[int | None], Awaitable[None]] | None,
     ) -> StreamingResponse:
         """Buffered variant for HoloNe-enabled runs: collect, inspect/redact, emit."""
-        lines: list[str] = []
-        actual_tokens: int | None = None
-        async for line in response:
-            if not line or line.strip() == "data: [DONE]":
-                continue
-            lines.append(line)
-            tokens = _tokens_from_sse_line(line)
-            if tokens is not None:
-                actual_tokens = max(actual_tokens or 0, tokens)
-
-        body = "".join(f"{line}\n\n" for line in lines) + "data: [DONE]\n\n"
-        holone_service = get_holone_service()
-        result = holone_service.inspect_stream_openai(body, client_has_tools=client_has_tools)
-        if result.findings:
-            logger.info("HoloNe stream findings: %s (blocked=%s)", [f.rule_id for f in result.findings], result.blocked)
-        body = result.body
-
-        async def body_gen():
-            yield body.encode("utf-8")
-            if on_complete is not None:
-                await on_complete(actual_tokens)
-
-        return StreamingResponse(body_gen(), media_type="text/event-stream")
+        return await stream_openai_response_buffered(
+            response,
+            holone_service=get_holone_service(),
+            client_has_tools=client_has_tools,
+            on_complete=on_complete,
+        )
 
     async def _stream_anthropic_response(
         self,
@@ -843,37 +446,12 @@ class LiteLLMExecutor:
         on_complete: Callable[[int | None], Awaitable[None]] | None = None,
     ) -> StreamingResponse:
         """Anthropic-shaped SSE pass-through (same contract as OpenAI)."""
-        holone_service = get_holone_service()
-        if holone_service.config.enabled:
-            return await self._stream_anthropic_response_buffered(
-                response, client_has_tools=client_has_tools, on_complete=on_complete,
-            )
-
-        input_tokens = 0
-        output_tokens = 0
-        found_usage = False
-
-        async def body_gen():
-            nonlocal input_tokens, output_tokens, found_usage
-            saw_done = False
-            async for line in response:
-                if not line:
-                    continue
-                if line.strip() == "data: [DONE]":
-                    saw_done = True
-                usage = _anthropic_usage_from_sse_line(line)
-                if usage is not None:
-                    found_usage = True
-                    input_tokens = max(input_tokens, usage[0])
-                    output_tokens = max(output_tokens, usage[1])
-                yield f"{line}\n\n"
-            if not saw_done:
-                yield "data: [DONE]\n\n"
-            if on_complete is not None:
-                total = input_tokens + output_tokens if found_usage else None
-                await on_complete(total)
-
-        return StreamingResponse(body_gen(), media_type="text/event-stream")
+        return await stream_anthropic_response(
+            response,
+            holone_service=get_holone_service(),
+            client_has_tools=client_has_tools,
+            on_complete=on_complete,
+        )
 
     async def _stream_anthropic_response_buffered(
         self,
@@ -883,287 +461,9 @@ class LiteLLMExecutor:
         on_complete: Callable[[int | None], Awaitable[None]] | None,
     ) -> StreamingResponse:
         """Buffered Anthropic variant for HoloNe-enabled runs."""
-        lines: list[str] = []
-        input_tokens = 0
-        output_tokens = 0
-        found_usage = False
-        async for line in response:
-            if not line or line.strip() == "data: [DONE]":
-                continue
-            lines.append(line)
-            usage = _anthropic_usage_from_sse_line(line)
-            if usage is not None:
-                found_usage = True
-                input_tokens = max(input_tokens, usage[0])
-                output_tokens = max(output_tokens, usage[1])
-
-        body = "".join(f"{line}\n\n" for line in lines) + "data: [DONE]\n\n"
-        holone_service = get_holone_service()
-        result = holone_service.inspect_stream_anthropic(body, client_has_tools=client_has_tools)
-        if result.findings:
-            logger.info("HoloNe stream findings: %s (blocked=%s)", [f.rule_id for f in result.findings], result.blocked)
-        body = result.body
-
-        async def body_gen():
-            yield body.encode("utf-8")
-            if on_complete is not None:
-                total = input_tokens + output_tokens if found_usage else None
-                await on_complete(total)
-
-        return StreamingResponse(body_gen(), media_type="text/event-stream")
-
-
-def _is_safe_transport_failure(exc: BaseException) -> bool:
-    safe_names = {
-        "ConnectError",
-        "ConnectTimeout",
-        "InvalidURL",
-        "ProxyError",
-        "UnsupportedProtocol",
-    }
-    current: BaseException | None = exc
-    seen: set[int] = set()
-    while current is not None and id(current) not in seen:
-        if type(current).__name__ in safe_names:
-            return True
-        seen.add(id(current))
-        current = current.__cause__ or current.__context__
-    return False
-
-
-async def _default_config() -> BackgroundManagerConfig:
-    return BackgroundManagerConfig.model_validate({})
-
-
-def _usage_tokens(response: JsonObject) -> int | None:
-    usage = response.get("usage")
-    if not isinstance(usage, dict):
-        return None
-    for key in ("total_tokens", "totalTokens"):
-        total = _integer(usage.get(key))
-        if total > 0:
-            return total
-    input_tokens = max(
-        _integer(usage.get("input_tokens")),
-        _integer(usage.get("prompt_tokens")),
-    )
-    output_tokens = max(
-        _integer(usage.get("output_tokens")),
-        _integer(usage.get("completion_tokens")),
-    )
-    total = input_tokens + output_tokens
-    return total if total > 0 else None
-
-
-def _tokens_from_sse_line(line: str) -> int | None:
-    """Extract total token usage from a raw SSE ``data: {...}`` line."""
-    if not line.startswith("data:"):
-        return None
-    payload = line[5:].strip()
-    if not payload or payload == "[DONE]":
-        return None
-    try:
-        data = json.loads(payload)
-    except ValueError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    return _usage_tokens(data)
-
-
-def _anthropic_usage_from_sse_line(line: str) -> tuple[int, int] | None:
-    """Extract (input_tokens, output_tokens) from an Anthropic SSE line."""
-    if not line.startswith("data:"):
-        return None
-    payload = line[5:].strip()
-    if not payload or payload == "[DONE]":
-        return None
-    try:
-        data = json.loads(payload)
-    except ValueError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    usage = data.get("usage")
-    if not isinstance(usage, dict):
-        # message_start carries usage under ``message``
-        message = data.get("message")
-        usage = message.get("usage") if isinstance(message, dict) else None
-    if not isinstance(usage, dict):
-        return None
-    return (_integer(usage.get("input_tokens")), _integer(usage.get("output_tokens")))
-
-
-def _integer(value: object) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
-
-
-def _required_messages(payload: GatewayRequest) -> list[dict[str, JsonValue]]:
-    if payload.messages is None:
-        raise HTTPException(
-            status_code=422, detail={"error": {"message": "messages are required"}}
+        return await stream_anthropic_response_buffered(
+            response,
+            holone_service=get_holone_service(),
+            client_has_tools=client_has_tools,
+            on_complete=on_complete,
         )
-    return payload.messages
-
-
-def _json_object(response: JsonObject | BaseModel) -> JsonObject:
-    if isinstance(response, BaseModel):
-        return response.model_dump(mode="json")
-    return response
-
-
-# ── L2: PublicModel auto-create from legacy BackgroundManagerConfig ──────────
-#
-# Startup step that auto-creates PublicModel rows from the legacy
-# BackgroundManagerConfig providers when none exist (idempotent, owner_id
-# NULL). When this succeeds, the LiteLLM-config fallback in ``models()``
-# is removed (returns empty instead). When it fails, the fallback is kept.
-#
-# P2.15 — ``_public_models_auto_created_flag=True`` with 0 providers is
-# intentional: an empty catalog is the product default when no providers
-# are configured.  The flag means "the auto-create step ran successfully"
-# (not "rows were created").  Returning True with 0 providers prevents
-# the LiteLLM fallback from kicking in (there is no LiteLLM Router
-# anymore — the fallback would just return an empty list anyway).
-
-_public_models_auto_created_flag: bool = False
-
-
-def _public_models_auto_created() -> bool:
-    """True if the startup auto-create step succeeded (fallback removed)."""
-    return _public_models_auto_created_flag
-
-
-async def auto_create_public_models_from_config(
-    load_config: ConfigLoader | None = None,
-) -> bool:
-    """Auto-create PublicModels from legacy BackgroundManagerConfig providers.
-
-    Runs at startup. Creates one PublicModel per provider in
-    ``BackgroundManagerConfig.provider_priority`` (or derived from loaded
-    keys) when no PublicModels exist. Idempotent — safe to call on every
-    boot. owner_id = NULL (instance-shared).
-
-    Returns True if the step succeeded (flag set), False on any exception
-    (caller keeps the LiteLLM fallback).
-    """
-    global _public_models_auto_created_flag
-
-    try:
-        from sqlalchemy import func, select
-
-        from stitch_backend.database import run_in_read_session, run_in_session
-        from stitch_backend.domains.ai_gateway.models import PublicModel
-        from stitch_backend.domains.ai_gateway.service import PublicModelService
-
-        # Check if any PublicModels exist.
-        async def _count(session):
-            result = await session.execute(select(func.count()).select_from(PublicModel))
-            return int(result.scalar_one())
-
-        existing = await run_in_read_session(_count)
-        if existing > 0:
-            # PublicModels already exist — no auto-create needed, but the
-            # gate is "succeeded" (existing rows serve the same purpose).
-            _public_models_auto_created_flag = True
-            return True
-
-        # Load config + keys to discover providers.
-        config = await (load_config or _default_config)()
-        provider_keys = await _load_keys_for_auto_create()
-
-        # Derive provider list from config.provider_priority + loaded keys.
-        providers: set[str] = set()
-        providers.update(config.provider_priority)
-        providers.update(provider_keys.keys())
-        # Filter out sentinel/internal keys.
-        providers.discard("__custom_providers__")
-
-        if not providers:
-            # No providers configured — nothing to create, but the step
-            # "succeeded" (there's just nothing to do).
-            _public_models_auto_created_flag = True
-            return True
-
-        async def _create(session):
-            svc = PublicModelService(session)
-            for provider in sorted(providers):
-                model_id = f"{provider}/*"
-                # Idempotent: check before create.
-                result = await session.execute(
-                    select(PublicModel).where(PublicModel.id == model_id)
-                )
-                if result.scalar_one_or_none() is not None:
-                    continue
-                await svc.create_public_model(
-                    model_id,
-                    display_name=provider,
-                    enabled=True,
-                    owner_id=None,
-                )
-            # P2.12: flush, not commit — run_in_session commits the
-            # outer transaction after the callback returns.
-            await session.flush()
-
-        await run_in_session(_create)
-        _public_models_auto_created_flag = True
-        logger.info(
-            "PublicModel auto-create succeeded: %d providers", len(providers),
-        )
-        return True
-    except Exception as exc:
-        logger.warning(
-            "PublicModel auto-create failed — keeping LiteLLM fallback: %s", exc,
-        )
-        _public_models_auto_created_flag = False
-        return False
-
-
-async def _load_keys_for_auto_create() -> dict[str, list[dict]]:
-    """Load provider keys for the auto-create step.
-
-    Mirrors the executor's former key loader (which fed ``_providers``)
-    so the PublicModel auto-create covers every provider the LiteLLM
-    Router would have served — including custom providers, which the
-    original built-in-only list missed (L2 gap fix). Safe fallback when
-    the real loader is unavailable (e.g. during tests).
-    """
-    try:
-        from stitch_backend.database import run_in_read_session
-        from stitch_backend.domains.api_keys.custom_providers import (
-            custom_provider_db_key,
-            get_custom_providers,
-        )
-        from stitch_backend.domains.api_keys.service import ApiKeysService
-
-        async def _load(session):
-            svc = ApiKeysService(session)
-            result: dict[str, list[dict]] = {}
-            for provider in (
-                "openai", "anthropic", "gemini", "antigravity",
-                "fireworks", "zai", "dashscope",
-            ):
-                try:
-                    keys = await svc.get_keys(provider)
-                    if keys:
-                        result[provider] = keys
-                except Exception:
-                    pass
-
-            # Custom providers — gap fix: the former ``_providers`` field
-            # was populated from ``_deployment_configs`` which included
-            # custom providers. The auto-create must cover them too.
-            try:
-                custom_providers = await get_custom_providers(session)
-                for cp in custom_providers:
-                    cp_keys = await svc.get_keys_by_db_key(custom_provider_db_key(cp.id))
-                    if cp_keys:
-                        result[f"custom_{cp.id}"] = cp_keys
-            except Exception:
-                pass
-
-            return result
-
-        return await run_in_read_session(_load)
-    except Exception:
-        return {}

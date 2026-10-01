@@ -1,7 +1,7 @@
 import { Database, Copy } from 'lucide-react';
 
 
-import { Tooltip } from '../Tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import { ButtonBase, SectionHeader } from '@/components/ui';
 

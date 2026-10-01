@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button, ConfirmActionButton, Input } from '@/components/ui';
 import { t } from '@/lib/i18n';
+import { formatDate, formatDateTime, formatTime } from '@/lib/utils';
 import type { ReplayRunPreset } from '@/lib/scenarioRecorder/replayPresets';
 
 type ReplayPresetsPanelProps = {
@@ -14,8 +15,7 @@ type ReplayPresetsPanelProps = {
 };
 
 function formatPresetTime(ts: number): string {
-  const d = new Date(ts);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  return formatDateTime(ts);
 }
 
 export function ReplayPresetsPanel({
@@ -33,13 +33,10 @@ export function ReplayPresetsPanel({
 
   const defaultName = useMemo(() => {
     const now = new Date();
-    return `${t('recorder.replay.presetDefaultName')} ${now.toLocaleDateString()} ${now.toLocaleTimeString(
-      [],
-      {
-        hour: '2-digit',
-        minute: '2-digit',
-      }
-    )}`;
+    return `${t('recorder.replay.presetDefaultName')} ${formatDate(now)} ${formatTime(now, {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
   }, []);
 
   return (

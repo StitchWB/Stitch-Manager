@@ -43,6 +43,13 @@ Checks:
     (.py, .ts, .tsx, .js, .json, .md):
     Flags literal occurrences of: KIRO_V2_STEPS, the Zone-3 bypass
     dir name, the SDK short name (case-insensitive), _save_totp_secret.
+
+  CHECK 3 -- autoreg must not import stitch_backend directly:
+    Scans ALL of python/autoreg/ (Zones 1+2, providers/ and captcha/
+    included) and flags ``import stitch_backend*`` / ``from stitch_backend*``
+    statements at ANY indentation (lazy in-function imports count).  The
+    only exempt file is python/autoreg/stitch_backend_bridge.py — the
+    sanctioned late-bound seam.
 """
 
 from __future__ import annotations
@@ -88,6 +95,13 @@ CHECK2_MARKERS = (
 )
 
 TEXT_EXTS = {".py", ".ts", ".tsx", ".js", ".json", ".md"}
+
+# CHECK 3: line-anchored (any indent) so comments/docstrings never match.
+CHECK3_PATTERNS = [
+    re.compile(r"^\s*from\s+stitch_backend(?:\s|\.)"),
+    re.compile(r"^\s*import\s+stitch_backend(?:\s|\.)"),
+]
+BRIDGE_REL = "python/autoreg/stitch_backend_bridge.py"
 
 
 def default_repo_root() -> Path:
@@ -145,6 +159,33 @@ def check_file(path: Path):
     return out
 
 
+def find_backend_import_violations(repo_root: Path) -> list[str]:
+    """CHECK 3: ``path:lineno: line`` for each direct autoreg->stitch_backend import."""
+    out: list[str] = []
+    autoreg = repo_root / "python" / "autoreg"
+    if not autoreg.is_dir():
+        return out
+    for dirpath, dirnames, filenames in os.walk(autoreg):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        for name in filenames:
+            if not name.endswith(".py"):
+                continue
+            path = Path(dirpath) / name
+            rel = path.relative_to(repo_root).as_posix()
+            if rel == BRIDGE_REL:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for i, line in enumerate(text.splitlines(), start=1):
+                for pat in CHECK3_PATTERNS:
+                    if pat.match(line):
+                        out.append(f"{rel}:{i}: {line.strip()}")
+                        break
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Open-core zone boundary leak-guard.")
     parser.add_argument("--repo-root", default=str(default_repo_root()))
@@ -168,19 +209,27 @@ def main() -> int:
             if args.verbose:
                 print(f"  {rel}:{lineno}: {check}: {snippet}")
 
-    if not violations:
+    backend_imports = find_backend_import_violations(repo_root)
+    if args.verbose:
+        for item in backend_imports:
+            print(f"  {item.split(':', 1)[0]}: CHECK3:backend-import: {item}")
+
+    if not violations and not backend_imports:
         print(f"ZONE BOUNDARY CLEAN ({files_scanned} files scanned)")
         return 0
 
     by_check: dict[str, list[str]] = {}
     for rel, check, lineno, snippet in violations:
         by_check.setdefault(check, []).append(f"{rel}:{lineno}: {snippet}")
+    if backend_imports:
+        by_check["CHECK3:backend-import"] = backend_imports
     print("ZONE BOUNDARY VIOLATIONS DETECTED:")
     for check, items in by_check.items():
         print(f"\n[{check}] ({len(items)})")
         for item in items:
             print(f"  {item}")
-    print(f"\nTotal violations: {len(violations)} ({files_scanned} files scanned)")
+    total = len(violations) + len(backend_imports)
+    print(f"\nTotal violations: {total} ({files_scanned} files scanned)")
     return 1
 
 

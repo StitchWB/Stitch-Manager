@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { AuthFile } from '../../../types/generated';
 import { t } from '@/lib/i18n';
+import { formatDate } from '@/lib/utils';
 import { Button, Checkbox, Modal, Select, Textarea } from '@/components/ui';
 
 interface ImportValidationState {
@@ -219,7 +220,7 @@ export function AiTransferModal({
                           <span className="text-slate-500 tabular-nums">
                             {f.expiresAt
                               ? t('aiHub.modals.expiresShort', {
-                                  date: new Date(f.expiresAt * 1000).toLocaleDateString(),
+                                  date: formatDate(f.expiresAt * 1000),
                                 })
                               : t('aiHub.modals.noExpiry')}
                           </span>

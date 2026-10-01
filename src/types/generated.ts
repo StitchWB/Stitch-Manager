@@ -44,11 +44,7 @@ export type TraeAutoregResult = { success: boolean; email: string | null; passwo
 
 export type GithubAutoregResult = { success: boolean; email: string | null; username: string | null; password: string | null; error: string | null; requiresVerification: boolean | null; verificationUrl: string | null }
 
-export type RoutingRuleInfo = { pattern: string; provider: string; fallback: string | null; description: string }
-
-export type RouteResult = { modelId: string; provider: string | null; fallback: string | null; matched: boolean }
-
-export type SettingsData = { theme?: string; provider?: string; registrationMode?: string; emailStrategy?: string; mailStrategy?: string; imapServer?: string; imapPort?: number; imapEmail?: string; imapUser?: string; imapPassword?: string; addyioEnabled?: boolean; addyioApiToken?: string; addyioAliasFormat?: string; addyioAutoDelete?: boolean; addyioDomain?: string; addyioDefaultRecipientId?: string; addyioDescriptionTemplate?: string; addyioFromName?: string; thirtyThreeMailEnabled?: boolean; thirtyThreeMailUsername?: string; thirtyThreeMailDomain?: string; thirtyThreeMailTemplate?: string; mailtmEnabled?: boolean; icloudEnabled?: boolean; icloudAppleId?: string; icloudAppPassword?: string; gmailBase?: string; gmailAlias?: string; gmailAppPassword?: string; proxyEnabled?: boolean; proxyUrl?: string; proxyUsername?: string; proxyPassword?: string; proxyType?: string; proxyList?: string; proxyRotationEnabled?: boolean; emailPattern?: string; emailCustomPrefix?: string; namePattern?: string; nameCustomFirst?: string; nameCustomLast?: string; count?: number; headless?: boolean; logVerbosity?: string; customIdePaths?: { [key in string]: string }; patcherStrategy?: string; autoRotateEnabled?: boolean; spoofMachineIdEnabled?: boolean; tokenRefreshEnabled?: boolean; tokenRefreshCheckInterval?: number; tokenRefreshBuffer?: number; uiScale?: number; speedMultiplier?: number; delayBetweenAccounts?: number; verificationCodeTimeout?: number; oauthCallbackTimeout?: number; allowAccessWait?: number; pageLoadTimeout?: number; elementWaitTimeout?: number; imapPollInterval?: number; passwordLength?: number; realisticTyping?: boolean; humanDelays?: boolean; screenshotsOnError?: boolean; captchaTimeout?: number; captchaSoundEnabled?: boolean; autoReplenishEnabled?: boolean; cardsText?: string; minActiveKiro?: number; minActiveWindsurf?: number; minActiveTrae?: number; kiroRegStrategy?: string; windsurfRegStrategy?: string; traeRegStrategy?: string; checkCreditsIntervalSeconds?: number; googleSheetsSpreadsheetId?: string; googleSheetsServiceAccountJson?: string }
+export type SettingsData = { theme?: string; provider?: string; registrationMode?: string; emailStrategy?: string; mailStrategy?: string; imapServer?: string; imapPort?: number; imapEmail?: string; imapUser?: string; imapPassword?: string; addyioEnabled?: boolean; addyioApiToken?: string; addyioAliasFormat?: string; addyioAutoDelete?: boolean; addyioDomain?: string; addyioDefaultRecipientId?: string; addyioDescriptionTemplate?: string; addyioFromName?: string; thirtyThreeMailEnabled?: boolean; thirtyThreeMailUsername?: string; thirtyThreeMailDomain?: string; thirtyThreeMailTemplate?: string; mailtmEnabled?: boolean; icloudEnabled?: boolean; icloudAppleId?: string; icloudAppPassword?: string; gmailBase?: string; gmailAlias?: string; gmailAppPassword?: string; proxyEnabled?: boolean; proxyUrl?: string; proxyUsername?: string; proxyPassword?: string; proxyType?: string; proxyList?: string; proxyRotationEnabled?: boolean; emailPattern?: string; emailCustomPrefix?: string; namePattern?: string; nameCustomFirst?: string; nameCustomLast?: string; count?: number; headless?: boolean; logVerbosity?: string; customIdePaths?: { [key in string]: string }; patcherStrategy?: string; autoRotateEnabled?: boolean; spoofMachineIdEnabled?: boolean; tokenRefreshEnabled?: boolean; tokenRefreshCheckInterval?: number; tokenRefreshBuffer?: number; uiScale?: number; speedMultiplier?: number; delayBetweenAccounts?: number; verificationCodeTimeout?: number; oauthCallbackTimeout?: number; allowAccessWait?: number; pageLoadTimeout?: number; elementWaitTimeout?: number; imapPollInterval?: number; passwordLength?: number; realisticTyping?: boolean; humanDelays?: boolean; screenshotsOnError?: boolean; captchaTimeout?: number; captchaSoundEnabled?: boolean; autoReplenishEnabled?: boolean; cardsText?: string; minActiveKiro?: number; minActiveWindsurf?: number; minActiveTrae?: number; fleetTargets?: { [key in string]: number } | null; kiroRegStrategy?: string; windsurfRegStrategy?: string; traeRegStrategy?: string; checkCreditsIntervalSeconds?: number; googleSheetsSpreadsheetId?: string; googleSheetsServiceAccountJson?: string }
 
 export type AddyIoTokenDetails = { name: string; createdAt: string; expiresAt: string | null }
 
@@ -63,10 +59,6 @@ export type KiroPatchConfig = { version: number; modules: PatchModules; machineI
 export type PatchModules = { machineIdSpoofing: boolean; telemetryBlocking: boolean; rateLimitBypass: boolean; errorSuppression: boolean; osSpoofing: boolean; commandSpoofing: boolean; authWatcher: boolean; constantPatching?: boolean; customPrompts?: boolean; requestSpy?: boolean }
 
 export type PatchConstants = { writeLimit?: string; graphTransitionLimit?: number; subAgentGraphTransitionLimit?: number; defaultMaxTokens?: number; defaultContextLength?: number; maxSnippetContentLength?: number }
-
-export type Message = { role: string; content: MessageContent }
-
-export type MessageContent = string | ContentBlock[]
 
 export type ContentBlock = { type: "text"; text: string } | { type: "image"; source: ImageSource }
 
@@ -97,8 +89,6 @@ export type AiProxyAccount = { id: number | null; provider: string; name: string
 export type KiroAccountQuota = { accountId: number; accountName: string; email?: string | null; subscriptionType?: string | null; used: number; limit: number; percentUsed: number; daysUntilReset?: number | null; fetchedAt: number; error?: string | null }
 
 export type RequestLog = { id: number | null; accountId: number | null; model: string; tokensIn: number | null; tokensOut: number | null; durationMs: number | null; status: number; errorMessage: string | null; createdAt: number }
-
-export type OAuthUrlResponse = { url: string; state: string }
 
 export type ModelUsage = { model: string; requests: number; tokens: number }
 
@@ -132,10 +122,6 @@ export type TaskExecution = { id: number; taskId: number; startedAt: number; com
 
 export type ExecutionStatus = "running" | "success" | "failed" | "cancelled"
 
-export type ImapConfig = { host: string; port: number; username: string; password: string; useTls?: boolean }
-
-export type VerificationCode = { code: string; from: string; to: string; subject: string; receivedAt: string }
-
 export type PatchResult = { success: boolean; message: string; backupPath: string | null }
 
 export type RegistrationStatus = { isRunning: boolean; success: boolean | null; status: string | null; provider: string | null; email: string | null; step: string | null; progress: number | null; error: string | null; startedAt: string | null; completedAt: string | null }
@@ -148,25 +134,11 @@ export type DashboardStats = { totalAccounts: number; activeTokens: number; quot
 
 export type ValidationResult = { valid: boolean; value: string | null; error: string | null }
 
-export type CountTokensRequest = { text: string }
-
-export type CountMessageTokensRequest = { messages: Message[] }
-
-export type TokenCountResponse = { tokens: number }
-
-export type QuotaInfoResponse = { accountId: number; provider: string; email: string; quotaUsed: number; quotaLimit: number; quotaRemaining: number; percentageUsed: number }
-
-export type AutoRegResponse = { success: boolean; email: string | null; password: string | null; error: string | null; needsConfirmation: boolean }
-
 export type WindsurfAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; loginOnly: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; emailPattern: string | null; namePattern: string | null; nameCustomFirst: string | null; nameCustomLast: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; inboxProvider: string | null; inboxMailbox: string | null; inboxMailtmAddress: string | null; inboxMailtmPassword: string | null; inboxMailtmBaseUrl: string | null; correlationId: string | null }
 
 export type TraeAutoregConfig = { email: string | null; password: string | null; name: string | null; headless: boolean; proxyUrl: string | null; imapServer: string | null; imapPort: number | null; imapUser: string | null; imapPassword: string | null; addyioEnabled: boolean | null; addyioApiToken: string | null; addyioDomain: string | null; addyioAliasFormat: string | null; addyioAutoDelete: boolean | null; thirtyThreeMailEnabled: boolean | null; thirtyThreeMailUsername: string | null; thirtyThreeMailDomain: string | null; mailtmEnabled: boolean | null; inboxProvider: string | null; inboxMailbox: string | null; inboxMailtmAddress: string | null; inboxMailtmPassword: string | null; inboxMailtmBaseUrl: string | null; correlationId: string | null }
 
 export type GithubAutoregConfig = { email: string | null; password: string; username: string | null; verificationCode: string | null; headless: boolean; imapServer: string | null; imapUser: string | null; imapPassword: string | null; inboxProvider: string | null; inboxMailbox: string | null; inboxMailtmAddress: string | null; inboxMailtmPassword: string | null; inboxMailtmBaseUrl: string | null; correlationId: string | null }
-
-export type DeviceFlowClient = { clientId: string; clientSecret: string }
-
-export type DeviceFlowSession = { client: DeviceFlowClient; deviceCode: string; userCode: string; verificationUri: string; interval: number; expiresAt: number }
 
 export interface ApiKeyEntry {
   key: string;
