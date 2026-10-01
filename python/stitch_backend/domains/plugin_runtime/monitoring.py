@@ -120,7 +120,7 @@ async def _notify_crash_loop(plugin_id: str, restarts: int) -> None:
                     User.telegram_id.is_not(None),
                 )
             )
-            targets = [row[0] for row in result.all()]
+            targets = [tid for (tid,) in result.all() if tid is not None]
 
         if not targets:
             logger.debug(
