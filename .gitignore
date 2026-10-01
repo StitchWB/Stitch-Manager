@@ -97,6 +97,8 @@ private.key
 # Logs
 *.log
 logs/
+# 'logs/' above would silently exclude src/components/logs (tracked source, not runtime logs)
+!src/components/logs/
 
 # OS
 .DS_Store
