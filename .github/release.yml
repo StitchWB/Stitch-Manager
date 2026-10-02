@@ -1,0 +1,16 @@
+changelog:
+  exclude:
+    authors:
+      - github-actions
+      - zone-export-bot
+  categories:
+    - title: Features
+      labels: [enhancement, feat]
+    - title: Fixes
+      labels: [bug, fix]
+    - title: Plugins
+      labels: [plugin]
+    - title: Documentation
+      labels: [documentation, docs]
+    - title: Other changes
+      labels: ["*"]
