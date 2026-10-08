@@ -50,6 +50,7 @@ export const marketplace: MarketplaceTranslations = {
     badgeVerifiedTooltip: "Криптографически проверен — аттестация пакета подписана офлайн и совпадает по sha256",
     badgeFilterAll: "Все",
     updateAvailable: "Доступно обновление",
+    open: "Открыть",
     featuresTitle: "Возможности",
     changelogTitle: "История изменений",
     linksTitle: "Ссылки",

@@ -127,7 +127,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
       {/* Name + meta */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-medium text-slate-100 truncate">
+          <span className="text-[13px] font-medium text-slate-100 truncate" title={item.name}>
             {item.name}
           </span>
           {locked && (
@@ -146,6 +146,11 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
           <span className="text-[11px] text-slate-500 truncate">
             {secondaryLine}
           </span>
+          {hasUpdate && (
+            <Badge variant="warning" size="sm" className="shrink-0">
+              {t('marketplace.updateAvailable')}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -154,18 +159,11 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
         className="shrink-0 flex flex-col items-end gap-1"
         onClick={e => e.stopPropagation()}
       >
-        {item.installed && item.installed_version !== null && (
-          <div className="flex items-center gap-1.5">
-            {/* eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable */}
-            <span className="text-[10px] text-slate-500 tabular-nums">
-              v{item.installed_version}
-            </span>
-            {hasUpdate && (
-              <Badge variant="warning" size="sm">
-                {t('marketplace.updateAvailable')}
-              </Badge>
-            )}
-          </div>
+        {item.installed && item.installed_version !== null && !hasUpdate && (
+          // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
+          <span className="text-[10px] text-slate-500 tabular-nums">
+            v{item.installed_version}
+          </span>
         )}
         {locked ? (
           <Tooltip content={tooltipMsg} side="left">

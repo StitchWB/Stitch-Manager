@@ -99,13 +99,14 @@ export function MarketplaceFilterBar({
                 onClick={() => onToggleCategory(c)}
                 aria-pressed={active}
                 className={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors shrink-0',
                   active
                     ? 'bg-indigo-500/15 text-indigo-300 ring-1 ring-inset ring-indigo-500/40'
                     : 'bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]',
                 )}
               >
-                {`${t(CATEGORY_LABEL_KEYS[c])} · ${categoryCounts.get(c) ?? 0}`}
+                <span className="whitespace-nowrap">{t(CATEGORY_LABEL_KEYS[c])}</span>
+                <span className="tabular-nums text-slate-500">{categoryCounts.get(c) ?? 0}</span>
               </ButtonBase>
             );
           })}
