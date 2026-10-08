@@ -427,12 +427,24 @@ PACKAGE_EXCLUDE_DIRS = frozenset(
         ".venv",
         "node_modules",
         "tests",
+        # Local tooling/IDE state that lives in plugin repo checkouts.
+        ".idea",
+        ".vscode",
+        ".hypothesis",
+        ".codegraph",
+        ".codenomad",
+        ".omo",
+        ".opencode",
+        ".discoverability",
+        ".trae",
     }
 )
 
 _PACKAGE_EXCLUDE_FILES = frozenset(
     {".gitignore", ".gitattributes", ".gitmodules", "ruff.toml", "pyproject.toml"}
 )
+# Env files never ship: they carry operator secrets in repo checkouts.
+_PACKAGE_EXCLUDE_FILE_PREFIXES = (".env",)
 _PACKAGE_EXCLUDE_PREFIXES = ("README", "LICENSE")
 _PACKAGE_EXCLUDE_SUFFIXES = (".pyc", ".pyo", ".log", ".db", ".sqlite3")
 
@@ -441,19 +453,48 @@ def _package_excluded(rel: Path) -> bool:
     if any(part in PACKAGE_EXCLUDE_DIRS for part in rel.parts):
         return True
     name = rel.name
-    if name in _PACKAGE_EXCLUDE_FILES or name.startswith(_PACKAGE_EXCLUDE_PREFIXES):
+    if name in _PACKAGE_EXCLUDE_FILES:
+        return True
+    if name.startswith(_PACKAGE_EXCLUDE_PREFIXES) or name.startswith(
+        _PACKAGE_EXCLUDE_FILE_PREFIXES
+    ):
         return True
     return name.endswith(_PACKAGE_EXCLUDE_SUFFIXES)
+
+
+def _manifest_excludes(package_dir: Path) -> frozenset[str]:
+    """Top-level paths the manifest asks to drop from the packed artifact.
+
+    A repo-root plugin package (the whole repo is the package) declares
+    ``"package_exclude": ["arena", "docs", ...]`` in its manifest so the
+    signed zip carries the runtime payload only.  Unknown manifest keys are
+    tolerated by the reader; this one is read directly.
+    """
+    import json
+
+    manifest_path = package_dir / MANIFEST_FILENAME
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return frozenset()
+    values = raw.get("package_exclude")
+    if not isinstance(values, list):
+        return frozenset()
+    return frozenset(
+        value.strip("/\\")
+        for value in values
+        if isinstance(value, str) and value.strip("/\\")
+    )
 
 
 def pack_service(package_dir: Path, out_dir: Path) -> Path:
     """Assemble a clean, signable copy of a service-plugin package.
 
-    Copies ``package_dir`` into ``out_dir`` minus repository/CI metadata and
-    dev-only tests (see :data:`PACKAGE_EXCLUDE_DIRS`), so the signed artifact
-    carries only the runtime payload (``plugin.json`` + module + ``_vendor``).
-    Unlike :func:`pack_provider` / :func:`pack_engine` no code is rewritten —
-    service plugins are self-contained subprocesses.
+    Copies ``package_dir`` into ``out_dir`` minus repository/CI metadata,
+    dev-only tests and env files (see :data:`PACKAGE_EXCLUDE_DIRS`), plus any
+    top-level paths the manifest lists under ``package_exclude``.  Unlike
+    :func:`pack_provider` / :func:`pack_engine` no code is rewritten — service
+    plugins are self-contained subprocesses.
 
     Packing to a fresh directory (rather than signing ``package_dir`` in
     place) also keeps ``publish`` from mutating the source tree, which matters
@@ -477,11 +518,12 @@ def pack_service(package_dir: Path, out_dir: Path) -> Path:
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
 
+    extra_excludes = _manifest_excludes(package_dir)
     for src in sorted(package_dir.rglob("*")):
         if not src.is_file():
             continue
         rel = src.relative_to(package_dir)
-        if _package_excluded(rel):
+        if rel.parts[0] in extra_excludes or _package_excluded(rel):
             continue
         dst = out_dir / rel
         dst.parent.mkdir(parents=True, exist_ok=True)

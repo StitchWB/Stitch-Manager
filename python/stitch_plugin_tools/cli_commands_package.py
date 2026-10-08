@@ -242,6 +242,24 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_pack_service(args: argparse.Namespace) -> int:
+    """Assemble a clean, signable copy of a service-plugin package.
+
+    Applies the packaging excludes (repo/CI metadata, tests, env files, and
+    the manifest's ``package_exclude`` list) so a repo-root package ships its
+    runtime payload only.  The result is unsigned - sign it before publishing.
+    """
+    from stitch_plugin_tools.publish import pack_service
+
+    try:
+        result = pack_service(Path(args.package_dir), Path(args.out))
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"packed {result}")
+    return 0
+
+
 def _cmd_pack_provider(args: argparse.Namespace) -> int:
     """Assemble a self-contained CODE plugin package for one provider.
 

@@ -172,6 +172,26 @@ def _marketplace_form_fields(manifest: PluginManifest) -> dict[str, str]:
     return fields
 
 
+def _assert_no_env_files(package_dir: Path) -> None:
+    """Refuse to publish a package tree that still carries env files.
+
+    Callers sign the tree before publishing, so stripping files later would
+    break the signature; a raw repo-root package (with an operator ``.env``)
+    must be packed first via ``pack_service``.  Failing loudly beats leaking
+    secrets to the distribution server.
+    """
+    offenders = sorted(
+        path.relative_to(package_dir).as_posix()
+        for path in package_dir.rglob("*")
+        if path.is_file() and path.name.startswith(".env")
+    )
+    if offenders:
+        raise ValueError(
+            "package carries env files that must not ship, pack it first "
+            "(pack-service): " + ", ".join(offenders[:5])
+        )
+
+
 async def publish_package(
     package_dir: Path,
     *,
@@ -195,6 +215,8 @@ async def publish_package(
     :class:`httpx.HTTPStatusError` on a non-2xx response and
     :class:`httpx.HTTPError` on transport failure.
     """
+    _assert_no_env_files(package_dir)
+
     # Gate before signing: signing mutates plugin.json, so missing metadata must fail first.
     manifest = crypto.read_manifest(package_dir)
     _require_publish_metadata(manifest)
