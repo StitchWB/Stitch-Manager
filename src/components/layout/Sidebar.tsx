@@ -335,7 +335,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className={cn('border-t border-white/5', sidebarCollapsed ? 'p-2 space-y-2' : 'p-4 space-y-2')}>
+      <div className={cn('border-t border-white/5 shrink-0', sidebarCollapsed ? 'p-2 space-y-2' : 'p-4 space-y-2')}>
         {/* Auth user chip + logout — only when auth is enabled */}
         {authEnabled && authUser && (
           <div className={cn(

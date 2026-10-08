@@ -1,8 +1,10 @@
-import { Check, Download, Lock, Trash2 } from 'lucide-react';
+import { Check, Download, ExternalLink, Lock, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
 import { t } from '@/lib/i18n';
 import type { MarketplaceItem, MarketplaceStatus } from '@/lib/backend/modules/marketplace';
 import { CATEGORY_LABEL_KEYS } from './categories';
@@ -37,6 +39,14 @@ export function MarketplaceDetailHeader({
     item.installed_version !== null &&
     item.version !== null &&
     item.installed_version !== item.version;
+
+  const navigate = useNavigate();
+  const servicePlugins = useServicePlugins();
+  const contributesPage = servicePlugins.some(
+    p =>
+      p.id === item.id &&
+      (p.ui?.kind === 'declarative' || (p.ui?.tabs?.length ?? 0) > 0),
+  );
 
   return (
     <>
@@ -74,7 +84,9 @@ export function MarketplaceDetailHeader({
 
       {/* Meta line */}
       <div className="text-xs text-slate-500 mb-4">
-        {[item.author, sourceLabel].filter(Boolean).join(' · ')}
+        {[item.author, sourceLabel, item.version ? `v${item.version}` : '']
+          .filter(Boolean)
+          .join(' · ')}
       </div>
 
       {/* Action row */}
@@ -136,6 +148,17 @@ export function MarketplaceDetailHeader({
           </Button>
         )}
 
+        {contributesPage && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => navigate(`/ai/plugin/${item.id}`)}
+            leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
+          >
+            {t('marketplace.open')}
+          </Button>
+        )}
+
         {item.installed && (
           <Button
             size="sm"
@@ -149,17 +172,11 @@ export function MarketplaceDetailHeader({
           </Button>
         )}
 
-        {/* Version text */}
-        <div className="ml-auto text-xs">
-          {hasUpdate ? (
-            <span className="text-indigo-300">
-              {item.installed_version} → {item.version}
-            </span>
-          ) : item.version ? (
-            // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
-            <span className="text-slate-500">v{item.version}</span>
-          ) : null}
-        </div>
+        {hasUpdate && (
+          <span className="text-xs text-indigo-300 tabular-nums">
+            {item.installed_version} → {item.version}
+          </span>
+        )}
       </div>
 
       {locked && item.required_tier && (

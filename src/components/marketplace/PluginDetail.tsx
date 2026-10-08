@@ -42,7 +42,7 @@ export function PluginDetail({ item, busy, isGuest, onInstall, onUninstall, onLo
         />
 
         {/* Underline tabs */}
-        <div className="flex items-center gap-1 border-b border-white/[0.06] mb-4">
+        <div className="flex items-center gap-0 border-b border-white/[0.06] mb-4">
           <ButtonBase
             type="button"
             onClick={() => setDetailTab('overview')}

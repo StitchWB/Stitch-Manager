@@ -19,6 +19,7 @@ from stitch_plugin_tools.cli_commands_package import (
     _cmd_new,
     _cmd_pack_engine,
     _cmd_pack_provider,
+    _cmd_pack_service,
     _cmd_publish,
     _cmd_publish_all,
     _cmd_run,
@@ -147,6 +148,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_pack.set_defaults(func=_cmd_pack_engine)
+
+    p_pack_service = sub.add_parser(
+        "pack-service",
+        help="assemble a clean, signable copy of a service-plugin package",
+    )
+    p_pack_service.add_argument(
+        "package_dir", help="service-package root (contains plugin.json)"
+    )
+    p_pack_service.add_argument("out", help="output pack directory")
+    p_pack_service.set_defaults(func=_cmd_pack_service)
 
     p_pack_provider = sub.add_parser(
         "pack-provider",
