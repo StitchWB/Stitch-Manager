@@ -104,9 +104,16 @@ async def try_totp_route(name: str, body: dict[str, Any]) -> Any:
 
     try:
         return await host.call(plugin_cmd, params)
-    except (PluginNotRunning, PluginCallTimeout, RpcCallError):
-        # Host died, timed out, or returned a JSON-RPC error — fall back
-        # to the built-in handler instead of surfacing as HTTP 400.
+    except RpcCallError as exc:
+        # JSON-RPC error response = expected business rejection, not an incident.
+        logger.warning(
+            "totp dual-format: plugin rejected '%s': %s, "
+            "falling back to built-in",
+            name,
+            str(exc).splitlines()[0],
+        )
+        return _FALLTHROUGH
+    except (PluginNotRunning, PluginCallTimeout):
         logger.warning(
             "totp dual-format: plugin error during '%s', "
             "falling back to built-in",

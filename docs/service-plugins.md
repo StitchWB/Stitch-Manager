@@ -66,7 +66,7 @@ The `contributions` object declares the plugin's surface area:
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `commands` | `object[]` | Namespaced commands. `name` is the command name (called as `plugin.{id}.{name}`). `readonly` gates write access. |
+| `commands` | `object[]` | Namespaced commands. `name` is the command name (called as `plugin.{id}.{name}`). `readonly` gates write access. `timeoutSeconds?` overrides the per-call timeout for that command (see [Per-command timeout](#per-command-timeout)). |
 | `ui` | `object` | UI contribution. `kind` is `"declarative"` (schema-driven) or `"core_page"` (host page binds to plugin commands). |
 | `ui.tabs` | `object[]` | Dynamic tabs in the AI Hub. `id`, `label`, `icon` (Lucide icon name), `page` (schema ref). |
 | `ui.page` | `object` | Declarative page schema (see §4). Only used when `kind=declarative`. |
@@ -158,6 +158,10 @@ the host.
 | `plugin.shutdown` | host→plugin | `{}` | `null` | Graceful shutdown. Plugin should clean up and exit. |
 | `plugin.call` (`_migrate_db`) | host→plugin | `{from_version, to_version}` | `{from_version, to_version}` | Reserved call name. Called after `plugin.init` when `contributions.storage.migrations` is set. The plugin creates/migrates its SQLite tables. |
 
+Two command names are reserved by the host and never reach the plugin
+process: `_migrate_db` (storage migrations, above) and `metrics`
+(below) - a plugin must not declare either in `contributions.commands`.
+
 ### Handshake fields
 
 - **`supported`** (host→plugin, in `plugin.init` params) — the optional
@@ -176,7 +180,46 @@ The scaffold template's `_handle_init` returns
 `{"plugin_id", "db_path", "data_dir", "capabilities": []}` and stores
 `supported` in `_Ctx` for later use.
 
+### `host_driver` capability (elevated trust class)
+
+`host_driver` is a manifest-declared capability
+(`"capabilities": ["host_driver"]`) that grants a service plugin
+**elevated trust**, subject to an entitlement check:
+
+- **Entitled-only.** At discovery the host resolves the effective
+  entitlements; a plugin that is not entitled to run `host_driver`
+  behavior starts as a normal plugin (the flag is simply not granted).
+  Desktop / admin (`"*"`) contexts pass automatically.
+- **Real user TEMP/TMP.** A `host_driver` plugin's child process sees
+  the real user `TEMP`/`TMP` (from the host environment, falling back
+  to the OS temp root) instead of the per-sidecar scoped temp dir.
+  `USERPROFILE`/`HOME` scoping is **unchanged for every plugin** —
+  host_driver never exposes the user profile.
+- **Normal caps.** The community/sandbox 5s call-timeout cap (and the
+  256MB memory cap where it applies) is not applied to a host_driver
+  host: it keeps the default 30s timeout and unlimited memory.
+- **Community/sandbox stripped.** The capability is only honored for
+  `local` (dev) and `cache` (signed) sources. A community or sandbox
+  manifest declaring `host_driver` is stripped at discovery — the
+  capability is ignored, and the plugin runs with full sandbox caps.
+- **Handshake.** The host advertises `host_driver` in the
+  `plugin.init` `supported` list, so a plugin can detect host support
+  at runtime.
+
+**Migration note for plugins:** plugins that need the real user temp
+directory (e.g. tools that spawn IDEs or CLIs writing to `%TEMP%`)
+should add `"host_driver"` to their manifest `capabilities`. Without
+it, behavior is unchanged — the child keeps the scoped
+`<temp-root>/sidecar-env/<name>/tmp` directory. The capability is
+inert on hosts that do not advertise it in `supported`.
+
 ### Metrics
+
+`metrics` is a reserved command name: when the dispatcher routes
+`plugin.{id}.metrics`, the bridge short-circuits to host-side counters
+and never forwards the call over RPC (`bridge.py`, `cmd == "metrics"`).
+A plugin that registers its own `metrics` command will never see it
+called through the namespaced route.
 
 The host serves per-plugin call statistics as
 `plugin.{id}.metrics` (HTTP: `POST /api/plugin.{id}.metrics`):
@@ -214,6 +257,50 @@ The host applies a per-call timeout (default 30s). On timeout, the
 child process is killed (kill-tree) and `RpcTimeoutError` is raised.
 The host restarts the plugin once on crash; a second crash marks it
 dead.
+
+### Per-command timeout
+
+A command MAY declare `timeoutSeconds` in its `contributions.commands[]`
+entry to override the default per-call timeout for that command; the host
+honors the declared value when it routes the call. The declared value
+never lifts the community/sandbox cap (5s).
+
+```json
+{"name": "stack_start", "readonly": false, "timeoutSeconds": 300}
+```
+
+### Async jobs (long operations)
+
+A handler must return within its timeout. A long-running operation MUST
+NOT block the handler for its whole duration: return immediately with
+
+```json
+{"accepted": true, "actionId": "<id>"}
+```
+
+and run the work out-of-band. The host/client then polls a readonly
+status command — by convention `action_status` — until the action
+reports completion:
+
+```json
+{"busy": true, "recent": [
+  {"id": "<id>", "cmd": "<command>", "status": "running",
+   "startedAt": "2026-01-01T00:00:00Z"}
+]}
+```
+
+`action_status` is readonly and returns
+`{busy, recent: [{id, cmd, status, startedAt, finishedAt?, exit?}]}`.
+Poll it until the action reports completion (`finishedAt` present), then
+read `exit` / the result. A command that refuses to start — e.g. a
+single-flight queue already running another action — returns
+`{"accepted": false, "reason": "<why>"}` rather than raising.
+
+The plugin's stdout is a single JSON-RPC channel. A handler that also
+prints human output must redirect it locally (e.g.
+`contextlib.redirect_stdout`); the server pins its own output stream at
+`serve()` start, so responses keep flowing to the host while that
+redirect is active.
 
 ---
 
@@ -338,11 +425,11 @@ that need them stay `core_page`.
 |------|---------|------------|
 | `heading` | Section heading. | `text`, `level?` (1-6). |
 | `section` | Group of nodes with an optional title. | `title?`, `nodes: UiNode[]`. |
-| `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`, `placeholder?` (text/select hint; plain string or i18n key, resolved like `label`). |
-| `table` | Data table with optional per-row actions. | `id`, `columns: [{key, label}]`, `source: {command, params?}`, `rowsKey?`, `rowActions?` (per-row action buttons; see below). `source.command` must be a readonly command returning rows. |
-| `button` | Action button. | `id`, `label`, `command`, `params?`, `paramsFrom?` (param key → field `id` binding), `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`. |
-| `card_grid` | Responsive grid of cards (additive revision). | `id`, `source: {command, params?}`, `card: {title, subtitle?, body?, image?, action?}`. `source.command` must be a readonly command returning an array of row objects (or an object wrapping it under `"rows"`); each row renders one card. |
-| `markdown` | Readonly rendered markdown (additive revision). | `id`, `source: {command, params?}`, `textKey?` (default `"text"`). `source.command` must be a readonly command returning an object whose `textKey` field holds the markdown string (a bare string response is accepted directly). |
+| `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`, `placeholder?` (text/select hint; plain string or i18n key, resolved like `label`), `source?` + `valueKey?` (toggle only, v2.1: readonly switch bound to a fetched boolean - see below). |
+| `table` | Data table with optional per-row actions. | `id`, `columns: [{key, label}]`, `source: {command, params?, refreshMs?}`, `rowsKey?`, `rowActions?` (per-row action buttons; see below), `empty?` (v2.1 i18n key shown when the source returns no rows). `source.command` must be a readonly command returning rows. |
+| `button` | Action button. | `id`, `label`, `command`, `params?`, `paramsFrom?` (param key → field `id` binding), `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`, `confirm?` (v2.1 prompt string; see below), `refreshOnSuccess?` (v2.1 node ids refetched after success). |
+| `card_grid` | Responsive grid of cards (additive revision). | `id`, `source: {command, params?, refreshMs?}`, `card: {title, subtitle?, body?, image?, tone?, hint?, action?}`, `empty?` (v2.1). `source.command` must be a readonly command returning an array of row objects (or an object wrapping it under `"rows"`); each row renders one card. `tone` (v2.1, row key first / literal `"ok"`\|`"warn"`\|`"down"` fallback) renders a colored dot + border; `hint` (v2.1) renders a small line under the body, resolved like a label. |
+| `markdown` | Readonly rendered markdown (additive revision). | `id`, `source: {command, params?, refreshMs?}`, `textKey?` (default `"text"`), `empty?` (v2.1). `source.command` must be a readonly command returning an object whose `textKey` field holds the markdown string (a bare string response is accepted directly). |
 
 ### Labels
 
@@ -360,10 +447,42 @@ controlled components that write back into this map. `placeholder?` is an
 optional hint for text/select fields, resolved like `label` (dotted
 string → i18n key via the plugin bundle, otherwise rendered as-is).
 
+A toggle field can also bind to a **fetched value** instead of user
+input (v2.1): `source: {command, params?, refreshMs?}` plus `valueKey?`
+(default `"value"`) renders a disabled switch reflecting the boolean
+under `valueKey` in the `source.command` response.
+
+### Source polling and empty states (v2.1)
+
+`table`, `card_grid` and `markdown` sources accept `refreshMs`: the
+renderer refetches the source command on that interval (values below
+2000 ms are capped to 2000 ms) and clears the interval on unmount.
+Absent means fetch-once/on-demand only. The `empty` field (i18n key or
+literal, resolved like `label`) replaces the default em-dash when the
+source returns no rows/text.
+
 ### Button clicks
 
 Button clicks invoke `plugin.{id}.{command}` via the host's
-`safeInvoke` — the result is surfaced as a toast or table refresh.
+`safeInvoke`, and the result is always surfaced:
+
+- success → the `pluginUi.actionSucceeded` toast. String fields of the
+  success payload (envelope keys `success`/`accepted`/`actionId`/
+  `error`/`reason` excluded) additionally render in a copyable result
+  dialog — this is how outputs like devbox `issue_tokens` →
+  `{chatBlock}` reach the user;
+- business error (`{success: false, error}` or `{accepted: false,
+  reason}`) → an error toast carrying the `error`/`reason` text
+  (falling back to `pluginUi.actionFailed` when absent);
+- transport failure → the `pluginUi.actionFailed` toast.
+
+A button with `confirm` (v2.1; i18n key or literal, resolved like
+`label`) prompts via `window.confirm` before invoking; declining aborts
+without calling the command. `variant: "danger"` page buttons without an
+explicit `confirm` prompt via the core `pluginUi.confirmRowAction` key —
+the same contract row actions follow. `refreshOnSuccess: [nodeIds]`
+(v2.1) refetches the named `table`/`card_grid`/`markdown` nodes after a
+successful invocation (unknown ids are ignored).
 
 Buttons bind field values through **`paramsFrom`**, a map of
 `param key → field id`:
@@ -504,6 +623,36 @@ to `http(s)`/`mailto` URLs — any other scheme (notably `javascript:`)
 renders its text without a hyperlink. Anything beyond the subset
 degrades to plain text; pages that need full rich-text/HTML stay
 `core_page`.
+
+### Manifest validation gate
+
+`python -m stitch_plugin_tools` runs a structural gate over
+`contributions.ui.page`, `contributions.commands` and `contributions.i18n`
+at **dev-install**, at **publish**, and in CI
+(`manifest-lint '../plugins-src/*/plugin.json'`). It blocks on:
+
+- a node kind outside the frozen vocabulary, or a `field` type outside
+  `text`/`select`/`toggle`;
+- a command reference (button, `source.command`, `rowActions`,
+  `card.action`) that is not declared in `contributions.commands`;
+- a referenced label/`empty`/`hint`/`confirm` i18n key that does not
+  resolve in BOTH the `ru` and `en` bundles (including column labels, tab
+  labels and the page title);
+- a `button.paramsFrom` target `field` id that is not declared on the page;
+- a declared i18n key in the plugin namespace that no declarative node or
+  tab label references (dead key). `core_page` plugins are exempt — their
+  React page owns those keys.
+
+`paramsFromRow` targets that are not a declared table column are a
+**warning**, never a block: rows may carry extra keys (e.g. totp rows
+expose `id` without a visible column).
+
+**Honest scope.** The gate is structural and static. It does NOT catch
+semantic param inversion (a button wired to the wrong field with the right
+shape), runtime data strings returned by commands, commands the plugin
+implements but omits from `contributions.commands` (a commands-surface
+concern, not a UI one — e.g. the mail plugin's `wait_otp`/`sync`), or
+`core_page` i18n keys that no declarative node references.
 
 ---
 

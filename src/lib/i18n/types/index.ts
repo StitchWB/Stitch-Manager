@@ -14,6 +14,7 @@ import type { PrivilegesTranslations } from './privileges';
 import type { MonitoringTranslations } from './monitoring';
 import type { CommonTranslations } from './common';
 import type { DashboardTranslations } from './dashboard';
+import type { DevboxPageTranslations } from './devboxPage';
 import type { FiltersTranslations } from './filters';
 import type { HeaderTranslations } from './header';
 import type { IdentityTranslations } from './identity';
@@ -119,4 +120,5 @@ export interface Translations
     UiTextsTranslations,
     FooterTranslations,
     UsersTranslations,
-    AiTranslations {}
+    AiTranslations,
+    DevboxPageTranslations {}

@@ -86,6 +86,15 @@ class RpcPluginServer:
         # Lock guards the id counter from re-entrancy (signal/nested loop) tearing its read-modify-write.
         self._request_id_lock = threading.Lock()
         self._queued_lines: list[str] = []
+        # Pinned at serve() start: a plugin's long action may swap sys.stdout process-wide.
+        self._stdin: Any = None
+        self._stdout: Any = None
+
+    def _input_stream(self) -> Any:
+        return self._stdin if self._stdin is not None else sys.stdin
+
+    def _output_stream(self) -> Any:
+        return self._stdout if self._stdout is not None else sys.stdout
 
     def register(self, name: str, handler: Any) -> None:
         """Register a command handler callable ``handler(params) -> result``."""
@@ -139,12 +148,13 @@ class RpcPluginServer:
         rid = self._next_request_id_locked()
         req = {"jsonrpc": _JSONRPC, "id": rid, "method": method,
                "params": params or {}}
-        sys.stdout.write(json.dumps(req, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
+        out = self._output_stream()
+        out.write(json.dumps(req, ensure_ascii=False) + "\n")
+        out.flush()
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            raw = sys.stdin.readline()
+            raw = self._input_stream().readline()
             if not raw:
                 raise RpcProtocolError(
                     "stdin closed while waiting for host response"
@@ -216,8 +226,9 @@ class RpcPluginServer:
             {"jsonrpc": _JSONRPC, "method": "plugin.log", "params": params},
             ensure_ascii=False,
         )
-        sys.stdout.write(line + "\n")
-        sys.stdout.flush()
+        out = self._output_stream()
+        out.write(line + "\n")
+        out.flush()
 
     def serve(self) -> None:
         """Main read-dispatch-write loop.  Exits on ``plugin.shutdown``.
@@ -233,8 +244,14 @@ class RpcPluginServer:
         non-ASCII response or request param kills the child with a
         UnicodeEncodeError/UnicodeDecodeError while the host-side pipe
         speaks UTF-8 anyway.
+
+        Both streams are pinned here so responses keep flowing to the
+        host even if a plugin swaps ``sys.stdout`` via
+        ``contextlib.redirect_stdout`` for a long action.
         """
-        for stream in (sys.stdin, sys.stdout):
+        self._stdin = sys.stdin
+        self._stdout = sys.stdout
+        for stream in (self._stdin, self._stdout):
             reconfigure = getattr(stream, "reconfigure", None)
             if reconfigure is None:
                 continue
@@ -248,7 +265,7 @@ class RpcPluginServer:
                 queued = self._queued_lines.pop(0)
                 if self._process_line(queued):
                     return  # plugin.shutdown received
-            raw = sys.stdin.readline()
+            raw = self._input_stream().readline()
             if not raw:
                 break
             line = raw.strip()
@@ -298,15 +315,15 @@ class RpcPluginServer:
         except Exception as exc:  # noqa: BLE001 — server never crashes
             return _error(_ERR_INTERNAL, str(exc))
 
-    @staticmethod
-    def _send_response(rid: Any, result: Any) -> None:
-        """Write one JSON-RPC response line to stdout."""
+    def _send_response(self, rid: Any, result: Any) -> None:
+        """Write one JSON-RPC response line to the pinned output stream."""
         if isinstance(result, dict) and "error" in result:
             obj: dict[str, Any] = {"jsonrpc": _JSONRPC, "id": rid, "error": result["error"]}
         else:
             obj = {"jsonrpc": _JSONRPC, "id": rid, "result": result}
-        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
+        out = self._output_stream()
+        out.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        out.flush()
 
 
 def _error(code: int, message: str, data: Any = None) -> dict[str, Any]:

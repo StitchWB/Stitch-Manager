@@ -314,3 +314,127 @@ describe('AiHubLayout rail navigation', () => {
     expect(subitems.className).toContain('md:flex');
   });
 });
+
+// ── F11: rail kind filter + core_page host-route mapping ────────────────────
+
+function corePagePlugin(id: string, tabId: string, label: string): ServicePluginInfo {
+  return {
+    id,
+    version: '1.0.0',
+    status: {
+      status: 'running',
+      port: null,
+      pid: 1,
+      uptimeSeconds: 1,
+      error: null,
+      plugin_id: id,
+      restarts: 0,
+      stopping: false,
+    },
+    ui: {
+      kind: 'core_page',
+      tabs: [{ id: tabId, label }],
+    },
+  };
+}
+
+describe('AiHubLayout plugin rail kind filter (F11)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _resetForTests();
+    navigatedPath = '/ai';
+    navigatedSearch = '';
+    (safeInvoke as jest.Mock).mockResolvedValue([]);
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+  });
+
+  it('(i) core_page plugin tabs navigate to their real host routes', async () => {
+    // One plugin per render: navigating away from /ai unmounts the rail.
+    const cases = [
+      ['stitch-mail', 'mail', '/mail'],
+      ['stitch-radar', 'radar', '/radar'],
+      ['stitch-opencode', 'opencode', '/ai/opencode-config'],
+      ['stitch-devbox', 'devbox', '/ai/devbox'],
+    ] as const;
+    for (const [pluginId, tabId, route] of cases) {
+      _resetForTests();
+      navigatedPath = '/ai';
+      (safeInvoke as jest.Mock).mockResolvedValue([
+        corePagePlugin(pluginId, tabId, tabId),
+      ]);
+
+      const view = renderAt('/ai');
+      const tab = await screen.findByTestId(
+        `ai-hub-rail-item-plugin:${pluginId}:${tabId}`,
+      );
+      await act(async () => {
+        fireEvent.click(tab);
+      });
+      await waitFor(() => {
+        expect(navigatedPath).toBe(route);
+      });
+      view.unmount();
+    }
+  });
+
+  it('(j) stitch-cards core_page tab maps to the Tools host route', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      corePagePlugin('stitch-cards', 'cards', 'Cards'),
+    ]);
+
+    renderAt('/ai');
+
+    await waitFor(() => {
+      expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
+    });
+    const tab = await screen.findByTestId('ai-hub-rail-item-plugin:stitch-cards:cards');
+    await act(async () => {
+      fireEvent.click(tab);
+    });
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/tools');
+    });
+  });
+
+  it('(k) plugins without a declarative/core_page kind render no tab', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      {
+        id: 'mystery',
+        version: '1.0.0',
+        status: {
+          status: 'running',
+          port: null,
+          pid: 1,
+          uptimeSeconds: 1,
+          error: null,
+          plugin_id: 'mystery',
+          restarts: 0,
+          stopping: false,
+        },
+        // Cast: simulates a manifest whose ui block predates the kind field.
+        ui: { tabs: [{ id: 'main', label: 'Mystery' }] } as unknown as ServicePluginInfo['ui'],
+      },
+    ]);
+
+    renderAt('/ai');
+
+    await waitFor(() => {
+      expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
+    });
+    expect(screen.queryByTestId('ai-hub-rail-item-plugin:mystery:main')).toBeNull();
+  });
+
+  it('(l) declarative plugins keep the /ai/plugin/{id} route', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue(pluginFixture);
+
+    renderAt('/ai');
+
+    const echoTab = await screen.findByTestId('ai-hub-rail-item-plugin:echo:main');
+    await act(async () => {
+      fireEvent.click(echoTab);
+    });
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/plugin/echo');
+    });
+  });
+});

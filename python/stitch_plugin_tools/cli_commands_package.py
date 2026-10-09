@@ -480,3 +480,10 @@ def _cmd_test(args: argparse.Namespace) -> int:
     from stitch_plugin_tools.runtool import test_package
 
     return test_package(Path(args.package_dir))
+
+
+def _cmd_manifest_lint(args: argparse.Namespace) -> int:
+    """Validate manifest UI contributions for one or more paths/globs (CI)."""
+    from stitch_plugin_tools.ui_manifest import lint_paths
+
+    return lint_paths(args.paths)

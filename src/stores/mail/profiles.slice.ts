@@ -8,12 +8,14 @@ import {
   emailInboxListProfiles,
   emailInboxUpsertProfile,
 } from '@/lib/backend/modules/emailInbox';
+import type { EmailInboxProfile } from '@/lib/backend/modules/emailInbox';
 import { buildImapConnectInput, buildMailTmConnectInput } from '@/lib/mail/runtime';
 import type { MailProfileSyncState, MailState, ProfilesSlice } from './types';
 import {
   clearFolderReconnectTimer,
   deriveStateFromConnectInput,
   invalidateListAndWaitTokens,
+  isEmailInboxProfile,
   normalizeProfileLabel,
   resolveEffectiveMailbox,
   setDedupedError,
@@ -114,7 +116,26 @@ export const createProfilesSlice: StateCreator<MailState, [], [], ProfilesSlice>
     set({ isProfilesLoading: true, error: null });
 
     try {
-      const profiles = await emailInboxListProfiles();
+      const rawProfiles: unknown = await emailInboxListProfiles();
+
+      const profiles: EmailInboxProfile[] = [];
+      const rejected: unknown[] = [];
+      const rows: unknown[] = Array.isArray(rawProfiles) ? rawProfiles : [rawProfiles];
+      for (const row of rows) {
+        if (isEmailInboxProfile(row)) {
+          profiles.push(row);
+        } else {
+          rejected.push(row);
+        }
+      }
+
+      if (rejected.length > 0) {
+        console.error('Malformed mail profiles rejected:', rejected);
+        setDedupedError(
+          set,
+          `${rejected.length} mail profile(s) rejected: malformed response from backend`,
+        );
+      }
 
       const existingSyncMap = get().profileSyncMap;
       const profileSyncMap: Record<string, MailProfileSyncState> = {};

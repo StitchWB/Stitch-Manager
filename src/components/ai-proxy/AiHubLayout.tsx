@@ -153,6 +153,18 @@ function getPluginIcon(name?: string): LucideIcon {
 }
 
 /**
+ * Host routes of core_page plugins whose page is a built-in app route.
+ * A core_page plugin absent here gets no rail tab at all.
+ */
+const CORE_PAGE_ROUTES: Record<string, string> = {
+  'stitch-mail': '/mail',
+  'stitch-radar': '/radar',
+  'stitch-opencode': '/ai/opencode-config',
+  'stitch-devbox': '/ai/devbox',
+  'stitch-cards': '/tools',
+};
+
+/**
  * Resolve a plugin-contributed tab label. When the label looks like a
  * translation key (contains a dot), look it up via t('plugin.{id}.{label}')
  * so the plugin's i18n bundle (registered by fetchServicePlugins) is
@@ -274,19 +286,29 @@ export function AiHubLayout() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
-  // Build dynamic tabs from service-plugin manifests. Each tab navigates to
-  // /ai/plugin/{pluginId}; active when pathname starts with that prefix.
+  // Rail tabs by ui.kind: declarative → /ai/plugin/{id}, core_page → its real host route (no route → no tab).
   const pluginTabs: AiTab[] = [];
   for (const plugin of plugins) {
     const tabs = plugin.ui?.tabs;
     if (!Array.isArray(tabs)) continue;
+    const kind = plugin.ui?.kind;
+    let to: string;
+    if (kind === 'declarative') {
+      to = `/ai/plugin/${plugin.id}`;
+    } else if (kind === 'core_page') {
+      const hostRoute = CORE_PAGE_ROUTES[plugin.id];
+      if (!hostRoute) continue;
+      to = hostRoute;
+    } else {
+      continue;
+    }
     for (const tab of tabs) {
       if (!tab.id || !tab.label) continue;
       pluginTabs.push({
         id: `plugin:${plugin.id}:${tab.id}`,
         pluginId: plugin.id,
         label: tab.label,
-        to: `/ai/plugin/${plugin.id}`,
+        to,
         icon: getPluginIcon(tab.icon),
         source: plugin.source,
       });
@@ -336,7 +358,7 @@ export function AiHubLayout() {
                       ? tab.children?.find(child => child.tabParam === tabParam)
                       : undefined;
                   const isActive = tab.pluginId
-                    ? location.pathname.startsWith('/ai/plugin/' + tab.pluginId)
+                    ? location.pathname.startsWith(tab.to)
                     : current === tab.id && !activeChild;
                   const label = resolveLabel(tab);
                   const isCommunity = tab.source === 'community';

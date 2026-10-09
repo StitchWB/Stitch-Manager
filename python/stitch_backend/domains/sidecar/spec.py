@@ -39,6 +39,8 @@ class LaunchPlan:
     # DEVNULL) or "pipes" (stdin/stdout/stderr as PIPE handles for RPC plugins;
     # the caller retrieves them via ``SidecarSupervisor.get_process``).
     stdio: str = "devnull"
+    # host_driver: real user TEMP/TMP; USERPROFILE/HOME stay scoped for every plugin.
+    host_driver: bool = False
 
 
 @dataclass(frozen=True)

@@ -388,8 +388,8 @@ export function LaunchSection({
   disabled
 }: LaunchSectionProps) {
   const [cardMode, setCardMode] = useState<'manual' | 'auto'>('auto');
-  const [findingLive, setFindingLive] = useState(false);
-  const [lastFoundCard, setLastFoundCard] = useState<string | null>(null);
+  const [generatingCard, setGeneratingCard] = useState(false);
+  const [lastGeneratedCard, setLastGeneratedCard] = useState<string | null>(null);
 
   // Sync cardMode when cardsText changes - preserve user's manual choice if they have cards
   // but default to auto when cardsText is empty
@@ -401,31 +401,40 @@ export function LaunchSection({
     });
   }, [cardsText, cardMode]);
 
-  const handleFindLive = async () => {
-    if (!cardBin || findingLive) return;
-    setFindingLive(true);
-    setLastFoundCard(null);
+  const handleGenerateCard = async () => {
+    if (!cardBin || generatingCard) return;
+    setGeneratingCard(true);
+    setLastGeneratedCard(null);
 
     try {
-      const result = await safeInvoke<{ number: string; month: string; year: string; cvv: string; } | null>('find_live_card', {
-        bin: cardBin,
-        maxAttempts: 20,
-        month: null,
-        year: null
+      const generated = await safeInvoke<Array<{ number: string; month: string; year: string; cvv: string }>>('generate_cards', {
+        req: {
+          bin: cardBin,
+          quantity: 1,
+          month: null,
+          year: null
+        }
       });
-
-      if (result) {
-        const cardStr = `${result.number}|${result.month}|${result.year}|${result.cvv}`;
-        setLastFoundCard(cardStr);
-        onCardsTextChange?.(cardStr);
-        toast.success(`Live карта найдена!`);
-      } else {
-        toast.error('Не удалось найти Live карту');
+      const card = Array.isArray(generated) ? generated[0] : null;
+      if (!card) {
+        toast.error('Не удалось сгенерировать карту');
+        return;
       }
+      const cardStr = `${card.number}|${card.month}|${card.year}|${card.cvv}`;
+      let binChecked = false;
+      try {
+        const check = await safeInvoke<{ success?: boolean }>('check_card_rust', { cardData: cardStr });
+        binChecked = Boolean(check?.success);
+      } catch {
+        binChecked = false;
+      }
+      setLastGeneratedCard(cardStr);
+      onCardsTextChange?.(cardStr);
+      toast.success(binChecked ? 'Карта сгенерирована и проверена по BIN' : 'Карта сгенерирована, BIN-проверка недоступна');
     } catch (err) {
       toast.error('Ошибка: ' + String(err));
     } finally {
-      setFindingLive(false);
+      setGeneratingCard(false);
     }
   };
 
@@ -613,7 +622,7 @@ export function LaunchSection({
                     value={cardBin || ''}
                     onChange={(e) => onCardBinChange?.(e.target.value)}
                     placeholder="515462002112xxxx"
-                    disabled={disabled || findingLive || !cardBin}
+                    disabled={disabled || generatingCard || !cardBin}
                     className="flex-1 text-xs font-mono"
                     shellClassName="h-7"
                   />
@@ -621,34 +630,34 @@ export function LaunchSection({
                   <Button
                     size="xs"
                     variant="primary"
-                    onClick={handleFindLive}
-                    disabled={disabled || findingLive || !cardBin}
+                    onClick={handleGenerateCard}
+                    disabled={disabled || generatingCard || !cardBin}
                     className={cn(
                       'flex items-center gap-1',
-                      findingLive || !cardBin ?
+                      generatingCard || !cardBin ?
                         'bg-white/[0.03] text-slate-600 cursor-not-allowed' :
                         'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20'
                     )}>
 
-                    {findingLive ?
+                    {generatingCard ?
                       <Loader2 size={12} className="animate-spin" /> :
 
                       <>
                         <Sparkles size={12} />
-                        {t('autoReg.engineTab.findLive')}
+                        {t('autoReg.engineTab.generateCard')}
                       </>
                     }
                   </Button>
                 </div>
 
-                {lastFoundCard &&
+                {lastGeneratedCard &&
                   <div className="text-[11px] text-emerald-400 flex items-center gap-1">
-                    <CreditCard size={12} />{t("autoReg.engineTab.live")}
-                    {lastFoundCard}
+                    <CreditCard size={12} />{t("autoReg.engineTab.generated")}
+                    {lastGeneratedCard}
                   </div>
                 }
 
-                {cardsText && !lastFoundCard &&
+                {cardsText && !lastGeneratedCard &&
                   <div className="text-[11px] text-slate-500">
                     {t('autoReg.engineTab.savedCards', { count: cardsText.split('\n').filter((l) => l.trim()).length })}
                   </div>

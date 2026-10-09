@@ -43,6 +43,7 @@ from stitch_plugin_tools.publish_compile import (
 from stitch_plugin_tools.publish_pack import pack_engine as pack_engine
 from stitch_plugin_tools.publish_pack import pack_provider as pack_provider
 from stitch_plugin_tools.publish_pack import pack_service as pack_service
+from stitch_plugin_tools.ui_manifest import assert_contributions
 
 if TYPE_CHECKING:
     from typing import Any
@@ -137,6 +138,11 @@ def _require_publish_metadata(manifest: PluginManifest) -> None:
         )
 
 
+def _require_ui_contributions(manifest: PluginManifest) -> None:
+    """Raise ``ValueError`` when the manifest's UI contributions are invalid."""
+    assert_contributions(manifest.id, manifest.contributions)
+
+
 def _marketplace_form_fields(manifest: PluginManifest) -> dict[str, str]:
     """Extract marketplace metadata extras into /admin/publish form fields.
 
@@ -220,6 +226,7 @@ async def publish_package(
     # Gate before signing: signing mutates plugin.json, so missing metadata must fail first.
     manifest = crypto.read_manifest(package_dir)
     _require_publish_metadata(manifest)
+    _require_ui_contributions(manifest)
 
     # Sign in place if a key is provided (updates plugin.json signature).
     if signing_key_pem is not None:
@@ -315,6 +322,8 @@ def dev_install(package_dir: Path, *, link: bool = False) -> Path:
     with a flat top-level key (contains ``.``) — the FE walkBundle walks
     dot-paths through nested objects, so flat keys silently never resolve.
     Catching this at dev-install time saves a confusing runtime failure.
+    Also raises when the UI contributions fail the manifest gate — see
+    :mod:`stitch_plugin_tools.ui_manifest`.
     """
     from autoreg.plugin.layout import LINK_FILENAME
 
@@ -330,6 +339,8 @@ def dev_install(package_dir: Path, *, link: bool = False) -> Path:
                 f"({', '.join(flat_keys)}) — nest them under objects "
                 f"(FE walkBundle walks dot-paths; flat keys never resolve)"
             )
+
+    _require_ui_contributions(manifest)
 
     dest = plugins_local_dir() / manifest.id
     if dest.exists():

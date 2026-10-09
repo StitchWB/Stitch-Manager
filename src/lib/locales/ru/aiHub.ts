@@ -50,6 +50,10 @@ export const aiHub: AiHubTranslations = {
     fmModelsAvailable: "Доступно моделей FreeModel: {count}",
     fmAvailableModels: "Доступные модели: FM-claude-sonnet-4-6, FM-claude-opus-4-8, FM-claude-haiku-4-5",
     fmGateway: "Gateway: http://127.0.0.1:25583",
+    fmStatusRunning: "Мост запущен на порту {port}",
+    fmStatusStopped: "Мост остановлен",
+    fmStatusError: "Ошибка моста: {error}",
+    fmBridgeNotRunning: "Сначала запустите мост",
     account_modal: {
       account_name: "Имя аккаунта",
       account_type: "Тип аккаунта",

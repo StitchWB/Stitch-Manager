@@ -18,6 +18,7 @@ def make_spec(host: ServicePluginHost) -> SidecarSpec:
             env=dict(host._env),
             stdio="pipes",
             config={"plugin_id": host.plugin_id},
+            host_driver=host.host_driver,
         )
 
     def on_stop() -> None:

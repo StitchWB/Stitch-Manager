@@ -10,6 +10,8 @@
 - plugin host absent/unhealthy → structured 400 (no built-in fallback —
   the built-in opencode_config domain was removed in the plugin
   migration);
+- caller not entitled to the plugin → 403 (same gate as the namespaced
+  ``plugin.*`` route, so the legacy name cannot bypass it);
 - plugin call error → structured 400/504 (see :mod:`dual_error`).
 
 The opencode_config commands have no common prefix to strip (unlike
@@ -24,8 +26,10 @@ import logging
 from typing import Any
 
 from stitch_backend.domains.plugin_runtime.dual_error import (
+    log_plugin_call_failure,
     raise_plugin_call_failed,
     raise_plugin_unavailable,
+    require_plugin_entitlement,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,13 +79,15 @@ async def try_opencode_dual_route(
     if host is None or not _plugin_healthy(host):
         raise_plugin_unavailable(OPENCODE_PLUGIN_ID, name)
 
+    await require_plugin_entitlement(OPENCODE_PLUGIN_ID, body)
+
     # Strip internal dispatcher keys before forwarding to the plugin.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
 
     try:
         return await host.call(plugin_cmd, params)
     except (PluginNotRunning, PluginCallTimeout, RpcCallError) as exc:
-        logger.warning("opencode dual: plugin error during '%s'", name, exc_info=True)
+        log_plugin_call_failure(logger, "opencode dual", name, exc)
         raise_plugin_call_failed(OPENCODE_PLUGIN_ID, name, exc)
 
 

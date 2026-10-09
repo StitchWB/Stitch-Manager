@@ -11,7 +11,19 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_CAPABILITIES: list[str] = [
     "reverse_rpc", "caller_identity", "structured_logging", "plugin_rpc",
+    "host_driver",
 ]
+
+HOST_DRIVER = "host_driver"
+
+
+def host_driver_eligible(capabilities: list[str], source: str) -> bool:
+    """True when a manifest may claim the host_driver trust class.
+
+    Community/sandbox sources are never eligible: the capability is
+    stripped at discovery regardless of what the manifest declares.
+    """
+    return source in ("local", "cache") and HOST_DRIVER in capabilities
 
 
 def parse_capabilities(init_result: Any) -> list[str]:

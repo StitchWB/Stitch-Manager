@@ -48,6 +48,10 @@ export interface AiHubTranslations {
     fmModelsAvailable: string;
     fmAvailableModels: string;
     fmGateway: string;
+    fmStatusRunning: string;
+    fmStatusStopped: string;
+    fmStatusError: string;
+    fmBridgeNotRunning: string;
     account_modal: {
       account_name: string;
       account_type: string;

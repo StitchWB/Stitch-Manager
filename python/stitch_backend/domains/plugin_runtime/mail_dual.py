@@ -11,6 +11,8 @@ command-registry lookup:
 - name not in :data:`MAIL_DUAL` → :data:`_FALLTHROUGH` (not ours);
 - plugin host absent/unhealthy → structured 400 (no built-in fallback —
   the built-in email_inbox domain was removed in the plugin migration);
+- caller not entitled to the plugin → 403 (same gate as the namespaced
+  ``plugin.*`` route, so the legacy name cannot bypass it);
 - plugin call error → structured 400/504 (see :mod:`dual_error`).
 
 Owner identity is forwarded under unprefixed names
@@ -25,8 +27,10 @@ import logging
 from typing import Any
 
 from stitch_backend.domains.plugin_runtime.dual_error import (
+    log_plugin_call_failure,
     raise_plugin_call_failed,
     raise_plugin_unavailable,
+    require_plugin_entitlement,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,6 +116,8 @@ async def try_mail_dual_route(
     if host is None or not _plugin_healthy(host):
         raise_plugin_unavailable(MAIL_PLUGIN_ID, name)
 
+    await require_plugin_entitlement(MAIL_PLUGIN_ID, body)
+
     # Strip internal dispatcher keys, then forward caller identity.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
     params["caller_user_id"] = body.get("_caller_user_id")
@@ -120,7 +126,7 @@ async def try_mail_dual_route(
     try:
         return await host.call(plugin_cmd, params)
     except (PluginNotRunning, PluginCallTimeout, RpcCallError) as exc:
-        logger.warning("mail dual: plugin error during '%s'", name, exc_info=True)
+        log_plugin_call_failure(logger, "mail dual", name, exc)
         raise_plugin_call_failed(MAIL_PLUGIN_ID, name, exc)
 
 
