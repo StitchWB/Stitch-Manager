@@ -92,13 +92,14 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return out;
 }
 
+// Invariant: markdown headings stay below the heading-node scale (max text-lg).
 const HEADING_CLASSES = [
-  'text-xl font-semibold text-slate-100',
-  'text-lg font-semibold text-slate-100',
+  'text-lg font-semibold tracking-tight text-slate-100',
   'text-base font-semibold text-slate-100',
-  'text-sm font-semibold text-slate-100',
-  'text-xs font-semibold text-slate-100',
+  'text-sm font-semibold text-slate-200',
+  'text-sm font-medium text-slate-300',
   'text-xs font-semibold text-slate-300',
+  'text-xs font-semibold text-slate-400',
 ];
 
 /** True when the line starts a new block (heading, fence, or list item). */
