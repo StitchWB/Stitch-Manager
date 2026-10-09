@@ -165,10 +165,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         return JSONResponse(content=_serialise(_mail_result))
 
     # ── Dual-format routing for opencode_config commands ─────────────────
-    # Same pattern as google_sheets_* / email_* above: when a healthy
-    # ``stitch-opencode`` plugin host is registered, opencode_config commands
-    # are routed to the plugin (identity mapping — no prefix to strip) BEFORE
-    # falling through to the built-in handler.
+    # Built-in fallback was removed in the plugin migration: absent/unhealthy host raises.
     from stitch_backend.domains.plugin_runtime.opencode_dual import (
         _FALLTHROUGH as _OPENCODE_FALLTHROUGH,
     )
@@ -181,10 +178,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         return JSONResponse(content=_serialise(_opencode_result))
 
     # ── Dual-format routing for radar commands ─────────────────────────────
-    # Same pattern as opencode_config above: when a healthy
-    # ``stitch-radar`` plugin host is registered, get_radar_offers /
-    # get_radar_stats commands are routed to the plugin (identity mapping
-    # — no prefix to strip) BEFORE falling through to the built-in handler.
+    # Built-in fallback was removed in the plugin migration: absent/unhealthy host raises.
     # Friends (get_friends) is NOT part of this route — it stays core-only.
     from stitch_backend.domains.plugin_runtime.radar_dual import (
         _FALLTHROUGH as _RADAR_FALLTHROUGH,
@@ -199,7 +193,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
 
     # ── Dual-format routing for card commands ──────────────────────────────
     # Same pattern as radar above: when a healthy ``stitch-cards`` plugin
-    # host is registered, generate_cards / check_card_rust / find_live_card
+    # host is registered, generate_cards / check_card_rust
     # commands are routed to the plugin (identity mapping — no prefix to
     # strip) BEFORE falling through to the built-in handler.
     from stitch_backend.domains.plugin_runtime.cards_dual import (

@@ -54,6 +54,7 @@ const AiOverview = lazy(() => import('./pages/AiOverview'));
 const AiAnalytics = lazy(() => import('./pages/AiAnalytics'));
 const AiGroupsPage = lazy(() => import('./pages/AiGroupsPage'));
 const Antigravity = lazy(() => import('./pages/Antigravity'));
+const Devbox = lazy(() => import('./pages/Devbox'));
 const HoloneSecurity = lazy(() => import('./pages/HoloneSecurity'));
 const ToolsPage = lazy(() => import('./pages/ToolsPage'));
 const Patcher = lazy(() => import('./pages/Patcher'));
@@ -601,6 +602,7 @@ function App() {
               <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
               <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
               <Route path="/ai/antigravity" element={<Antigravity />} />
+              <Route path="/ai/devbox" element={<Devbox />} />
               <Route path="/ai/holone" element={<HoloneSecurity />} />
               <Route path="/ai/tools" element={<ToolsPage />} />
               <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />

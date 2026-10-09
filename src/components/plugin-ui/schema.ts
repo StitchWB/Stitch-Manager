@@ -42,10 +42,19 @@ export interface TableColumn {
 export interface TableSource {
   command: string;
   params?: Record<string, unknown>;
+  /**
+   * Optional polling interval in milliseconds (additive v2.1 revision).
+   * When present the renderer refetches the source on this cadence;
+   * absent means fetch-once/on-demand only.
+   */
+  refreshMs?: number;
 }
 
 /** Variant for a button node. */
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+
+/** Status tone values a card can carry (additive v2.1 revision). */
+export type CardTone = 'ok' | 'warn' | 'down';
 
 /**
  * Row-scoped table action — a button rendered for EVERY row of a table
@@ -127,6 +136,18 @@ export interface CardTemplate {
   body?: string;
   /** Card image URL — row column key first, literal URL fallback. */
   image?: string;
+  /**
+   * Status tone of the card (additive v2.1 revision) — row column key
+   * first, literal `CardTone` fallback. Unknown resolved values render
+   * as the neutral default.
+   */
+  tone?: CardTone | (string & {});
+  /**
+   * Small hint line under the card body (additive v2.1 revision) — row
+   * column key first, literal string fallback (i18n keys resolve like
+   * node labels).
+   */
+  hint?: string;
   /** Optional action button rendered on every card; see `CardAction`. */
   action?: CardAction;
 }
@@ -153,6 +174,18 @@ export type UiNode =
        * renders as-is.
        */
       placeholder?: string;
+      /**
+       * Readonly source binding for a toggle field (additive v2.1
+       * revision). The toggle reflects state fetched from
+       * `source.command` instead of holding user input; the response's
+       * boolean lives under `valueKey`.
+       */
+      source?: TableSource;
+      /**
+       * Key of the boolean field in the `source.command` response that
+       * carries the toggle state (additive v2.1 revision).
+       */
+      valueKey?: string;
     }
   | {
       kind: 'table';
@@ -166,6 +199,11 @@ export type UiNode =
        * see `RowAction`. Destructive actions use `variant: 'danger'`.
        */
       rowActions?: RowAction[];
+      /**
+       * i18n key (or literal) shown when the source returns no rows
+       * (additive v2.1 revision).
+       */
+      empty?: string;
     }
   | {
       kind: 'button';
@@ -189,6 +227,17 @@ export type UiNode =
        * node: see `rowActions` / `RowAction.paramsFromRow`.
        */
       paramsFrom?: Record<string, string>;
+      /**
+       * Confirmation prompt shown before invoking the command (additive
+       * v2.1 revision). Resolved like `label` (i18n key or literal);
+       * absent means invoke immediately.
+       */
+      confirm?: string;
+      /**
+       * Ids of nodes whose sources are refetched after a successful
+       * invocation (additive v2.1 revision). Unknown ids are ignored.
+       */
+      refreshOnSuccess?: string[];
     }
   | {
       /**
@@ -204,6 +253,11 @@ export type UiNode =
       id: string;
       source: TableSource;
       card: CardTemplate;
+      /**
+       * i18n key (or literal) shown when the source returns no rows
+       * (additive v2.1 revision).
+       */
+      empty?: string;
     }
   | {
       /**
@@ -221,6 +275,11 @@ export type UiNode =
       id: string;
       source: TableSource;
       textKey?: string;
+      /**
+       * i18n key (or literal) shown when the source returns no text
+       * (additive v2.1 revision).
+       */
+      empty?: string;
     };
 
 /** Top-level schema for a declarative plugin page. */

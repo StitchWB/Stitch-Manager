@@ -15,6 +15,7 @@ import { privileges } from './en/privileges';
 import { monitoring } from './en/monitoring';
 import { common } from './en/common';
 import { dashboard } from './en/dashboard';
+import { devboxPage } from './en/devboxPage';
 import { filters } from './en/filters';
 import { header } from './en/header';
 import { identity } from './en/identity';
@@ -77,6 +78,7 @@ export const en: Translations = {
   ...monitoring,
   ...common,
   ...dashboard,
+  ...devboxPage,
   ...filters,
   ...header,
   ...identity,

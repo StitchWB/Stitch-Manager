@@ -14,6 +14,7 @@ Nineteen subcommands:
     vendor <package_dir>                        vendor canonical rpc_server + helpers into <pkg>/_vendor/
     run <package_dir>                           interactive plugin REPL (spawn + stderr stream + reverse-RPC stubs)
     test <package_dir>                          run the plugin's own tests via the venv pytest
+    manifest-lint <paths/globs…>                validate manifest UI contributions (CI walk)
     drift […]                                   fetch drift report + propose selector weight rerank
     publish-selectors […]                       publish a selector overlay pack (hot update)
     codes {issue|list}                          issue and list activation codes (admin)

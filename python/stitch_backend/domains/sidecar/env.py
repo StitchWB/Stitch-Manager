@@ -56,13 +56,18 @@ def _scoped_tmp_dir(name: str) -> Path:
     return scoped
 
 
-def _child_env(extra: dict[str, str], name: str) -> dict[str, str]:
+def _child_env(
+    extra: dict[str, str], name: str, *, host_driver: bool = False
+) -> dict[str, str]:
     """Minimal env for child processes: allowlisted host vars + explicit extras.
 
     Boundary: the host's full environment (FERNET_KEY, JWT_SECRET,
     IMAP_PASSWORD, ...) must NOT leak into plugin/sidecar subprocesses —
     community plugins are unsigned code.  PATH is reconstructed minimal and
     TEMP/TMP/HOME/USERPROFILE are scoped per sidecar (see allowlist note).
+    ``host_driver=True`` (entitled-only elevated trust) passes the real
+    user TEMP/TMP through instead; HOME/USERPROFILE stay scoped for every
+    plugin.
 
     Honest limitation: this is defense-in-depth, not a sandbox.  On Linux a
     same-user process can still read the host's env via ``/proc/<ppid>/environ``
@@ -72,8 +77,13 @@ def _child_env(extra: dict[str, str], name: str) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if k in _CHILD_ENV_ALLOWLIST}
     env["PATH"] = _minimal_path()
     scoped = str(_scoped_tmp_dir(name))
-    env["TEMP"] = scoped
-    env["TMP"] = scoped
+    if host_driver:
+        temp = os.environ.get("TEMP") or tempfile.gettempdir()
+        env["TEMP"] = temp
+        env["TMP"] = temp
+    else:
+        env["TEMP"] = scoped
+        env["TMP"] = scoped
     if os.name == "nt":
         env["USERPROFILE"] = scoped
     else:

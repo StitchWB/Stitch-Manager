@@ -1,6 +1,7 @@
 import type {
   EmailConnectInput,
   EmailFolder,
+  EmailInboxProfile,
   EmailInboxSyncState,
 } from '@/lib/backend/modules/emailInbox';
 import { DEFAULT_IMAP, DEFAULT_MAIL_TM, type MailProfileSyncState, type MailState } from './types';
@@ -134,6 +135,49 @@ export function recoverFromLostSession(
 export function normalizeProfileLabel(label: string): string {
   const trimmed = label.trim();
   return trimmed.length > 0 ? trimmed : 'Mailbox profile';
+}
+
+/**
+ * Structural guard for rows crossing the backend/plugin boundary (safeInvoke
+ * casts blindly). Checks only the fields downstream code dereferences;
+ * options/mine/shared and credential payload fields are intentionally unchecked.
+ */
+export function isEmailInboxProfile(value: unknown): value is EmailInboxProfile {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.id !== 'string' ||
+    typeof record.label !== 'string' ||
+    typeof record.accountId !== 'string' ||
+    (record.provider !== 'imap' && record.provider !== 'mail_tm')
+  ) {
+    return false;
+  }
+
+  const connectInput = record.connectInput;
+  if (typeof connectInput !== 'object' || connectInput === null) {
+    return false;
+  }
+
+  const input = connectInput as Record<string, unknown>;
+  if (typeof input.provider !== 'string' || typeof input.accountId !== 'string') {
+    return false;
+  }
+
+  const credentials = input.credentials;
+  if (typeof credentials !== 'object' || credentials === null) {
+    return false;
+  }
+
+  const creds = credentials as Record<string, unknown>;
+  if (creds.type !== 'imap' && creds.type !== 'mail_tm') {
+    return false;
+  }
+
+  return typeof creds.value === 'object' && creds.value !== null;
 }
 
 export function toMailProfileSyncState(syncState: EmailInboxSyncState): MailProfileSyncState {

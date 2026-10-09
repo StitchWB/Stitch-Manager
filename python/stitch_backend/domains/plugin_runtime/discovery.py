@@ -56,6 +56,9 @@ from stitch_backend.domains.plugin_runtime import (
     register_manifest,
 )
 from stitch_backend.domains.plugin_runtime.host import ServicePluginHost
+from stitch_backend.domains.plugin_runtime.host_capabilities import (
+    host_driver_eligible,
+)
 from stitch_backend.domains.plugin_runtime.lkg import (
     maybe_save_crash_report,
     previous_version_dir,
@@ -98,10 +101,8 @@ async def start_service_plugins() -> None:
     started = 0
     for manifest, package_dir, source in discovered:
         try:
-            memory_mb = _COMMUNITY_MEMORY_LIMIT_MB if source == "community" else None
             ok = await _start_one(
-                manifest, package_dir, source=source,
-                memory_limit_mb=memory_mb, loader=loader,
+                manifest, package_dir, source=source, loader=loader,
             )
             if ok:
                 started += 1
@@ -118,7 +119,6 @@ async def _start_one(
     package_dir: Path,
     *,
     source: str = "local",
-    memory_limit_mb: int | None = None,
     loader: PluginLoader | None = None,
 ) -> bool:
     """Register + start a single service plugin host.  Returns True on success."""
@@ -227,6 +227,27 @@ async def _start_one(
         )
         child_env.update(antigravity_child_env())
 
+    # The opencode config dir under the real home is invisible to the sandbox-scoped child.
+    if manifest.id == "stitch-opencode":
+        from stitch_backend.domains.plugin_runtime.opencode_sidecar import (
+            opencode_child_env,
+        )
+        child_env.update(opencode_child_env())
+
+    host_driver = host_driver_eligible(manifest.capabilities, source)
+    if host_driver:
+        from stitch_backend.domains.plugin_distribution.entitlements import (
+            get_effective_entitlements,
+            is_entitled_to,
+        )
+        entitlements = await get_effective_entitlements(None, None)
+        host_driver = is_entitled_to(manifest.id, entitlements)
+    memory_limit_mb = (
+        _COMMUNITY_MEMORY_LIMIT_MB
+        if source == "community" and not host_driver
+        else None
+    )
+
     host = ServicePluginHost(
         plugin_id=manifest.id,
         entry_module=entry_module,
@@ -234,6 +255,7 @@ async def _start_one(
         data_dir=_base_dir() / "data" / "plugins" / manifest.id,
         migrations=migrations,
         source=source,
+        host_driver=host_driver,
         memory_limit_mb=memory_limit_mb,
         env=child_env,
     )
@@ -378,6 +400,7 @@ async def rollback_service_plugin(plugin_id: str) -> bool:
         data_dir=_base_dir() / "data" / "plugins" / plugin_id,
         migrations=bool(storage_decl.get("migrations")),
         source=host.source,
+        host_driver=host.host_driver,
         memory_limit_mb=host.memory_limit_mb,
     )
     new_host.crash_hook = _on_crash_loop

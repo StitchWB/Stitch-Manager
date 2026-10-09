@@ -16,6 +16,7 @@ from autoreg.plugin.manifest import (
 from stitch_plugin_tools.cli_commands_package import (
     _cmd_dev_install,
     _cmd_keygen,
+    _cmd_manifest_lint,
     _cmd_new,
     _cmd_pack_engine,
     _cmd_pack_provider,
@@ -283,6 +284,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "package_dir", help="package directory (contains plugin.json)"
     )
     p_test.set_defaults(func=_cmd_test)
+
+    p_manifest_lint = sub.add_parser(
+        "manifest-lint",
+        help="validate plugin manifest UI contributions (CI) — paths or globs",
+    )
+    p_manifest_lint.add_argument(
+        "paths", nargs="+", help="plugin.json path(s) or glob(s)"
+    )
+    p_manifest_lint.set_defaults(func=_cmd_manifest_lint)
 
     p_drift = sub.add_parser(
         "drift",

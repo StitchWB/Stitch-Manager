@@ -1,12 +1,14 @@
 """Dual-format routing for card commands.
 
-``generate_cards`` / ``check_card_rust`` / ``find_live_card`` are served by
+``generate_cards`` / ``check_card_rust`` are served by
 the ``stitch-cards`` plugin.  The dispatcher calls
 :func:`try_cards_dual_route` before the command-registry lookup:
 
 - name not in :data:`CARDS_DUAL` → :data:`_FALLTHROUGH` (not ours);
 - plugin host absent/unhealthy → structured 400 (no built-in fallback —
   the built-in cards domain was removed in the plugin migration);
+- caller not entitled to the plugin → 403 (same gate as the namespaced
+  ``plugin.*`` route, so the legacy name cannot bypass it);
 - plugin call error → structured 400/504 (see :mod:`dual_error`).
 
 The card commands have no common prefix to strip (unlike
@@ -14,7 +16,7 @@ The card commands have no common prefix to strip (unlike
 mapping).  The plugin's ``contributions.commands`` list in
 ``plugins-src/stitch-cards/plugin.json`` mirrors the same names.
 
-The network commands (``check_card_rust`` / ``find_live_card``) receive the
+The network command (``check_card_rust``) receives the
 core outbound proxy (kiro-patch config) as a ``proxy`` param — the plugin
 has no access to core settings, so the router injects it.
 """
@@ -25,8 +27,10 @@ import logging
 from typing import Any
 
 from stitch_backend.domains.plugin_runtime.dual_error import (
+    log_plugin_call_failure,
     raise_plugin_call_failed,
     raise_plugin_unavailable,
+    require_plugin_entitlement,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,12 +48,11 @@ _FALLTHROUGH: Any = object()
 CARDS_DUAL: dict[str, str] = {
     "generate_cards": "generate_cards",
     "check_card_rust": "check_card_rust",
-    "find_live_card": "find_live_card",
 }
 
 #: Commands that perform outbound HTTP and therefore receive the core
 #: outbound proxy as a ``proxy`` param.
-_PROXY_COMMANDS = frozenset({"check_card_rust", "find_live_card"})
+_PROXY_COMMANDS = frozenset({"check_card_rust"})
 
 
 def _plugin_healthy(host: Any) -> bool:
@@ -76,6 +79,8 @@ async def try_cards_dual_route(
     if host is None or not _plugin_healthy(host):
         raise_plugin_unavailable(CARDS_PLUGIN_ID, name)
 
+    await require_plugin_entitlement(CARDS_PLUGIN_ID, body)
+
     # Strip internal dispatcher keys before forwarding to the plugin.
     params = {k: v for k, v in body.items() if not k.startswith("_")}
     if name in _PROXY_COMMANDS:
@@ -86,7 +91,7 @@ async def try_cards_dual_route(
     try:
         return await host.call(plugin_cmd, params)
     except (PluginNotRunning, PluginCallTimeout, RpcCallError) as exc:
-        logger.warning("cards dual: plugin error during '%s'", name, exc_info=True)
+        log_plugin_call_failure(logger, "cards dual", name, exc)
         raise_plugin_call_failed(CARDS_PLUGIN_ID, name, exc)
 
 

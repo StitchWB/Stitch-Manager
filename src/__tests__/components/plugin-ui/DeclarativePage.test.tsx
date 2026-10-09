@@ -567,9 +567,9 @@ describe('DeclarativePage', () => {
 
     render(<DeclarativePage pluginId="test" schema={nullTableSchema} />);
 
-    // null → empty state (em-dash), NOT an error.
+    // null → empty state (default i18n key, t = identity), NOT an error.
     await waitFor(() => {
-      expect(screen.getByText('—')).toBeTruthy();
+      expect(screen.getByText('pluginUi.noData')).toBeTruthy();
     });
   });
 
@@ -1051,13 +1051,13 @@ describe('DeclarativePage', () => {
   });
 
   it('(ad) card_grid null → empty state, malformed object → inline error, rejection → error message', async () => {
-    // null → empty state (em-dash), NOT an error.
+    // null → empty state (default i18n key), NOT an error.
     (safeInvoke as jest.Mock).mockResolvedValueOnce(null);
     const first = render(
       <DeclarativePage pluginId="test" schema={cardGridSchema} />,
     );
     await waitFor(() => {
-      expect(screen.getByText('—')).toBeTruthy();
+      expect(screen.getByText('pluginUi.noData')).toBeTruthy();
     });
     first.unmount();
 
@@ -1186,13 +1186,13 @@ describe('DeclarativePage', () => {
   });
 
   it('(ai) markdown null → empty state, missing textKey → inline error', async () => {
-    // null → empty state (em-dash), NOT an error.
+    // null → empty state (default i18n key), NOT an error.
     (safeInvoke as jest.Mock).mockResolvedValueOnce(null);
     const first = render(
       <DeclarativePage pluginId="test" schema={markdownSchema} />,
     );
     await waitFor(() => {
-      expect(screen.getByText('—')).toBeTruthy();
+      expect(screen.getByText('pluginUi.noData')).toBeTruthy();
     });
     first.unmount();
 

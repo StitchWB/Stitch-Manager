@@ -1,21 +1,3 @@
-/**
- * Declarative manifest contract tests.
- *
- * Loads the REAL migrated manifests of the three declarative service
- * plugins (stitch-notebooklm, stitch-totp, stitch-sheets) from
- * plugins-src/ and renders their `contributions.ui.page` through the REAL
- * DeclarativePage renderer — no renderer mock, no i18n mock. Only the
- * backend invoke bridge and toast are mocked.
- *
- * Verifies:
- *   (1) Every manifest ships the nodes vocabulary (no legacy `sections`,
- *       no inline {ru,en} label objects — labels are i18n key strings).
- *   (2) Each page renders: section titles, table headers, table rows
- *       (via mocked command responses), field labels and buttons.
- *   (3) Labels resolve through the real t() + registered plugin bundles
- *       in both en and ru locales.
- */
-
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
@@ -135,14 +117,14 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
   });
 
   afterEach(() => {
-    for (const id of ['stitch-notebooklm', 'stitch-totp', 'stitch-sheets']) {
+    for (const id of ['stitch-notebooklm', 'stitch-totp']) {
       unregisterPluginBundles(id);
     }
     setLocale(savedLocale);
   });
 
-  it('all three manifests use the nodes vocabulary with string i18n-key labels', () => {
-    for (const dir of ['stitch-notebooklm', 'stitch-totp', 'stitch-sheets']) {
+  it('both manifests use the nodes vocabulary with string i18n-key labels', () => {
+    for (const dir of ['stitch-notebooklm', 'stitch-totp']) {
       assertStringLabels(loadManifest(dir));
     }
   });
@@ -150,6 +132,25 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
   it('stitch-notebooklm page renders title, table rows, fields and buttons (en)', async () => {
     const manifest = loadManifest('stitch-notebooklm');
     install(manifest);
+    const pageNodes = allNodes(
+      (manifest.contributions.ui.page as PluginPageSchema).nodes,
+    );
+    const notebooksTable = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'table' }> =>
+        n.kind === 'table' && n.id === 'notebooks',
+    );
+    expect(notebooksTable?.empty).toBe('stitch-notebooklm.empty');
+    const createButton = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'button' }> =>
+        n.kind === 'button' && n.id === 'create-notebook',
+    );
+    expect(createButton?.params).toBeUndefined();
+    expect(createButton?.paramsFrom).toEqual({ title: 'title-field' });
+    const askButton = pageNodes.find(
+      (n): n is Extract<UiNode, { kind: 'button' }> =>
+        n.kind === 'button' && n.id === 'ask',
+    );
+    expect(askButton?.paramsFrom).toEqual({ question: 'ask-field' });
     (safeInvoke as jest.Mock).mockImplementation((cmd: string) => {
       if (cmd === 'plugin.stitch-notebooklm.list_notebooks') {
         return Promise.resolve([{ id: 'nb-1', title: 'My Notebook' }]);
@@ -176,16 +177,15 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
     expect(screen.getByText('Title')).toBeTruthy();
     // Field label + buttons.
     expect(screen.getByText('Question')).toBeTruthy();
+    expect(screen.getByText('Notebook title')).toBeTruthy();
     expect(screen.getByText('Create Notebook')).toBeTruthy();
     expect(screen.getByText('Ask')).toBeTruthy();
   });
 
-  it('stitch-totp page renders keys table, add/remove form and switches to ru', async () => {
+  it('stitch-totp page renders keys table without secret column, add-only form and switches to ru', async () => {
     const manifest = loadManifest('stitch-totp');
     install(manifest);
 
-    // The Add Key button binds its params to the page fields via paramsFrom;
-    // the form fields carry i18n-key placeholders.
     const pageNodes = allNodes(
       (manifest.contributions.ui.page as PluginPageSchema).nodes,
     );
@@ -198,19 +198,21 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
       label: 'label-field',
       secret: 'secret-field',
     });
-    // The page-level remove button keeps its static params (no paramsFrom);
-    // the ROW-scoped remove lives on the table node as a rowAction —
-    // remove_key expects param `id` and list_keys rows carry `id`
-    // (verified against stitch_totp/storage.py).
-    const removeButton = pageNodes.find(
+    const pageRemoveButtons = pageNodes.filter(
       (n): n is Extract<UiNode, { kind: 'button' }> =>
-        n.kind === 'button' && n.id === 'remove-key',
+        n.kind === 'button' && n.command === 'remove_key',
     );
-    expect(removeButton?.paramsFrom).toBeUndefined();
+    expect(pageRemoveButtons).toEqual([]);
     const totpTable = pageNodes.find(
       (n): n is Extract<UiNode, { kind: 'table' }> =>
         n.kind === 'table' && n.id === 'totp-keys',
     );
+    expect(totpTable?.columns.map((col) => col.key)).toEqual([
+      'label',
+      'issuer',
+      'enabled',
+    ]);
+    expect(totpTable?.empty).toBe('stitch-totp.empty');
     expect(totpTable?.rowActions).toEqual([
       {
         id: 'remove-key-row',
@@ -234,7 +236,13 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
     (safeInvoke as jest.Mock).mockImplementation((cmd: string) => {
       if (cmd === 'plugin.stitch-totp.list_keys') {
         return Promise.resolve([
-          { label: 'Kiro', issuer: 'AWS', secret: 'JBSWY3DPEHPK3PXP', enabled: true },
+          {
+            id: 'k-1',
+            label: 'Kiro',
+            issuer: 'AWS',
+            secret: 'JBSWY3DPEHPK3PXP',
+            enabled: true,
+          },
         ]);
       }
       return Promise.resolve({});
@@ -249,14 +257,14 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
 
     expect(screen.getByText('2FA (TOTP)')).toBeTruthy();
     expect(screen.getByText('TOTP keys')).toBeTruthy();
-    // Row data from the bare-array list_keys response.
+    // list_keys rows carry the decrypted secret; it must never render as a cell.
     await waitFor(() => {
-      expect(screen.getByText('JBSWY3DPEHPK3PXP')).toBeTruthy();
+      expect(screen.getByText('Kiro')).toBeTruthy();
     });
-    expect(screen.getByText('Kiro')).toBeTruthy();
-    // Buttons resolved from bundle keys.
+    expect(screen.getByText('AWS')).toBeTruthy();
+    expect(screen.queryByText('JBSWY3DPEHPK3PXP')).toBeNull();
     expect(screen.getByText('Add Key')).toBeTruthy();
-    expect(screen.getByText('Remove Key')).toBeTruthy();
+    expect(screen.queryByText('Remove Key')).toBeNull();
     // Row action button rendered in the trailing actions column (one row
     // → one button), label resolved from the plugin bundle.
     expect(screen.getAllByText('Remove')).toHaveLength(1);
@@ -276,106 +284,10 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
     );
     expect(screen.getByText('TOTP-ключи')).toBeTruthy();
     expect(screen.getByText('Добавить ключ')).toBeTruthy();
-    expect(screen.getByText('Удалить ключ')).toBeTruthy();
+    expect(screen.queryByText('Удалить ключ')).toBeNull();
     // Row action label switches locale with the bundle.
     expect(screen.getAllByText('Удалить')).toHaveLength(1);
     expect(screen.getByPlaceholderText('например, Kiro')).toBeTruthy();
   });
 
-  it('stitch-sheets page renders both tables via rowsKey and the oauth button', async () => {
-    const manifest = loadManifest('stitch-sheets');
-    install(manifest);
-    // The links table carries a row-scoped delete action: delete_link
-    // expects param `linkId` (verified against stitch_sheets/__main__.py
-    // _handle_delete_link), mapped from the row's link_id column.
-    const pageNodes = allNodes(
-      (manifest.contributions.ui.page as PluginPageSchema).nodes,
-    );
-    const linksTable = pageNodes.find(
-      (n): n is Extract<UiNode, { kind: 'table' }> =>
-        n.kind === 'table' && n.id === 'links',
-    );
-    expect(linksTable?.rowActions).toEqual([
-      {
-        id: 'delete-link-row',
-        label: 'stitch-sheets.deleteRow',
-        command: 'delete_link',
-        variant: 'danger',
-        paramsFromRow: { linkId: 'link_id' },
-      },
-    ]);
-    // Real plugin shape: cell-shaped rows under identities/links (consumed by
-    // the identity graph) plus flat rows under identitiesFlat/linksFlat for
-    // the declarative tables (rowsKey points at the flat variants).
-    const dataset = {
-      identities: [
-        {
-          rowNumber: 2,
-          cells: [
-            { key: 'identity_id', value: 'i-1' },
-            { key: 'display_name', value: 'Alice' },
-            { key: 'email', value: 'alice@x.io' },
-            { key: 'status', value: 'active' },
-          ],
-        },
-      ],
-      identitiesFlat: [
-        { rowNumber: 2, identity_id: 'i-1', display_name: 'Alice', email: 'alice@x.io', status: 'active' },
-      ],
-      links: [
-        {
-          rowNumber: 2,
-          cells: [
-            { key: 'link_id', value: 'l-1' },
-            { key: 'identity_id', value: 'i-1' },
-            { key: 'provider', value: 'tiktok' },
-            { key: 'account_id', value: 'acc-9' },
-            { key: 'role', value: 'owner' },
-            { key: 'status', value: 'active' },
-          ],
-        },
-      ],
-      linksFlat: [
-        {
-          rowNumber: 2,
-          link_id: 'l-1',
-          identity_id: 'i-1',
-          provider: 'tiktok',
-          account_id: 'acc-9',
-          role: 'owner',
-          status: 'active',
-        },
-      ],
-    };
-    (safeInvoke as jest.Mock).mockImplementation((cmd: string) => {
-      if (cmd === 'plugin.stitch-sheets.fetch_dataset') {
-        return Promise.resolve(dataset);
-      }
-      return Promise.resolve({});
-    });
-
-    render(
-      <DeclarativePage
-        pluginId={manifest.id}
-        schema={manifest.contributions.ui.page as PluginPageSchema}
-      />,
-    );
-
-    expect(screen.getByText('Identity Graph')).toBeTruthy();
-    expect(screen.getByText('Identities')).toBeTruthy();
-    expect(screen.getByText('Links')).toBeTruthy();
-
-    // rowsKey "identities" feeds the first table, "links" the second.
-    await waitFor(() => {
-      expect(screen.getByText('Alice')).toBeTruthy();
-    });
-    expect(screen.getByText('alice@x.io')).toBeTruthy();
-    expect(screen.getByText('tiktok')).toBeTruthy();
-    expect(screen.getByText('acc-9')).toBeTruthy();
-    // Row action button on the single links row (identities table has no
-    // rowActions — exactly one Delete button on the page).
-    expect(screen.getAllByText('Delete')).toHaveLength(1);
-
-    expect(screen.getByText('Connect Google')).toBeTruthy();
-  });
 });

@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { Puzzle } from 'lucide-react';
+import { Inbox, Puzzle } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { appToast } from '@/lib/observability/toast';
 import {
   Button,
   Input,
+  Modal,
   Select,
+  Textarea,
   Toggle,
   LoadingSpinner,
   EmptyState,
@@ -19,6 +21,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui';
+import { cn } from '@/lib/utils';
 import type { PluginPageSchema, RowAction, UiNode } from './schema';
 import { invokeAction } from './bindings';
 import { renderMarkdown } from './markdown';
@@ -34,14 +37,43 @@ interface ServicePluginInfo {
   };
 }
 
+// Invariant: heading-node scale stays one step below the page title (text-2xl).
 const headingSizes = [
-  'text-2xl',
   'text-xl',
   'text-lg',
   'text-base',
   'text-sm',
   'text-xs',
+  'text-xs',
 ];
+
+/** Centered spinner block for async node loads. */
+function NodeLoading() {
+  return (
+    <div className="flex justify-center py-6">
+      <LoadingSpinner size="sm" />
+    </div>
+  );
+}
+
+/** Dashed-border centered empty block shared by table/card_grid/markdown nodes. */
+function NodeEmpty({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-8 text-center">
+      <Inbox className="h-5 w-5 text-slate-600" aria-hidden="true" />
+      <p className="text-xs text-slate-500">{message}</p>
+    </div>
+  );
+}
+
+/** Inline error block for malformed/failed node sources. */
+function NodeError({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+      {message}
+    </div>
+  );
+}
 
 /**
  * Resolve a manifest label to display text. Labels are plugin-namespaced
@@ -114,25 +146,180 @@ const missingParamsFromWarnings = new Set<string>();
 /** Warn-once registry for row actions whose paramsFromRow references a missing column. */
 const missingRowParamWarnings = new Set<string>();
 
-/**
- * Shared invoke path for button nodes and table row actions: runs
- * `plugin.{pluginId}.{command}` through invokeAction and surfaces
- * rejections as the `pluginUi.actionFailed` toast. Returns true on
- * success so callers (row actions) can trigger follow-ups like a table
- * refetch.
- */
+/** Floor for `source.refreshMs` polling — manifests asking for less are capped. */
+const MIN_REFRESH_MS = 2000;
+
+// RPC result envelope keys ({success,error} / {accepted,actionId,reason}) — never command output.
+const RESULT_ENVELOPE_KEYS = new Set(['success', 'accepted', 'actionId', 'error', 'reason']);
+
+interface CommandOutcome {
+  ok: boolean;
+  /** Success payload when it is a plain object (dialog surface input). */
+  payload?: Record<string, unknown>;
+}
+
+interface CommandResultEntry {
+  key: string;
+  value: string;
+}
+
+/** Business-error text of a resolved payload; null when it is not a business error. */
+function businessErrorText(payload: unknown): string | null {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  if (record.success === false) {
+    return typeof record.error === 'string' && record.error !== ''
+      ? record.error
+      : t('pluginUi.actionFailed');
+  }
+  if (record.accepted === false) {
+    return typeof record.reason === 'string' && record.reason !== ''
+      ? record.reason
+      : t('pluginUi.actionFailed');
+  }
+  return null;
+}
+
+/** Non-empty string fields of a success payload, envelope keys excluded. */
+function copyableEntries(payload?: Record<string, unknown>): CommandResultEntry[] {
+  if (!payload) return [];
+  const entries: CommandResultEntry[] = [];
+  for (const [key, value] of Object.entries(payload)) {
+    if (RESULT_ENVELOPE_KEYS.has(key)) continue;
+    if (typeof value === 'string' && value !== '') entries.push({ key, value });
+  }
+  return entries;
+}
+
+/** Shared invoke path: success → actionSucceeded toast, business error → error toast with the reason text. */
 async function runPluginCommand(
   pluginId: string,
   command: string,
   params?: Record<string, unknown>,
-): Promise<boolean> {
+): Promise<CommandOutcome> {
   try {
-    await invokeAction(pluginId, command, params);
-    return true;
+    const payload = await invokeAction<unknown>(pluginId, command, params);
+    const errorText = businessErrorText(payload);
+    if (errorText !== null) {
+      appToast.error(errorText);
+      return { ok: false };
+    }
+    appToast.success(t('pluginUi.actionSucceeded'));
+    return {
+      ok: true,
+      payload:
+        payload != null && typeof payload === 'object' && !Array.isArray(payload)
+          ? (payload as Record<string, unknown>)
+          : undefined,
+    };
   } catch {
     appToast.error(t('pluginUi.actionFailed'));
-    return false;
+    return { ok: false };
   }
+}
+
+/** Copyable surface for success payloads carrying string output (devbox `issue_tokens` → `{chatBlock}`). */
+function CommandResultDialog({
+  entries,
+  onClose,
+}: {
+  entries: CommandResultEntry[];
+  onClose: () => void;
+}) {
+  const handleCopy = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      appToast.success(t('pluginUi.copied'));
+    } catch {
+      appToast.error(t('pluginUi.actionFailed'));
+    }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title={t('pluginUi.actionSucceeded')} size="sm">
+      <div className="space-y-4">
+        {entries.map(entry => (
+          <div key={entry.key} className="space-y-1.5">
+            <div className="text-xs font-medium text-slate-400">{entry.key}</div>
+            <Textarea
+              readOnly
+              rows={Math.min(8, entry.value.split('\n').length + 1)}
+              value={entry.value}
+              data-testid={`command-result-${entry.key}`}
+              className="font-mono text-xs"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid={`copy-${entry.key}`}
+              onClick={() => void handleCopy(entry.value)}
+            >
+              {t('common.copy')}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/** Page-scoped refetch wiring: per-node bump signals + the button entry point. */
+interface RefreshBinding {
+  signals: Record<string, number>;
+  request: (nodeIds: string[]) => void;
+}
+
+/** `source.refreshMs` polling: bumps the node's fetch key on an interval, capped at MIN_REFRESH_MS. */
+function useRefreshInterval(refreshMs: number | undefined, bump: () => void) {
+  useEffect(() => {
+    if (typeof refreshMs !== 'number' || refreshMs <= 0) return;
+    const timer = setInterval(bump, Math.max(refreshMs, MIN_REFRESH_MS));
+    return () => clearInterval(timer);
+  }, [refreshMs, bump]);
+}
+
+/** Readonly toggle bound to a fetched source value (`field.source` + `valueKey`, default "value"). */
+function SourceToggle({
+  pluginId,
+  node,
+}: {
+  pluginId: string;
+  node: Extract<UiNode, { kind: 'field' }>;
+}) {
+  const [checked, setChecked] = useState(false);
+  const [fetchKey, setFetchKey] = useState(0);
+  const bump = useCallback(() => setFetchKey(k => k + 1), []);
+  const source = node.source;
+
+  useEffect(() => {
+    if (!source) return;
+    let cancelled = false;
+    invokeAction<unknown>(pluginId, source.command, source.params)
+      .then(resp => {
+        if (cancelled) return;
+        const valueKey = node.valueKey ?? 'value';
+        if (resp != null && typeof resp === 'object') {
+          setChecked((resp as Record<string, unknown>)[valueKey] === true);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [pluginId, source, node.valueKey, fetchKey]);
+
+  useRefreshInterval(source?.refreshMs, bump);
+
+  return (
+    <Toggle
+      label={resolveLabel(pluginId, node.label)}
+      checked={checked}
+      disabled
+      onChange={() => undefined}
+    />
+  );
 }
 
 function renderNode(
@@ -140,6 +327,7 @@ function renderNode(
   node: UiNode,
   index: number,
   fields: FieldBinding,
+  refresh: RefreshBinding,
 ) {
   switch (node.kind) {
     case 'heading': {
@@ -147,7 +335,7 @@ function renderNode(
       return (
         <div
           key={index}
-          className={`${headingSizes[level - 1]} font-semibold text-slate-100`}
+          className={`${headingSizes[level - 1]} font-semibold tracking-tight text-slate-100`}
         >
           {resolveLabel(pluginId, node.text)}
         </div>
@@ -155,15 +343,16 @@ function renderNode(
     }
     case 'section':
       return (
-        <div key={index} className="space-y-3">
+        <div
+          key={index}
+          className="space-y-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+        >
           {node.title && (
-            <div className="text-sm font-medium text-slate-300">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {resolveLabel(pluginId, node.title)}
             </div>
           )}
-          {(node.nodes ?? []).map((child, i) =>
-            renderNode(pluginId, child, i, fields),
-          )}
+          {renderNodeList(pluginId, node.nodes ?? [], fields, refresh)}
         </div>
       );
     case 'field': {
@@ -175,33 +364,38 @@ function renderNode(
       const value = fields.values[node.id];
       if (node.field === 'text') {
         return (
-          <Input
-            key={index}
-            label={label}
-            value={String(value ?? '')}
-            placeholder={placeholder}
-            readOnly={node.readonly}
-            onChange={e => fields.onChange(node.id, e.target.value)}
-          />
+          <div key={index} className="max-w-md">
+            <Input
+              label={label}
+              value={String(value ?? '')}
+              placeholder={placeholder}
+              readOnly={node.readonly}
+              onChange={e => fields.onChange(node.id, e.target.value)}
+            />
+          </div>
         );
       }
       if (node.field === 'select') {
         return (
-          <Select
-            key={index}
-            label={label}
-            value={String(value ?? '')}
-            placeholder={placeholder}
-            options={(node.options ?? []).map(opt => ({
-              ...opt,
-              label: resolveLabel(pluginId, opt.label),
-            }))}
-            disabled={node.readonly}
-            onChange={e => fields.onChange(node.id, e.target.value)}
-          />
+          <div key={index} className="max-w-md">
+            <Select
+              label={label}
+              value={String(value ?? '')}
+              placeholder={placeholder}
+              options={(node.options ?? []).map(opt => ({
+                ...opt,
+                label: resolveLabel(pluginId, opt.label),
+              }))}
+              disabled={node.readonly}
+              onChange={e => fields.onChange(node.id, e.target.value)}
+            />
+          </div>
         );
       }
       // toggle
+      if (node.source) {
+        return <SourceToggle key={index} pluginId={pluginId} node={node} />;
+      }
       return (
         <Toggle
           key={index}
@@ -213,7 +407,14 @@ function renderNode(
       );
     }
     case 'table':
-      return <TableNode key={index} pluginId={pluginId} node={node} />;
+      return (
+        <TableNode
+          key={index}
+          pluginId={pluginId}
+          node={node}
+          refreshSignal={refresh.signals[node.id] ?? 0}
+        />
+      );
     case 'button':
       return (
         <ButtonNode
@@ -221,12 +422,27 @@ function renderNode(
           pluginId={pluginId}
           node={node}
           fieldValues={fields.values}
+          onRefresh={refresh.request}
         />
       );
     case 'card_grid':
-      return <CardGridNode key={index} pluginId={pluginId} node={node} />;
+      return (
+        <CardGridNode
+          key={index}
+          pluginId={pluginId}
+          node={node}
+          refreshSignal={refresh.signals[node.id] ?? 0}
+        />
+      );
     case 'markdown':
-      return <MarkdownNode key={index} pluginId={pluginId} node={node} />;
+      return (
+        <MarkdownNode
+          key={index}
+          pluginId={pluginId}
+          node={node}
+          refreshSignal={refresh.signals[node.id] ?? 0}
+        />
+      );
     default: {
       // Tolerant reader: future node kinds not in the type union yet.
       const kind = (node as { kind: string }).kind;
@@ -236,22 +452,54 @@ function renderNode(
   }
 }
 
+/** Render a node list, grouping consecutive button nodes into one wrapping row. */
+function renderNodeList(
+  pluginId: string,
+  nodes: UiNode[],
+  fields: FieldBinding,
+  refresh: RefreshBinding,
+): ReactNode[] {
+  const out: ReactNode[] = [];
+  let run: number[] = [];
+  const flushRun = (): void => {
+    if (run.length === 0) return;
+    out.push(
+      <div key={`buttons-${run[0]}`} className="flex flex-wrap items-center gap-2">
+        {run.map(i => renderNode(pluginId, nodes[i], i, fields, refresh))}
+      </div>,
+    );
+    run = [];
+  };
+  nodes.forEach((node, i) => {
+    if (node.kind === 'button') {
+      run.push(i);
+      return;
+    }
+    flushRun();
+    out.push(renderNode(pluginId, node, i, fields, refresh));
+  });
+  flushRun();
+  return out;
+}
+
 function TableNode({
   pluginId,
   node,
+  refreshSignal,
 }: {
   pluginId: string;
   node: Extract<UiNode, { kind: 'table' }>;
+  refreshSignal: number;
 }) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Bumped after a successful row action so the effect below re-runs the
-  // source command (TableNode had no refresh mechanism before row
-  // actions; page-level buttons still do NOT trigger a table refetch).
+  // Bumped by row actions, refreshMs polling and refreshOnSuccess to re-run the source command.
   const [fetchKey, setFetchKey] = useState(0);
   // `${rowIndex}:${actionId}` of the in-flight row action, if any.
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const bump = useCallback(() => setFetchKey(k => k + 1), []);
+  useRefreshInterval(node.source.refreshMs, bump);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,7 +548,7 @@ function TableNode({
     return () => {
       cancelled = true;
     };
-  }, [pluginId, node.source.command, node.source.params, node.rowsKey, fetchKey]);
+  }, [pluginId, node.source.command, node.source.params, node.rowsKey, fetchKey, refreshSignal]);
 
   const rowActions = node.rowActions ?? [];
 
@@ -342,7 +590,7 @@ function TableNode({
     }
     setBusyAction(`${rowIndex}:${action.id}`);
     try {
-      const ok = await runPluginCommand(pluginId, action.command, params);
+      const { ok } = await runPluginCommand(pluginId, action.command, params);
       // Refresh the rows so the mutation is visible immediately.
       if (ok) setFetchKey(k => k + 1);
     } finally {
@@ -350,49 +598,62 @@ function TableNode({
     }
   };
 
-  if (loading) return <LoadingSpinner size="sm" />;
-  if (error) return <p className="text-xs text-red-400">{error}</p>;
-  if (rows.length === 0) return <p className="text-xs text-slate-500">&mdash;</p>;
+  if (loading) return <NodeLoading />;
+  if (error) return <NodeError message={error} />;
+  if (rows.length === 0) {
+    return (
+      <NodeEmpty
+        message={node.empty ? resolveLabel(pluginId, node.empty) : t('pluginUi.noData')}
+      />
+    );
+  }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {node.columns.map(col => (
-            <TableHead key={col.key}>{resolveLabel(pluginId, col.label)}</TableHead>
-          ))}
-          {rowActions.length > 0 && <TableHead />}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row, i) => (
-          <TableRow key={i}>
+    <div className="overflow-hidden rounded-xl border border-white/[0.06]">
+      <Table className="w-full" containerClassName="overflow-x-auto">
+        <TableHeader className="bg-white/[0.03]">
+          <TableRow className="border-b border-white/[0.06] hover:bg-transparent">
             {node.columns.map(col => (
-              <TableCell key={col.key}>
-                {String(row[col.key] ?? '')}
-              </TableCell>
+              <TableHead
+                key={col.key}
+                className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+              >
+                {resolveLabel(pluginId, col.label)}
+              </TableHead>
             ))}
-            {rowActions.length > 0 && (
-              <TableCell key="__row_actions">
-                <div className="flex justify-end gap-2">
-                  {rowActions.map(action => (
-                    <Button
-                      key={action.id}
-                      size="sm"
-                      variant={action.variant ?? 'primary'}
-                      isLoading={busyAction === `${i}:${action.id}`}
-                      onClick={() => handleRowAction(action, row, i)}
-                    >
-                      {resolveLabel(pluginId, action.label)}
-                    </Button>
-                  ))}
-                </div>
-              </TableCell>
-            )}
+            {rowActions.length > 0 && <TableHead className="px-4 py-2.5" />}
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row, i) => (
+            <TableRow key={i} className="border-b border-white/[0.04] last:border-b-0">
+              {node.columns.map(col => (
+                <TableCell key={col.key} className="px-4 py-2 text-xs text-slate-300">
+                  {String(row[col.key] ?? '')}
+                </TableCell>
+              ))}
+              {rowActions.length > 0 && (
+                <TableCell key="__row_actions" className="px-4 py-2">
+                  <div className="flex justify-end gap-2">
+                    {rowActions.map(action => (
+                      <Button
+                        key={action.id}
+                        size="xs"
+                        variant={action.variant ?? 'secondary'}
+                        isLoading={busyAction === `${i}:${action.id}`}
+                        onClick={() => handleRowAction(action, row, i)}
+                      >
+                        {resolveLabel(pluginId, action.label)}
+                      </Button>
+                    ))}
+                  </div>
+                </TableCell>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -400,14 +661,24 @@ function ButtonNode({
   pluginId,
   node,
   fieldValues,
+  onRefresh,
 }: {
   pluginId: string;
   node: Extract<UiNode, { kind: 'button' }>;
   fieldValues: Record<string, FieldValue>;
+  onRefresh: (nodeIds: string[]) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [resultEntries, setResultEntries] = useState<CommandResultEntry[] | null>(null);
 
   const handleClick = async () => {
+    // danger buttons confirm via the row-action key when no explicit confirm text is given.
+    const confirmText = node.confirm
+      ? resolveLabel(pluginId, node.confirm)
+      : node.variant === 'danger'
+        ? t('pluginUi.confirmRowAction')
+        : undefined;
+    if (confirmText !== undefined && !window.confirm(confirmText)) return;
     setBusy(true);
     try {
       // Without paramsFrom the button sends its static params unchanged.
@@ -435,20 +706,35 @@ function ButtonNode({
         }
         params = merged;
       }
-      await runPluginCommand(pluginId, node.command, params);
+      const { ok, payload } = await runPluginCommand(pluginId, node.command, params);
+      if (ok) {
+        const entries = copyableEntries(payload);
+        if (entries.length > 0) setResultEntries(entries);
+        if (node.refreshOnSuccess && node.refreshOnSuccess.length > 0) {
+          onRefresh(node.refreshOnSuccess);
+        }
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Button
-      variant={node.variant ?? 'primary'}
-      isLoading={busy}
-      onClick={handleClick}
-    >
-      {resolveLabel(pluginId, node.label)}
-    </Button>
+    <>
+      <Button
+        variant={node.variant ?? 'primary'}
+        isLoading={busy}
+        onClick={handleClick}
+      >
+        {resolveLabel(pluginId, node.label)}
+      </Button>
+      {resultEntries && (
+        <CommandResultDialog
+          entries={resultEntries}
+          onClose={() => setResultEntries(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -470,21 +756,31 @@ function resolveCardField(
   return template;
 }
 
+/** Card status tone → dot color + border color; unknown tones render neutral. */
+const TONE_STYLES: Record<string, { dot: string; border: string }> = {
+  ok: { dot: 'bg-emerald-400', border: 'border-emerald-500/40' },
+  warn: { dot: 'bg-amber-400', border: 'border-amber-500/40' },
+  down: { dot: 'bg-red-400', border: 'border-red-500/40' },
+};
+
 function CardGridNode({
   pluginId,
   node,
+  refreshSignal,
 }: {
   pluginId: string;
   node: Extract<UiNode, { kind: 'card_grid' }>;
+  refreshSignal: number;
 }) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Bumped after a successful card action so the effect below re-runs
-  // the source command (same refetch mechanism as TableNode row actions).
+  // Bumped by card actions, refreshMs polling and refreshOnSuccess to re-run the source command.
   const [fetchKey, setFetchKey] = useState(0);
   // Index of the card whose action is in flight, if any.
   const [busyAction, setBusyAction] = useState<number | null>(null);
+  const bump = useCallback(() => setFetchKey(k => k + 1), []);
+  useRefreshInterval(node.source.refreshMs, bump);
 
   useEffect(() => {
     let cancelled = false;
@@ -530,7 +826,7 @@ function CardGridNode({
     return () => {
       cancelled = true;
     };
-  }, [pluginId, node.source.command, node.source.params, fetchKey]);
+  }, [pluginId, node.source.command, node.source.params, fetchKey, refreshSignal]);
 
   const action = node.card.action;
 
@@ -572,7 +868,7 @@ function CardGridNode({
     }
     setBusyAction(rowIndex);
     try {
-      const ok = await runPluginCommand(pluginId, action.command, params);
+      const { ok } = await runPluginCommand(pluginId, action.command, params);
       // Refresh the rows so the mutation is visible immediately.
       if (ok) setFetchKey(k => k + 1);
     } finally {
@@ -580,41 +876,73 @@ function CardGridNode({
     }
   };
 
-  if (loading) return <LoadingSpinner size="sm" />;
-  if (error) return <p className="text-xs text-red-400">{error}</p>;
-  if (rows.length === 0) return <p className="text-xs text-slate-500">&mdash;</p>;
+  if (loading) return <NodeLoading />;
+  if (error) return <NodeError message={error} />;
+  if (rows.length === 0) {
+    return (
+      <NodeEmpty
+        message={node.empty ? resolveLabel(pluginId, node.empty) : t('pluginUi.noData')}
+      />
+    );
+  }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {rows.map((row, i) => {
         const title = resolveCardField(row, node.card.title);
         const subtitle = resolveCardField(row, node.card.subtitle);
         const body = resolveCardField(row, node.card.body);
         const imageSrc = resolveCardField(row, node.card.image);
+        const tone = resolveCardField(row, node.card.tone);
+        const toneStyle = TONE_STYLES[tone];
+        const hintRaw = resolveCardField(row, node.card.hint);
+        const hint = hintRaw ? resolveLabel(pluginId, hintRaw) : '';
         return (
-          <GlassCard key={i} className="overflow-hidden">
+          <GlassCard
+            key={i}
+            className={cn('flex h-full flex-col overflow-hidden', toneStyle?.border)}
+          >
             {imageSrc && (
               <img
                 src={imageSrc}
                 alt={title}
-                className="h-32 w-full object-cover"
+                className="h-32 w-full shrink-0 object-cover"
               />
             )}
-            <div className="space-y-1 p-3">
-              <div className="text-sm font-semibold text-white">{title}</div>
+            <div className="flex flex-col gap-1 p-4">
+              <div className="flex items-center gap-2">
+                {toneStyle && (
+                  <span
+                    aria-hidden="true"
+                    data-tone={tone}
+                    className={cn('h-2 w-2 shrink-0 rounded-full', toneStyle.dot)}
+                  />
+                )}
+                <span className="truncate text-xs font-medium uppercase tracking-wide text-slate-400">
+                  {title}
+                </span>
+              </div>
               {subtitle && (
-                <div className="text-xs text-slate-400">{subtitle}</div>
+                <div
+                  title={subtitle}
+                  className="truncate text-lg font-semibold tabular-nums text-white"
+                >
+                  {subtitle}
+                </div>
               )}
               {body && (
                 <div className="text-xs leading-relaxed text-slate-300">
                   {body}
                 </div>
               )}
+              {hint && (
+                <div className="text-[11px] text-slate-500">{hint}</div>
+              )}
               {action && (
-                <div className="pt-2">
+                <div className="mt-2">
                   <Button
-                    size="sm"
-                    variant={action.variant ?? 'primary'}
+                    size="xs"
+                    variant={action.variant ?? 'secondary'}
                     isLoading={busyAction === i}
                     onClick={() => handleAction(row, i)}
                   >
@@ -633,13 +961,19 @@ function CardGridNode({
 function MarkdownNode({
   pluginId,
   node,
+  refreshSignal,
 }: {
   pluginId: string;
   node: Extract<UiNode, { kind: 'markdown' }>;
+  refreshSignal: number;
 }) {
   const [text, setText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by refreshMs polling and refreshOnSuccess to re-run the source command.
+  const [fetchKey, setFetchKey] = useState(0);
+  const bump = useCallback(() => setFetchKey(k => k + 1), []);
+  useRefreshInterval(node.source.refreshMs, bump);
 
   useEffect(() => {
     let cancelled = false;
@@ -687,13 +1021,23 @@ function MarkdownNode({
     return () => {
       cancelled = true;
     };
-  }, [pluginId, node.source.command, node.source.params, node.textKey]);
+  }, [pluginId, node.source.command, node.source.params, node.textKey, fetchKey, refreshSignal]);
 
-  if (loading) return <LoadingSpinner size="sm" />;
-  if (error) return <p className="text-xs text-red-400">{error}</p>;
-  if (!text) return <p className="text-xs text-slate-500">&mdash;</p>;
+  if (loading) return <NodeLoading />;
+  if (error) return <NodeError message={error} />;
+  if (!text) {
+    return (
+      <NodeEmpty
+        message={node.empty ? resolveLabel(pluginId, node.empty) : t('pluginUi.noData')}
+      />
+    );
+  }
 
-  return renderMarkdown(text);
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+      {renderMarkdown(text)}
+    </div>
+  );
 }
 
 interface DeclarativePageProps {
@@ -717,14 +1061,24 @@ function DeclarativePage({ pluginId, schema }: DeclarativePageProps) {
   }, []);
   const fields: FieldBinding = { values: fieldValues, onChange: handleFieldChange };
 
+  const [refreshSignals, setRefreshSignals] = useState<Record<string, number>>({});
+  const requestRefresh = useCallback((nodeIds: string[]) => {
+    setRefreshSignals(prev => {
+      const next = { ...prev };
+      for (const id of nodeIds) next[id] = (next[id] ?? 0) + 1;
+      return next;
+    });
+  }, []);
+  const refresh: RefreshBinding = { signals: refreshSignals, request: requestRefresh };
+
   return (
-    <div className="space-y-4 p-4">
+    <div className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
       {schema?.title && (
-        <h1 className="text-xl font-semibold text-slate-100">
+        <h1 className="text-2xl font-bold tracking-tight text-white">
           {resolveLabel(pluginId, schema.title)}
         </h1>
       )}
-      {nodes.map((node, i) => renderNode(pluginId, node, i, fields))}
+      {renderNodeList(pluginId, nodes, fields, refresh)}
     </div>
   );
 }
@@ -779,7 +1133,11 @@ export function PluginPageHost() {
   if (ui?.kind === 'declarative' && ui.page) {
     // Key by plugin id so navigating between two plugin pages remounts and
     // the field state map is re-collected from the new schema.
-    return <DeclarativePage key={plugin.id} pluginId={plugin.id} schema={ui.page} />;
+    return (
+      <div className="h-full overflow-y-auto">
+        <DeclarativePage key={plugin.id} pluginId={plugin.id} schema={ui.page} />
+      </div>
+    );
   }
 
   return (

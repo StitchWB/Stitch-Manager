@@ -15,6 +15,7 @@ import { privileges } from './ru/privileges';
 import { monitoring } from './ru/monitoring';
 import { common } from './ru/common';
 import { dashboard } from './ru/dashboard';
+import { devboxPage } from './ru/devboxPage';
 import { filters } from './ru/filters';
 import { header } from './ru/header';
 import { identity } from './ru/identity';
@@ -77,6 +78,7 @@ export const ru: Translations = {
   ...monitoring,
   ...common,
   ...dashboard,
+  ...devboxPage,
   ...filters,
   ...header,
   ...identity,

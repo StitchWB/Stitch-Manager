@@ -87,6 +87,7 @@ class ServicePluginHost:
         default_timeout: float = 30.0,
         env: dict[str, str] | None = None,
         source: str = "local",
+        host_driver: bool = False,
         memory_limit_mb: int | None = None,
         sidecar_name: str | None = None,
     ) -> None:
@@ -108,7 +109,8 @@ class ServicePluginHost:
         self.migrations = migrations
         # Community/sandbox plugins get a 5s max timeout cap (unsigned subprocesses).
         self.source = source
-        if source in ("community", "sandbox"):
+        self.host_driver = host_driver
+        if source in ("community", "sandbox") and not self.host_driver:
             default_timeout = min(default_timeout, 5.0)
         self.default_timeout = default_timeout
         self.memory_limit_mb = memory_limit_mb

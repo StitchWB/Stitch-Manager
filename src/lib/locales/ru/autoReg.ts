@@ -52,8 +52,8 @@ export const autoReg: AutoRegTranslations = {
     engineTab: {
       auto: "Авто",
       cardsLoaded: "Карты загружены",
-      findLive: "Найти live",
-      live: "Live",
+      generateCard: "Сгенерировать карту",
+      generated: "Сгенерированная карта: ",
       logsLabel: "Логи",
       manual: "Вручную",
       openai_captcha: "OpenAI captcha",

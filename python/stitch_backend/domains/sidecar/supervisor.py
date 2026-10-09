@@ -208,7 +208,7 @@ class SidecarSupervisor:
                         stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        env=_child_env(plan.env, name),
+                        env=_child_env(plan.env, name, host_driver=plan.host_driver),
                         **_subprocess_isolation_kwargs(),
                         **_privilege_drop_kwargs(),
                     )
@@ -230,7 +230,7 @@ class SidecarSupervisor:
                         cwd=plan.cwd,
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL,
-                        env=_child_env(plan.env, name),
+                        env=_child_env(plan.env, name, host_driver=plan.host_driver),
                         **_subprocess_isolation_kwargs(),
                         **_privilege_drop_kwargs(),
                     )

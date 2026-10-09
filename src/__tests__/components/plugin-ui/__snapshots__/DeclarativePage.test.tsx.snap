@@ -3,54 +3,62 @@
 exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
 <div>
   <div
-    class="space-y-4 p-4"
+    class="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8"
   >
     <h1
-      class="text-xl font-semibold text-slate-100"
+      class="text-2xl font-bold tracking-tight text-white"
     >
       plugin.test.test.page.title
     </h1>
     <div
-      class="text-2xl font-semibold text-slate-100"
+      class="text-xl font-semibold tracking-tight text-slate-100"
     >
       Overview
     </div>
     <div
-      class="space-y-3"
+      class="space-y-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
     >
       <div
-        class="text-sm font-medium text-slate-300"
+        class="text-xs font-semibold uppercase tracking-wider text-slate-400"
       >
         Settings
       </div>
       <div
-        data-testid="ui-input"
+        class="max-w-md"
       >
-        <label>
-          Name
-        </label>
-        <input
-          value="Alice"
-        />
+        <div
+          data-testid="ui-input"
+        >
+          <label>
+            Name
+          </label>
+          <input
+            value="Alice"
+          />
+        </div>
       </div>
       <div
-        data-testid="ui-select"
+        class="max-w-md"
       >
-        <label>
-          Role
-        </label>
-        <select>
-          <option
-            value="admin"
-          >
-            Admin
-          </option>
-          <option
-            value="user"
-          >
-            User
-          </option>
-        </select>
+        <div
+          data-testid="ui-select"
+        >
+          <label>
+            Role
+          </label>
+          <select>
+            <option
+              value="admin"
+            >
+              Admin
+            </option>
+            <option
+              value="user"
+            >
+              User
+            </option>
+          </select>
+        </div>
       </div>
       <label
         data-testid="ui-toggle"
@@ -62,47 +70,55 @@ exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
         Active
       </label>
     </div>
-    <table
-      data-testid="ui-table"
+    <div
+      class="overflow-hidden rounded-xl border border-white/[0.06]"
     >
-      <thead>
-        <tr>
-          <th>
-            Name
-          </th>
-          <th>
-            Email
-          </th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>
-            Alice
-          </td>
-          <td>
-            a@b.c
-          </td>
-          <td>
-            <div
-              class="flex justify-end gap-2"
-            >
-              <button
-                data-testid="ui-button"
+      <table
+        data-testid="ui-table"
+      >
+        <thead>
+          <tr>
+            <th>
+              Name
+            </th>
+            <th>
+              Email
+            </th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              Alice
+            </td>
+            <td>
+              a@b.c
+            </td>
+            <td>
+              <div
+                class="flex justify-end gap-2"
               >
-                Delete
-              </button>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <button
-      data-testid="ui-button"
+                <button
+                  data-testid="ui-button"
+                >
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div
+      class="flex flex-wrap items-center gap-2"
     >
-      Ping
-    </button>
+      <button
+        data-testid="ui-button"
+      >
+        Ping
+      </button>
+    </div>
   </div>
 </div>
 `;

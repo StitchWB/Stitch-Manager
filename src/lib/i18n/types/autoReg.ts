@@ -50,8 +50,8 @@ export interface AutoRegTranslations {
     engineTab: {
       auto: string;
       cardsLoaded: string;
-      findLive: string;
-      live: string;
+      generateCard: string;
+      generated: string;
       logsLabel: string;
       manual: string;
       openai_captcha: string;

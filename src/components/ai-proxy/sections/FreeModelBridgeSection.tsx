@@ -1,8 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { t } from '@/lib/i18n';
 import { toast } from 'sonner';
 
 import { getProxySettings, updateProxySettings } from '@/lib/backend/modules/aiProxy';
+import {
+  getFreeModelBridgeStatus,
+  startFreeModelBridge,
+  stopFreeModelBridge,
+  type FreeModelBridgeStatus,
+} from '@/lib/backend/modules/freeModelBridge';
 import { Button, GlassCard, Input } from '@/components/ui';
 
 export function FreeModelBridgeSection() {
@@ -12,6 +18,8 @@ export function FreeModelBridgeSection() {
   const [isTestingFreemodel, setIsTestingFreemodel] = useState(false);
   const [freemodelTestResult, setFreemodelTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState<FreeModelBridgeStatus | null>(null);
+  const [isTogglingBridge, setIsTogglingBridge] = useState(false);
 
   // Load FreeModel API key from proxy settings on mount
   const loadFreemodelKey = useCallback(async () => {
@@ -34,6 +42,20 @@ export function FreeModelBridgeSection() {
     loadFreemodelKey();
   }
 
+  const refreshBridgeStatus = useCallback(async () => {
+    try {
+      setBridgeStatus(await getFreeModelBridgeStatus());
+    } catch {
+      setBridgeStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      refreshBridgeStatus();
+    });
+  }, [refreshBridgeStatus]);
+
   const handleSaveFreemodel = useCallback(async () => {
     setIsSavingFreemodel(true);
     try {
@@ -49,11 +71,43 @@ export function FreeModelBridgeSection() {
     }
   }, [freemodelApiKey]);
 
+  const handleStartBridge = useCallback(async () => {
+    setIsTogglingBridge(true);
+    try {
+      const st = await startFreeModelBridge();
+      setBridgeStatus(st);
+      if (st.status !== 'running') {
+        toast.error(t('aiHub.failedGeneric', { msg: st.errorMessage || t('aiHub.fmStatusStopped') }));
+      }
+    } catch (e) {
+      toast.error(t('aiHub.failedGeneric', { msg: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setIsTogglingBridge(false);
+    }
+  }, []);
+
+  const handleStopBridge = useCallback(async () => {
+    setIsTogglingBridge(true);
+    try {
+      setBridgeStatus(await stopFreeModelBridge());
+    } catch (e) {
+      toast.error(t('aiHub.failedGeneric', { msg: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setIsTogglingBridge(false);
+    }
+  }, []);
+
   const handleTestFreemodel = useCallback(async () => {
     setIsTestingFreemodel(true);
     setFreemodelTestResult(null);
+    const port = bridgeStatus?.port;
+    if (!port) {
+      setFreemodelTestResult({ ok: false, msg: t('aiHub.fmBridgeNotRunning') });
+      setIsTestingFreemodel(false);
+      return;
+    }
     try {
-      const resp = await fetch('http://127.0.0.1:25583/v1/models', {
+      const resp = await fetch(`http://127.0.0.1:${port}/v1/models`, {
         headers: { Authorization: `Bearer ${freemodelApiKey || 'freemodel-local'}` },
       });
       if (resp.ok) {
@@ -68,12 +122,43 @@ export function FreeModelBridgeSection() {
     } finally {
       setIsTestingFreemodel(false);
     }
-  }, [freemodelApiKey]);
+  }, [freemodelApiKey, bridgeStatus]);
+
+  const bridgeRunning = bridgeStatus?.status === 'running';
+  const statusText = bridgeStatus?.status === 'error'
+    ? t('aiHub.fmStatusError', { error: bridgeStatus.errorMessage || '' })
+    : bridgeRunning
+      ? t('aiHub.fmStatusRunning', { port: bridgeStatus?.port ?? '' })
+      : t('aiHub.fmStatusStopped');
 
   return (
     <GlassCard>
       <div className="p-5 space-y-4">
-        <h3 className="text-sm font-medium text-white/90">{t('aiHub.fmTitle')}</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-medium text-white/90">{t('aiHub.fmTitle')}</h3>
+          <div className="flex items-center gap-3">
+            <span
+              className={`text-xs ${
+                bridgeRunning
+                  ? 'text-emerald-400'
+                  : bridgeStatus?.status === 'error'
+                    ? 'text-red-400'
+                    : 'text-slate-400'
+              }`}
+            >
+              {statusText}
+            </span>
+            {bridgeRunning ? (
+              <Button variant="secondary" size="sm" onClick={handleStopBridge} isLoading={isTogglingBridge}>
+                {t('common.stop')}
+              </Button>
+            ) : (
+              <Button variant="primary" size="sm" onClick={handleStartBridge} isLoading={isTogglingBridge}>
+                {t('common.start')}
+              </Button>
+            )}
+          </div>
+        </div>
         <p className="text-xs text-slate-400">
           {t('aiHub.fmDesc')}
         </p>
