@@ -242,6 +242,12 @@ def build_inference_providers(
     from stitch_backend.domains.ai_proxy.inference_provider import (
         build_inference_provider_registry,
     )
+    from stitch_backend.domains.ai_proxy.notion_bridge import (
+        SIDECAR_NAME as _NB_SIDECAR,
+    )
+    from stitch_backend.domains.ai_proxy.notion_bridge import (
+        resolve_endpoint as _nb_resolve_endpoint,
+    )
 
     key_fetchers: dict[str, Any] = {}
     for provider in _API_KEY_PROVIDERS:
@@ -308,6 +314,8 @@ def build_inference_providers(
         kiro_fetcher=_fetch_kiro_models,
         freemodel_sidecar=_FM_SIDECAR,
         freemodel_endpoint_fallback=_fm_resolve_endpoint,
+        notion_sidecar=_NB_SIDECAR,
+        notion_endpoint_fallback=_nb_resolve_endpoint,
         web_gemini_fetcher=web_gemini_fetcher,
         web_deepseek_fetcher=web_deepseek_fetcher,
         web_qwen_fetcher=web_qwen_fetcher,
