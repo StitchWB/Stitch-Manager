@@ -231,6 +231,8 @@ def build_inference_provider_registry(
     kiro_fetcher: AccountsFetcher | None = None,
     freemodel_sidecar: str | None = None,
     freemodel_endpoint_fallback: Callable[[], str | None] | None = None,
+    notion_sidecar: str | None = None,
+    notion_endpoint_fallback: Callable[[], str | None] | None = None,
     web_gemini_fetcher: Callable[[], Awaitable[list[ModelDict]]] | None = None,
     web_deepseek_fetcher: Callable[[], Awaitable[list[ModelDict]]] | None = None,
     web_qwen_fetcher: Callable[[], Awaitable[list[ModelDict]]] | None = None,
@@ -274,6 +276,16 @@ def build_inference_provider_registry(
                 "freemodel",
                 freemodel_sidecar,
                 endpoint_fallback=freemodel_endpoint_fallback,
+            )
+        )
+
+    # Sidecar-backed: web-AI bridges (Notion agent, …) owned by the stitch-bridges plugin; [] while stopped.
+    if notion_sidecar:
+        registry.register(
+            SidecarInferenceProvider(
+                "notion",
+                notion_sidecar,
+                endpoint_fallback=notion_endpoint_fallback,
             )
         )
 
