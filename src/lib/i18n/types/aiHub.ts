@@ -550,6 +550,7 @@ export interface AiHubTranslations {
       integrations: string;
       monitor: string;
       notebooklm: string;
+      opencode: string;
       overview: string;
       providers: string;
       routing: string;

@@ -87,6 +87,7 @@ function renderAt(path: string) {
           <Route path="/ai/routing" element={<div data-testid="page-content" />} />
           <Route path="/ai/antigravity" element={<div data-testid="page-content" />} />
           <Route path="/ai/devbox" element={<div data-testid="page-content" />} />
+          <Route path="/ai/opencode-config" element={<div data-testid="page-content" />} />
           <Route path="/ai/plugin/:id" element={<div data-testid="page-content" />} />
         </Route>
       </Routes>
@@ -525,6 +526,40 @@ describe('AiHubLayout breadcrumb bar (P2.9)', () => {
     const pageSegment = within(breadcrumb).getByText('aiHub.tabs.routing');
     expect(pageSegment.closest('a')).toBeNull();
     expect(within(breadcrumb).queryByText('proxy')).toBeNull();
+  });
+});
+
+// ── W4/P3.4: opencode gets its own rail item ─────────────────────────────────
+
+describe('AiHubLayout opencode rail item (P3)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _resetForTests();
+    navigatedPath = '/ai';
+    navigatedSearch = '';
+    (safeInvoke as jest.Mock).mockResolvedValue([]);
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+  });
+
+  it('renders the opencode rail item and navigates to /ai/opencode-config', async () => {
+    renderAt('/ai');
+
+    const item = screen.getByTestId('ai-hub-rail-item-opencode');
+    await act(async () => {
+      fireEvent.click(item);
+    });
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/opencode-config');
+    });
+  });
+
+  it('marks the opencode item active at /ai/opencode-config, not connections', () => {
+    renderAt('/ai/opencode-config');
+
+    expect(screen.getByTestId('ai-hub-rail-item-opencode').getAttribute('aria-current')).toBe(
+      'page',
+    );
+    expect(screen.getByTestId('ai-hub-rail-item-connections').getAttribute('aria-current')).toBeNull();
   });
 });
 
