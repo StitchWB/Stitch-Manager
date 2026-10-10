@@ -17,7 +17,7 @@ export default function AiMonitorPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showDebugDrawer, setShowDebugDrawer] = useState(false);
-  const controller = useAiProvidersController();
+  const controller = useAiProvidersController('monitor');
 
   const {
     proxyStatus,
