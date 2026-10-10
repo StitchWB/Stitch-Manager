@@ -8,7 +8,7 @@ exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
     <h1
       class="text-2xl font-bold tracking-tight text-white"
     >
-      plugin.test.test.page.title
+      Title
     </h1>
     <div
       class="text-xl font-semibold tracking-tight text-slate-100"
@@ -71,49 +71,55 @@ exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
       </label>
     </div>
     <div
-      class="overflow-hidden rounded-xl border border-white/[0.06]"
+      class="space-y-2"
     >
-      <table
-        data-testid="ui-table"
+      <div
+        class="overflow-hidden rounded-xl border border-white/[0.06]"
       >
-        <thead>
-          <tr>
-            <th>
-              Name
-            </th>
-            <th>
-              Email
-            </th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              Alice
-            </td>
-            <td>
-              a@b.c
-            </td>
-            <td>
-              <div
-                class="flex justify-end gap-2"
-              >
-                <button
-                  data-testid="ui-button"
+        <table
+          data-testid="ui-table"
+        >
+          <thead>
+            <tr>
+              <th>
+                Name
+              </th>
+              <th>
+                Email
+              </th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                Alice
+              </td>
+              <td>
+                a@b.c
+              </td>
+              <td>
+                <div
+                  class="flex justify-end gap-2"
                 >
-                  Delete
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                  <button
+                    data-loading="false"
+                    data-testid="ui-button"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
     <div
       class="flex flex-wrap items-center gap-2"
     >
       <button
+        data-loading="false"
         data-testid="ui-button"
       >
         Ping

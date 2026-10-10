@@ -25,6 +25,22 @@ function getRequestKey(command: string, args?: Record<string, unknown>): string 
 let _backendOffline = false;
 let _offlineToastId: string | number | null = null;
 
+type OfflineListener = (offline: boolean) => void;
+const _offlineListeners = new Set<OfflineListener>();
+
+/** Subscribe to backend connectivity transitions; returns unsubscribe. */
+export function subscribeBackendOffline(listener: OfflineListener): () => void {
+  _offlineListeners.add(listener);
+  listener(_backendOffline);
+  return () => {
+    _offlineListeners.delete(listener);
+  };
+}
+
+function _notifyOffline(offline: boolean): void {
+  for (const listener of _offlineListeners) listener(offline);
+}
+
 // ── Auth session-expiry hook ────────────────────────────────────────────────
 // When auth is enabled and a regular /api/* call (via safeInvoke) comes back
 // 401, the session cookie has expired or been revoked. The auth store
@@ -61,6 +77,7 @@ function isConnectionError(error: unknown): boolean {
 function markBackendOffline() {
   if (_backendOffline) return; // already shown
   _backendOffline = true;
+  _notifyOffline(true);
   // Dynamic import to avoid circular deps — toast is optional
   import('sonner').then(({ toast }) => {
     _offlineToastId = toast.error('Backend is offline', {
@@ -74,6 +91,7 @@ function markBackendOffline() {
 function markBackendOnline() {
   if (!_backendOffline) return;
   _backendOffline = false;
+  _notifyOffline(false);
   import('sonner').then(({ toast }) => {
     if (_offlineToastId !== null) {
       toast.dismiss(_offlineToastId);

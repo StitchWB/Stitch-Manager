@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Globe } from 'lucide-react';
 import { useAppStore } from '../../stores/app';
-import { useAiProxyStore, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
+import { startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
+import { subscribeBackendOffline } from '@/lib/backend/core/invoke';
 import { t } from '@/lib/i18n';
 import { ButtonBase } from '@/components/ui/ButtonBase';
 import { IconButton } from '@/components/ui/IconButton';
@@ -24,9 +25,11 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
   const { language, setLanguage } = useAppStore();
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
-  const proxyStatus = useAiProxyStore(state => state.status);
+  const [backendOffline, setBackendOffline] = useState(false);
 
-  const isOnline = proxyStatus?.running ?? false;
+  useEffect(() => subscribeBackendOffline(setBackendOffline), []);
+
+  const isOnline = !backendOffline;
 
   // Use centralized proxy status polling
   useEffect(() => {

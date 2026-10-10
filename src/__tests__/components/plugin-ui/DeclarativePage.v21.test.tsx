@@ -275,6 +275,59 @@ describe('DeclarativePage v2.1 renderer feedback', () => {
     expect(screen.queryByTestId('ui-modal')).toBeNull();
   });
 
+  it('(n) a legit "reason" data field survives next to a success envelope', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue({
+      success: true,
+      reason: 'quota_exceeded',
+      chatBlock: 'tok_abc123',
+    });
+    render(
+      <DeclarativePage
+        pluginId="test"
+        schema={buttonSchema({ id: 'issue', label: 'Issue', command: 'issue_tokens' })}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Issue'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('command-result-reason')).toBeTruthy();
+    });
+    expect(
+      (screen.getByTestId('command-result-reason') as HTMLTextAreaElement).value,
+    ).toBe('quota_exceeded');
+    expect(screen.getByTestId('command-result-chatBlock')).toBeTruthy();
+    expect(screen.queryByTestId('command-result-success')).toBeNull();
+  });
+
+  it('(o) the deferred-action envelope still strips accepted/actionId/reason', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue({
+      accepted: true,
+      actionId: 'a1',
+      reason: 'queued',
+      chatBlock: 'tok_abc123',
+    });
+    render(
+      <DeclarativePage
+        pluginId="test"
+        schema={buttonSchema({ id: 'issue', label: 'Issue', command: 'issue_tokens' })}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Issue'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('command-result-chatBlock')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('command-result-reason')).toBeNull();
+    expect(screen.queryByTestId('command-result-accepted')).toBeNull();
+    expect(screen.queryByTestId('command-result-actionId')).toBeNull();
+  });
+
   it('(f) button.confirm prompts with the resolved string; decline aborts, accept invokes', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => false);
     try {
@@ -294,7 +347,7 @@ describe('DeclarativePage v2.1 renderer feedback', () => {
         fireEvent.click(screen.getByText('Restart'));
       });
 
-      expect(confirmSpy).toHaveBeenCalledWith('plugin.test.test.confirm.restart');
+      expect(confirmSpy).toHaveBeenCalledWith('Restart');
       expect(safeInvoke).not.toHaveBeenCalled();
 
       confirmSpy.mockImplementation(() => true);
@@ -458,7 +511,7 @@ describe('DeclarativePage v2.1 renderer feedback', () => {
     };
     const first = render(<DeclarativePage pluginId="test" schema={tableSchema} />);
     await waitFor(() => {
-      expect(screen.getByText('plugin.test.test.no.rows')).toBeTruthy();
+      expect(screen.getByText('Rows')).toBeTruthy();
     });
     expect(screen.queryByText('—')).toBeNull();
     first.unmount();
@@ -477,7 +530,7 @@ describe('DeclarativePage v2.1 renderer feedback', () => {
     };
     const second = render(<DeclarativePage pluginId="test" schema={gridSchema} />);
     await waitFor(() => {
-      expect(screen.getByText('plugin.test.test.no.cards')).toBeTruthy();
+      expect(screen.getByText('Cards')).toBeTruthy();
     });
     second.unmount();
 
@@ -493,7 +546,7 @@ describe('DeclarativePage v2.1 renderer feedback', () => {
     };
     render(<DeclarativePage pluginId="test" schema={mdSchema} />);
     await waitFor(() => {
-      expect(screen.getByText('plugin.test.test.no.text')).toBeTruthy();
+      expect(screen.getByText('Text')).toBeTruthy();
     });
   });
 
@@ -536,7 +589,7 @@ describe('DeclarativePage v2.1 renderer feedback', () => {
     expect(cards[2].className).not.toContain('border-emerald-500/40');
 
     // Hint resolves through the label machinery on every card.
-    expect(screen.getAllByText('plugin.test.test.hint.key')).toHaveLength(3);
+    expect(screen.getAllByText('Key')).toHaveLength(3);
   });
 
   it('(m) toggle field with a source binding renders a switch bound to the source value', async () => {

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from 'react';
 import { useParams } from 'react-router-dom';
 import { Inbox, Puzzle } from 'lucide-react';
 import { t } from '@/lib/i18n';
@@ -22,7 +30,7 @@ import {
   TableCell,
 } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import type { PluginPageSchema, RowAction, UiNode } from './schema';
+import type { CardTemplate, PluginPageSchema, RowAction, UiNode } from './schema';
 import { invokeAction } from './bindings';
 import { renderMarkdown } from './markdown';
 
@@ -75,6 +83,25 @@ function NodeError({ message }: { message: string }) {
   );
 }
 
+/** Subtle indicator shown while a background refetch keeps stale content on screen. */
+function NodeRefreshing() {
+  return (
+    <div className="flex justify-end py-1" data-testid="node-refreshing" role="status">
+      <LoadingSpinner size="sm" />
+    </div>
+  );
+}
+
+/** `autoRetry` → `Auto Retry`; used for the unresolved-i18n-key fallback. */
+function humanizeLabelKey(segment: string): string {
+  const words = segment
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\-\s]+/g, ' ')
+    .trim();
+  if (words === '') return segment;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /**
  * Resolve a manifest label to display text. Labels are plugin-namespaced
  * i18n keys: text starting with `<pluginId>.` is resolved via
@@ -82,10 +109,34 @@ function NodeError({ message }: { message: string }) {
  * i18nPluginBundles.ts) — the same convention the scaffold generates and
  * AiHubLayout uses for plugin tab labels. Anything else (plain strings like
  * "ID", "Email", or version strings like "v1.2.3") renders as-is.
+ * An unresolved key falls back to the humanized last segment, never the raw key.
  */
 function resolveLabel(pluginId: string, text: string): string {
   const prefix = `${pluginId}.`;
-  return text.startsWith(prefix) ? t(`plugin.${pluginId}.${text}`) : text;
+  if (!text.startsWith(prefix)) return text;
+  const key = `plugin.${pluginId}.${text}`;
+  const resolved = t(key);
+  if (resolved !== key) return resolved;
+  const remainder = text.slice(prefix.length);
+  const lastSegment = remainder.split('.').pop() ?? remainder;
+  return humanizeLabelKey(lastSegment);
+}
+
+function hashRowContent(row: Record<string, unknown>): string {
+  const serialized = JSON.stringify(row);
+  let hash = 0;
+  for (let i = 0; i < serialized.length; i += 1) {
+    hash = (hash * 31 + serialized.charCodeAt(i)) | 0;
+  }
+  return hash.toString(36);
+}
+
+/** Stable React/busy-state key: row id column first, content hash + index as fallback. */
+function stableRowKey(row: Record<string, unknown>, index: number): string {
+  const id = row.id;
+  if (typeof id === 'string' && id !== '') return id;
+  if (typeof id === 'number' && Number.isFinite(id)) return String(id);
+  return `${hashRowContent(row)}:${index}`;
 }
 
 /** Value held in the page-level field state map. */
@@ -149,8 +200,23 @@ const missingRowParamWarnings = new Set<string>();
 /** Floor for `source.refreshMs` polling — manifests asking for less are capped. */
 const MIN_REFRESH_MS = 2000;
 
-// RPC result envelope keys ({success,error} / {accepted,actionId,reason}) — never command output.
-const RESULT_ENVELOPE_KEYS = new Set(['success', 'accepted', 'actionId', 'error', 'reason']);
+// RPC result envelope keys — stripped only when the payload matches the envelope shape.
+const SUCCESS_ENVELOPE_KEYS = new Set(['success', 'error']);
+const DEFERRED_ENVELOPE_KEYS = new Set(['accepted', 'actionId', 'reason']);
+
+/**
+ * Envelope keys to strip from a payload, or null when it is plain command
+ * output. `{success:boolean, error?}` and `{accepted:boolean, actionId, reason?}`
+ * are the two RPC envelope conventions plugin handlers use; a `reason` field
+ * on a non-deferred payload is business data and must survive.
+ */
+function envelopeKeysFor(payload: Record<string, unknown>): ReadonlySet<string> | null {
+  if (typeof payload.success === 'boolean') return SUCCESS_ENVELOPE_KEYS;
+  if (typeof payload.accepted === 'boolean' && 'actionId' in payload) {
+    return DEFERRED_ENVELOPE_KEYS;
+  }
+  return null;
+}
 
 interface CommandOutcome {
   ok: boolean;
@@ -185,9 +251,10 @@ function businessErrorText(payload: unknown): string | null {
 /** Non-empty string fields of a success payload, envelope keys excluded. */
 function copyableEntries(payload?: Record<string, unknown>): CommandResultEntry[] {
   if (!payload) return [];
+  const envelopeKeys = envelopeKeysFor(payload);
   const entries: CommandResultEntry[] = [];
   for (const [key, value] of Object.entries(payload)) {
-    if (RESULT_ENVELOPE_KEYS.has(key)) continue;
+    if (envelopeKeys?.has(key)) continue;
     if (typeof value === 'string' && value !== '') entries.push({ key, value });
   }
   return entries;
@@ -289,14 +356,20 @@ function SourceToggle({
   node: Extract<UiNode, { kind: 'field' }>;
 }) {
   const [checked, setChecked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [fetchKey, setFetchKey] = useState(0);
   const bump = useCallback(() => setFetchKey(k => k + 1), []);
   const source = node.source;
+  const command = source?.command;
 
   useEffect(() => {
     if (!source) return;
     let cancelled = false;
-    invokeAction<unknown>(pluginId, source.command, source.params)
+    const commandMissing = typeof command !== 'string' || command === '';
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync error state before the async fetch
+    setError(commandMissing ? 'Toggle source is missing a command' : null);
+    if (commandMissing) return;
+    invokeAction<unknown>(pluginId, command, source.params)
       .then(resp => {
         if (cancelled) return;
         const valueKey = node.valueKey ?? 'value';
@@ -304,21 +377,27 @@ function SourceToggle({
           setChecked((resp as Record<string, unknown>)[valueKey] === true);
         }
       })
-      .catch(() => undefined);
+      .catch(err => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+      });
     return () => {
       cancelled = true;
     };
-  }, [pluginId, source, node.valueKey, fetchKey]);
+  }, [pluginId, source, command, node.valueKey, fetchKey]);
 
   useRefreshInterval(source?.refreshMs, bump);
 
   return (
-    <Toggle
-      label={resolveLabel(pluginId, node.label)}
-      checked={checked}
-      disabled
-      onChange={() => undefined}
-    />
+    <div className="space-y-2">
+      <Toggle
+        label={resolveLabel(pluginId, node.label)}
+        checked={checked}
+        disabled
+        onChange={() => undefined}
+      />
+      {error && <NodeError message={error} />}
+    </div>
   );
 }
 
@@ -493,36 +572,48 @@ function TableNode({
 }) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumped by row actions, refreshMs polling and refreshOnSuccess to re-run the source command.
   const [fetchKey, setFetchKey] = useState(0);
-  // `${rowIndex}:${actionId}` of the in-flight row action, if any.
+  // `${rowKey}:${actionId}` of the in-flight row action, if any.
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const loadedOnce = useRef(false);
   const bump = useCallback(() => setFetchKey(k => k + 1), []);
-  useRefreshInterval(node.source.refreshMs, bump);
+  const command = node.source?.command;
+  const sourceParams = node.source?.params;
+  useRefreshInterval(node.source?.refreshMs, bump);
 
   useEffect(() => {
+    if (typeof command !== 'string' || command === '') return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
-    setLoading(true);
+    if (loadedOnce.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch keeps stale rows visible
+      setRefreshing(true);
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load must spin before the async fetch
+      setLoading(true);
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- stale error must clear before the async fetch
     setError(null);
     invokeAction<Record<string, unknown> | Record<string, unknown>[]>(
       pluginId,
-      node.source.command,
-      node.source.params,
+      command,
+      sourceParams,
     )
       .then(resp => {
         if (cancelled) return;
+        loadedOnce.current = true;
+        setRefreshing(false);
+        setLoading(false);
         // null/undefined → empty state (no rows, no error).
         if (resp == null) {
           setRows([]);
-          setLoading(false);
           return;
         }
         // Bare array of rows.
         if (Array.isArray(resp)) {
           setRows(resp as Record<string, unknown>[]);
-          setLoading(false);
           return;
         }
         // Object wrapping rows under `rowsKey` (default "rows").
@@ -530,7 +621,6 @@ function TableNode({
         const data = (resp as Record<string, unknown>)[rowsKey];
         if (Array.isArray(data)) {
           setRows(data as Record<string, unknown>[]);
-          setLoading(false);
           return;
         }
         // Malformed response: non-null, non-array, no rowsKey — show an
@@ -538,24 +628,25 @@ function TableNode({
         setError(
           `Table response missing rowsKey "${rowsKey}"`,
         );
-        setLoading(false);
       })
       .catch(err => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        loadedOnce.current = true;
+        setRefreshing(false);
         setLoading(false);
+        setError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;
     };
-  }, [pluginId, node.source.command, node.source.params, node.rowsKey, fetchKey, refreshSignal]);
+  }, [pluginId, command, sourceParams, node.rowsKey, fetchKey, refreshSignal]);
 
   const rowActions = node.rowActions ?? [];
 
   const handleRowAction = async (
     action: RowAction,
     row: Record<string, unknown>,
-    rowIndex: number,
+    rowKeyValue: string,
   ) => {
     // Destructive actions confirm before invoking; declining aborts
     // without calling the command.
@@ -588,7 +679,7 @@ function TableNode({
         }
       }
     }
-    setBusyAction(`${rowIndex}:${action.id}`);
+    setBusyAction(`${rowKeyValue}:${action.id}`);
     try {
       const { ok } = await runPluginCommand(pluginId, action.command, params);
       // Refresh the rows so the mutation is visible immediately.
@@ -598,6 +689,12 @@ function TableNode({
     }
   };
 
+  if (!Array.isArray(node.columns)) {
+    return <NodeError message="Table node is missing columns" />;
+  }
+  if (typeof command !== 'string' || command === '') {
+    return <NodeError message="Table source is missing a command" />;
+  }
   if (loading) return <NodeLoading />;
   if (error) return <NodeError message={error} />;
   if (rows.length === 0) {
@@ -609,50 +706,56 @@ function TableNode({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.06]">
-      <Table className="w-full" containerClassName="overflow-x-auto">
-        <TableHeader className="bg-white/[0.03]">
-          <TableRow className="border-b border-white/[0.06] hover:bg-transparent">
-            {node.columns.map(col => (
-              <TableHead
-                key={col.key}
-                className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
-              >
-                {resolveLabel(pluginId, col.label)}
-              </TableHead>
-            ))}
-            {rowActions.length > 0 && <TableHead className="px-4 py-2.5" />}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row, i) => (
-            <TableRow key={i} className="border-b border-white/[0.04] last:border-b-0">
+    <div className="space-y-2">
+      {refreshing && <NodeRefreshing />}
+      <div className="overflow-hidden rounded-xl border border-white/[0.06]">
+        <Table className="w-full" containerClassName="overflow-x-auto">
+          <TableHeader className="bg-white/[0.03]">
+            <TableRow className="border-b border-white/[0.06] hover:bg-transparent">
               {node.columns.map(col => (
-                <TableCell key={col.key} className="px-4 py-2 text-xs text-slate-300">
-                  {String(row[col.key] ?? '')}
-                </TableCell>
+                <TableHead
+                  key={col.key}
+                  className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+                >
+                  {resolveLabel(pluginId, col.label)}
+                </TableHead>
               ))}
-              {rowActions.length > 0 && (
-                <TableCell key="__row_actions" className="px-4 py-2">
-                  <div className="flex justify-end gap-2">
-                    {rowActions.map(action => (
-                      <Button
-                        key={action.id}
-                        size="xs"
-                        variant={action.variant ?? 'secondary'}
-                        isLoading={busyAction === `${i}:${action.id}`}
-                        onClick={() => handleRowAction(action, row, i)}
-                      >
-                        {resolveLabel(pluginId, action.label)}
-                      </Button>
-                    ))}
-                  </div>
-                </TableCell>
-              )}
+              {rowActions.length > 0 && <TableHead className="px-4 py-2.5" />}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, i) => {
+              const key = stableRowKey(row, i);
+              return (
+                <TableRow key={key} className="border-b border-white/[0.04] last:border-b-0">
+                  {node.columns.map(col => (
+                    <TableCell key={col.key} className="px-4 py-2 text-xs text-slate-300">
+                      {String(row[col.key] ?? '')}
+                    </TableCell>
+                  ))}
+                  {rowActions.length > 0 && (
+                    <TableCell key="__row_actions" className="px-4 py-2">
+                      <div className="flex justify-end gap-2">
+                        {rowActions.map(action => (
+                          <Button
+                            key={action.id}
+                            size="xs"
+                            variant={action.variant ?? 'secondary'}
+                            isLoading={busyAction === `${key}:${action.id}`}
+                            onClick={() => handleRowAction(action, row, key)}
+                          >
+                            {resolveLabel(pluginId, action.label)}
+                          </Button>
+                        ))}
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -774,36 +877,49 @@ function CardGridNode({
 }) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumped by card actions, refreshMs polling and refreshOnSuccess to re-run the source command.
   const [fetchKey, setFetchKey] = useState(0);
-  // Index of the card whose action is in flight, if any.
-  const [busyAction, setBusyAction] = useState<number | null>(null);
+  // Stable key of the card whose action is in flight, if any.
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const loadedOnce = useRef(false);
   const bump = useCallback(() => setFetchKey(k => k + 1), []);
-  useRefreshInterval(node.source.refreshMs, bump);
+  const command = node.source?.command;
+  const sourceParams = node.source?.params;
+  const card = node.card as CardTemplate | undefined;
+  useRefreshInterval(node.source?.refreshMs, bump);
 
   useEffect(() => {
+    if (typeof command !== 'string' || command === '') return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
-    setLoading(true);
+    if (loadedOnce.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch keeps stale cards visible
+      setRefreshing(true);
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load must spin before the async fetch
+      setLoading(true);
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- stale error must clear before the async fetch
     setError(null);
     invokeAction<Record<string, unknown> | Record<string, unknown>[]>(
       pluginId,
-      node.source.command,
-      node.source.params,
+      command,
+      sourceParams,
     )
       .then(resp => {
         if (cancelled) return;
+        loadedOnce.current = true;
+        setRefreshing(false);
+        setLoading(false);
         // null/undefined → empty state (no cards, no error).
         if (resp == null) {
           setRows([]);
-          setLoading(false);
           return;
         }
         // Bare array of rows.
         if (Array.isArray(resp)) {
           setRows(resp as Record<string, unknown>[]);
-          setLoading(false);
           return;
         }
         // Object wrapping rows under "rows" (table default rowsKey;
@@ -811,28 +927,28 @@ function CardGridNode({
         const data = (resp as Record<string, unknown>).rows;
         if (Array.isArray(data)) {
           setRows(data as Record<string, unknown>[]);
-          setLoading(false);
           return;
         }
         // Malformed response — inline error like TableNode.
         setError('Card grid response missing "rows"');
-        setLoading(false);
       })
       .catch(err => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        loadedOnce.current = true;
+        setRefreshing(false);
         setLoading(false);
+        setError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;
     };
-  }, [pluginId, node.source.command, node.source.params, fetchKey, refreshSignal]);
+  }, [pluginId, command, sourceParams, fetchKey, refreshSignal]);
 
-  const action = node.card.action;
+  const action = card?.action;
 
   const handleAction = async (
     row: Record<string, unknown>,
-    rowIndex: number,
+    rowKeyValue: string,
   ) => {
     if (!action) return;
     // Destructive actions confirm before invoking; declining aborts
@@ -866,7 +982,7 @@ function CardGridNode({
         }
       }
     }
-    setBusyAction(rowIndex);
+    setBusyAction(rowKeyValue);
     try {
       const { ok } = await runPluginCommand(pluginId, action.command, params);
       // Refresh the rows so the mutation is visible immediately.
@@ -876,6 +992,12 @@ function CardGridNode({
     }
   };
 
+  if (!card || typeof card !== 'object') {
+    return <NodeError message="Card grid node is missing the card template" />;
+  }
+  if (typeof command !== 'string' || command === '') {
+    return <NodeError message="Card grid source is missing a command" />;
+  }
   if (loading) return <NodeLoading />;
   if (error) return <NodeError message={error} />;
   if (rows.length === 0) {
@@ -887,73 +1009,77 @@ function CardGridNode({
   }
 
   return (
-    <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {rows.map((row, i) => {
-        const title = resolveCardField(row, node.card.title);
-        const subtitle = resolveCardField(row, node.card.subtitle);
-        const body = resolveCardField(row, node.card.body);
-        const imageSrc = resolveCardField(row, node.card.image);
-        const tone = resolveCardField(row, node.card.tone);
-        const toneStyle = TONE_STYLES[tone];
-        const hintRaw = resolveCardField(row, node.card.hint);
-        const hint = hintRaw ? resolveLabel(pluginId, hintRaw) : '';
-        return (
-          <GlassCard
-            key={i}
-            className={cn('flex h-full flex-col overflow-hidden', toneStyle?.border)}
-          >
-            {imageSrc && (
-              <img
-                src={imageSrc}
-                alt={title}
-                className="h-32 w-full shrink-0 object-cover"
-              />
-            )}
-            <div className="flex flex-col gap-1 p-4">
-              <div className="flex items-center gap-2">
-                {toneStyle && (
-                  <span
-                    aria-hidden="true"
-                    data-tone={tone}
-                    className={cn('h-2 w-2 shrink-0 rounded-full', toneStyle.dot)}
-                  />
-                )}
-                <span className="truncate text-xs font-medium uppercase tracking-wide text-slate-400">
-                  {title}
-                </span>
-              </div>
-              {subtitle && (
-                <div
-                  title={subtitle}
-                  className="truncate text-lg font-semibold tabular-nums text-white"
-                >
-                  {subtitle}
+    <div className="space-y-2">
+      {refreshing && <NodeRefreshing />}
+      <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((row, i) => {
+          const key = stableRowKey(row, i);
+          const title = resolveCardField(row, card.title);
+          const subtitle = resolveCardField(row, card.subtitle);
+          const body = resolveCardField(row, card.body);
+          const imageSrc = resolveCardField(row, card.image);
+          const tone = resolveCardField(row, card.tone);
+          const toneStyle = TONE_STYLES[tone];
+          const hintRaw = resolveCardField(row, card.hint);
+          const hint = hintRaw ? resolveLabel(pluginId, hintRaw) : '';
+          return (
+            <GlassCard
+              key={key}
+              className={cn('flex h-full flex-col overflow-hidden', toneStyle?.border)}
+            >
+              {imageSrc && (
+                <img
+                  src={imageSrc}
+                  alt={title}
+                  className="h-32 w-full shrink-0 object-cover"
+                />
+              )}
+              <div className="flex flex-col gap-1 p-4">
+                <div className="flex items-center gap-2">
+                  {toneStyle && (
+                    <span
+                      aria-hidden="true"
+                      data-tone={tone}
+                      className={cn('h-2 w-2 shrink-0 rounded-full', toneStyle.dot)}
+                    />
+                  )}
+                  <span className="truncate text-xs font-medium uppercase tracking-wide text-slate-400">
+                    {title}
+                  </span>
                 </div>
-              )}
-              {body && (
-                <div className="text-xs leading-relaxed text-slate-300">
-                  {body}
-                </div>
-              )}
-              {hint && (
-                <div className="text-[11px] text-slate-500">{hint}</div>
-              )}
-              {action && (
-                <div className="mt-2">
-                  <Button
-                    size="xs"
-                    variant={action.variant ?? 'secondary'}
-                    isLoading={busyAction === i}
-                    onClick={() => handleAction(row, i)}
+                {subtitle && (
+                  <div
+                    title={subtitle}
+                    className="truncate text-lg font-semibold tabular-nums text-white"
                   >
-                    {resolveLabel(pluginId, action.label)}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </GlassCard>
-        );
-      })}
+                    {subtitle}
+                  </div>
+                )}
+                {body && (
+                  <div className="text-xs leading-relaxed text-slate-300">
+                    {body}
+                  </div>
+                )}
+                {hint && (
+                  <div className="text-[11px] text-slate-500">{hint}</div>
+                )}
+                {action && (
+                  <div className="mt-2">
+                    <Button
+                      size="xs"
+                      variant={action.variant ?? 'secondary'}
+                      isLoading={busyAction === key}
+                      onClick={() => handleAction(row, key)}
+                    >
+                      {resolveLabel(pluginId, action.label)}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </GlassCard>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -969,31 +1095,43 @@ function MarkdownNode({
 }) {
   const [text, setText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumped by refreshMs polling and refreshOnSuccess to re-run the source command.
   const [fetchKey, setFetchKey] = useState(0);
+  const loadedOnce = useRef(false);
   const bump = useCallback(() => setFetchKey(k => k + 1), []);
-  useRefreshInterval(node.source.refreshMs, bump);
+  const command = node.source?.command;
+  const sourceParams = node.source?.params;
+  useRefreshInterval(node.source?.refreshMs, bump);
 
   useEffect(() => {
+    if (typeof command !== 'string' || command === '') return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
-    setLoading(true);
+    if (loadedOnce.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch keeps stale text visible
+      setRefreshing(true);
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load must spin before the async fetch
+      setLoading(true);
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- stale error must clear before the async fetch
     setError(null);
-    setText(null);
-    invokeAction<unknown>(pluginId, node.source.command, node.source.params)
+    invokeAction<unknown>(pluginId, command, sourceParams)
       .then(resp => {
         if (cancelled) return;
+        loadedOnce.current = true;
+        setRefreshing(false);
+        setLoading(false);
         // null/undefined → empty state (no text, no error).
         if (resp == null) {
-          setLoading(false);
+          setText(null);
           return;
         }
         // Bare string response is accepted as the markdown text directly
         // (the string analogue of the table node's bare-array tolerance).
         if (typeof resp === 'string') {
           setText(resp);
-          setLoading(false);
           return;
         }
         // Object carrying the markdown under `textKey` (default "text").
@@ -1002,27 +1140,29 @@ function MarkdownNode({
           const value = (resp as Record<string, unknown>)[textKey];
           if (typeof value === 'string') {
             setText(value);
-            setLoading(false);
             return;
           }
           // Malformed response — inline error like TableNode.
           setError(`Markdown response missing textKey "${textKey}"`);
-          setLoading(false);
           return;
         }
         setError(`Markdown response missing textKey "${node.textKey ?? 'text'}"`);
-        setLoading(false);
       })
       .catch(err => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        loadedOnce.current = true;
+        setRefreshing(false);
         setLoading(false);
+        setError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;
     };
-  }, [pluginId, node.source.command, node.source.params, node.textKey, fetchKey, refreshSignal]);
+  }, [pluginId, command, sourceParams, node.textKey, fetchKey, refreshSignal]);
 
+  if (typeof command !== 'string' || command === '') {
+    return <NodeError message="Markdown source is missing a command" />;
+  }
   if (loading) return <NodeLoading />;
   if (error) return <NodeError message={error} />;
   if (!text) {
@@ -1034,8 +1174,11 @@ function MarkdownNode({
   }
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-      {renderMarkdown(text)}
+    <div className="space-y-2">
+      {refreshing && <NodeRefreshing />}
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+        {renderMarkdown(text)}
+      </div>
     </div>
   );
 }
@@ -1045,7 +1188,42 @@ interface DeclarativePageProps {
   schema: PluginPageSchema;
 }
 
-function DeclarativePage({ pluginId, schema }: DeclarativePageProps) {
+interface PluginUiErrorBoundaryState {
+  failed: boolean;
+}
+
+/** Last-resort fallback so a malformed manifest cannot blank the whole host route. */
+class PluginUiErrorBoundary extends Component<
+  { children: ReactNode },
+  PluginUiErrorBoundaryState
+> {
+  state: PluginUiErrorBoundaryState = { failed: false };
+
+  static getDerivedStateFromError(): PluginUiErrorBoundaryState {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error(
+      'DeclarativePage: plugin UI failed to render',
+      error,
+      info.componentStack,
+    );
+  }
+
+  render(): ReactNode {
+    if (this.state.failed) {
+      return (
+        <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+          <NodeError message="Plugin UI failed to render" />
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function DeclarativePageContent({ pluginId, schema }: DeclarativePageProps) {
   // Tolerant of malformed manifests: a missing/non-array `nodes` renders an
   // empty page instead of crashing the whole host route.
   const nodes = Array.isArray(schema?.nodes) ? schema.nodes : [];
@@ -1080,6 +1258,14 @@ function DeclarativePage({ pluginId, schema }: DeclarativePageProps) {
       )}
       {renderNodeList(pluginId, nodes, fields, refresh)}
     </div>
+  );
+}
+
+function DeclarativePage(props: DeclarativePageProps) {
+  return (
+    <PluginUiErrorBoundary>
+      <DeclarativePageContent {...props} />
+    </PluginUiErrorBoundary>
   );
 }
 

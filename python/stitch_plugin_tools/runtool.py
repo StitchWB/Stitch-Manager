@@ -487,10 +487,12 @@ def run_package(package_dir: Path) -> int:
     module = manifest.entry.get("module") or module_dir.name
 
     # 2. Refresh _vendor/ (idempotent) so standalone packages are current.
+    from stitch_plugin_tools.vendoring import CanonicalRpcSourceError, vendor_all
+
     try:
-        from stitch_plugin_tools.vendoring import vendor_all
         vendor_all(module_dir)
-    except Exception as exc:  # noqa: BLE001 - non-fatal
+    except CanonicalRpcSourceError as exc:
+        # read-only playground: warn + continue (publish/dev-install re-raise this)
         print(
             f"warning: vendor refresh failed: {exc}", file=sys.stderr
         )

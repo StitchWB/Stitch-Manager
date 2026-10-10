@@ -1,4 +1,5 @@
 import { useEffect, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { cn } from '../../lib/utils';
@@ -66,7 +67,8 @@ export function Modal({
 
   if (!isOpen) return null;
 
-  return (
+  // portal escapes ancestor backdrop-filter/transform, which would otherwise trap this fixed overlay in their stacking context
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
@@ -137,8 +139,8 @@ export function Modal({
           )}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+        {/* min-h-0 is required: without it the flex child refuses to shrink and the footer gets clipped */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6">{children}</div>
 
         {/* Footer */}
         {footer && (
@@ -153,6 +155,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

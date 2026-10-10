@@ -24,18 +24,28 @@ import { DEVBOX_REFRESH_MS, DEVBOX_SECURITY_URL } from './constants';
 export function DevboxPermissions() {
   const fetcher = useCallback(() => devboxPermissionsPending(), []);
   const { data, error, reload } = useDevboxPoll(fetcher, DEVBOX_REFRESH_MS);
-  const rows = Array.isArray(data) ? data : [];
+  const rows = data?.rows ?? [];
+  const degraded = error !== null || data?.bridge === 'down';
 
   return (
     <DevboxSection
       title={t('devboxPage.sectionPermissions')}
       caption={t('devboxPage.observationCaption')}
-      error={error}
-      onRetry={reload}
       testId="devbox-permissions"
     >
       <div className="flex flex-col gap-3">
-        {rows.length === 0 && !error ? (
+        {degraded && (
+          <div
+            className="flex items-center gap-2 text-2xs text-slate-300"
+            data-testid="devbox-permissions-degraded"
+          >
+            <span>{t('devboxPage.permissionsBridgeDown')}</span>
+            <Button size="xs" variant="ghost" onClick={reload}>
+              {t('common.retry')}
+            </Button>
+          </div>
+        )}
+        {rows.length === 0 ? (
           <EmptyState compact icon={ShieldQuestion} title={t('devboxPage.permissionsEmpty')} />
         ) : (
           <Table containerClassName="rounded-lg border border-white/5">
@@ -91,7 +101,7 @@ export function DevboxPermissions() {
 
         <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-3">
           <p className="text-2xs text-slate-400 flex items-start gap-1.5">
-            <FileLock2 size={13} className="shrink-0 mt-0.5 text-slate-500" />
+            <FileLock2 size={13} className="shrink-0 mt-0.5 text-slate-400" />
             <span data-testid="devbox-security-summary">{t('devboxPage.securitySummary')}</span>
           </p>
           <Button

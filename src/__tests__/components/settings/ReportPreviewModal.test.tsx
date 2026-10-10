@@ -50,7 +50,7 @@ describe('ReportPreviewModal', () => {
     };
     mockFetchOk(preview);
 
-    const { container } = render(
+    render(
       <ReportPreviewModal
         reportId="r1"
         onClose={jest.fn()}
@@ -60,7 +60,7 @@ describe('ReportPreviewModal', () => {
     );
 
     const pre = await waitFor(() => {
-      const el = container.querySelector('pre');
+      const el = document.body.querySelector('pre');
       expect(el).toBeTruthy();
       return el!;
     });
@@ -92,7 +92,7 @@ describe('ReportPreviewModal', () => {
     };
     mockFetchOk(preview);
 
-    const { container } = render(
+    render(
       <ReportPreviewModal
         reportId="r2"
         onClose={jest.fn()}
@@ -102,7 +102,7 @@ describe('ReportPreviewModal', () => {
     );
 
     const pre = await waitFor(() => {
-      const el = container.querySelector('pre');
+      const el = document.body.querySelector('pre');
       expect(el).toBeTruthy();
       return el!;
     });

@@ -191,6 +191,37 @@ def sign_package(package_dir: Path, private_key_pem: bytes | str) -> str:
     return f"{SIGNATURE_PREFIX}{base64.b64encode(sig).decode('ascii')}"
 
 
+def verify_package_verbose(
+    package_dir: Path, signature: str, public_key_b64: str
+) -> tuple[bool, str]:
+    """Verify a package signature, returning ``(ok, reason)``.
+
+    Reasons: ``"ok"``, ``"bad_signature_format"`` (wrong prefix or bad
+    base64), ``"bad_pubkey"``, ``"unreadable_package"``,
+    ``"signature_mismatch"``.  Never raises — callers use this as a gate
+    and surface the reason in logs.
+    """
+    if not isinstance(signature, str) or not signature.startswith(SIGNATURE_PREFIX):
+        return False, "bad_signature_format"
+    try:
+        sig_bytes = base64.b64decode(signature.removeprefix(SIGNATURE_PREFIX))
+    except (ValueError, base64.binascii.Error):  # type: ignore[attr-defined]
+        return False, "bad_signature_format"
+    try:
+        pub = load_public_key(public_key_b64)
+    except (ValueError, base64.binascii.Error):  # type: ignore[attr-defined]
+        return False, "bad_pubkey"
+    try:
+        digest = compute_package_hash(package_dir)
+    except Exception:  # noqa: BLE001 — unreadable/corrupt package is a gate refusal
+        return False, "unreadable_package"
+    try:
+        pub.verify(sig_bytes, digest)
+    except InvalidSignature:
+        return False, "signature_mismatch"
+    return True, "ok"
+
+
 def verify_package(package_dir: Path, signature: str, public_key_b64: str) -> bool:
     """Verify a package signature against the canonical content hash.
 
@@ -198,25 +229,7 @@ def verify_package(package_dir: Path, signature: str, public_key_b64: str) -> bo
     Any malformed input (bad base64, wrong prefix, wrong key) returns
     ``False`` rather than raising — callers use this as a gate.
     """
-    if not isinstance(signature, str) or not signature.startswith(SIGNATURE_PREFIX):
-        return False
-    try:
-        sig_bytes = base64.b64decode(signature.removeprefix(SIGNATURE_PREFIX))
-    except (ValueError, base64.binascii.Error):  # type: ignore[attr-defined]
-        return False
-    try:
-        pub = load_public_key(public_key_b64)
-    except (ValueError, base64.binascii.Error):  # type: ignore[attr-defined]
-        return False
-    try:
-        digest = compute_package_hash(package_dir)
-    except Exception:  # noqa: BLE001 — unreadable/corrupt package is a gate refusal
-        return False
-    try:
-        pub.verify(sig_bytes, digest)
-    except InvalidSignature:
-        return False
-    return True
+    return verify_package_verbose(package_dir, signature, public_key_b64)[0]
 
 
 def package_is_signed(manifest: PluginManifest) -> bool:

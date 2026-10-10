@@ -25,7 +25,7 @@ function VitalCard({ card }: { card: DevboxVitalCard }) {
     <GlassCard
       className={cn('p-3 flex flex-col gap-1', TONE_BORDER_CLASSES[tone])}
     >
-      <span className="text-2xs uppercase tracking-wider text-slate-500 truncate">
+      <span className="text-2xs uppercase tracking-wider text-slate-400 truncate">
         {devboxLabel(card.title)}
       </span>
       <span
@@ -34,9 +34,11 @@ function VitalCard({ card }: { card: DevboxVitalCard }) {
       >
         {card.value}
       </span>
-      {card.hint && <span className="text-2xs text-slate-500 truncate">{devboxLabel(card.hint)}</span>}
+      {card.hint && (
+        <span className="text-2xs text-slate-300 line-clamp-2">{devboxLabel(card.hint)}</span>
+      )}
       {card.updatedAt !== null && card.updatedAt !== undefined && card.updatedAt !== '' && (
-        <span className="text-2xs text-slate-600">
+        <span className="text-2xs text-slate-400">
           {t('devboxPage.updatedStamp', { time: devboxTime(card.updatedAt) })}
         </span>
       )}

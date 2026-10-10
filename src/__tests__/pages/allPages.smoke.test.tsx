@@ -23,6 +23,7 @@ import { MemoryRouter } from 'react-router-dom';
 jest.mock('../../lib/backend/core/invoke', () => ({
   setAuthExpiredHandler: jest.fn(),
   safeInvoke: jest.fn(),
+  subscribeBackendOffline: jest.fn(() => () => undefined),
   BackendError: class extends Error {},
 }));
 

@@ -131,8 +131,9 @@ except ImportError:
 
         @staticmethod
         def _send_response(rid: Any, result: Any) -> None:
-            if isinstance(result, dict) and "error" in result:
-                obj = {{"jsonrpc": "2.0", "id": rid, "error": result["error"]}}
+            err = result.get("error") if isinstance(result, dict) else None
+            if isinstance(err, dict) and "code" in err and "message" in err:
+                obj = {{"jsonrpc": "2.0", "id": rid, "error": err}}
             else:
                 obj = {{"jsonrpc": "2.0", "id": rid, "result": result}}
             sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\\n")

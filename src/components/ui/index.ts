@@ -39,6 +39,8 @@ export { StatCard } from './StatCard';
 export { StatItem } from './StatItem';
 
 export { TabButton } from './TabButton';
+export { RadioCard } from './RadioCard';
+export type { RadioCardProps } from './RadioCard';
 
 export { Toggle } from './Toggle';
 

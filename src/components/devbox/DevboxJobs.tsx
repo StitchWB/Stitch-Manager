@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
+import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { t } from '@/lib/i18n';
 import { devboxJobCancel, devboxJobsLive, devboxTime } from '@/lib/backend/modules/devbox';
@@ -20,16 +21,26 @@ import { DEVBOX_REFRESH_MS } from './constants';
 export function DevboxJobs() {
   const fetcher = useCallback(() => devboxJobsLive(), []);
   const { data, error, reload } = useDevboxPoll(fetcher, DEVBOX_REFRESH_MS);
-  const rows = Array.isArray(data) ? data : [];
+  const rows = data?.rows ?? [];
+  const degraded = error !== null || data?.bridge === 'down';
 
   return (
     <DevboxSection
       title={t('devboxPage.sectionJobs')}
-      error={error}
-      onRetry={reload}
       testId="devbox-jobs"
     >
-      {rows.length === 0 && !error ? (
+      {degraded && (
+        <div
+          className="flex items-center gap-2 mb-2 text-2xs text-slate-300"
+          data-testid="devbox-jobs-degraded"
+        >
+          <span>{t('devboxPage.jobsBridgeDown')}</span>
+          <Button size="xs" variant="ghost" onClick={reload}>
+            {t('common.retry')}
+          </Button>
+        </div>
+      )}
+      {rows.length === 0 ? (
         <EmptyState compact icon={Briefcase} title={t('devboxPage.jobsEmpty')} />
       ) : (
         <Table containerClassName="rounded-lg border border-white/5">

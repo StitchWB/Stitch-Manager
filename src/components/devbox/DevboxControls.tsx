@@ -2,7 +2,6 @@ import { ExternalLink, Play, Power } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { Toggle } from '@/components/ui/Toggle';
-import { Badge } from '@/components/ui/Badge';
 import { Textarea } from '@/components/ui/Textarea';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { appToast } from '@/lib/observability/toast';
@@ -12,23 +11,19 @@ import {
   devboxIngressControl,
   devboxIssueTokens,
   devboxLatestFinishedPayload,
-  devboxProfileUse,
   devboxRunDoctor,
   devboxStackDown,
   devboxStackFullDown,
-  devboxStackStart,
   devboxTime,
   devboxVitalValue,
   devboxWatchdogControl,
   type DevboxAccepted,
   type DevboxActionStatus,
-  type DevboxProfileRow,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
 
 export interface DevboxControlsProps {
-  profiles: DevboxProfileRow[] | null;
   overviewCards: DevboxVitalCard[] | null;
   actionStatus: DevboxActionStatus | null;
   busy: boolean;
@@ -41,13 +36,11 @@ function payloadString(payload: Record<string, unknown> | null, key: string): st
 }
 
 export function DevboxControls({
-  profiles,
   overviewCards,
   actionStatus,
   busy,
   onAction,
 }: DevboxControlsProps) {
-  const rows = Array.isArray(profiles) ? profiles : [];
   const recent = actionStatus?.recent;
   const ingressUp = devboxVitalValue(overviewCards, 'ingress') === 'up';
   const watchdogValue = devboxVitalValue(overviewCards, 'watchdog');
@@ -84,41 +77,11 @@ export function DevboxControls({
           </div>
         )}
 
-        {rows.map(profile => (
-          <div
-            key={profile.name}
-            className="flex items-center justify-between gap-2 border-b border-white/5 pb-2 last:border-b-0 last:pb-0"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs text-slate-200 truncate">{profile.name}</span>
-              {profile.active && (
-                <Badge variant="success" size="sm" withDot>
-                  {t('devboxPage.activeBadge')}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <ConfirmActionButton
-                size="xs"
-                variant="secondary"
-                disabled={busy}
-                data-testid={`devbox-profile-start-${profile.name}`}
-                onConfirm={() => onAction(devboxStackStart(profile.name, false))}
-              >
-                {t('devboxPage.controlStart')}
-              </ConfirmActionButton>
-              <Button
-                size="xs"
-                variant="secondary"
-                disabled={busy || profile.active}
-                data-testid={`devbox-profile-use-${profile.name}`}
-                onClick={() => onAction(devboxProfileUse(profile.name))}
-              >
-                {t('devboxPage.controlUse')}
-              </Button>
-            </div>
-          </div>
-        ))}
+        {!chatBlock && (
+          <p className="text-2xs text-slate-400" data-testid="devbox-next-steps">
+            {t('devboxPage.nextStepsHint')}
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <ConfirmActionButton
@@ -189,7 +152,7 @@ export function DevboxControls({
 
         {chatBlock && (
           <div className="flex flex-col gap-2" data-testid="devbox-chat-block">
-            <span className="text-2xs uppercase tracking-wider text-slate-500">
+            <span className="text-2xs uppercase tracking-wider text-slate-400">
               {t('devboxPage.chatBlockLabel')}
             </span>
             <Textarea
@@ -213,7 +176,7 @@ export function DevboxControls({
 
         {doctorReport && (
           <div className="flex flex-col gap-2">
-            <span className="text-2xs uppercase tracking-wider text-slate-500">
+            <span className="text-2xs uppercase tracking-wider text-slate-400">
               {t('devboxPage.doctorReportLabel')}
             </span>
             <pre
@@ -227,7 +190,7 @@ export function DevboxControls({
 
         {cockpitUrl && (
           <div className="flex items-center gap-2">
-            <span className="text-2xs uppercase tracking-wider text-slate-500">
+            <span className="text-2xs uppercase tracking-wider text-slate-400">
               {t('devboxPage.cockpitUrlLabel')}
             </span>
             <Button

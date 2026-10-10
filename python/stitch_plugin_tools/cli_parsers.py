@@ -61,7 +61,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_verify = sub.add_parser("verify", help="verify a plugin package signature")
     p_verify.add_argument("package_dir", help="package directory (contains plugin.json)")
-    p_verify.add_argument("--pubkey", required=True, help="public key file (base64)")
+    p_verify.add_argument(
+        "--pubkey",
+        default=None,
+        help="public key file (base64; default: embedded plugin pubkey)",
+    )
     p_verify.set_defaults(func=_cmd_verify)
 
     p_publish = sub.add_parser(

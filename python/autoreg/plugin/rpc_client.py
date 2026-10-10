@@ -6,6 +6,7 @@ import collections
 import json
 import logging
 import os
+import queue
 import subprocess
 import threading
 import time
@@ -23,6 +24,14 @@ from .rpc_reverse import _ReverseRpcMixin
 
 # Pinned name: tests capture these warnings under the "autoreg.plugin.rpc" logger.
 logger = logging.getLogger("autoreg.plugin.rpc")
+
+# Bounds in-flight reverse-RPC requests; the reader refuses overflow instead of blocking.
+_REVERSE_POOL_WORKERS = 4
+_STDERR_TAIL_MAX = 200
+
+
+class RpcWriteTimeoutError(RpcProtocolError):
+    """Write to child stdin exceeded ``_write_timeout`` (child stdin wedged)."""
 
 
 def _make_request(rid: int, method: str, params: dict[str, Any]) -> str:
@@ -55,8 +64,11 @@ class RpcPluginClient(_ReverseRpcMixin):
     Zone-1: plain stdlib only.
     """
 
-    def __init__(self, *, default_timeout: float = 30.0) -> None:
+    def __init__(
+        self, *, default_timeout: float = 30.0, write_timeout: float = 5.0
+    ) -> None:
         self._default_timeout = default_timeout
+        self._write_timeout = write_timeout
         self._proc: subprocess.Popen[bytes] | None = None
         self._reader: threading.Thread | None = None
         self._next_id = 1
@@ -70,15 +82,24 @@ class RpcPluginClient(_ReverseRpcMixin):
         self._init_result: Any = None
         # Reverse RPC: handlers for plugin→host requests (engine.oauth.* etc.)
         self._request_handlers: dict[str, Any] = {}
-        # N1: bounded reverse-RPC pool; a 5th request blocks the reader, applying backpressure to the plugin.
+        # _reverse_slots caps in-flight reverse-RPC requests so the reader never blocks on saturation.
         self._reverse_pool = ThreadPoolExecutor(
-            max_workers=4, thread_name_prefix="rpc-reverse"
+            max_workers=_REVERSE_POOL_WORKERS, thread_name_prefix="rpc-reverse"
         )
+        self._reverse_slots = threading.BoundedSemaphore(_REVERSE_POOL_WORKERS)
+        # Bounded reply queue drained by one daemon writer; the reader only enqueues.
+        self._reply_queue: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=64)
+        self._reply_thread: threading.Thread | None = None
+        self._reply_thread_lock = threading.Lock()
         # Ring buffer for plugin.log notifications; maxlen evicts old entries automatically.
         self._structured_logs: collections.deque[dict[str, Any]] = (
             collections.deque(maxlen=1000)
         )
         self._structured_logs_lock = threading.Lock()
+        self._stderr_tail: collections.deque[str] = collections.deque(
+            maxlen=_STDERR_TAIL_MAX
+        )
+        self._stderr_thread: threading.Thread | None = None
 
     @property
     def init_result(self) -> Any:
@@ -89,6 +110,17 @@ class RpcPluginClient(_ReverseRpcMixin):
     def is_alive(self) -> bool:
         """True if the child process is still running."""
         return self._proc is not None and self._proc.poll() is None
+
+    def get_stderr_tail(self, lines: int = 100) -> list[str]:
+        """Return the last *lines* child stderr lines captured by ``start()``.
+
+        Empty when stderr was not piped by this client (``attach()`` path)
+        or the child wrote nothing.
+        """
+        snapshot = list(self._stderr_tail)
+        if lines <= 0:
+            return snapshot
+        return snapshot[-lines:] if lines < len(snapshot) else snapshot
 
     # ── public API ───────────────────────────────────────────────────────
 
@@ -121,12 +153,16 @@ class RpcPluginClient(_ReverseRpcMixin):
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 env=child_env,
             )
         except OSError as exc:
             raise RpcProtocolError(f"failed to spawn child: {exc}") from exc
 
+        self._stderr_thread = threading.Thread(
+            target=self._stderr_loop, args=(proc,), name="rpc-stderr", daemon=True
+        )
+        self._stderr_thread.start()
         return self.attach(proc, init_params=init_params, timeout=timeout)
 
     def attach(
@@ -280,6 +316,8 @@ class RpcPluginClient(_ReverseRpcMixin):
             with self._pending_lock:
                 self._pending.pop(rid, None)
                 self._notify_drained_locked()
+            if isinstance(exc, RpcWriteTimeoutError):
+                self.kill()
             raise exc
 
         if not pending.event.wait(timeout=timeout):
@@ -298,16 +336,60 @@ class RpcPluginClient(_ReverseRpcMixin):
     def _send_request(self, rid: int, method: str, params: dict[str, Any]) -> None:
         """Write a JSON-RPC request line to child stdin."""
         data = (_make_request(rid, method, params) + "\n").encode("utf-8")
-        with self._write_lock:
-            if self._proc is None or self._proc.stdin is None:
-                raise RpcProtocolError("child stdin not available")
-            try:
-                self._proc.stdin.write(data)
-                self._proc.stdin.flush()
-            except (BrokenPipeError, OSError, ValueError) as exc:
-                raise RpcProtocolError(
-                    f"failed to write to child stdin: {exc}"
-                ) from exc
+        self._write_bytes(data)
+
+    def _write_bytes(self, data: bytes) -> None:
+        """Write *data* to child stdin, bounded by ``_write_timeout``.
+
+        A wedged child with a full pipe would otherwise block the caller
+        forever, so the write runs on a daemon thread and raises
+        ``RpcWriteTimeoutError`` (a ``RpcProtocolError``) when it does not
+        complete in time.  The writer thread holds ``_write_lock`` so a late
+        write cannot interleave.
+        """
+        done = threading.Event()
+        errors: list[BaseException] = []
+
+        def _writer() -> None:
+            with self._write_lock:
+                proc = self._proc
+                if proc is None or proc.stdin is None:
+                    errors.append(RpcProtocolError("child stdin not available"))
+                    done.set()
+                    return
+                try:
+                    proc.stdin.write(data)
+                    proc.stdin.flush()
+                except (BrokenPipeError, OSError, ValueError) as exc:
+                    errors.append(exc)
+                finally:
+                    done.set()
+
+        threading.Thread(target=_writer, name="rpc-write", daemon=True).start()
+        if not done.wait(timeout=self._write_timeout):
+            raise RpcWriteTimeoutError(
+                f"write to child stdin timed out after {self._write_timeout}s"
+            )
+        if errors:
+            exc = errors[0]
+            if isinstance(exc, RpcProtocolError):
+                raise exc
+            raise RpcProtocolError(
+                f"failed to write to child stdin: {exc}"
+            ) from exc
+
+    def _stderr_loop(self, proc: subprocess.Popen[bytes]) -> None:
+        """Drain child stderr into a bounded tail so the pipe never fills."""
+        stream = proc.stderr
+        if stream is None:
+            return
+        try:
+            for raw in iter(stream.readline, b""):
+                self._stderr_tail.append(
+                    raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                )
+        except Exception as exc:  # noqa: BLE001 — pipe closed / process dead
+            logger.debug("rpc: stderr drain stopped: %s", exc)
 
     def _reader_loop(self) -> None:
         """Reader thread: reads lines from child stdout, routes by id."""
@@ -323,8 +405,8 @@ class RpcPluginClient(_ReverseRpcMixin):
                 if not line:
                     continue
                 self._handle_line(line)
-        except Exception:  # noqa: BLE001 -- best-effort reader
-            pass
+        except Exception as exc:  # noqa: BLE001 -- best-effort reader
+            logger.warning("rpc: reader loop stopped on error: %s", exc, exc_info=True)
         finally:
             self._fail_all_pending(
                 RpcProtocolError("child stdout closed (process exited)")
@@ -431,6 +513,9 @@ class RpcPluginClient(_ReverseRpcMixin):
         """Join reader thread, shut down reverse-RPC pool, close pipes."""
         if self._reader is not None and self._reader.is_alive():
             self._reader.join(timeout=2.0)
+        if self._stderr_thread is not None and self._stderr_thread.is_alive():
+            self._stderr_thread.join(timeout=2.0)
+        self._stop_reply_writer()
         # N1: wait=False never blocks teardown on a hung handler; workers are daemon-backed.
         try:
             self._reverse_pool.shutdown(wait=False)

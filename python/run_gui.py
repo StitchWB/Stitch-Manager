@@ -16,12 +16,14 @@ launcher use an existing backend instead, which is used by start-dev.ps1.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import socket
 import sys
 import threading
 import time
+from typing import Any
 
 # Make sure the python/ directory is on sys.path so stitch_backend is importable.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -203,7 +205,29 @@ def _backend_watchdog(
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+class _DesktopApi:
+    """Bridge exposed to the webview as window.pywebview.api.
+
+    Must stay attribute-free except methods: pywebview recursively walks every
+    non-callable attribute of the js_api object to build the JS surface.
+    """
+
+    def pick_folder(self) -> str | None:
+        import webview  # noqa: PLC0415 (optional dependency)
+
+        if _DESKTOP_WINDOW is None:
+            return None
+        result = _DESKTOP_WINDOW.create_file_dialog(webview.FOLDER_DIALOG)
+        if not result:
+            return None
+        return str(result[0])
+
+
+_DESKTOP_WINDOW: Any = None
+
+
 def main() -> None:
+    global _DESKTOP_WINDOW
     # Mark this backend as desktop: a guest session on the local machine is
     # the owner (admin caller context).  Never set on the VDS.
     os.environ.setdefault("STITCH_DESKTOP_MODE", "1")
@@ -274,9 +298,22 @@ def main() -> None:
     webview.settings['REMOTE_DEBUGGING_PORT'] = None
     webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
 
+    # pywebview logs lifecycle INFO to stderr by default; split like the backend.
+    pv_stdout = logging.StreamHandler(sys.stdout)
+    pv_stdout.setLevel(logging.DEBUG)
+    pv_stdout.addFilter(lambda record: record.levelno < logging.WARNING)
+    pv_stderr = logging.StreamHandler(sys.stderr)
+    pv_stderr.setLevel(logging.WARNING)
+    pv_logger = logging.getLogger("pywebview")
+    pv_logger.handlers.clear()
+    pv_logger.addHandler(pv_stdout)
+    pv_logger.addHandler(pv_stderr)
+    pv_logger.propagate = False
+
     # Get icon path early for Win32 API calls
     icon = _icon_path()
 
+    api = _DesktopApi()
     window = webview.create_window(
         "Stitch Account Manager",
         target_url,
@@ -284,7 +321,9 @@ def main() -> None:
         height=800,
         min_size=(1024, 768),
         background_color="#1a1a2e",  # Match app theme for instant visual feedback
+        js_api=api,
     )
+    _DESKTOP_WINDOW = window
 
     # Windows: set taskbar icon via Win32 API
     if sys.platform == "win32" and icon:
