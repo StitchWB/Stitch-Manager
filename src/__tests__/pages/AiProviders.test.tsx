@@ -1,6 +1,6 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { useEffect } from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import AiProviders from '../../pages/AiProviders';
@@ -254,6 +254,24 @@ describe('AiProviders page', () => {
 
     await waitFor(() => {
       expect(navigatedSearch).toBe('?tab=board');
+    });
+  });
+
+  it('navigates to the proxy tab when the board proxy node config action fires', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const proxyNode = await screen.findByTestId('routing-node-4');
+    fireEvent.click(within(proxyNode).getByRole('button', { name: 'Config' }));
+
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?tab=proxy');
     });
   });
 
