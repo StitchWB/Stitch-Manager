@@ -104,7 +104,7 @@ export function CommandPalette() {
                 </CommandItem>
               )}
               {isAdmin && (
-                <CommandItem icon={<Key />} onSelect={() => runCommand(() => navigate('/api-keys'))}>
+                <CommandItem icon={<Key />} onSelect={() => runCommand(() => navigate('/ai/providers'))}>
                   {t('commandPalette.apiKeys')}
                 </CommandItem>
               )}

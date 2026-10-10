@@ -427,7 +427,7 @@ export default function AiProviders() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => navigate('/ai/analytics')}
+              onClick={() => navigate('/ai/monitor?tab=analytics')}
             >
               {t('aiHub.actions.openDetailedAnalytics')}
             </Button>
@@ -451,7 +451,7 @@ export default function AiProviders() {
                   id: 'debug-chat',
                   label: t('aiHub.actions.openDebugChat'),
                   icon: <MessageSquare size={14} />,
-                  onSelect: () => navigate('/chat'),
+                  onSelect: () => navigate('/ai/chat'),
                 },
                 {
                   id: 'run-migration',
@@ -705,7 +705,7 @@ export default function AiProviders() {
                 historySummary={historySummary}
                 hasAccounts={filteredAccounts.length > 0}
                 accountReadiness={accountReadiness}
-                onOpenAnalytics={() => navigate('/ai-analytics')}
+                onOpenAnalytics={() => navigate('/ai/monitor?tab=analytics')}
                 onOpenDebugChat={() => setShowDebugDrawer(true)}
               />
             )}
