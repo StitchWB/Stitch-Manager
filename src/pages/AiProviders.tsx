@@ -54,17 +54,13 @@ import {
 import { getBackgroundManagerConfig } from '../lib/backend/modules/backgroundManager';
 import { t } from '../lib/i18n';
 import { useAppStore } from '../stores/app';
-import { useUIPreferencesStore } from '../stores/uiPreferences';
-import { useAuthStore } from '../stores/auth';
-import AiGroupsPage from './AiGroupsPage';
 
 const CLIENT_API_KEY = 'proxystitch-local';
 
-type AiSection = 'providers' | 'groups' | 'routing' | 'monitor';
+type AiSection = 'providers' | 'routing' | 'monitor';
 
 function resolveSection(param: string | undefined): AiSection {
-  if (param === 'routing' || param === 'integrations') return 'routing';
-  if (param === 'groups') return 'groups';
+  if (param === 'routing') return 'routing';
   if (param === 'monitor' || param === 'usage' || param === 'diagnostics') return 'monitor';
   return 'providers';
 }
@@ -292,20 +288,6 @@ export default function AiProviders() {
   }, [migrateLegacyData, fetchEndpoints, fetchPublicModels]);
 
   const aiSection = useMemo<AiSection>(() => resolveSection(sectionParam), [sectionParam]);
-  const { setLastAiSection } = useUIPreferencesStore();
-
-  // ── Groups tab state ──────────────────────────────────────────────────
-  // authEnabled gates the groups branch; createGroupOpen is controlled by the
-  // header "Create Group" button and forwarded to <AiGroupsPage />. All other
-  // groups-tab state (selectedGroupId, howToGetOpen, responsive breakpoints,
-  // fetch/auto-select effects) lives in AiGroupsPage.
-  const authEnabled = useAuthStore(state => state.enabled);
-  const [createGroupOpen, setCreateGroupOpen] = useState(false);
-
-  // Remember last visited AI section for redirect on next AI Hub open
-  useEffect(() => {
-    if (aiSection) setLastAiSection(aiSection);
-  }, [aiSection, setLastAiSection]);
 
   // Lightweight fetch of the background-manager autoSwitch flag for the routing flow.
   useEffect(() => {
@@ -387,24 +369,6 @@ export default function AiProviders() {
 
   // === Page header config per section ===
   const headerForSection = (() => {
-    if (aiSection === 'groups') {
-      return {
-        eyebrow: t('sidebar.aiHub'),
-        title: t('ai.groups.title'),
-        description: '',
-        actions: (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setCreateGroupOpen(true)}
-            leftIcon={<Plus size={14} />}
-          >
-            {t('ai.groups.create.cta')}
-          </Button>
-        ),
-      };
-    }
-
     if (aiSection === 'routing') {
       return {
         eyebrow: t('sidebar.aiHub'),
@@ -604,14 +568,6 @@ export default function AiProviders() {
 
                 <PublicModelsSection />
               </>
-            )}
-
-            {/* === GROUPS TAB === */}
-            {aiSection === 'groups' && authEnabled && (
-              <AiGroupsPage
-                createGroupOpen={createGroupOpen}
-                setCreateGroupOpen={setCreateGroupOpen}
-              />
             )}
 
             {/* === ROUTING TAB === */}
