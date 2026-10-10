@@ -338,6 +338,18 @@ export default function AiProviders() {
     };
   }, [aiSection]);
 
+  const openRoutingTab = useCallback(
+    (tab: RoutingTab) => {
+      setSearchParams(
+        prev => {
+          prev.set('tab', tab);
+          return prev;
+        },
+      );
+    },
+    [setSearchParams]
+  );
+
   const setProxyDraftWithUpdater = useCallback(
     (updater: (prev: ProxySettings | null) => ProxySettings | null) => {
       setProxyDraft(prev => updater(prev));
@@ -567,12 +579,12 @@ export default function AiProviders() {
                     cavemanEnabled={cavemanEnabled}
                     cavemanLevel={cavemanLevel}
                     compressionEnabled={compressionEnabled}
-                    onOpenHolone={() => {}}
+                    onOpenHolone={() => openRoutingTab('holone')}
                     onOpenProviders={() => navigate('/ai/providers')}
-                    onOpenMappings={() => {}}
-                    onOpenRotation={() => {}}
-                    onOpenProxy={() => {}}
-                    onOpenCompression={() => {}}
+                    onOpenMappings={() => openRoutingTab('mappings')}
+                    onOpenRotation={() => openRoutingTab('rotation')}
+                    onOpenProxy={() => openRoutingTab('proxy')}
+                    onOpenCompression={() => openRoutingTab('compression')}
                     onStartStopProxy={handleStartStopProxy}
                   />
                 )}
