@@ -31,7 +31,7 @@ export default function AiProvidersPage() {
   const [addEndpointOpen, setAddEndpointOpen] = useState(false);
   const proxyStoreStatus = useAiProxyStore(s => s.status);
   const serverOffline = !(proxyStoreStatus?.running ?? false);
-  const controller = useAiProvidersController();
+  const controller = useAiProvidersController('providers');
   const { gatewayActionBusy, handleImportOpencode, handleMigrateLegacy } = useGatewayActions();
 
   const {

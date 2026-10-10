@@ -29,7 +29,7 @@ export default function AiRoutingPage() {
   const language = useAppStore(state => state.language);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isIdeWizardOpen, setIsIdeWizardOpen] = useState(false);
-  const controller = useAiProvidersController();
+  const controller = useAiProvidersController('routing');
   const boardStatus = useRoutingBoardStatus();
 
   const {
