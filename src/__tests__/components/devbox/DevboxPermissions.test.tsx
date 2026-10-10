@@ -21,7 +21,7 @@ jest.mock('sonner', () => ({
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { DevboxPermissions } from '@/components/devbox/DevboxPermissions';
-import { devboxRouter, devboxCallArgs, pageRoutes } from './devboxTestKit';
+import { devboxRouter, devboxCalls, devboxCallArgs, pageRoutes } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
@@ -64,11 +64,14 @@ describe('Devbox permissions pending', () => {
     });
   });
 
-  it('reject dispatches permission_reply with decision=reject', async () => {
+  it('reject is confirm-gated and dispatches permission_reply with decision=reject', async () => {
     render(<DevboxPermissions />);
     await screen.findByText('bash');
 
-    fireEvent.click(screen.getByTestId('devbox-permission-reject-p1'));
+    const reject = screen.getByTestId('devbox-permission-reject-p1');
+    fireEvent.click(reject);
+    expect(devboxCalls(invokeMock, 'permission_reply')).toHaveLength(0);
+    fireEvent.click(reject);
 
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'permission_reply')).toEqual([

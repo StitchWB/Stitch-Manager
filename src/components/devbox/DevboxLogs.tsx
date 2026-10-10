@@ -40,11 +40,18 @@ export function DevboxLogs() {
   return (
     <DevboxSection
       title={t('devboxPage.sectionLogs')}
+      caption={t('devboxPage.logsCaption')}
       error={error}
       onRetry={reload}
       testId="devbox-logs"
       actions={
-        <IconButton size="sm" variant="ghost" aria-label={t('common.refresh')} onClick={reload}>
+        <IconButton
+          size="sm"
+          variant="ghost"
+          aria-label={t('common.refresh')}
+          tooltip={t('devboxPage.tipRefreshLogs')}
+          onClick={reload}
+        >
           <RefreshCw size={14} />
         </IconButton>
       }
@@ -70,7 +77,12 @@ export function DevboxLogs() {
         </div>
 
         {!hasLines && !error ? (
-          <EmptyState compact icon={FileText} title={t('devboxPage.logsEmpty')} />
+          <EmptyState
+            compact
+            icon={FileText}
+            title={t('devboxPage.logsEmpty')}
+            description={t('devboxPage.logsEmptyDesc')}
+          />
         ) : (
           <div className="flex flex-col gap-3">
             {visible.map(s => (

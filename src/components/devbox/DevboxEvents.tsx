@@ -32,17 +32,22 @@ export function DevboxEvents() {
       testId="devbox-events"
     >
       {rows.length === 0 && !error ? (
-        <EmptyState compact icon={ScrollText} title={t('devboxPage.eventsEmpty')} />
+        <EmptyState
+          compact
+          icon={ScrollText}
+          title={t('devboxPage.eventsEmpty')}
+          description={t('devboxPage.eventsEmptyDesc')}
+        />
       ) : (
         <div
           data-testid="devbox-events-river"
           className="max-h-72 overflow-auto rounded-lg border border-white/5 bg-black/40 p-3 font-mono text-2xs leading-5 text-slate-300"
         >
-          {rows.map((row, i) => (
-            <div key={i} className="truncate">
-              {eventLine(row)}
-            </div>
-          ))}
+           {rows.map((row, i) => (
+             <div key={i} className="truncate" title={eventLine(row)}>
+               {eventLine(row)}
+             </div>
+           ))}
         </div>
       )}
     </DevboxSection>

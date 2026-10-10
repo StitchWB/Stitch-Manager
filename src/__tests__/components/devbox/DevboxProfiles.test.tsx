@@ -196,14 +196,11 @@ describe('Devbox profile editor', () => {
     expect(screen.queryByTestId('devbox-profile-form')).toBeNull();
   });
 
-  it('row start is confirm-gated and sends {name, preview}', async () => {
+  it('row start sends {name, preview} immediately', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
     renderProfiles();
 
-    const start = screen.getByTestId('devbox-profile-start-example-simple');
-    fireEvent.click(start);
-    expect(devboxCalls(invokeMock, 'stack_start')).toHaveLength(0);
-    fireEvent.click(start);
+    fireEvent.click(screen.getByTestId('devbox-profile-start-example-simple'));
 
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([

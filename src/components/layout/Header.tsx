@@ -61,11 +61,11 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           </span>
         )}
         <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-sm font-medium text-white truncate">{title}</h1>
+          <h1 className="text-sm font-medium text-white truncate" title={title}>{title}</h1>
           {subtitle && (
             <>
               <span className="text-slate-700" aria-hidden="true">/</span>
-              <p className="text-xs text-slate-500 truncate">{subtitle}</p>
+              <p className="text-xs text-slate-500 truncate" title={subtitle}>{subtitle}</p>
             </>
           )}
         </div>
@@ -99,6 +99,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
             }}
             size="md"
             aria-label={t('header.changeLanguage')}
+            tooltip={t('header.changeLanguage')}
             aria-expanded={langOpen}
             aria-haspopup="listbox"
           >

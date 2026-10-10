@@ -4,7 +4,9 @@ export interface SidebarTranslations {
     aiHub: string;
     automation: string;
     autoReg: string;
+    collapse: string;
     dashboard: string;
+    expand: string;
     friends: string;
     groups: string;
     idePatch: string;

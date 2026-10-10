@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Copy, FolderCog, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   Table,
@@ -14,6 +14,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { RadioCard } from '@/components/ui/RadioCard';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Textarea } from '@/components/ui/Textarea';
 import { Input } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -118,15 +119,17 @@ function PortsField({
   label,
   testId,
   value,
+  tip,
   onCommit,
 }: {
   label: string;
   testId: string;
   value: unknown;
+  tip?: string;
   onCommit: (ports: number[]) => void;
 }) {
   const [text, setText] = useState(portsToText(value));
-  return (
+  const labelEl = (
     <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
       {label}
       <Input
@@ -138,6 +141,13 @@ function PortsField({
         onBlur={() => onCommit(textToPorts(text))}
       />
     </label>
+  );
+  return tip ? (
+    <Tooltip content={tip} wrapperClassName="min-w-0">
+      {labelEl}
+    </Tooltip>
+  ) : (
+    labelEl
   );
 }
 
@@ -372,6 +382,13 @@ export function DevboxProfiles({
     }
   };
 
+  const saveWithTip = (node: ReactNode) =>
+    saveDisabled ? (
+      <Tooltip content={t('devboxPage.tipSaveDisabled')}>{node}</Tooltip>
+    ) : (
+      node
+    );
+
   return (
     <DevboxSection
       title={t('devboxPage.sectionProfiles')}
@@ -393,7 +410,12 @@ export function DevboxProfiles({
       }
     >
       {rows.length === 0 && !error ? (
-        <EmptyState compact icon={FolderCog} title={t('devboxPage.profilesEmpty')} />
+        <EmptyState
+          compact
+          icon={FolderCog}
+          title={t('devboxPage.profilesEmpty')}
+          description={t('devboxPage.profilesEmptyDesc')}
+        />
       ) : (
         <Table containerClassName="rounded-lg border border-white/5">
           <TableHeader>
@@ -421,21 +443,23 @@ export function DevboxProfiles({
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center justify-end gap-1">
-                    <ConfirmActionButton
+                    <div className="flex items-center justify-end gap-1">
+                    <Button
                       size="xs"
                       variant="secondary"
                       disabled={busy}
                       data-testid={`devbox-profile-start-${row.name}`}
-                      onConfirm={() => onAction(devboxStackStart(row.name, false))}
+                      title={t('devboxPage.tipStart')}
+                      onClick={() => onAction(devboxStackStart(row.name, false))}
                     >
                       {t('devboxPage.controlStart')}
-                    </ConfirmActionButton>
+                    </Button>
                     <Button
                       size="xs"
                       variant="secondary"
                       disabled={busy || row.active}
                       data-testid={`devbox-profile-use-${row.name}`}
+                      title={t('devboxPage.tipUse')}
                       onClick={() => onAction(devboxProfileUse(row.name))}
                     >
                       {t('devboxPage.controlUse')}
@@ -443,6 +467,7 @@ export function DevboxProfiles({
                     <IconButton
                       size="sm"
                       aria-label={t('devboxPage.duplicateProfile')}
+                      tooltip={t('devboxPage.duplicateProfile')}
                       data-testid={`devbox-profile-duplicate-${row.name}`}
                       onClick={() => openCreateFrom(row.name)}
                     >
@@ -451,6 +476,7 @@ export function DevboxProfiles({
                     <IconButton
                       size="sm"
                       aria-label={t('common.edit')}
+                      tooltip={t('common.edit')}
                       data-testid={`devbox-profile-edit-${row.name}`}
                       onClick={() => openEditor(row.name)}
                     >
@@ -460,13 +486,16 @@ export function DevboxProfiles({
                       size="xs"
                       variant="danger"
                       disabled={busy}
+                      iconOnly
+                      className="h-6 w-6"
                       aria-label={t('devboxPage.deleteProfile')}
+                      tooltip={t('devboxPage.tipDelete')}
                       data-testid={`devbox-profile-delete-${row.name}`}
                       onConfirm={() => void deleteProfile(row.name)}
                     >
                       <Trash2 size={14} />
                     </ConfirmActionButton>
-                  </div>
+                    </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -490,42 +519,48 @@ export function DevboxProfiles({
                 <Button size="sm" variant="secondary" onClick={() => setEditor(null)}>
                   {t('common.close')}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={saveDisabled}
-                  isLoading={editor.saving}
-                  data-testid="devbox-profile-save"
-                  onClick={() => void save(false)}
-                >
-                  {t('devboxPage.addProfile')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  disabled={saveDisabled}
-                  isLoading={editor.saving}
-                  data-testid="devbox-profile-save-start"
-                  onClick={() => void save(true)}
-                >
-                  {t('devboxPage.addAndStart')}
-                </Button>
+                {saveWithTip(
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={saveDisabled}
+                    isLoading={editor.saving}
+                    data-testid="devbox-profile-save"
+                    onClick={() => void save(false)}
+                  >
+                    {t('devboxPage.addProfile')}
+                  </Button>,
+                )}
+                {saveWithTip(
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={saveDisabled}
+                    isLoading={editor.saving}
+                    data-testid="devbox-profile-save-start"
+                    onClick={() => void save(true)}
+                  >
+                    {t('devboxPage.addAndStart')}
+                  </Button>,
+                )}
               </div>
             ) : (
               <div className="flex justify-end gap-2">
                 <Button size="sm" variant="secondary" onClick={() => setEditor(null)}>
                   {t('common.close')}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  disabled={saveDisabled}
-                  isLoading={editor.saving}
-                  data-testid="devbox-profile-save"
-                  onClick={() => void save(false)}
-                >
-                  {t('common.save')}
-                </Button>
+                {saveWithTip(
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={saveDisabled}
+                    isLoading={editor.saving}
+                    data-testid="devbox-profile-save"
+                    onClick={() => void save(false)}
+                  >
+                    {t('common.save')}
+                  </Button>,
+                )}
               </div>
             )
           }
@@ -678,6 +713,7 @@ export function DevboxProfiles({
                         {t('devboxPage.formAdvanced')}
                       </Button>
                       <div className="grid grid-cols-2 gap-2" data-testid="devbox-profile-advanced">
+                        <Tooltip content={t('devboxPage.tipFieldToolchain')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
                           {t('devboxPage.formToolchain')}
                           <Input
@@ -685,9 +721,11 @@ export function DevboxProfiles({
                             spellCheck={false}
                             className="font-mono text-xs normal-case tracking-normal"
                             data-testid="devbox-profile-field-toolchain"
-                            onChange={e => updateModel({ toolchain: e.target.value })}
-                          />
+                          onChange={e => updateModel({ toolchain: e.target.value })}
+                        />
                         </label>
+                        </Tooltip>
+                        <Tooltip content={t('devboxPage.tipFieldUiPort')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
                           {t('devboxPage.formUiPort')}
                           <Input
@@ -702,6 +740,7 @@ export function DevboxProfiles({
                             }
                           />
                         </label>
+                        </Tooltip>
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
                           {t('devboxPage.formGitName')}
                           <Input
@@ -720,6 +759,7 @@ export function DevboxProfiles({
                             onChange={e => updateModel({ git_email: e.target.value })}
                           />
                         </label>
+                        <Tooltip content={t('devboxPage.tipFieldPreviewOrigin')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
                           {t('devboxPage.formPreviewOrigin')}
                           <Input
@@ -732,11 +772,13 @@ export function DevboxProfiles({
                             onChange={e => updateModel({ preview_origin: e.target.value })}
                           />
                         </label>
+                        </Tooltip>
                         <PortsField
                           key={`allowed:${portsToText(model.allowed_ports)}`}
                           label={t('devboxPage.formAllowedPorts')}
                           testId="devbox-profile-field-allowed_ports"
                           value={model.allowed_ports}
+                          tip={t('devboxPage.tipFieldPorts')}
                           onCommit={ports => updateModel({ allowed_ports: ports })}
                         />
                         <PortsField
@@ -744,6 +786,7 @@ export function DevboxProfiles({
                           label={t('devboxPage.formPortDeny')}
                           testId="devbox-profile-field-port_deny"
                           value={model.port_deny}
+                          tip={t('devboxPage.tipFieldPorts')}
                           onCommit={ports => updateModel({ port_deny: ports })}
                         />
                       </div>

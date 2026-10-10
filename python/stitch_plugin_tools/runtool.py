@@ -7,8 +7,8 @@ Two entry points:
   from ``autoreg.plugin.rpc``), streams child stderr live to the tool's
   stderr, drives a line-based REPL on stdin (``<command> [json-params]``
   -> ``plugin.call`` -> pretty-printed result), and stubs reverse-RPC
-  ``engine.oauth.*`` requests so plugins that use ``server.call_host``
-  fail gracefully instead of hanging.
+  ``engine.oauth.*`` and ``host.secrets.*`` requests so plugins that use
+  ``server.call_host`` fail gracefully instead of hanging.
 
 * ``test_package(package_dir)`` - runs the venv pytest on
   ``<package_dir>/tests`` if present, streaming output.  No tests dir
@@ -51,6 +51,14 @@ _ENGINE_OAUTH_STUB_METHODS = (
     "engine.oauth.exchange_code",
 )
 
+# Mirrors the host-side register_secret_handlers surface (plugin_runtime/host_secrets).
+_HOST_SECRETS_STUB_METHODS = (
+    "host.secrets.get",
+    "host.secrets.set",
+    "host.secrets.delete",
+    "host.secrets.list",
+)
+
 # Exit codes (mirrors the rest of the CLI).
 _RC_OK = 0
 _RC_BAD_PACKAGE = 2
@@ -68,13 +76,13 @@ _INIT_TIMEOUT = 10.0
 
 
 class _RunRpcPluginClient(RpcPluginClient):
-    """``RpcPluginClient`` with ``engine.oauth.*`` reverse-RPC stubs.
+    """``RpcPluginClient`` with ``engine.oauth.*`` / ``host.secrets.*`` reverse-RPC stubs.
 
     Overrides ``_handle_plugin_request`` to intercept any
-    ``engine.oauth.*`` method: prints the request to the tool's stderr
-    (so the author sees what the plugin asked for) and writes a stub
-    JSON-RPC error response so the plugin's ``call_host`` raises
-    ``RpcCallError`` with a clear message instead of hanging.
+    ``engine.oauth.*`` / ``host.secrets.*`` method: prints the request to
+    the tool's stderr (so the author sees what the plugin asked for) and
+    writes a stub JSON-RPC error response so the plugin's ``call_host``
+    raises ``RpcCallError`` with a clear message instead of hanging.
     """
 
     def __init__(self, *, plugin_id: str, stderr_writer: Any,
@@ -87,22 +95,37 @@ class _RunRpcPluginClient(RpcPluginClient):
         self, rid: int, method: str, params: dict[str, Any]
     ) -> None:
         if method.startswith("engine.oauth."):
-            self._stderr_writer.write(
-                f"[stub] reverse-RPC request: {method} "
-                f"{json.dumps(params, ensure_ascii=False)}\n"
+            self._stub_reverse_rpc(
+                rid, method, json.dumps(params, ensure_ascii=False),
+                "oauth stub: not available in run mode",
             )
-            self._write_line(
-                {
-                    "jsonrpc": "2.0",
-                    "id": rid,
-                    "error": {
-                        "code": -32603,
-                        "message": "oauth stub: not available in run mode",
-                    },
-                }
+            return
+        if method.startswith("host.secrets."):
+            # name only — a secret value must never reach the tool's stderr
+            name = params.get("name") if isinstance(params, dict) else None
+            self._stub_reverse_rpc(
+                rid, method, f"name={name!r}",
+                "secrets stub: not available in run mode",
             )
             return
         super()._handle_plugin_request(rid, method, params)
+
+    def _stub_reverse_rpc(
+        self, rid: int, method: str, trace: str, message: str
+    ) -> None:
+        self._stderr_writer.write(
+            f"[stub] reverse-RPC request: {method} {trace}\n"
+        )
+        self._write_line(
+            {
+                "jsonrpc": "2.0",
+                "id": rid,
+                "error": {
+                    "code": -32603,
+                    "message": message,
+                },
+            }
+        )
 
 
 class _StderrWriter:
@@ -281,10 +304,10 @@ def _attach_client(
       - stderr reader: playground starts it BEFORE attach (in
         ``run_package``) so init-time stderr is visible; the host starts
         it AFTER attach.
-      - engine.oauth handlers: playground stubs them via
-        ``_RunRpcPluginClient._handle_plugin_request`` (no real OAuth in
-        dev mode); the host registers real handlers via
-        ``register_engine_handlers``.
+      - engine.oauth / host.secrets handlers: playground stubs them via
+        ``_RunRpcPluginClient._handle_plugin_request`` (no real OAuth or
+        keyring in dev mode); the host registers real handlers via
+        ``register_engine_handlers`` / ``register_secret_handlers``.
       - capabilities parsing: playground does not parse (host-only).
       - memory caps: playground has none (host-only).
       - _migrate_db failure: non-fatal (playground continues so the
@@ -348,6 +371,10 @@ def _print_banner(
     print(
         f"stubs: {', '.join(m.split('.')[-1] for m in _ENGINE_OAUTH_STUB_METHODS)}"
         " (engine.oauth.* -> stub error)"
+    )
+    print(
+        f"stubs: {', '.join(m.split('.')[-1] for m in _HOST_SECRETS_STUB_METHODS)}"
+        " (host.secrets.* -> stub error)"
     )
 
 

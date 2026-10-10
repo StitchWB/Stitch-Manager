@@ -531,3 +531,37 @@ def _cmd_manifest_lint(args: argparse.Namespace) -> int:
     from stitch_plugin_tools.ui_manifest import lint_paths
 
     return lint_paths(args.paths)
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    """Validate a plugin manifest + cross-check its UI contributions.
+
+    See :mod:`stitch_plugin_tools.manifest_validate` for the check set;
+    findings print one per line on stderr, a clean package exits 0.
+    """
+    from stitch_plugin_tools.manifest_validate import validate_package
+
+    package_dir = Path(args.package_dir)
+    if not package_dir.is_dir():
+        print(f"error: package dir not found: {package_dir}", file=sys.stderr)
+        return 2
+    report = validate_package(package_dir)
+    for warning in report.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    if report.findings:
+        for finding in report.findings:
+            print(finding, file=sys.stderr)
+        return 1
+    print(f"manifest OK: {report.label}, {report.checks_passed} checks passed")
+    return 0
+
+
+def _cmd_typegen(args: argparse.Namespace) -> int:
+    """Generate _types.py + ui-types.d.ts from command params schemas.
+
+    See :mod:`stitch_plugin_tools.typegen` for the marker / refusal /
+    idempotency contract.
+    """
+    from stitch_plugin_tools.typegen import run_typegen
+
+    return run_typegen(Path(args.package_dir))

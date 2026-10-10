@@ -96,6 +96,11 @@ class RpcPluginClient(_ReverseRpcMixin):
             collections.deque(maxlen=1000)
         )
         self._structured_logs_lock = threading.Lock()
+        # Ring of plugin.job_progress notification snapshots (bounded, last 200).
+        self._job_snapshots: collections.deque[dict[str, Any]] = (
+            collections.deque(maxlen=200)
+        )
+        self._job_snapshots_lock = threading.Lock()
         self._stderr_tail: collections.deque[str] = collections.deque(
             maxlen=_STDERR_TAIL_MAX
         )
@@ -435,6 +440,9 @@ class RpcPluginClient(_ReverseRpcMixin):
         method = obj.get("method")
         if method == "plugin.log" and "id" not in obj:
             self._handle_plugin_log(obj.get("params", {}))
+            return
+        if method == "plugin.job_progress" and "id" not in obj:
+            self._handle_plugin_job_progress(obj.get("params", {}))
             return
 
         rid = obj.get("id")

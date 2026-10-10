@@ -27,7 +27,9 @@ from stitch_plugin_tools.cli_commands_package import (
     _cmd_sign,
     _cmd_sync_template,
     _cmd_test,
+    _cmd_typegen,
     _cmd_upgrade,
+    _cmd_validate,
     _cmd_vendor,
     _cmd_verify,
 )
@@ -297,6 +299,24 @@ def _build_parser() -> argparse.ArgumentParser:
         "paths", nargs="+", help="plugin.json path(s) or glob(s)"
     )
     p_manifest_lint.set_defaults(func=_cmd_manifest_lint)
+
+    p_validate = sub.add_parser(
+        "validate",
+        help="validate a plugin manifest + cross-check UI contributions",
+    )
+    p_validate.add_argument(
+        "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_validate.set_defaults(func=_cmd_validate)
+
+    p_typegen = sub.add_parser(
+        "typegen",
+        help="generate _types.py + ui-types.d.ts from command params schemas",
+    )
+    p_typegen.add_argument(
+        "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_typegen.set_defaults(func=_cmd_typegen)
 
     p_drift = sub.add_parser(
         "drift",

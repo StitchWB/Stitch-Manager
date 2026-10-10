@@ -2,6 +2,7 @@ import { ExternalLink, Play, Power } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { Toggle } from '@/components/ui/Toggle';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Textarea } from '@/components/ui/Textarea';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { appToast } from '@/lib/observability/toast';
@@ -90,6 +91,7 @@ export function DevboxControls({
             disabled={busy}
             leftIcon={<Power size={14} />}
             data-testid="devbox-control-stop-services"
+            tooltip={t('devboxPage.tipStopServices')}
             onConfirm={() => onAction(devboxStackDown())}
           >
             {t('devboxPage.controlStopServices')}
@@ -100,54 +102,63 @@ export function DevboxControls({
             disabled={busy}
             leftIcon={<Power size={14} />}
             data-testid="devbox-control-stop-all"
+            tooltip={t('devboxPage.tipStopAll')}
             onConfirm={() => onAction(devboxStackFullDown())}
           >
             {t('devboxPage.controlStopAll')}
           </ConfirmActionButton>
           <ConfirmActionButton
             size="sm"
-            variant="danger"
+            variant="secondary"
             disabled={busy}
             data-testid="devbox-control-tokens"
+            tooltip={t('devboxPage.tipRotateTokens')}
             onConfirm={() => onAction(devboxIssueTokens())}
           >
             {t('devboxPage.controlTokens')}
           </ConfirmActionButton>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            data-testid="devbox-control-doctor"
-            onClick={() => onAction(devboxRunDoctor())}
-          >
-            {t('devboxPage.controlDoctor')}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            data-testid="devbox-control-ingress"
-            onClick={() => onAction(devboxIngressControl(ingressUp ? 'down' : 'up'))}
-          >
-            {ingressUp ? t('devboxPage.controlIngressOn') : t('devboxPage.controlIngressOff')}
-          </Button>
+          <Tooltip content={t('devboxPage.tipDoctor')}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              data-testid="devbox-control-doctor"
+              onClick={() => onAction(devboxRunDoctor())}
+            >
+              {t('devboxPage.controlDoctor')}
+            </Button>
+          </Tooltip>
+          <Tooltip content={t('devboxPage.tipIngress')}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !overviewCards}
+              data-testid="devbox-control-ingress"
+              onClick={() => onAction(devboxIngressControl(ingressUp ? 'down' : 'up'))}
+            >
+              {ingressUp ? t('devboxPage.controlIngressOn') : t('devboxPage.controlIngressOff')}
+            </Button>
+          </Tooltip>
           <Toggle
             size="sm"
             label={t('devboxPage.controlWatchdog')}
+            tooltip={t('devboxPage.tipWatchdog')}
             checked={watchdogOn}
             disabled={busy}
             onChange={next => onAction(devboxWatchdogControl(next ? 'start' : 'stop'))}
           />
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            leftIcon={<Play size={14} />}
-            data-testid="devbox-control-cockpit"
-            onClick={() => onAction(devboxCockpitOpen())}
-          >
-            {t('devboxPage.controlCockpit')}
-          </Button>
+          <Tooltip content={t('devboxPage.tipCockpit')}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              leftIcon={<Play size={14} />}
+              data-testid="devbox-control-cockpit"
+              onClick={() => onAction(devboxCockpitOpen())}
+            >
+              {t('devboxPage.controlCockpit')}
+            </Button>
+          </Tooltip>
         </div>
 
         {chatBlock && (

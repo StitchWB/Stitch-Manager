@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { t } from '../../lib/i18n';
 import { Button } from './Button';
+import { Tooltip } from './Tooltip';
 
 export interface ConfirmActionButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'onClick'> {
@@ -14,6 +15,8 @@ export interface ConfirmActionButtonProps
   /** When true, strips size-based padding so the button renders as a square
    * icon-only control (pair with explicit h-/w- classes in className). */
   iconOnly?: boolean;
+  /** Hover/focus hint; also defaults the aria-label when none is passed. */
+  tooltip?: string;
 }
 
 const DEFAULT_ARMED_TIMEOUT_MS = 3000;
@@ -31,6 +34,7 @@ export function ConfirmActionButton({
   className,
   children,
   disabled,
+  tooltip,
   ...rest
 }: ConfirmActionButtonProps) {
   const [armed, setArmed] = useState(false);
@@ -61,10 +65,11 @@ export function ConfirmActionButton({
     void onConfirm();
   };
 
-  return (
+  const button = (
     <Button
       {...rest}
       disabled={disabled}
+      aria-label={rest['aria-label'] ?? tooltip}
       onClick={handleClick}
       className={cn(
         className,
@@ -76,4 +81,6 @@ export function ConfirmActionButton({
       {armed ? (armedLabel ?? t('common.sure')) : children}
     </Button>
   );
+
+  return tooltip ? <Tooltip content={tooltip}>{button}</Tooltip> : button;
 }

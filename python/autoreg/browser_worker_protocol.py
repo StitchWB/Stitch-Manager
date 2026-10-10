@@ -26,7 +26,13 @@ def _stderr_print(*args, **kwargs):
     _original_print(*args, **kwargs)
 
 
-builtins.print = _stderr_print
+def install_stderr_print():
+    """Redirect bare ``print`` to stderr for the worker process only.
+
+    Only ``browser_worker.main`` calls this: importing the module (tests,
+    the host process) must not mutate ``builtins.print`` process-wide.
+    """
+    builtins.print = _stderr_print
 
 
 def log_stderr(*args, **kwargs):

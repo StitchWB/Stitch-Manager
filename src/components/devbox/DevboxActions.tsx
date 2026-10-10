@@ -26,7 +26,12 @@ export function DevboxActions({ recent }: DevboxActionsProps) {
   return (
     <DevboxSection title={t('devboxPage.sectionActions')} testId="devbox-actions">
       {rows.length === 0 ? (
-        <EmptyState compact icon={History} title={t('devboxPage.actionsEmpty')} />
+        <EmptyState
+          compact
+          icon={History}
+          title={t('devboxPage.actionsEmpty')}
+          description={t('devboxPage.actionsEmptyDesc')}
+        />
       ) : (
         <Table containerClassName="rounded-lg border border-white/5">
           <TableHeader>
@@ -60,12 +65,13 @@ export function DevboxActions({ recent }: DevboxActionsProps) {
                     <TableCell>{row.exit ?? '—'}</TableCell>
                     <TableCell>
                       {hasPayload && (
-                        <IconButton
-                          size="sm"
-                          aria-label={expanded ? t('devboxPage.hidePayload') : t('devboxPage.showPayload')}
-                          data-testid={`devbox-action-payload-${row.id}`}
-                          onClick={() => setExpandedId(expanded ? null : row.id)}
-                        >
+                         <IconButton
+                           size="sm"
+                           aria-label={expanded ? t('devboxPage.hidePayload') : t('devboxPage.showPayload')}
+                           tooltip={expanded ? t('devboxPage.hidePayload') : t('devboxPage.tipPayload')}
+                           data-testid={`devbox-action-payload-${row.id}`}
+                           onClick={() => setExpandedId(expanded ? null : row.id)}
+                         >
                           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </IconButton>
                       )}

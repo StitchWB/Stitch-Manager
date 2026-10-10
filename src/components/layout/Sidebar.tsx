@@ -138,6 +138,8 @@ export default function Sidebar() {
       {/* Collapse Toggle Button — integrated into border-right */}
       <ButtonBase
         onClick={toggleSidebar}
+        aria-label={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+        title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
         className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-8 rounded-full bg-vsc-sidebar text-slate-400 flex items-center justify-center shadow-lg hover:text-white hover:bg-vsc-panel transition-colors z-50 border border-white/20 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity">
 
         {sidebarCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}

@@ -1,4 +1,4 @@
-"""Reverse-RPC (plugin→host) dispatch and structured-log ring buffer for RpcPluginClient."""
+"""Reverse-RPC (plugin→host) dispatch, structured-log ring buffer and job-progress snapshots for RpcPluginClient."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import logging
 import queue
 import threading
+from datetime import UTC, datetime
 from typing import Any
 
 from .rpc import _ERR_INTERNAL, _JSONRPC, RpcProtocolError
@@ -23,7 +24,8 @@ class _ReverseRpcMixin:
     The attributes used here (``_proc``, ``_write_lock``,
     ``_request_handlers``, ``_reverse_pool``, ``_reply_queue``,
     ``_reply_thread``, ``_reply_thread_lock``, ``_structured_logs``,
-    ``_structured_logs_lock``) are initialized in
+    ``_structured_logs_lock``, ``_job_snapshots``,
+    ``_job_snapshots_lock``) are initialized in
     ``RpcPluginClient.__init__``.
     """
 
@@ -51,6 +53,16 @@ class _ReverseRpcMixin:
         if lines <= 0:
             return snapshot
         return snapshot[-lines:] if lines < len(snapshot) else snapshot
+
+    def get_job_snapshots(self) -> list[dict[str, Any]]:
+        """Return the job-progress snapshot ring (oldest first).
+
+        Each snapshot mirrors one ``plugin.job_progress`` notification:
+        ``{jobId, percent, message}``.  The ring keeps the last 200
+        updates; empty when no job has reported progress.
+        """
+        with self._job_snapshots_lock:
+            return list(self._job_snapshots)
 
     def _handle_plugin_request(
         self, rid: int, method: str, params: dict[str, Any]
@@ -178,6 +190,32 @@ class _ReverseRpcMixin:
         }
         if extra:
             entry["extra"] = extra
+        with self._structured_logs_lock:
+            self._structured_logs.append(entry)
+
+    def _handle_plugin_job_progress(self, params: Any) -> None:
+        """Push a ``plugin.job_progress`` notification into the snapshot ring.
+
+        Runs in the reader thread.  Tolerant: non-dict params are dropped
+        (the plugin sent a malformed notification).  Also appends a
+        level-info structured log entry so job progress is observable in
+        host logs.
+        """
+        if not isinstance(params, dict):
+            return
+        snapshot: dict[str, Any] = {
+            "jobId": params.get("jobId", ""),
+            "percent": params.get("percent", 0),
+            "message": params.get("message", ""),
+        }
+        with self._job_snapshots_lock:
+            self._job_snapshots.append(snapshot)
+        entry: dict[str, Any] = {
+            "level": "info",
+            "message": f"job {snapshot['jobId']} {snapshot['percent']}%",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "extra": {"jobId": snapshot["jobId"], "percent": snapshot["percent"]},
+        }
         with self._structured_logs_lock:
             self._structured_logs.append(entry)
 

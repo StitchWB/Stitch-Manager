@@ -13,6 +13,9 @@ from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session
 from stitch_backend.domains.auth.permissions import ensure_permission
+from stitch_backend.domains.logging import (
+    plugin_ingest,  # noqa: F401 — registers the plugin.stderr handler
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

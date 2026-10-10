@@ -9,7 +9,9 @@ import {
   TableRow,
 } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
+import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import {
   devboxPermissionReply,
@@ -46,7 +48,12 @@ export function DevboxPermissions() {
           </div>
         )}
         {rows.length === 0 ? (
-          <EmptyState compact icon={ShieldQuestion} title={t('devboxPage.permissionsEmpty')} />
+          <EmptyState
+            compact
+            icon={ShieldQuestion}
+            title={t('devboxPage.permissionsEmpty')}
+            description={t('devboxPage.permissionsEmptyDesc')}
+          />
         ) : (
           <Table containerClassName="rounded-lg border border-white/5">
             <TableHeader>
@@ -61,28 +68,31 @@ export function DevboxPermissions() {
               {rows.map(row => (
                 <TableRow key={row.id}>
                   <TableCell>{row.tool}</TableCell>
-                  <TableCell className="max-w-[24rem] truncate">{row.summary}</TableCell>
+                   <TableCell className="max-w-[24rem] truncate" title={row.summary}>{row.summary}</TableCell>
                   <TableCell>{devboxTime(row.startedAt)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Button
-                        size="xs"
-                        variant="primary"
-                        data-testid={`devbox-permission-approve-${row.id}`}
-                        onClick={() =>
-                          void runDevboxAction(
-                            devboxPermissionReply(row.id, 'once'),
-                            reload,
-                          )
-                        }
-                      >
-                        {t('devboxPage.approveOnce')}
-                      </Button>
-                      <Button
+                      <Tooltip content={t('devboxPage.tipApproveOnce')}>
+                        <Button
+                          size="xs"
+                          variant="primary"
+                          data-testid={`devbox-permission-approve-${row.id}`}
+                          onClick={() =>
+                            void runDevboxAction(
+                              devboxPermissionReply(row.id, 'once'),
+                              reload,
+                            )
+                          }
+                        >
+                          {t('devboxPage.approveOnce')}
+                        </Button>
+                      </Tooltip>
+                      <ConfirmActionButton
                         size="xs"
                         variant="danger"
                         data-testid={`devbox-permission-reject-${row.id}`}
-                        onClick={() =>
+                        tooltip={t('devboxPage.tipReject')}
+                        onConfirm={() =>
                           void runDevboxAction(
                             devboxPermissionReply(row.id, 'reject'),
                             reload,
@@ -90,7 +100,7 @@ export function DevboxPermissions() {
                         }
                       >
                         {t('devboxPage.reject')}
-                      </Button>
+                      </ConfirmActionButton>
                     </div>
                   </TableCell>
                 </TableRow>
