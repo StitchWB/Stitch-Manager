@@ -21,6 +21,8 @@ import { useAiProxyStore } from './stores/aiProxy';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
 import { AdminRoute } from './components/auth/AdminRoute';
+import { LEGACY_REDIRECTS, LegacyRedirectRoutes } from './components/ai-proxy/LegacyRedirects';
+import { resolveRestoreRoute } from './lib/routing/restoreRoute';
 import { safeInvoke } from './lib/backend';
 import { isDesktopApp } from '@/lib/backend/core/url';
 import type { Account, ProxyStatus, ScheduledTask, SettingsData } from './types/generated';
@@ -162,18 +164,6 @@ function RouteTracker() {
     // On web "/" is the public landing — a deliberate destination, never
     // bounce from it. Desktop keeps the restore-to-last-workspace behavior.
     if (activeRoute && activeRoute !== '/' && location.pathname === '/' && isDesktopApp()) {
-      // Sanitize legacy/persisted values: older builds stored full URLs or
-      // garbage here; feeding that to navigate() throws a DOMException on
-      // history.replaceState ("URL 'https:'"). Keep same-origin pathnames only.
-      let candidate = activeRoute;
-      if (/^https?:/i.test(candidate)) {
-        try {
-          candidate = new URL(candidate).pathname || '/';
-        } catch {
-          candidate = '/';
-        }
-      }
-      if (!candidate.startsWith('/')) candidate = '/';
       // Ensure the route exists in our route list
       const validRoutes = [
         '/',
@@ -183,6 +173,7 @@ function RouteTracker() {
         '/autoreg',
         '/ai',
         '/ai/antigravity',
+        '/ai/devbox',
         '/ai/api-keys',
         '/ai/tools',
         '/ai/chat',
@@ -199,16 +190,33 @@ function RouteTracker() {
         '/tools',
         '/marketplace',
       ];
-      // Simple check - if it starts with a known route base
-      const isValid = validRoutes.some(
-        r => candidate === r || candidate.startsWith(r.replace(':section', ''))
-      );
-      if (isValid) {
-        try {
-          navigate(candidate, { replace: true });
-        } catch {
-          // Never let a bad persisted route take down the whole app.
-        }
+      const aiHubSections = [
+        'providers',
+        'routing',
+        'monitor',
+        'integrations',
+        'opencode-config',
+        'chat',
+        'notebooklm',
+        'antigravity',
+        'devbox',
+        'overview',
+        'groups',
+        'usage',
+        'diagnostics',
+        'freemodel',
+        'api-keys',
+        'gateway',
+      ].map(section => `/ai/${section}`);
+      const exists = (path: string) =>
+        validRoutes.includes(path) ||
+        aiHubSections.includes(path) ||
+        (path.startsWith('/ai/') && LEGACY_REDIRECTS.some(redirect => redirect.from === path));
+      const resolved = resolveRestoreRoute(activeRoute, exists, LEGACY_REDIRECTS);
+      if (resolved) {
+        navigate(resolved, { replace: true });
+      } else if (activeRoute.startsWith('/ai')) {
+        navigate('/ai', { replace: true });
       }
     }
   }, [activeRoute, navigate, location.pathname]);
@@ -217,10 +225,11 @@ function RouteTracker() {
   // the last workspace route with it).
   useEffect(() => {
     const isWebLanding = location.pathname === '/' && !isDesktopApp();
-    if (location.pathname !== activeRoute && !isWebLanding) {
-      setActiveRoute(location.pathname);
+    const current = location.pathname + location.search;
+    if (current !== activeRoute && !isWebLanding) {
+      setActiveRoute(current);
     }
-  }, [location.pathname, activeRoute, setActiveRoute]);
+  }, [location.pathname, location.search, activeRoute, setActiveRoute]);
 
   return null;
 }
@@ -592,31 +601,20 @@ function App() {
             {/* AI Hub — vertical rail layout shared by all /ai/* pages */}
             <Route element={<AiHubLayout />}>
               <Route path="/ai" element={<AiOverview />} />
-              <Route path="/ai/overview" element={<Navigate to="/ai" replace />} />
-              {/* Groups moved to a first-class route (/groups). Redirect the
-                  legacy /ai/groups deep link so bookmarks and the old AI Hub
-                  tab path keep working. */}
-              <Route path="/ai/groups" element={<Navigate to="/groups" replace />} />
+              {LegacyRedirectRoutes('ai-hub')}
               <Route path="/ai/integrations" element={<AiIntegrations />} />
-              <Route path="/ai/usage" element={<Navigate to="/ai/monitor" replace />} />
-              <Route path="/ai/diagnostics" element={<Navigate to="/ai/monitor" replace />} />
-              <Route path="/ai/freemodel" element={<Navigate to="/ai/providers" replace />} />
               <Route path="/ai/antigravity" element={<Antigravity />} />
               <Route path="/ai/devbox" element={<Devbox />} />
               <Route path="/ai/holone" element={<HoloneSecurity />} />
               <Route path="/ai/tools" element={<ToolsPage />} />
-              <Route path="/ai/api-keys" element={<Navigate to="/ai/providers" replace />} />
               <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
               <Route path="/ai/chat" element={<Chat />} />
               <Route path="/ai/analytics" element={<AiAnalytics />} />
-              <Route path="/ai/gateway" element={<Navigate to="/ai/providers" replace />} />
               <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
               <Route path="/ai/:section" element={<AiProviders />} />
               <Route path="/ai/notebooklm" element={<NotebookLM />} />
             </Route>
-            <Route path="/ai-providers" element={<Navigate to="/ai/providers" replace />} />
-            <Route path="/ai-analytics" element={<Navigate to="/ai/analytics" replace />} />
-            <Route path="/antigravity" element={<Navigate to="/ai/antigravity" replace />} />
+            {LegacyRedirectRoutes('top-level')}
             <Route path="/patcher" element={isDesktopApp() ? <Patcher /> : <Navigate to="/app" replace />} />
             <Route path="/scheduler" element={<Scheduler />} />
             <Route path="/automation" element={<Automation />} />
@@ -627,7 +625,6 @@ function App() {
             <Route path="/scenarios" element={<Scenarios />} />
             <Route path="/tools" element={<Tools />} />
             <Route path="/totp" element={<Totp />} />
-            <Route path="/notebooklm" element={<Navigate to="/ai/notebooklm" replace />} />
             {/* Admin zone — guarded by AdminRoute */}
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
             <Route path="/users/:userId" element={<AdminRoute><UserProfile /></AdminRoute>} />
@@ -635,7 +632,6 @@ function App() {
             <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
             <Route path="/privileges" element={<AdminRoute><Privileges /></AdminRoute>} />
             <Route path="/plugins" element={<AdminRoute><Plugins /></AdminRoute>} />
-            <Route path="/api-keys" element={<Navigate to="/ai/providers" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

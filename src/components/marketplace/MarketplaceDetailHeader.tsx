@@ -1,5 +1,6 @@
 import { Check, Download, ExternalLink, Lock, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { CORE_PAGE_ROUTES } from '@/components/ai-proxy/corePageRoutes';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { TierBadge } from '@/components/ui/TierBadge';
@@ -152,7 +153,7 @@ export function MarketplaceDetailHeader({
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => navigate(`/ai/plugin/${item.id}`)}
+            onClick={() => navigate(CORE_PAGE_ROUTES[item.id] ?? `/ai/plugin/${item.id}`)}
             leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
           >
             {t('marketplace.open')}

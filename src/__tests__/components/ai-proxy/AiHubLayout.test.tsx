@@ -89,6 +89,8 @@ function renderAt(path: string) {
           <Route path="/ai" element={<div data-testid="page-content" />} />
           <Route path="/ai/routing" element={<div data-testid="page-content" />} />
           <Route path="/ai/tools" element={<div data-testid="page-content" />} />
+          <Route path="/ai/antigravity" element={<div data-testid="page-content" />} />
+          <Route path="/ai/devbox" element={<div data-testid="page-content" />} />
           <Route path="/ai/plugin/:id" element={<div data-testid="page-content" />} />
         </Route>
       </Routes>
@@ -436,5 +438,59 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
     await waitFor(() => {
       expect(navigatedPath).toBe('/ai/plugin/echo');
     });
+  });
+});
+
+// ── W1.3: rail highlight for the antigravity and devbox host routes ──────────
+
+describe('AiHubLayout rail highlight for canonical host routes (W1.3)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _resetForTests();
+    navigatedPath = '/ai';
+    navigatedSearch = '';
+    (safeInvoke as jest.Mock).mockResolvedValue([]);
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+  });
+
+  it('highlights the stitch-antigravity plugin tab at /ai/antigravity, not providers', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      {
+        id: 'stitch-antigravity',
+        version: '0.1.0',
+        status: {
+          status: 'running',
+          port: null,
+          pid: 42,
+          uptimeSeconds: 5,
+          error: null,
+          plugin_id: 'stitch-antigravity',
+          restarts: 0,
+          stopping: false,
+        },
+        ui: {
+          kind: 'declarative',
+          tabs: [{ id: 'antigravity', label: 'stitch-antigravity.tab', icon: 'Orbit' }],
+        },
+      },
+    ] satisfies ServicePluginInfo[]);
+
+    renderAt('/ai/antigravity');
+
+    const tab = await screen.findByTestId('ai-hub-rail-item-plugin:stitch-antigravity:antigravity');
+    expect(tab.getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('ai-hub-rail-item-providers').getAttribute('aria-current')).toBeNull();
+  });
+
+  it('highlights the stitch-devbox plugin tab at /ai/devbox, not providers', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      corePagePlugin('stitch-devbox', 'devbox', 'Devbox'),
+    ]);
+
+    renderAt('/ai/devbox');
+
+    const tab = await screen.findByTestId('ai-hub-rail-item-plugin:stitch-devbox:devbox');
+    expect(tab.getAttribute('aria-current')).toBe('page');
+    expect(screen.getByTestId('ai-hub-rail-item-providers').getAttribute('aria-current')).toBeNull();
   });
 });
