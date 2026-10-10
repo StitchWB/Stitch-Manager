@@ -1,5 +1,6 @@
 import { forwardRef } from 'react';
 import { cn } from '../../lib/utils';
+import { Tooltip } from './Tooltip';
 
 export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'danger' | 'success' | 'ghost';
@@ -8,7 +9,7 @@ export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ className, variant = 'default', size = 'md', children, disabled, ...props }, ref) => {
+  ({ className, variant = 'default', size = 'md', children, disabled, tooltip, ...props }, ref) => {
     const variants = {
       default:
         'text-slate-500 hover:text-white hover:bg-white/10 disabled:hover:bg-transparent',
@@ -24,10 +25,11 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       md: 'w-8 h-8 p-2',
     };
 
-    return (
+    const button = (
       <button
         ref={ref}
         disabled={disabled}
+        aria-label={props['aria-label'] ?? tooltip}
         className={cn(
           'inline-flex items-center justify-center rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shrink-0',
           variants[variant],
@@ -39,6 +41,8 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         {children}
       </button>
     );
+
+    return tooltip ? <Tooltip content={tooltip}>{button}</Tooltip> : button;
   }
 );
 

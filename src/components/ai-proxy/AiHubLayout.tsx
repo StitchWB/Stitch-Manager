@@ -152,10 +152,16 @@ function getPluginIcon(name?: string): LucideIcon {
   return Puzzle;
 }
 
-// Rail tab only for core_page routes absent from the top-level sidebar; absent here = no rail tab.
+/**
+ * Host routes of core_page plugins whose page is a built-in app route.
+ * A core_page plugin absent here gets no rail tab at all.
+ */
 const CORE_PAGE_ROUTES: Record<string, string> = {
+  'stitch-mail': '/mail',
+  'stitch-radar': '/radar',
   'stitch-opencode': '/ai/opencode-config',
   'stitch-devbox': '/ai/devbox',
+  'stitch-cards': '/tools',
 };
 
 /**

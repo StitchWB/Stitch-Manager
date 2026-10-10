@@ -34,6 +34,7 @@ try:
         BrowserWorkerError,
         ElementNotFoundError,
         TimeoutError,
+        install_stderr_print,
         log_stderr,
     )
 except ImportError:
@@ -43,6 +44,7 @@ except ImportError:
         BrowserWorkerError,
         ElementNotFoundError,
         TimeoutError,
+        install_stderr_print,
         log_stderr,
     )
 
@@ -277,6 +279,7 @@ def main():
         Output: {"status": "ok"}
     """
     try:
+        install_stderr_print()
         log_stderr("[WORKER_MAIN] Starting BrowserWorker main loop...")
         log_stderr(f"[WORKER_MAIN] Python version: {sys.version}")
         log_stderr(f"[WORKER_MAIN] Working directory: {os.getcwd()}")

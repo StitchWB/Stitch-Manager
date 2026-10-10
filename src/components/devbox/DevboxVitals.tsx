@@ -1,6 +1,7 @@
 import { Activity } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { devboxTime, type DevboxVitalCard } from '@/lib/backend/modules/devbox';
@@ -19,18 +20,32 @@ const TONE_BORDER_CLASSES: Record<string, string> = {
   down: 'border-red-500/30',
 };
 
+const VITAL_TIPS = {
+  profile: 'devboxPage.tipVitalProfile',
+  ingress: 'devboxPage.tipVitalIngress',
+  bridge: 'devboxPage.tipVitalBridge',
+  runner: 'devboxPage.tipVitalRunner',
+  watchdog: 'devboxPage.tipVitalWatchdog',
+  host_services: 'devboxPage.tipVitalHostServices',
+} as const;
+
 function VitalCard({ card }: { card: DevboxVitalCard }) {
   const tone = TONE_VALUE_CLASSES[card.tone] ? card.tone : 'ok';
-  return (
+  const tipKey = VITAL_TIPS[card.id as keyof typeof VITAL_TIPS];
+  const cardEl = (
     <GlassCard
       className={cn('p-3 flex flex-col gap-1', TONE_BORDER_CLASSES[tone])}
     >
-      <span className="text-2xs uppercase tracking-wider text-slate-400 truncate">
+      <span
+        className="text-2xs uppercase tracking-wider text-slate-400 truncate"
+        title={devboxLabel(card.title)}
+      >
         {devboxLabel(card.title)}
       </span>
       <span
         className={cn('text-sm font-semibold truncate', TONE_VALUE_CLASSES[tone])}
         data-testid={`devbox-vital-value-${card.id}`}
+        title={String(card.value)}
       >
         {card.value}
       </span>
@@ -43,6 +58,13 @@ function VitalCard({ card }: { card: DevboxVitalCard }) {
         </span>
       )}
     </GlassCard>
+  );
+  return tipKey ? (
+    <Tooltip content={t(tipKey)} wrapperClassName="min-w-0">
+      {cardEl}
+    </Tooltip>
+  ) : (
+    cardEl
   );
 }
 
@@ -62,7 +84,12 @@ export function DevboxVitals({ cards, error, onRetry }: DevboxVitalsProps) {
       testId="devbox-vitals"
     >
       {rows.length === 0 && !error ? (
-        <EmptyState compact icon={Activity} title={t('devboxPage.vitalsEmpty')} />
+        <EmptyState
+          compact
+          icon={Activity}
+          title={t('devboxPage.vitalsEmpty')}
+          description={t('devboxPage.vitalsEmptyDesc')}
+        />
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {rows.map(card => (

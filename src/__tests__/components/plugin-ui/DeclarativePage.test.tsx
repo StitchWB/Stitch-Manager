@@ -43,7 +43,7 @@
  * mocks Header/sonner to keep tests focused on the component body).
  */
 
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import DeclarativePage from '@/components/plugin-ui/DeclarativePage';
 import type { PluginPageSchema, UiNode } from '@/components/plugin-ui/schema';
@@ -122,6 +122,9 @@ jest.mock('@/components/ui', () => ({
     </label>
   ),
   LoadingSpinner: () => <div data-testid="ui-loading-spinner">Loading...</div>,
+  ProgressBar: ({ value }: any) => (
+    <div data-testid="ui-progress-bar" data-value={String(value)} />
+  ),
   GlassCard: ({ children, className }: any) => (
     <div data-testid="ui-glass-card" className={className}>
       {children}
@@ -1467,5 +1470,252 @@ describe('DeclarativePage', () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  // ── Job node (job) ────────────────────────────────────────────────────────
+
+  describe('job node', () => {
+    const jobSchema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'tbl',
+          columns: [{ key: 'name', label: 'Name' }],
+          source: { command: 'list_tbl' },
+        },
+        {
+          kind: 'job',
+          id: 'backup',
+          label: 'Backup',
+          start: { command: 'start_backup' },
+          pollMs: 500,
+        },
+      ],
+    };
+
+    function countCalls(cmd: string): number {
+      return (safeInvoke as jest.Mock).mock.calls.filter(([c]) => c === cmd)
+        .length;
+    }
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('(ar) start → busy → polling renders percent/message → done shows result and bumps refresh once', async () => {
+      let getStatusCount = 0;
+      let resolveStart: (value: unknown) => void = () => undefined;
+      (safeInvoke as jest.Mock).mockImplementation((cmd: unknown) => {
+        if (cmd === 'plugin.test.start_backup') {
+          return new Promise(resolve => {
+            resolveStart = resolve;
+          });
+        }
+        if (cmd === 'plugin.test.get_job') {
+          getStatusCount += 1;
+          return Promise.resolve(
+            getStatusCount === 1
+              ? { jobId: 'j1', status: 'running', percent: 50, message: 'halfway' }
+              : { jobId: 'j1', status: 'done', percent: 100, result: { files: 3 } },
+          );
+        }
+        return Promise.resolve([{ name: 'One' }]);
+      });
+
+      render(<DeclarativePage pluginId="test" schema={jobSchema} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(countCalls('plugin.test.list_tbl')).toBe(1);
+      expect(screen.getByText('Backup')).toBeTruthy();
+
+      fireEvent.click(screen.getByText('common.start'));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const startButton = screen.getByText('common.start').closest('button')!;
+      expect(startButton.getAttribute('data-loading')).toBe('true');
+
+      await act(async () => {
+        resolveStart({ jobId: 'j1' });
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(safeInvoke).toHaveBeenCalledWith('plugin.test.get_job', {
+        jobId: 'j1',
+      });
+      expect(
+        screen.getByTestId('ui-progress-bar').getAttribute('data-value'),
+      ).toBe('50');
+      expect(screen.getByText('halfway')).toBeTruthy();
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText('{"files":3}')).toBeTruthy();
+      expect(countCalls('plugin.test.list_tbl')).toBe(2);
+
+      const doneGetJobCalls = countCalls('plugin.test.get_job');
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+        await Promise.resolve();
+      });
+      expect(countCalls('plugin.test.get_job')).toBe(doneGetJobCalls);
+      expect(countCalls('plugin.test.list_tbl')).toBe(2);
+    });
+
+    it('(as) get_job failed status renders NodeError with the error text', async () => {
+      (safeInvoke as jest.Mock).mockImplementation((cmd: unknown) => {
+        if (cmd === 'plugin.test.start_backup') {
+          return Promise.resolve({ jobId: 'j1' });
+        }
+        if (cmd === 'plugin.test.get_job') {
+          return Promise.resolve({
+            jobId: 'j1',
+            status: 'failed',
+            error: 'boom',
+          });
+        }
+        return Promise.resolve([{ name: 'One' }]);
+      });
+
+      render(<DeclarativePage pluginId="test" schema={jobSchema} />);
+      await act(async () => {
+        fireEvent.click(screen.getByText('common.start'));
+        await Promise.resolve();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText('boom')).toBeTruthy();
+      expect(countCalls('plugin.test.get_job')).toBe(1);
+    });
+
+    it('(at) cancel while running invokes the cancel command with the jobId', async () => {
+      (safeInvoke as jest.Mock).mockImplementation((cmd: unknown) => {
+        if (cmd === 'plugin.test.start_backup') {
+          return Promise.resolve({ jobId: 'j1' });
+        }
+        if (cmd === 'plugin.test.get_job') {
+          return Promise.resolve({
+            jobId: 'j1',
+            status: 'running',
+            percent: 10,
+          });
+        }
+        if (cmd === 'plugin.test.cancel_job') {
+          return Promise.resolve({ ok: true });
+        }
+        return Promise.resolve([{ name: 'One' }]);
+      });
+
+      render(<DeclarativePage pluginId="test" schema={jobSchema} />);
+      await act(async () => {
+        fireEvent.click(screen.getByText('common.start'));
+        await Promise.resolve();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByTestId('ui-progress-bar')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('common.cancel'));
+        await Promise.resolve();
+      });
+      expect(safeInvoke).toHaveBeenCalledWith('plugin.test.cancel_job', {
+        jobId: 'j1',
+      });
+    });
+
+    it('(au) unmount while polling freezes the get_job call count', async () => {
+      (safeInvoke as jest.Mock).mockImplementation((cmd: unknown) => {
+        if (cmd === 'plugin.test.start_backup') {
+          return Promise.resolve({ jobId: 'j1' });
+        }
+        if (cmd === 'plugin.test.get_job') {
+          return Promise.resolve({
+            jobId: 'j1',
+            status: 'running',
+            percent: 10,
+          });
+        }
+        return Promise.resolve([{ name: 'One' }]);
+      });
+
+      const view = render(<DeclarativePage pluginId="test" schema={jobSchema} />);
+      await act(async () => {
+        fireEvent.click(screen.getByText('common.start'));
+        await Promise.resolve();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(countCalls('plugin.test.get_job')).toBe(1);
+
+      view.unmount();
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+        await Promise.resolve();
+      });
+      expect(countCalls('plugin.test.get_job')).toBe(1);
+    });
+
+    it('(av) job node without start.command renders an inline error without crashing', () => {
+      const schema: PluginPageSchema = {
+        nodes: [
+          { kind: 'heading', text: 'Before' },
+          {
+            kind: 'job',
+            id: 'broken',
+            start: {},
+          } as unknown as UiNode,
+        ],
+      };
+
+      render(<DeclarativePage pluginId="test" schema={schema} />);
+
+      expect(screen.getByText('Job start is missing a command')).toBeTruthy();
+      expect(screen.getByText('Before')).toBeTruthy();
+    });
+
+    it('(aw) start response without a string jobId renders NodeError', async () => {
+      (safeInvoke as jest.Mock).mockImplementation((cmd: unknown) => {
+        if (cmd === 'plugin.test.start_backup') {
+          return Promise.resolve({ ok: true });
+        }
+        return Promise.resolve([{ name: 'One' }]);
+      });
+
+      render(<DeclarativePage pluginId="test" schema={jobSchema} />);
+      await act(async () => {
+        fireEvent.click(screen.getByText('common.start'));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(
+        screen.getByText('Job start response is missing jobId'),
+      ).toBeTruthy();
+      expect(countCalls('plugin.test.get_job')).toBe(0);
+    });
   });
 });

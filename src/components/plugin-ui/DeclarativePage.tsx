@@ -22,6 +22,7 @@ import {
   LoadingSpinner,
   EmptyState,
   GlassCard,
+  ProgressBar,
   Table,
   TableHeader,
   TableBody,
@@ -191,14 +192,45 @@ function collectInitialFieldValues(
   return out;
 }
 
-/** Warn-once registry for buttons whose paramsFrom references a missing field. */
+/** Warn-once registry for nodes whose paramsFrom references a missing field. */
 const missingParamsFromWarnings = new Set<string>();
+
+/** Static params overridden by paramsFrom field values; a missing field id omits the key (warn once). */
+function resolveFieldParams(
+  pluginId: string,
+  node: { id: string; params?: Record<string, unknown>; paramsFrom?: Record<string, string> },
+  fieldValues: Record<string, FieldValue>,
+): Record<string, unknown> | undefined {
+  if (!node.paramsFrom) return node.params;
+  const merged: Record<string, unknown> = { ...(node.params ?? {}) };
+  for (const [paramKey, fieldId] of Object.entries(node.paramsFrom)) {
+    if (fieldId in fieldValues) {
+      merged[paramKey] = fieldValues[fieldId];
+    } else {
+      delete merged[paramKey];
+      const warnKey = `${pluginId}.${node.id}.${paramKey}`;
+      if (!missingParamsFromWarnings.has(warnKey)) {
+        missingParamsFromWarnings.add(warnKey);
+        console.warn(
+          `DeclarativePage: node "${node.id}" paramsFrom references ` +
+            `unknown field "${fieldId}" — param "${paramKey}" omitted`,
+        );
+      }
+    }
+  }
+  return merged;
+}
 
 /** Warn-once registry for row actions whose paramsFromRow references a missing column. */
 const missingRowParamWarnings = new Set<string>();
 
 /** Floor for `source.refreshMs` polling — manifests asking for less are capped. */
 const MIN_REFRESH_MS = 2000;
+
+/** Floor for `job.pollMs` status polling — manifests asking for less are capped. */
+const MIN_JOB_POLL_MS = 250;
+const DEFAULT_JOB_POLL_MS = 1000;
+const JOB_CANCELLED_NOTE = 'Cancelled';
 
 // RPC result envelope keys — stripped only when the payload matches the envelope shape.
 const SUCCESS_ENVELOPE_KEYS = new Set(['success', 'error']);
@@ -332,10 +364,17 @@ function CommandResultDialog({
   );
 }
 
-/** Page-scoped refetch wiring: per-node bump signals + the button entry point. */
+/** Page-scoped refetch wiring: per-node bump signals, the page-wide signal, and their entry points. */
 interface RefreshBinding {
   signals: Record<string, number>;
+  global: number;
   request: (nodeIds: string[]) => void;
+  requestAll: () => void;
+}
+
+/** Effective refetch key of a source node: its per-node signal plus the page-wide signal. */
+function nodeRefreshSignal(refresh: RefreshBinding, nodeId: string): number {
+  return (refresh.signals[nodeId] ?? 0) + refresh.global;
 }
 
 /** `source.refreshMs` polling: bumps the node's fetch key on an interval, capped at MIN_REFRESH_MS. */
@@ -491,7 +530,7 @@ function renderNode(
           key={index}
           pluginId={pluginId}
           node={node}
-          refreshSignal={refresh.signals[node.id] ?? 0}
+          refreshSignal={nodeRefreshSignal(refresh, node.id)}
         />
       );
     case 'button':
@@ -510,7 +549,7 @@ function renderNode(
           key={index}
           pluginId={pluginId}
           node={node}
-          refreshSignal={refresh.signals[node.id] ?? 0}
+          refreshSignal={nodeRefreshSignal(refresh, node.id)}
         />
       );
     case 'markdown':
@@ -519,7 +558,17 @@ function renderNode(
           key={index}
           pluginId={pluginId}
           node={node}
-          refreshSignal={refresh.signals[node.id] ?? 0}
+          refreshSignal={nodeRefreshSignal(refresh, node.id)}
+        />
+      );
+    case 'job':
+      return (
+        <JobNode
+          key={index}
+          pluginId={pluginId}
+          node={node}
+          fieldValues={fields.values}
+          onRefreshAll={refresh.requestAll}
         />
       );
     default: {
@@ -784,31 +833,7 @@ function ButtonNode({
     if (confirmText !== undefined && !window.confirm(confirmText)) return;
     setBusy(true);
     try {
-      // Without paramsFrom the button sends its static params unchanged.
-      let params: Record<string, unknown> | undefined = node.params;
-      if (node.paramsFrom) {
-        // Start from the static params, then override every key listed in
-        // paramsFrom with the current value of the referenced field.
-        const merged: Record<string, unknown> = { ...(node.params ?? {}) };
-        for (const [paramKey, fieldId] of Object.entries(node.paramsFrom)) {
-          if (fieldId in fieldValues) {
-            merged[paramKey] = fieldValues[fieldId];
-          } else {
-            // Manifest bug: referenced field does not exist on the page.
-            // Omit the key entirely and warn once per button+param.
-            delete merged[paramKey];
-            const warnKey = `${pluginId}.${node.id}.${paramKey}`;
-            if (!missingParamsFromWarnings.has(warnKey)) {
-              missingParamsFromWarnings.add(warnKey);
-              console.warn(
-                `DeclarativePage: button "${node.id}" paramsFrom references ` +
-                  `unknown field "${fieldId}" — param "${paramKey}" omitted`,
-              );
-            }
-          }
-        }
-        params = merged;
-      }
+      const params = resolveFieldParams(pluginId, node, fieldValues);
       const { ok, payload } = await runPluginCommand(pluginId, node.command, params);
       if (ok) {
         const entries = copyableEntries(payload);
@@ -1183,6 +1208,193 @@ function MarkdownNode({
   );
 }
 
+type JobPhase = 'idle' | 'starting' | 'running' | 'done' | 'failed' | 'cancelled';
+
+function JobNode({
+  pluginId,
+  node,
+  fieldValues,
+  onRefreshAll,
+}: {
+  pluginId: string;
+  node: Extract<UiNode, { kind: 'job' }>;
+  fieldValues: Record<string, FieldValue>;
+  onRefreshAll: () => void;
+}) {
+  const [phase, setPhase] = useState<JobPhase>('idle');
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [percent, setPercent] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [resultText, setResultText] = useState('');
+  const [errorText, setErrorText] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  const startCommand = node.start?.command;
+  const statusCommand = node.statusCommand ?? 'get_job';
+  const cancelCommand = node.cancelCommand ?? 'cancel_job';
+  const pollMs = Math.max(node.pollMs ?? DEFAULT_JOB_POLL_MS, MIN_JOB_POLL_MS);
+  const refreshOnSuccess = node.refreshOnSuccess !== false;
+
+  const handleStart = async () => {
+    setPhase('starting');
+    setErrorText('');
+    try {
+      const params = resolveFieldParams(
+        pluginId,
+        { id: node.id, ...node.start },
+        fieldValues,
+      );
+      const resp = await invokeAction<unknown>(pluginId, startCommand, params);
+      const id =
+        resp != null && typeof resp === 'object' && !Array.isArray(resp)
+          ? (resp as Record<string, unknown>).jobId
+          : undefined;
+      if (typeof id !== 'string' || id === '') {
+        setErrorText('Job start response is missing jobId');
+        setPhase('failed');
+        return;
+      }
+      setJobId(id);
+      setPercent(0);
+      setStatusMessage('');
+      setResultText('');
+      setPhase('running');
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : String(err));
+      setPhase('failed');
+    }
+  };
+
+  useEffect(() => {
+    if (phase !== 'running' || jobId === null) return;
+    let cancelled = false;
+    const poll = async (): Promise<void> => {
+      try {
+        const resp = await invokeAction<unknown>(pluginId, statusCommand, {
+          jobId,
+        });
+        if (cancelled) return;
+        if (resp == null || typeof resp !== 'object' || Array.isArray(resp)) {
+          setErrorText('Job status response is malformed');
+          setPhase('failed');
+          return;
+        }
+        const rec = resp as Record<string, unknown>;
+        if (typeof rec.percent === 'number') {
+          setPercent(Math.min(Math.max(rec.percent, 0), 100));
+        }
+        if (typeof rec.message === 'string') setStatusMessage(rec.message);
+        if (rec.status === 'running') return;
+        if (rec.status === 'done') {
+          setResultText(rec.result === undefined ? '' : JSON.stringify(rec.result));
+          setPhase('done');
+          if (refreshOnSuccess) onRefreshAll();
+        } else if (rec.status === 'failed') {
+          setErrorText(
+            typeof rec.error === 'string' && rec.error !== ''
+              ? rec.error
+              : t('pluginUi.actionFailed'),
+          );
+          setPhase('failed');
+        } else if (rec.status === 'cancelled') {
+          setPhase('cancelled');
+        } else {
+          setErrorText(`Unknown job status "${String(rec.status)}"`);
+          setPhase('failed');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setErrorText(err instanceof Error ? err.message : String(err));
+        setPhase('failed');
+      }
+    };
+    const timer = setInterval(() => void poll(), pollMs);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [phase, jobId, pluginId, statusCommand, pollMs, refreshOnSuccess, onRefreshAll]);
+
+  const handleCancel = async () => {
+    if (jobId === null) return;
+    setCancelling(true);
+    try {
+      await invokeAction<unknown>(pluginId, cancelCommand, { jobId });
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : String(err));
+      setPhase('failed');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  if (typeof startCommand !== 'string' || startCommand === '') {
+    return <NodeError message="Job start is missing a command" />;
+  }
+
+  const label = node.label !== undefined ? resolveLabel(pluginId, node.label) : '';
+
+  if (phase === 'failed') {
+    return <NodeError message={errorText} />;
+  }
+  if (phase === 'running') {
+    return (
+      <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+        {label && (
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            {label}
+          </div>
+        )}
+        <ProgressBar value={percent} size="sm" />
+        {statusMessage && (
+          <div className="text-xs text-slate-400">{statusMessage}</div>
+        )}
+        <Button
+          size="sm"
+          variant="secondary"
+          isLoading={cancelling}
+          onClick={handleCancel}
+        >
+          {t('common.cancel')}
+        </Button>
+      </div>
+    );
+  }
+  if (phase === 'done') {
+    return (
+      <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+        <div className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+          {label === '' ? t('common.success') : label}
+        </div>
+        {resultText !== '' && (
+          <div className="whitespace-pre-wrap break-all font-mono text-xs text-slate-300">
+            {resultText}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (phase === 'cancelled') {
+    return (
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs text-slate-500">
+        {JOB_CANCELLED_NOTE}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {label && (
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          {label}
+        </div>
+      )}
+      <Button variant="primary" isLoading={phase === 'starting'} onClick={handleStart}>
+        {t('common.start')}
+      </Button>
+    </div>
+  );
+}
+
 interface DeclarativePageProps {
   pluginId: string;
   schema: PluginPageSchema;
@@ -1247,7 +1459,14 @@ function DeclarativePageContent({ pluginId, schema }: DeclarativePageProps) {
       return next;
     });
   }, []);
-  const refresh: RefreshBinding = { signals: refreshSignals, request: requestRefresh };
+  const [globalSignal, setGlobalSignal] = useState(0);
+  const requestAllRefresh = useCallback(() => setGlobalSignal(prev => prev + 1), []);
+  const refresh: RefreshBinding = {
+    signals: refreshSignals,
+    global: globalSignal,
+    request: requestRefresh,
+    requestAll: requestAllRefresh,
+  };
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">

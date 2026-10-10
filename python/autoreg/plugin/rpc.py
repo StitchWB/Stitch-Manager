@@ -74,8 +74,18 @@ class RpcPluginServer:
     queued and processed by the serve loop after the current handler
     returns (single-threaded serve loop).
 
+    Jobs: long-running work runs via ``start_job(fn)`` on a daemon
+    thread (the serve loop stays serial); ``register_job_commands()``
+    adds the ``list_jobs`` / ``get_job`` / ``cancel_job`` polling
+    commands, and progress is emitted as ``plugin.job_progress``
+    notifications.  Every stdout line write (responses, notifications,
+    reverse-RPC requests) is serialized by an output lock so job
+    threads never interleave partial lines.
+
     Zone-1: plain stdlib only (no stitch_backend imports, no third-party).
     """
+
+    _JOB_HISTORY_MAX = 50
 
     def __init__(self) -> None:
         self._handlers: dict[str, Any] = {}
@@ -94,6 +104,10 @@ class RpcPluginServer:
         # Pinned at serve() start: a plugin's long action may swap sys.stdout process-wide.
         self._stdin: Any = None
         self._stdout: Any = None
+        self._jobs: dict[str, dict[str, Any]] = {}
+        self._jobs_lock = threading.Lock()
+        # Serializes every stdout line write (serve thread + job threads).
+        self._output_lock = threading.Lock()
 
     def _input_stream(self) -> Any:
         return self._stdin if self._stdin is not None else sys.stdin
@@ -152,9 +166,10 @@ class RpcPluginServer:
         rid = self._next_request_id_locked()
         req = {"jsonrpc": _JSONRPC, "id": rid, "method": method,
                "params": params or {}}
-        out = self._output_stream()
-        out.write(json.dumps(req, ensure_ascii=False) + "\n")
-        out.flush()
+        with self._output_lock:
+            out = self._output_stream()
+            out.write(json.dumps(req, ensure_ascii=False) + "\n")
+            out.flush()
 
         self._ensure_reader()
         deadline = time.monotonic() + timeout
@@ -232,13 +247,188 @@ class RpcPluginServer:
             "timestamp": datetime.now(UTC).isoformat(),
         }
         params.update(extra)
+        self._send_notification("plugin.log", params)
+
+    class _JobContext:
+        """Execution context handed to a ``start_job`` function."""
+
+        __slots__ = ("_record", "_server")
+
+        def __init__(self, server: RpcPluginServer, record: dict[str, Any]) -> None:
+            self._server = server
+            self._record = record
+
+        @property
+        def job_id(self) -> str:
+            return self._record["jobId"]
+
+        @property
+        def cancelled(self) -> bool:
+            return bool(self._record["cancelled"])
+
+        def report_progress(self, percent: int, message: str) -> None:
+            self._server._report_job_progress(self._record, percent, message)
+
+    def start_job(self, fn: Any, *, name: str = "") -> str:
+        """Start ``fn(ctx)`` as a background job on a daemon thread.
+
+        Call from a command handler and return the job id: host calls cap
+        at ~30s, so long work runs as a job while the host polls the
+        commands from :meth:`register_job_commands`.  ``fn`` receives a
+        context with ``job_id``, a ``cancelled`` property (flipped by
+        ``cancel_job``) and ``report_progress(percent, message)`` which
+        updates the job and emits a ``plugin.job_progress`` notification.
+        Terminal status is decided when ``fn`` returns: ``done`` with
+        ``result`` = return value, ``cancelled`` when it returned after
+        ``cancelled`` became True, ``failed`` with ``error`` = str(exc)
+        when it raises.
+        """
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        job_id = uuid4().hex
+        record: dict[str, Any] = {
+            "jobId": job_id,
+            "name": name,
+            "status": "running",
+            "percent": 0,
+            "message": "",
+            "result": None,
+            "error": None,
+            "startedAt": datetime.now(UTC).isoformat(),
+            "finishedAt": None,
+            "cancelled": False,
+        }
+        ctx = self._JobContext(self, record)
+        with self._jobs_lock:
+            self._jobs[job_id] = record
+        threading.Thread(
+            target=self._run_job,
+            args=(fn, ctx, record),
+            name=f"rpc-job-{job_id[:8]}",
+            daemon=True,
+        ).start()
+        return job_id
+
+    def register_job_commands(self) -> None:
+        """Register the ``list_jobs`` / ``get_job`` / ``cancel_job`` commands.
+
+        ``list_jobs`` returns ``[{jobId, name, status, percent, message,
+        startedAt, finishedAt}]`` newest-first; ``get_job`` (params
+        ``{jobId}``) returns ``{jobId, name, status, percent, message,
+        result, error}`` with status ``running``/``done``/``failed``/
+        ``cancelled`` (unknown id → JSON-RPC error); ``cancel_job``
+        (params ``{jobId}``) returns ``{ok: bool}`` and sets the
+        cancelled flag only while the job is still running.  At most 50
+        finished jobs are kept (oldest dropped).
+        """
+        self.register("list_jobs", self._cmd_list_jobs)
+        self.register("get_job", self._cmd_get_job)
+        self.register("cancel_job", self._cmd_cancel_job)
+
+    def _cmd_list_jobs(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+        with self._jobs_lock:
+            return [
+                {
+                    "jobId": rec["jobId"],
+                    "name": rec["name"],
+                    "status": rec["status"],
+                    "percent": rec["percent"],
+                    "message": rec["message"],
+                    "startedAt": rec["startedAt"],
+                    "finishedAt": rec["finishedAt"],
+                }
+                for rec in reversed(self._jobs.values())
+            ]
+
+    def _cmd_get_job(self, params: dict[str, Any]) -> dict[str, Any]:
+        job_id = params.get("jobId", "")
+        with self._jobs_lock:
+            rec = self._jobs.get(job_id)
+            if rec is None:
+                return _error(-32601, f"job not found: {job_id}")
+            return {
+                "jobId": rec["jobId"],
+                "name": rec["name"],
+                "status": rec["status"],
+                "percent": rec["percent"],
+                "message": rec["message"],
+                "result": rec["result"],
+                "error": rec["error"],
+            }
+
+    def _cmd_cancel_job(self, params: dict[str, Any]) -> dict[str, Any]:
+        job_id = params.get("jobId", "")
+        with self._jobs_lock:
+            rec = self._jobs.get(job_id)
+            if rec is None or rec["status"] != "running":
+                return {"ok": False}
+            rec["cancelled"] = True
+        return {"ok": True}
+
+    def _run_job(self, fn: Any, ctx: Any, record: dict[str, Any]) -> None:
+        """Run one job to a terminal status, then prune finished history."""
+        from datetime import UTC, datetime
+
+        try:
+            result = fn(ctx)
+        except Exception as exc:  # noqa: BLE001 — job failure is a status, not a crash
+            with self._jobs_lock:
+                record["status"] = "failed"
+                record["error"] = str(exc)
+                record["finishedAt"] = datetime.now(UTC).isoformat()
+                self._prune_finished_locked()
+            return
+        with self._jobs_lock:
+            if record["cancelled"]:
+                record["status"] = "cancelled"
+            else:
+                record["status"] = "done"
+                record["result"] = result
+            record["finishedAt"] = datetime.now(UTC).isoformat()
+            self._prune_finished_locked()
+
+    def _report_job_progress(
+        self, record: dict[str, Any], percent: int, message: str
+    ) -> None:
+        """Update a job's progress and emit a ``plugin.job_progress`` notification."""
+        with self._jobs_lock:
+            record["percent"] = percent
+            record["message"] = message
+        self._send_notification(
+            "plugin.job_progress",
+            {
+                "jobId": record["jobId"],
+                "percent": percent,
+                "message": message,
+            },
+        )
+
+    def _prune_finished_locked(self) -> None:
+        """Drop the oldest finished jobs beyond ``_JOB_HISTORY_MAX``.
+
+        Must be called under ``_jobs_lock``.
+        """
+        finished = [
+            job_id for job_id, rec in self._jobs.items()
+            if rec["status"] != "running"
+        ]
+        excess = len(finished) - self._JOB_HISTORY_MAX
+        if excess <= 0:
+            return
+        for job_id in finished[:excess]:
+            del self._jobs[job_id]
+
+    def _send_notification(self, method: str, params: dict[str, Any]) -> None:
+        """Write one JSON-RPC notification line under the output lock."""
         line = json.dumps(
-            {"jsonrpc": _JSONRPC, "method": "plugin.log", "params": params},
+            {"jsonrpc": _JSONRPC, "method": method, "params": params},
             ensure_ascii=False,
         )
         out = self._output_stream()
-        out.write(line + "\n")
-        out.flush()
+        with self._output_lock:
+            out.write(line + "\n")
+            out.flush()
 
     def serve(self) -> None:
         """Main read-dispatch-write loop.  Exits on ``plugin.shutdown``.
@@ -394,7 +584,9 @@ class RpcPluginServer:
 
         Only a result whose ``error`` is a dict carrying both ``code`` and
         ``message`` (what ``_error`` builds) becomes a JSON-RPC error
-        envelope; any other ``error`` value ships as ``result``.
+        envelope; any other ``error`` value ships as ``result``.  The
+        write is serialized with job-thread notifications by
+        ``_output_lock``.
         """
         err = result.get("error") if isinstance(result, dict) else None
         if isinstance(err, dict) and "code" in err and "message" in err:
@@ -402,8 +594,9 @@ class RpcPluginServer:
         else:
             obj = {"jsonrpc": _JSONRPC, "id": rid, "result": result}
         out = self._output_stream()
-        out.write(json.dumps(obj, ensure_ascii=False) + "\n")
-        out.flush()
+        with self._output_lock:
+            out.write(json.dumps(obj, ensure_ascii=False) + "\n")
+            out.flush()
 
 
 def _error(code: int, message: str, data: Any = None) -> dict[str, Any]:

@@ -5,7 +5,7 @@
  * BOUNDARY RULE (v2 scope):
  *   The declarative renderer supports a FIXED dictionary of node kinds:
  *   heading, section, field (text/select/toggle), table, button,
- *   card_grid, markdown.
+ *   card_grid, markdown, job.
  *   Pages that require capabilities OUTSIDE this dictionary — polling /
  *   realtime updates, arbitrary HTML rendering (the markdown node renders
  *   a safe subset only — no raw HTML passthrough), drag-and-drop, virtual
@@ -152,6 +152,14 @@ export interface CardTemplate {
   action?: CardAction;
 }
 
+/** Start invocation of a job node; the command must return `{jobId: string}`. */
+export interface JobStart {
+  command: string;
+  params?: Record<string, unknown>;
+  /** Field→param binding — identical semantics to the button node's `paramsFrom`. */
+  paramsFrom?: Record<string, string>;
+}
+
 /**
  * Discriminated union of all renderable UI nodes.
  * The `kind` field is the discriminant; exhaustive switch is required.
@@ -280,6 +288,22 @@ export type UiNode =
        * (additive v2.1 revision).
        */
       empty?: string;
+    }
+  | {
+      /** Long-running command job: start returns `{jobId}`, then the renderer polls `statusCommand` until a terminal status. */
+      kind: 'job';
+      id: string;
+      /** Node label — resolved like other node labels (i18n key or literal). */
+      label?: string;
+      start: JobStart;
+      /** Status poll command invoked with `{jobId}`; default `"get_job"`. */
+      statusCommand?: string;
+      /** Cancel command invoked with `{jobId}`; default `"cancel_job"`. */
+      cancelCommand?: string;
+      /** Poll interval in ms; default 1000, floored at the renderer's MIN_JOB_POLL_MS. */
+      pollMs?: number;
+      /** Bump the page refresh signal on terminal `done` so source nodes reload; default true. */
+      refreshOnSuccess?: boolean;
     };
 
 /** Top-level schema for a declarative plugin page. */

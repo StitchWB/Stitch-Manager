@@ -2,7 +2,9 @@
 
 This document is the **command and SPI contract** for service-plugin
 authors. It covers command naming policy, the SPI method-to-command
-map, reserved names, versioning, and a pre-publish checklist.
+map, reserved names, versioning, and a pre-publish checklist. For
+how-to recipes on top of this contract (jobs, secrets, logging,
+typegen, release), see [docs/service-plugin-cookbook.md](service-plugin-cookbook.md).
 
 > **Scope boundary:** this document governs the command surface and SPI
 > surface that a `kind=service` plugin exposes to the host. The
@@ -186,6 +188,54 @@ This means a `TotpProvider` plugin that ships `generate_secret` and
 fall back to the built-in `pyotp`-backed impl for `get_code` /
 `verify_code` / `count_owned_keys` — degraded but safe. The host's
 `spi.resolve()` priority is: **healthy plugin impl > built-in impl**.
+
+### 3.4 Secrets — the host keyring (`host.secrets.*`)
+
+A plugin that persists secrets (API keys, tokens, TOTP seeds) MUST use
+the host keyring rather than hand-rolling its own at-rest encryption —
+the `crypto.py` file convention (§7.3) is the legacy shape; do not add
+new instances of it. The host owns the Fernet key; a plugin never sees
+the key, the plaintext at rest, or another plugin's names.
+
+The keyring is reached over reverse RPC from inside a command handler
+(closure pattern per §7.4):
+
+```python
+def _handle_save_token(params: dict[str, Any]) -> dict[str, Any]:
+    result = server.call_host("host.secrets.set", {
+        "name": "api_key",
+        "value": str(params.get("apiKey", "")),
+    })
+    return {"saved": result["ok"]}
+```
+
+| Method | Params | Result |
+|--------|--------|--------|
+| `host.secrets.get` | `name` (required) | `{"name": <name>, "value": <str or null>}` — an absent name returns `null`, not an error |
+| `host.secrets.set` | `name`, `value` (required) | `{"ok": true}` |
+| `host.secrets.delete` | `name` (required) | `{"ok": true}` — deleting an absent name is not an error |
+| `host.secrets.list` | none | `{"names": [...]}` — names only, never values |
+
+**Namespace isolation.** The plugin identity is bound by the host at
+attach time (a closure over the manifest id). Request params carry no
+plugin identity and cannot select one — a forged `pluginId` param is
+ignored. Plugin A can never read, write, or list plugin B's names.
+
+**Validation.** `name` must match `^[A-Za-z0-9_.-]{1,64}$`; `value` must
+be a string of at most 64 KiB (UTF-8 bytes). Violations raise
+`ValueError` in the handler and surface to the plugin as a JSON-RPC
+error (the §7.1 error convention).
+
+**At rest and audit.** Values are encrypted with the host's process-wide
+Fernet key (`TOKEN_ENCRYPTION_KEY` env var or the auto-generated
+`.db_key` file — see `python/stitch_backend/security/fernet_at_rest.py`)
+and stored under the host's data dir, outside any plugin's `data_dir`.
+Every `set`/`delete` appends an audit log line with the plugin id and
+the name only — values are never logged.
+
+> **Playground:** `stitch_plugin_tools run` stubs `host.secrets.*` with
+> a clear error (no keyring in dev mode) — the same treatment as
+> `engine.oauth.*`.
 
 ---
 

@@ -43,6 +43,9 @@ VALID_CATEGORIES = (
 VALID_STATUSES = ("stable", "beta", "deprecated")
 VALID_FEATURE_STATUSES = ("stable", "beta", "planned")
 
+# Param types accepted in contributions.commands[].params.<name>.type.
+VALID_PARAM_TYPES = ("string", "number", "boolean", "object", "array")
+
 _logger = logging.getLogger(__name__)
 
 # Semver 2.0.0 — MAJOR.MINOR.PATCH with optional prerelease and build metadata.
@@ -273,6 +276,40 @@ class PluginManifest:
             return None
 
 
+def _validate_command_params(contributions: dict[str, Any]) -> None:
+    """Type-check ``contributions.commands[].params`` (optional, v2).
+
+    Absent ``params`` is fine (backward compat); unknown keys inside a
+    param entry are ignored (forward compat).  Malformed values raise
+    ``ManifestValidationError`` with the ``<cmd>.params[.<name>]`` field.
+    """
+    commands = contributions.get("commands")
+    if not isinstance(commands, list):
+        return
+    for i, entry in enumerate(commands):
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        cmd = name if isinstance(name, str) and name else f"commands[{i}]"
+        params = entry.get("params")
+        if params is None:
+            continue
+        if not isinstance(params, dict):
+            raise ManifestValidationError(f"{cmd}.params", "must be an object")
+        for param_name, spec in params.items():
+            field = f"{cmd}.params.{param_name}"
+            if not isinstance(spec, dict):
+                raise ManifestValidationError(field, "must be an object")
+            if spec.get("type") not in VALID_PARAM_TYPES:
+                raise ManifestValidationError(
+                    field,
+                    f'type must be one of {VALID_PARAM_TYPES}, '
+                    f'got "{spec.get("type")}"',
+                )
+            if "required" in spec and not isinstance(spec["required"], bool):
+                raise ManifestValidationError(field, "required must be a boolean")
+
+
 def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     """Parse + validate a raw manifest dict into ``PluginManifest``.
 
@@ -440,6 +477,7 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     if not isinstance(contributions_raw, dict):
         raise ManifestValidationError("contributions", "must be an object")
     contributions = dict(contributions_raw)
+    _validate_command_params(contributions)
 
     # Validated here but kept in extras on purpose: publish reads them from extras.
     _validate_marketplace_metadata(raw)

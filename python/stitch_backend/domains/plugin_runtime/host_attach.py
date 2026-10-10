@@ -11,6 +11,9 @@ from stitch_backend.domains.plugin_runtime import host_resources
 from stitch_backend.domains.plugin_runtime.host_capabilities import (
     SUPPORTED_CAPABILITIES,
 )
+from stitch_backend.domains.plugin_runtime.host_secrets import (
+    register_secret_handlers,
+)
 
 if TYPE_CHECKING:
     import subprocess
@@ -59,6 +62,9 @@ def attach_rpc(
         call_host during/after init; handlers must be wired before the
         first plugin.call).  Lives in _attach_rpc rather than start()
         so restart (_restart_once → _attach_rpc) also wires handlers.
+      - register host.secrets.* reverse-RPC handlers (host-side keyring;
+        same wiring rationale as engine.oauth.* — the plugin id bound
+        here is the namespace, request params never select it).
       - register plugin.call_plugin reverse-RPC handler (plugin→plugin
         calls; same wiring rationale as engine.oauth.*).
       - parse capabilities from the init result (tolerant: missing/
@@ -103,6 +109,8 @@ def attach_rpc(
     )
     # Wire engine.oauth.* reverse-RPC handlers after attach.
     register_engine_handlers(host.rpc)
+    # Wire host.secrets.* reverse-RPC handlers (plugin id binds the namespace).
+    register_secret_handlers(host.rpc, host.plugin_id)
     # Wire plugin.call_plugin reverse-RPC handler (also wired on restart).
     host._register_plugin_rpc_handler()
     # Parse capabilities from init result after attach.

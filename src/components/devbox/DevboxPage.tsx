@@ -91,6 +91,7 @@ export function DevboxPage() {
             size="md"
             variant="ghost"
             aria-label={t('devboxPage.refresh')}
+            tooltip={t('devboxPage.refresh')}
             data-testid="devbox-refresh"
           >
             <RefreshCw size={16} />

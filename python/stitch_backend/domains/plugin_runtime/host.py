@@ -17,7 +17,6 @@ the server process.
 from __future__ import annotations
 
 import asyncio
-import collections
 import logging
 import os
 import subprocess
@@ -62,6 +61,7 @@ from stitch_backend.domains.sidecar import (
 )
 
 if TYPE_CHECKING:
+    import collections
     from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
@@ -132,7 +132,7 @@ class ServicePluginHost:
         self._monitor_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
 
-        self._log_buffer: collections.deque[str] = collections.deque(maxlen=1000)
+        self._log_buffer: collections.deque[str] = host_logs.LogBuffer(self.plugin_id)
         self._stderr_thread: threading.Thread | None = None
 
         # Capabilities from plugin.init; empty until handshake — host keeps unknowns for observability.

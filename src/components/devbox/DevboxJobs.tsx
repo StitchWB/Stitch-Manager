@@ -41,7 +41,12 @@ export function DevboxJobs() {
         </div>
       )}
       {rows.length === 0 ? (
-        <EmptyState compact icon={Briefcase} title={t('devboxPage.jobsEmpty')} />
+        <EmptyState
+          compact
+          icon={Briefcase}
+          title={t('devboxPage.jobsEmpty')}
+          description={t('devboxPage.jobsEmptyDesc')}
+        />
       ) : (
         <Table containerClassName="rounded-lg border border-white/5">
           <TableHeader>
@@ -65,12 +70,13 @@ export function DevboxJobs() {
                   {row.sessionId ?? '—'}
                 </TableCell>
                 <TableCell>
-                  <ConfirmActionButton
-                    size="xs"
-                    variant="danger"
-                    data-testid={`devbox-job-cancel-${row.id}`}
-                    onConfirm={() => void runDevboxAction(devboxJobCancel(row.id), reload)}
-                  >
+                   <ConfirmActionButton
+                     size="xs"
+                     variant="danger"
+                     data-testid={`devbox-job-cancel-${row.id}`}
+                     tooltip={t('devboxPage.tipCancelJob')}
+                     onConfirm={() => void runDevboxAction(devboxJobCancel(row.id), reload)}
+                   >
                     {t('devboxPage.cancelJob')}
                   </ConfirmActionButton>
                 </TableCell>
