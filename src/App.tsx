@@ -599,8 +599,11 @@ function App() {
               <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
               <Route path="/ai/chat" element={<Chat />} />
               <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
-              <Route path="/ai/:section" element={<AiProviders />} />
+              <Route path="/ai/providers" element={<AiProviders />} />
+              <Route path="/ai/routing" element={<AiProviders />} />
+              <Route path="/ai/monitor" element={<AiProviders />} />
               <Route path="/ai/notebooklm" element={<NotebookLM />} />
+              <Route path="/ai/*" element={<NotFound />} />
             </Route>
             {LegacyRedirectRoutes('top-level')}
             <Route path="/patcher" element={isDesktopApp() ? <Patcher /> : <Navigate to="/app" replace />} />
