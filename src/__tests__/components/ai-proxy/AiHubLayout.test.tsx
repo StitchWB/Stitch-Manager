@@ -9,9 +9,6 @@
  *       navigates to /ai/plugin/{pluginId}.
  *   (d) Below md the rail collapses to icon-only: asserted via classes
  *       (w-12 / md:w-48, hidden md:inline labels) and Tooltip wrapping.
- *   (e-h) Tools sub-items: rendered indented under the parent, active child
- *       follows the ?tab= param (parent stays active without/unknown param),
- *       clicking navigates to the param URL, hidden below md.
  *
  * Mocks: invoke (safeInvoke), i18n (t = identity), @/components/ui
  * (Badge/Tooltip stubs), stores (app/auth), useMediaQuery. The real
@@ -88,7 +85,6 @@ function renderAt(path: string) {
         <Route element={<AiHubLayout />}>
           <Route path="/ai" element={<div data-testid="page-content" />} />
           <Route path="/ai/routing" element={<div data-testid="page-content" />} />
-          <Route path="/ai/tools" element={<div data-testid="page-content" />} />
           <Route path="/ai/antigravity" element={<div data-testid="page-content" />} />
           <Route path="/ai/devbox" element={<div data-testid="page-content" />} />
           <Route path="/ai/plugin/:id" element={<div data-testid="page-content" />} />
@@ -149,8 +145,6 @@ describe('AiHubLayout rail navigation', () => {
     expect(screen.getByText('Connections')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.monitor')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.chat')).toBeTruthy();
-    expect(screen.getByText('aiHub.tabs.tools')).toBeTruthy();
-    expect(screen.getByText('aiHub.tabs.notebooklm')).toBeTruthy();
     expect(screen.getByText('Overview')).toBeTruthy();
 
     // No plugins → no plugins group.
@@ -255,66 +249,6 @@ describe('AiHubLayout rail navigation', () => {
       'aiHub.tabs.routing',
     );
   });
-
-  it('(e) renders sub-items under the tools tab; parent active without tab param', () => {
-    renderAt('/ai/tools');
-
-    expect(screen.getByTestId('ai-hub-rail-subitems-tools')).toBeTruthy();
-    expect(screen.getByTestId('ai-hub-rail-subitem-compression')).toBeTruthy();
-    expect(screen.getByTestId('ai-hub-rail-subitem-holone')).toBeTruthy();
-    expect(screen.getByText('aiHub.tabs.compression')).toBeTruthy();
-    expect(screen.getByText('aiHub.tabs.holone')).toBeTruthy();
-
-    expect(screen.getByTestId('ai-hub-rail-item-tools').getAttribute('aria-current')).toBe('page');
-    expect(
-      screen.getByTestId('ai-hub-rail-subitem-compression').getAttribute('aria-current'),
-    ).toBeNull();
-    expect(screen.getByTestId('ai-hub-rail-subitem-holone').getAttribute('aria-current')).toBeNull();
-  });
-
-  it('(f) highlights the child matching the tab param and deactivates the parent', () => {
-    renderAt('/ai/tools?tab=holone');
-
-    expect(screen.getByTestId('ai-hub-rail-subitem-holone').getAttribute('aria-current')).toBe(
-      'page',
-    );
-    expect(
-      screen.getByTestId('ai-hub-rail-subitem-compression').getAttribute('aria-current'),
-    ).toBeNull();
-    expect(screen.getByTestId('ai-hub-rail-item-tools').getAttribute('aria-current')).toBeNull();
-  });
-
-  it('(f2) unknown tab param keeps the parent active', () => {
-    renderAt('/ai/tools?tab=bogus');
-
-    expect(screen.getByTestId('ai-hub-rail-item-tools').getAttribute('aria-current')).toBe('page');
-    expect(screen.getByTestId('ai-hub-rail-subitem-holone').getAttribute('aria-current')).toBeNull();
-    expect(
-      screen.getByTestId('ai-hub-rail-subitem-compression').getAttribute('aria-current'),
-    ).toBeNull();
-  });
-
-  it('(g) clicking a sub-item navigates to the tab param URL', async () => {
-    renderAt('/ai/tools');
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('ai-hub-rail-subitem-compression'));
-    });
-
-    await waitFor(() => {
-      expect(navigatedPath).toBe('/ai/tools');
-      expect(navigatedSearch).toBe('?tab=compression');
-    });
-  });
-
-  it('(h) sub-items hide below md (class-based)', () => {
-    (useMediaQuery as jest.Mock).mockReturnValue(false);
-    renderAt('/ai/tools');
-
-    const subitems = screen.getByTestId('ai-hub-rail-subitems-tools');
-    expect(subitems.className).toContain('hidden');
-    expect(subitems.className).toContain('md:flex');
-  });
 });
 
 // ── F11: rail kind filter + core_page host-route mapping ────────────────────
@@ -350,11 +284,9 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
 
-  it('(i) core_page plugin tabs navigate to their real host routes', async () => {
+  it('(i) core_page plugin tabs navigate to their real /ai host routes', async () => {
     // One plugin per render: navigating away from /ai unmounts the rail.
     const cases = [
-      ['stitch-mail', 'mail', '/mail'],
-      ['stitch-radar', 'radar', '/radar'],
       ['stitch-opencode', 'opencode', '/ai/opencode-config'],
       ['stitch-devbox', 'devbox', '/ai/devbox'],
     ] as const;
@@ -379,7 +311,7 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
     }
   });
 
-  it('(j) stitch-cards core_page tab maps to the Tools host route', async () => {
+  it('(j) stitch-cards core_page tab is hosted outside /ai and renders no rail item', async () => {
     (safeInvoke as jest.Mock).mockResolvedValue([
       corePagePlugin('stitch-cards', 'cards', 'Cards'),
     ]);
@@ -389,13 +321,7 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
     await waitFor(() => {
       expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
     });
-    const tab = await screen.findByTestId('ai-hub-rail-item-plugin:stitch-cards:cards');
-    await act(async () => {
-      fireEvent.click(tab);
-    });
-    await waitFor(() => {
-      expect(navigatedPath).toBe('/tools');
-    });
+    expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-cards:cards')).toBeNull();
   });
 
   it('(k) plugins without a declarative/core_page kind render no tab', async () => {
@@ -438,6 +364,68 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
     await waitFor(() => {
       expect(navigatedPath).toBe('/ai/plugin/echo');
     });
+  });
+});
+
+// ── W3/P2.4: rail cleanup — tools/notebooklm removed, external core_page skipped ──
+
+describe('AiHubLayout rail cleanup (P2.4)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _resetForTests();
+    navigatedPath = '/ai';
+    navigatedSearch = '';
+    (safeInvoke as jest.Mock).mockResolvedValue([]);
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+  });
+
+  it('renders no rail items for the removed tools and notebooklm tabs', () => {
+    renderAt('/ai');
+
+    expect(screen.queryByTestId('ai-hub-rail-item-tools')).toBeNull();
+    expect(screen.queryByTestId('ai-hub-rail-item-notebooklm')).toBeNull();
+  });
+
+  it('renders no rail item for a core_page plugin hosted outside /ai', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      corePagePlugin('stitch-mail', 'mail', 'Mail'),
+    ]);
+
+    renderAt('/ai');
+
+    await waitFor(() => {
+      expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
+    });
+    expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-mail:mail')).toBeNull();
+  });
+
+  it('keeps declarative plugin tabs in the rail', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      {
+        id: 'stitch-bridges',
+        version: '1.0.0',
+        status: {
+          status: 'running',
+          port: null,
+          pid: 7,
+          uptimeSeconds: 5,
+          error: null,
+          plugin_id: 'stitch-bridges',
+          restarts: 0,
+          stopping: false,
+        },
+        ui: {
+          kind: 'declarative',
+          tabs: [{ id: 'main', label: 'Bridges', icon: 'Network' }],
+        },
+      },
+    ] satisfies ServicePluginInfo[]);
+
+    renderAt('/ai');
+
+    expect(
+      await screen.findByTestId('ai-hub-rail-item-plugin:stitch-bridges:main'),
+    ).toBeTruthy();
   });
 });
 
