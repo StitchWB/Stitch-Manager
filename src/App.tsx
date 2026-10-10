@@ -21,7 +21,8 @@ import { useAiProxyStore } from './stores/aiProxy';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
 import { AdminRoute } from './components/auth/AdminRoute';
-import { LegacyRedirectRoutes } from './components/ai-proxy/LegacyRedirects';
+import { LEGACY_REDIRECTS, LegacyRedirectRoutes } from './components/ai-proxy/LegacyRedirects';
+import { resolveRestoreRoute } from './lib/routing/restoreRoute';
 import { safeInvoke } from './lib/backend';
 import { isDesktopApp } from '@/lib/backend/core/url';
 import type { Account, ProxyStatus, ScheduledTask, SettingsData } from './types/generated';
@@ -163,18 +164,6 @@ function RouteTracker() {
     // On web "/" is the public landing — a deliberate destination, never
     // bounce from it. Desktop keeps the restore-to-last-workspace behavior.
     if (activeRoute && activeRoute !== '/' && location.pathname === '/' && isDesktopApp()) {
-      // Sanitize legacy/persisted values: older builds stored full URLs or
-      // garbage here; feeding that to navigate() throws a DOMException on
-      // history.replaceState ("URL 'https:'"). Keep same-origin pathnames only.
-      let candidate = activeRoute;
-      if (/^https?:/i.test(candidate)) {
-        try {
-          candidate = new URL(candidate).pathname || '/';
-        } catch {
-          candidate = '/';
-        }
-      }
-      if (!candidate.startsWith('/')) candidate = '/';
       // Ensure the route exists in our route list
       const validRoutes = [
         '/',
@@ -184,6 +173,7 @@ function RouteTracker() {
         '/autoreg',
         '/ai',
         '/ai/antigravity',
+        '/ai/devbox',
         '/ai/api-keys',
         '/ai/tools',
         '/ai/chat',
@@ -200,16 +190,33 @@ function RouteTracker() {
         '/tools',
         '/marketplace',
       ];
-      // Simple check - if it starts with a known route base
-      const isValid = validRoutes.some(
-        r => candidate === r || candidate.startsWith(r.replace(':section', ''))
-      );
-      if (isValid) {
-        try {
-          navigate(candidate, { replace: true });
-        } catch {
-          // Never let a bad persisted route take down the whole app.
-        }
+      const aiHubSections = [
+        'providers',
+        'routing',
+        'monitor',
+        'integrations',
+        'opencode-config',
+        'chat',
+        'notebooklm',
+        'antigravity',
+        'devbox',
+        'overview',
+        'groups',
+        'usage',
+        'diagnostics',
+        'freemodel',
+        'api-keys',
+        'gateway',
+      ].map(section => `/ai/${section}`);
+      const exists = (path: string) =>
+        validRoutes.includes(path) ||
+        aiHubSections.includes(path) ||
+        (path.startsWith('/ai/') && LEGACY_REDIRECTS.some(redirect => redirect.from === path));
+      const resolved = resolveRestoreRoute(activeRoute, exists, LEGACY_REDIRECTS);
+      if (resolved) {
+        navigate(resolved, { replace: true });
+      } else if (activeRoute.startsWith('/ai')) {
+        navigate('/ai', { replace: true });
       }
     }
   }, [activeRoute, navigate, location.pathname]);
@@ -218,10 +225,11 @@ function RouteTracker() {
   // the last workspace route with it).
   useEffect(() => {
     const isWebLanding = location.pathname === '/' && !isDesktopApp();
-    if (location.pathname !== activeRoute && !isWebLanding) {
-      setActiveRoute(location.pathname);
+    const current = location.pathname + location.search;
+    if (current !== activeRoute && !isWebLanding) {
+      setActiveRoute(current);
     }
-  }, [location.pathname, activeRoute, setActiveRoute]);
+  }, [location.pathname, location.search, activeRoute, setActiveRoute]);
 
   return null;
 }
