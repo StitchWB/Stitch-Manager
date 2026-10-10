@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from autoreg.plugin import crypto
@@ -336,9 +337,13 @@ def pack_provider(
         raise FileNotFoundError(f"provider source not found: {provider_src}")
 
     # ── 1. Copy provider implementation ────────────────────────────────
+    _warn_signing_material(provider_src)
     shutil.copytree(
         provider_src, out_dir, dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
+        ignore=shutil.ignore_patterns(
+            "__pycache__", "*.pyc", ".git",
+            "keys", "*.key", "upgrade.diff", ".upgrade-staging",
+        ),
     )
 
     # ── 2. Bundle base.py + common.py if any bundled file imports them ──
@@ -437,16 +442,26 @@ PACKAGE_EXCLUDE_DIRS = frozenset(
         ".opencode",
         ".discoverability",
         ".trae",
+        # keygen output and upgrade leftovers must never ship.
+        "keys",
+        ".upgrade-staging",
     }
 )
 
 _PACKAGE_EXCLUDE_FILES = frozenset(
-    {".gitignore", ".gitattributes", ".gitmodules", "ruff.toml", "pyproject.toml"}
+    {
+        ".gitignore",
+        ".gitattributes",
+        ".gitmodules",
+        "ruff.toml",
+        "pyproject.toml",
+        "upgrade.diff",
+    }
 )
 # Env files never ship: they carry operator secrets in repo checkouts.
 _PACKAGE_EXCLUDE_FILE_PREFIXES = (".env",)
 _PACKAGE_EXCLUDE_PREFIXES = ("README", "LICENSE")
-_PACKAGE_EXCLUDE_SUFFIXES = (".pyc", ".pyo", ".log", ".db", ".sqlite3")
+_PACKAGE_EXCLUDE_SUFFIXES = (".pyc", ".pyo", ".log", ".db", ".sqlite3", ".key", ".bak")
 
 
 def _package_excluded(rel: Path) -> bool:
@@ -460,6 +475,20 @@ def _package_excluded(rel: Path) -> bool:
     ):
         return True
     return name.endswith(_PACKAGE_EXCLUDE_SUFFIXES)
+
+
+def _warn_signing_material(src_root: Path) -> None:
+    offenders = sorted(
+        path.relative_to(src_root).as_posix()
+        for path in src_root.rglob("*")
+        if path.is_file() and (path.suffix == ".key" or "keys" in path.parts)
+    )
+    if offenders:
+        print(
+            "warning: signing material found in the source tree, "
+            "excluded from the pack: " + ", ".join(offenders),
+            file=sys.stderr,
+        )
 
 
 def _manifest_excludes(package_dir: Path) -> frozenset[str]:
@@ -513,6 +542,8 @@ def pack_service(package_dir: Path, out_dir: Path) -> Path:
     """
     if not (package_dir / MANIFEST_FILENAME).is_file():
         raise FileNotFoundError(f"no {MANIFEST_FILENAME} in {package_dir}")
+
+    _warn_signing_material(package_dir)
 
     if out_dir.exists():
         shutil.rmtree(out_dir)

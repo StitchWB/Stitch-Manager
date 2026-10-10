@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import os
 from pathlib import Path
 
 # Symbols to extract from the canonical rpc.py, in output order.
@@ -90,10 +91,64 @@ _SECTION_SEP = "\n\n\n"
 # These are the ONLY imports the server-side subset needs.
 
 
-def _canonical_rpc_path() -> Path:
-    """Resolve the path to ``autoreg/plugin/rpc.py`` from this module."""
-    # stitch_plugin_tools/vendoring.py → python/ → autoreg/plugin/rpc.py
-    return Path(__file__).resolve().parents[1] / "autoreg" / "plugin" / "rpc.py"
+# stitch_plugin_tools/vendoring.py → python/ → autoreg/plugin/rpc.py
+_REPO_RPC_PATH = Path(__file__).resolve().parents[1] / "autoreg" / "plugin" / "rpc.py"
+
+_BUNDLED_RPC_PATH = (
+    Path(__file__).resolve().parent / "_bundled" / "rpc_server_canon.py"
+)
+
+_REPO_HELPERS_PATH = (
+    Path(__file__).resolve().parents[1] / "autoreg" / "plugin" / "helpers.py"
+)
+
+_BUNDLED_HELPERS_PATH = (
+    Path(__file__).resolve().parent / "_bundled" / "plugin_helpers_canon.py"
+)
+
+
+class CanonicalRpcSourceError(RuntimeError):
+    """A canonical ``autoreg/plugin/`` source (rpc.py or helpers.py) could not be resolved.
+
+    Raised when every resolution step fails: ``STITCH_PLUGIN_CANON`` unset
+    or dangling (rpc.py only), the repo-relative file absent, and the
+    bundled snapshot shipped inside ``stitch_plugin_tools`` missing too.
+    """
+
+
+def _canonical_rpc_source() -> str:
+    """Return the canonical ``autoreg/plugin/rpc.py`` text (LF-normalized).
+
+    Resolution order:
+      1. ``STITCH_PLUGIN_CANON`` — path to a canonical rpc.py; a set but
+         dangling value raises instead of silently falling through.
+      2. The repo-relative ``autoreg/plugin/rpc.py`` (hub checkout layout).
+      3. The bundled snapshot ``_bundled/rpc_server_canon.py`` shipped
+         inside ``stitch_plugin_tools`` (installs without the ``autoreg``
+         tree).
+
+    Raises :class:`CanonicalRpcSourceError` when none resolve.
+    """
+    env_value = os.environ.get("STITCH_PLUGIN_CANON")
+    if env_value:
+        env_path = Path(env_value)
+        if not env_path.is_file():
+            raise CanonicalRpcSourceError(
+                f"STITCH_PLUGIN_CANON is set to {env_path} but that file"
+                " does not exist; unset it or point it at a valid canonical"
+                " rpc.py"
+            )
+        return env_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if _REPO_RPC_PATH.is_file():
+        return _REPO_RPC_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if _BUNDLED_RPC_PATH.is_file():
+        return _BUNDLED_RPC_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+    raise CanonicalRpcSourceError(
+        "cannot resolve the canonical rpc.py: STITCH_PLUGIN_CANON is not"
+        f" set, {_REPO_RPC_PATH} does not exist, and the bundled copy"
+        f" {_BUNDLED_RPC_PATH} is missing; set STITCH_PLUGIN_CANON to a"
+        " canonical rpc.py or reinstall stitch_plugin_tools"
+    )
 
 
 def _extract_symbol_sources(source: str, tree: ast.Module) -> list[str]:
@@ -159,9 +214,11 @@ def canonical_rpc_server_text() -> str:
 
     The header embeds ``_VENDOR_SOURCE_SHA256`` — a SHA-256 over the full
     canonical text EXCLUDING the hash line itself (avoids self-reference).
+
+    Raises :class:`CanonicalRpcSourceError` when no canonical source
+    resolves (env var, repo-relative, bundled).
     """
-    rpc_path = _canonical_rpc_path()
-    source = rpc_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    source = _canonical_rpc_source()
     tree = ast.parse(source)
     snippets = _extract_symbol_sources(source, tree)
 
@@ -244,22 +301,44 @@ _HELPERS_HEADER_PREFIX = (
 _HELPERS_FUTURE_LINE = "from __future__ import annotations\n"
 
 
-def _canonical_helpers_path() -> Path:
-    """Resolve the path to ``autoreg/plugin/helpers.py`` from this module."""
-    return Path(__file__).resolve().parents[1] / "autoreg" / "plugin" / "helpers.py"
+def _canonical_helpers_source() -> str:
+    """Return the canonical ``autoreg/plugin/helpers.py`` text (LF-normalized).
+
+    Resolution order:
+      1. The repo-relative ``autoreg/plugin/helpers.py`` (hub checkout
+         layout).
+      2. The bundled snapshot ``_bundled/plugin_helpers_canon.py`` shipped
+         inside ``stitch_plugin_tools`` (installs without the ``autoreg``
+         tree).
+
+    Raises :class:`CanonicalRpcSourceError` when neither resolves.
+    """
+    if _REPO_HELPERS_PATH.is_file():
+        return _REPO_HELPERS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if _BUNDLED_HELPERS_PATH.is_file():
+        return _BUNDLED_HELPERS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+    raise CanonicalRpcSourceError(
+        f"cannot resolve the canonical helpers.py: {_REPO_HELPERS_PATH} does"
+        f" not exist and the bundled copy {_BUNDLED_HELPERS_PATH} is missing;"
+        " reinstall stitch_plugin_tools"
+    )
 
 
 def canonical_plugin_helpers_text() -> str:
     """Return the canonical vendored ``plugin_helpers.py`` text (LF-normalized).
 
-    Whole-file copy of ``autoreg/plugin/helpers.py`` with the vendored-from
-    marker comment prepended and ``_VENDOR_SOURCE_SHA256`` inserted right
-    after the ``from __future__`` import (same header layout as the vendored
-    ``rpc_server.py`` — an assignment before ``from __future__`` would be a
-    SyntaxError).  The hash covers the full vendored text EXCLUDING the hash
-    line itself (same self-reference avoidance as ``rpc_server.py``).
+    Whole-file copy of the canonical ``autoreg/plugin/helpers.py`` with the
+    vendored-from marker comment prepended and ``_VENDOR_SOURCE_SHA256``
+    inserted right after the ``from __future__`` import (same header layout
+    as the vendored ``rpc_server.py`` — an assignment before
+    ``from __future__`` would be a SyntaxError).  The hash covers the full
+    vendored text EXCLUDING the hash line itself (same self-reference
+    avoidance as ``rpc_server.py``).
+
+    Raises :class:`CanonicalRpcSourceError` when no canonical source
+    resolves (repo-relative or bundled).
     """
-    source = _canonical_helpers_path().read_text(encoding="utf-8").replace("\r\n", "\n")
+    source = _canonical_helpers_source()
     if _HELPERS_FUTURE_LINE not in source:
         raise RuntimeError(
             "canonical helpers.py: 'from __future__ import annotations' not found"

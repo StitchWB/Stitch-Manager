@@ -303,7 +303,9 @@ async def _on_crash_loop(host: ServicePluginHost) -> None:
         "Service plugin %s crash loop (version=%s) — telemetry + LKG rollback",
         plugin_id, version,
     )
-    await maybe_save_crash_report(plugin_id, version, host.get_logs())
+    await maybe_save_crash_report(
+        plugin_id, version, host.get_logs(), host.get_structured_logs()
+    )
     await rollback_service_plugin(plugin_id)
 
 

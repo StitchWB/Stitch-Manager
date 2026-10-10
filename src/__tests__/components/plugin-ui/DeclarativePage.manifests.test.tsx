@@ -291,3 +291,38 @@ describeIfPlugins('declarative plugin manifests render through DeclarativePage',
   });
 
 });
+
+describe('resolveLabel against the real i18n runtime', () => {
+  const savedLocale = getLocale();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setLocale('en');
+    (safeInvoke as jest.Mock).mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    unregisterPluginBundles('synth');
+    setLocale(savedLocale);
+  });
+
+  it('renders the bundle translation when present and a humanized fallback when absent', () => {
+    registerPluginBundles('synth', {
+      en: { synth: { present: 'Translated Present' } },
+    });
+    const schema: PluginPageSchema = {
+      nodes: [
+        { kind: 'heading', text: 'synth.present' },
+        { kind: 'heading', text: 'synth.missing.deepLabel' },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="synth" schema={schema} />);
+
+    expect(screen.getByText('Translated Present')).toBeTruthy();
+    expect(screen.getByText('Deep Label')).toBeTruthy();
+    expect(
+      screen.queryByText('plugin.synth.synth.missing.deepLabel'),
+    ).toBeNull();
+  });
+});

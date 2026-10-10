@@ -145,6 +145,10 @@ def scaffold_provider_plugin(
     name: str = "",
     author: str = "",
     version: str = "0.1.0",
+    description: str = "",
+    category: str = "productivity",
+    status: str = "beta",
+    icon: str = "🧩",
 ) -> Path:
     """Scaffold a ``kind=provider`` package (ADR-005 contract) into ``out_dir``.
 
@@ -159,6 +163,11 @@ def scaffold_provider_plugin(
         name: Human-readable name (defaults to ``plugin_id``).
         author: Optional author name.
         version: Semver version string (default ``"0.1.0"``).
+        description: Short plain-text description (default: generated from
+            the display name).
+        category: Marketplace category (default ``"productivity"``).
+        status: Marketplace status (default ``"beta"``).
+        icon: Single emoji shown in the marketplace (default ``"🧩"``).
 
     Returns:
         The path to the assembled package directory (``out_dir``).
@@ -174,10 +183,10 @@ def scaffold_provider_plugin(
 
     manifest: dict[str, Any] = {
         "schema": SCHEMA_ID_V2,
-        "id": f"{plugin_id}-provider",
+        "id": f"{plugin_id.replace('_', '-')}-autoreg",
         "name": f"{display_name} provider",
-        "description": f"Code plugin for the {display_name} registration provider.",
-        "author": author or "WhiteBite",
+        "description": description
+        or f"Code plugin for the {display_name} registration provider.",
         "version": version,
         "service": plugin_id,
         "kind": "provider",
@@ -186,6 +195,9 @@ def scaffold_provider_plugin(
         "entry": {"module": "provider.py", "class": class_name},
         "capabilities": [f"autoreg.{plugin_id}"],
         "outputs": [],
+        "category": category,
+        "status": status,
+        "icon": icon,
         "meta": {
             "display_name": display_name,
             "category": "ide",
@@ -196,6 +208,8 @@ def scaffold_provider_plugin(
         "generated_by": generated_by_field(),
         "signature": "",
     }
+    if author:
+        manifest["author"] = author
     (out_dir / "plugin.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",

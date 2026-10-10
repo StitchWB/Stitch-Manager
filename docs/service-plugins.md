@@ -724,7 +724,7 @@ that the host discovers when `STITCH_DEV_MODE=1`.
 The official service plugins live in their own **public repos**
 ([`StitchWB/stitch-antigravity`](https://github.com/StitchWB/stitch-antigravity), [`stitch-cards`](https://github.com/StitchWB/stitch-cards), `stitch-freemodel` (private),
 [`stitch-mail`](https://github.com/StitchWB/stitch-mail), [`stitch-notebooklm`](https://github.com/StitchWB/stitch-notebooklm), [`stitch-opencode`](https://github.com/StitchWB/stitch-opencode), [`stitch-radar`](https://github.com/StitchWB/stitch-radar),
-[`stitch-sheets`](https://github.com/StitchWB/stitch-sheets), [`stitch-totp`](https://github.com/StitchWB/stitch-totp)) — that is
+[`stitch-relaycheck`](https://github.com/StitchWB/stitch-relaycheck), [`stitch-sheets`](https://github.com/StitchWB/stitch-sheets), [`stitch-totp`](https://github.com/StitchWB/stitch-totp)) — that is
 their source of truth and where external PRs land. The hub mounts them as git
 submodules at `plugins-src/` (pinned commit; advance with
 `scripts/bump_service_plugins.py`). Each plugin

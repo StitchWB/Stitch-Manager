@@ -34,7 +34,6 @@ import {
   devboxCalls,
   devboxCallArgs,
   overviewFixture,
-  profilesFixture,
   pageRoutes,
 } from './devboxTestKit';
 
@@ -55,7 +54,6 @@ function renderControls(opts: {
   };
   render(
     <DevboxControls
-      profiles={profilesFixture}
       overviewCards={opts.cards ?? overviewFixture.cards}
       actionStatus={actionStatus}
       busy={opts.busy ?? false}
@@ -110,21 +108,6 @@ describe('Devbox controls confirm gates', () => {
     fireEvent.click(tokens);
     await waitFor(() => {
       expect(devboxCalls(invokeMock, 'issue_tokens')).toHaveLength(1);
-    });
-  });
-
-  it('per-profile stack_start is confirm-gated and sends {name, preview}', async () => {
-    renderControls();
-    const start = screen.getByTestId('devbox-profile-start-example-simple');
-
-    fireEvent.click(start);
-    expect(devboxCalls(invokeMock, 'stack_start')).toHaveLength(0);
-
-    fireEvent.click(start);
-    await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
-        { name: 'example-simple', preview: false },
-      ]);
     });
   });
 
@@ -269,5 +252,30 @@ describe('Devbox controls payload surfaces (A1)', () => {
     });
 
     expect(screen.queryByTestId('devbox-chat-block')).toBeNull();
+  });
+
+  it('shows the next-steps hint while no chatBlock payload exists', () => {
+    renderControls();
+
+    expect(screen.getByTestId('devbox-next-steps')).toBeTruthy();
+  });
+
+  it('hides the next-steps hint once a chatBlock payload arrives', () => {
+    renderControls({
+      recent: [
+        {
+          id: 'a5',
+          cmd: 'issue_tokens',
+          status: 'finished',
+          startedAt: 1791536987.76,
+          finishedAt: 1791536988.0,
+          exit: 0,
+          payload: { chatBlock: 'paste me' },
+        },
+      ],
+    });
+
+    expect(screen.queryByTestId('devbox-next-steps')).toBeNull();
+    expect(screen.getByTestId('devbox-chat-block')).toBeTruthy();
   });
 });

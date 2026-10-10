@@ -25,6 +25,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 
 from stitch_backend.core.exceptions import StitchError
+from stitch_backend.core.shared_http import shared_ssl_context
 from stitch_backend.domains.plugin_distribution.config import (
     server_url,
     standalone_mode,
@@ -63,7 +64,7 @@ async def fetch_active_channels() -> list[dict[str, Any]]:
     now = time.monotonic()
     if _channels_cache is not None and (now - _channels_cache_ts) < _CACHE_TTL_SECONDS:
         return _channels_cache
-    async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, verify=shared_ssl_context()) as client:
         resp = await client.get(f"{server_url()}/partner-channels")
         resp.raise_for_status()
     body = resp.json()

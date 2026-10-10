@@ -119,6 +119,28 @@ export function devboxProfilePut(
   return safeInvoke<DevboxProfilePutResult>(`${NS}.profile_put`, { name, json });
 }
 
+export function devboxProfileDelete(name: string): Promise<{ deleted: boolean }> {
+  return safeInvoke<{ deleted: boolean }>(`${NS}.profile_delete`, { name });
+}
+
+export interface DevboxFolderCheck {
+  exists: boolean;
+  is_git: boolean;
+}
+
+export interface DevboxProfileDefaults {
+  git_name: string;
+  git_email: string;
+}
+
+export function devboxFolderCheck(path: string): Promise<DevboxFolderCheck> {
+  return safeInvoke<DevboxFolderCheck>(`${NS}.folder_check`, { path }, NO_CACHE);
+}
+
+export function devboxProfileDefaults(): Promise<DevboxProfileDefaults> {
+  return safeInvoke<DevboxProfileDefaults>(`${NS}.profile_defaults`, {}, NO_CACHE);
+}
+
 export function devboxStackStart(name: string, preview: boolean): Promise<DevboxAccepted> {
   return safeInvoke<DevboxAccepted>(`${NS}.stack_start`, { name, preview });
 }
@@ -159,16 +181,31 @@ export function devboxActionStatus(): Promise<DevboxActionStatus> {
   return safeInvoke<DevboxActionStatus>(`${NS}.action_status`, {}, NO_CACHE);
 }
 
-export function devboxJobsLive(): Promise<DevboxJobRow[]> {
-  return safeInvoke<DevboxJobRow[]>(`${NS}.jobs_live`, {}, NO_CACHE);
+export interface DevboxObserved<T> {
+  rows: T[];
+  bridge: 'up' | 'down';
+}
+
+function observedRows<T>(raw: unknown): DevboxObserved<T> {
+  if (Array.isArray(raw)) return { rows: raw as T[], bridge: 'up' };
+  const obj = (raw ?? {}) as Record<string, unknown>;
+  const rows = Array.isArray(obj.rows) ? (obj.rows as T[]) : [];
+  const bridge = obj.bridge === 'down' || obj.source === 'events' ? 'down' : 'up';
+  return { rows, bridge };
+}
+
+export function devboxJobsLive(): Promise<DevboxObserved<DevboxJobRow>> {
+  return safeInvoke<unknown>(`${NS}.jobs_live`, {}, NO_CACHE).then(observedRows<DevboxJobRow>);
 }
 
 export function devboxJobCancel(jobId: string): Promise<DevboxAccepted> {
   return safeInvoke<DevboxAccepted>(`${NS}.job_cancel`, { jobId });
 }
 
-export function devboxPermissionsPending(): Promise<DevboxPermissionRow[]> {
-  return safeInvoke<DevboxPermissionRow[]>(`${NS}.permissions_pending`, {}, NO_CACHE);
+export function devboxPermissionsPending(): Promise<DevboxObserved<DevboxPermissionRow>> {
+  return safeInvoke<unknown>(`${NS}.permissions_pending`, {}, NO_CACHE).then(
+    observedRows<DevboxPermissionRow>,
+  );
 }
 
 export function devboxPermissionReply(

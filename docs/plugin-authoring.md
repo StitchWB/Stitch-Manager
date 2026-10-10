@@ -203,11 +203,12 @@ A plugin MUST NOT register a user command named `_migrate_db`.
 ### 4.2 Protocol methods (`plugin.init`, `plugin.ping`, `plugin.shutdown`)
 
 These are JSON-RPC **method names** handled by `RpcPluginServer`
-internally — they are not user commands. A plugin MUST NOT register a
-user command named `init`, `ping`, or `shutdown` via
-`server.register(...)`, because the host's `plugin.call` dispatch would
-shadow them and the names are reserved for the protocol handshake,
-liveness probe, and graceful shutdown.
+internally — they are not user commands. User commands arrive as
+`plugin.call` with the command name in `params.name`, and the server
+looks that name up only in its registered-handler map, so registering a
+command named `init`, `ping`, or `shutdown` does **not** collide with
+the protocol methods above. The only reserved `plugin.call` name is
+`_migrate_db` (see 4.1).
 
 | Reserved name | Layer | Purpose |
 |---------------|-------|---------|
@@ -278,8 +279,8 @@ host version you developed and tested against.
    relevant `SPI_METHOD_MAP` section maps to a command the plugin
    implements. Partial SPI is degraded-but-safe (per-call built-in
    fallback), but a complete implementation is the contract.
-3. **No reserved names.** The plugin does not register user commands
-   named `_migrate_db`, `init`, `ping`, or `shutdown`.
+3. **No reserved names.** The plugin does not register a user command
+   named `_migrate_db` (the only reserved `plugin.call` name).
 4. **`readonly` flag is set correctly.** `contributions.commands[].readonly`
    is informational today (the host does not yet enforce it for plugin
    commands), but it documents intent and gates future enforcement.

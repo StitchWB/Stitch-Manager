@@ -39,6 +39,9 @@ CRASH_LOOP_THRESHOLD = 2
 #: Last stderr lines included in a crash report (from the host ring buffer).
 _STDERR_LINES_PER_REPORT = 20
 
+#: Last structured log entries included in a crash report.
+_STRUCTURED_LINES_PER_REPORT = 20
+
 #: Bound the in-memory event journal (observability only).
 _MAX_EVENTS = 100
 
@@ -108,12 +111,16 @@ def previous_version_dir(
 
 
 async def maybe_save_crash_report(
-    plugin_id: str, version: str, stderr_lines: list[str],
+    plugin_id: str,
+    version: str,
+    stderr_lines: list[str],
+    structured_logs: list[dict[str, Any]],
 ) -> str:
     """Save a crash-loop report via ``pending_reports`` (failure_hook pattern).
 
-    Bundle carries plugin id, version, and the last stderr lines from the
-    host log buffer.  Consent-gated by ``telemetry_consent`` (reuses
+    Bundle carries plugin id, version, the last stderr lines, and the last
+    structured log entries (``server.log()`` notifications) from the host
+    log buffers.  Consent-gated by ``telemetry_consent`` (reuses
     ``failure_hook._read_consent``).  Never raises — telemetry must not
     break the runtime.  Returns the report id ("" when not saved).
     """
@@ -126,6 +133,7 @@ async def maybe_save_crash_report(
             "step": "crash_loop",
             "step_kind": "service_host",
             "error": "\n".join(stderr_lines[-_STDERR_LINES_PER_REPORT:]),
+            "structured_tail": structured_logs[-_STRUCTURED_LINES_PER_REPORT:],
             "scrubbed": True,
         }
         report_id = save_pending_report(bundle)

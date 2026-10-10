@@ -138,10 +138,13 @@ class PluginLoader:
                     entry.name,
                 )
                 return entry
-            if self._verify_signed(entry, manifest):
+            ok, reason = self._verify_signed(entry, manifest)
+            if ok:
                 return entry
             logger.warning(
-                "plugins-local/%s has invalid signature; skipping", entry.name
+                "plugins-local/%s has invalid signature (%s); skipping",
+                entry.name,
+                reason,
             )
         return None
 
@@ -186,24 +189,29 @@ class PluginLoader:
         if manifest is None:
             return None
         # Cache packages ALWAYS require a valid signature, even in dev_mode.
-        if self._verify_signed(newest_dir, manifest):
+        ok, reason = self._verify_signed(newest_dir, manifest)
+        if ok:
             return newest_dir
         logger.warning(
-            "cache package %s has invalid signature; skipping", newest_dir
+            "cache package %s has invalid signature (%s); skipping",
+            newest_dir,
+            reason,
         )
         return None
 
     # ── signature verification ─────────────────────────────────────────────
 
-    def _verify_signed(self, package_dir: Path, manifest: PluginManifest) -> bool:
+    def _verify_signed(
+        self, package_dir: Path, manifest: PluginManifest
+    ) -> tuple[bool, str]:
         if not manifest.signature:
-            return False
+            return False, "unsigned"
         if not self._public_key_b64:
             logger.warning(
                 "no public key configured; cannot verify %s", package_dir
             )
-            return False
-        return crypto.verify_package(
+            return False, "no_pubkey"
+        return crypto.verify_package_verbose(
             package_dir, manifest.signature, self._public_key_b64
         )
 
@@ -303,13 +311,16 @@ def _try_read_manifest(package_dir: Path) -> PluginManifest | None:
     """Read + validate a manifest, returning ``None`` on any failure.
 
     Used during scanning — a corrupt manifest in one package must not
-    prevent the loader from finding the next candidate.
+    prevent the loader from finding the next candidate.  Every failure
+    logs a warning with the package path and the concrete reason.
     """
     manifest_path = package_dir / "plugin.json"
     if not manifest_path.is_file():
+        logger.warning("package %s: missing plugin.json", package_dir)
         return None
     try:
         raw = json.loads(manifest_path.read_text(encoding="utf-8"))
         return validate_manifest(raw)
-    except (OSError, ValueError, ManifestValidationError):
+    except (OSError, ValueError, ManifestValidationError) as exc:
+        logger.warning("package %s: unreadable manifest (%s)", package_dir, exc)
         return None

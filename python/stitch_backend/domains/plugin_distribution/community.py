@@ -27,6 +27,7 @@ import httpx
 
 from autoreg.plugin.install import safe_extract_zip
 from autoreg.plugin.manifest import parse_semver, validate_manifest
+from stitch_backend.core.shared_http import shared_ssl_context
 
 from .activation import ActivationService
 from .config import data_dir, server_url
@@ -79,7 +80,7 @@ def fetch_catalog() -> dict[str, Any]:
         return _catalog_cache
 
     try:
-        with httpx.Client(timeout=15.0) as c:
+        with httpx.Client(timeout=15.0, verify=shared_ssl_context()) as c:
             resp = c.get(_catalog_url())
             if resp.status_code != 200:
                 logger.warning("Community catalog non-200 status %d", resp.status_code)

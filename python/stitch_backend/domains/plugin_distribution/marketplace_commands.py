@@ -30,6 +30,7 @@ from autoreg.plugin.install import list_installed_versions
 from autoreg.plugin.layout import plugins_cache_dir, plugins_local_dir, resolve_link
 from autoreg.plugin.manifest import parse_semver, resolve_i18n, validate_manifest
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.shared_http import shared_ssl_context
 
 from .activation import ActivationService
 from .community import (
@@ -242,7 +243,7 @@ async def _fetch_manifest_cached(activation: ActivationService, token: str) -> d
     cached = _cache_get("manifest")
     if cached is not None:
         return cached
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    async with httpx.AsyncClient(timeout=5.0, verify=shared_ssl_context()) as client:
         sync = PluginSyncService(activation, client=client)
         manifest = await sync.fetch_manifest(token)
     _cache_set("manifest", manifest)
@@ -264,7 +265,7 @@ async def _fetch_public_catalog_cached(activation: ActivationService) -> dict:
     cached = _cache_get("catalog_public")
     if cached is not None:
         return cached
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    async with httpx.AsyncClient(timeout=5.0, verify=shared_ssl_context()) as client:
         sync = PluginSyncService(activation, client=client)
         catalog = await sync.fetch_public_catalog()
     _cache_set("catalog_public", catalog)

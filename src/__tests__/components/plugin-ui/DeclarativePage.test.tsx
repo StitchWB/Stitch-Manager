@@ -44,7 +44,7 @@
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import DeclarativePage from '@/components/plugin-ui/DeclarativePage';
 import type { PluginPageSchema, UiNode } from '@/components/plugin-ui/schema';
 import { safeInvoke } from '@/lib/backend/core/invoke';
@@ -74,8 +74,13 @@ jest.mock('@/lib/observability/toast', () => ({
 // Stub @/components/ui primitives so the test asserts on DeclarativePage's
 // node dispatch, not on the real Input/Select/Toggle/Table internals.
 jest.mock('@/components/ui', () => ({
-  Button: ({ children, onClick, disabled }: any) => (
-    <button data-testid="ui-button" onClick={onClick} disabled={disabled}>
+  Button: ({ children, onClick, disabled, isLoading }: any) => (
+    <button
+      data-testid="ui-button"
+      data-loading={String(Boolean(isLoading))}
+      onClick={onClick}
+      disabled={disabled}
+    >
       {children}
     </button>
   ),
@@ -311,8 +316,8 @@ describe('DeclarativePage', () => {
     const { container } = render(
       <DeclarativePage pluginId="test" schema={{ title: 'test.only.title' } as PluginPageSchema} />,
     );
-    // Title still renders; no nodes, no throw.
-    expect(screen.getByText('plugin.test.test.only.title')).toBeTruthy();
+    // Title still renders (unresolved key → humanized fallback); no nodes, no throw.
+    expect(screen.getByText('Title')).toBeTruthy();
     expect(container.querySelectorAll('[data-testid="ui-button"]')).toHaveLength(0);
   });
 
@@ -410,9 +415,7 @@ describe('DeclarativePage', () => {
     render(<DeclarativePage pluginId="test" schema={placeholderSchema} />);
 
     const inputs = screen.getAllByRole('textbox');
-    // Dotted placeholder starting with pluginId is treated as an i18n key
-    // (t = identity in this test).
-    expect(inputs[0].getAttribute('placeholder')).toBe('plugin.test.test.hint.key');
+    expect(inputs[0].getAttribute('placeholder')).toBe('Key');
     // Plain placeholder renders as-is.
     expect(inputs[1].getAttribute('placeholder')).toBe('Plain hint');
   });
@@ -510,9 +513,8 @@ describe('DeclarativePage', () => {
 
     render(<DeclarativePage pluginId="test" schema={i18nSchema} />);
 
-    // "test.title" starts with "test." → t('plugin.test.test.title')
-    // (t = identity in this test).
-    expect(screen.getByText('plugin.test.test.title')).toBeTruthy();
+    expect(screen.getByText('Title')).toBeTruthy();
+    expect(screen.queryByText('plugin.test.test.title')).toBeNull();
   });
 
   it('(n) dotted label not starting with pluginId renders literally', () => {
@@ -1204,5 +1206,266 @@ describe('DeclarativePage', () => {
         screen.getByText('Markdown response missing textKey "text"'),
       ).toBeTruthy();
     });
+  });
+
+  // ── D1: missing i18n key → humanized fallback ─────────────────────────────
+
+  it('(aj) missing i18n key renders a humanized fallback, never the dotted key', () => {
+    const schema: PluginPageSchema = {
+      nodes: [{ kind: 'heading', text: 'test.settings.autoRetry' }],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    expect(screen.getByText('Auto Retry')).toBeTruthy();
+    expect(
+      screen.queryByText('plugin.test.test.settings.autoRetry'),
+    ).toBeNull();
+  });
+
+  // ── D2: SourceToggle surfaces fetch failures ──────────────────────────────
+
+  it('(ak) toggle source rejection shows an inline error next to the toggle', async () => {
+    (safeInvoke as jest.Mock).mockRejectedValueOnce(new Error('status fetch failed'));
+    const schema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'field',
+          field: 'toggle',
+          id: 'status',
+          label: 'Status',
+          source: { command: 'get_status' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('status fetch failed')).toBeTruthy();
+    });
+    expect(screen.getByRole('checkbox')).toBeTruthy();
+  });
+
+  // ── D3: background refetch keeps stale content; busy tracks stable row id ─
+
+  const refetchSchema: PluginPageSchema = {
+    nodes: [
+      {
+        kind: 'table',
+        id: 'tbl',
+        columns: [{ key: 'name', label: 'Name' }],
+        source: { command: 'list_tbl' },
+        rowActions: [
+          {
+            id: 'del',
+            label: 'Delete',
+            command: 'del',
+            paramsFromRow: { itemId: 'id' },
+          },
+        ],
+      },
+      {
+        kind: 'button',
+        id: 'refresh',
+        label: 'Refresh',
+        command: 'noop',
+        refreshOnSuccess: ['tbl'],
+      },
+    ],
+  };
+
+  it('(al) background refetch keeps prior rows visible with a subtle refreshing indicator', async () => {
+    let firstList = true;
+    let resolveRefetch: (value: unknown) => void = () => undefined;
+    (safeInvoke as jest.Mock).mockImplementation((cmd: unknown) => {
+      if (cmd === 'plugin.test.list_tbl') {
+        if (firstList) {
+          firstList = false;
+          return Promise.resolve([
+            { id: 'r1', name: 'One' },
+            { id: 'r2', name: 'Two' },
+          ]);
+        }
+        return new Promise(resolve => {
+          resolveRefetch = resolve;
+        });
+      }
+      return Promise.resolve({ success: true });
+    });
+
+    render(<DeclarativePage pluginId="test" schema={refetchSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('One')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Refresh'));
+    });
+
+    // Stale rows stay rendered while the refetch is in flight.
+    expect(screen.getByText('One')).toBeTruthy();
+    expect(screen.getByText('Two')).toBeTruthy();
+    expect(screen.getByTestId('ui-table')).toBeTruthy();
+    expect(screen.getByTestId('node-refreshing')).toBeTruthy();
+
+    await act(async () => {
+      resolveRefetch([{ id: 'r1', name: 'Uno' }]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Uno')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('node-refreshing')).toBeNull();
+  });
+
+  it('(am) busy indicator tracks the clicked row stable id across a refetch reorder', async () => {
+    let listCount = 0;
+    let resolveDelete: (value: unknown) => void = () => undefined;
+    (safeInvoke as jest.Mock).mockImplementation((cmd: unknown) => {
+      if (cmd === 'plugin.test.list_tbl') {
+        listCount += 1;
+        if (listCount === 1) {
+          return Promise.resolve([
+            { id: 'r1', name: 'One' },
+            { id: 'r2', name: 'Two' },
+          ]);
+        }
+        return Promise.resolve([
+          { id: 'r2', name: 'Two' },
+          { id: 'r1', name: 'One' },
+        ]);
+      }
+      if (cmd === 'plugin.test.del') {
+        return new Promise(resolve => {
+          resolveDelete = resolve;
+        });
+      }
+      return Promise.resolve({ success: true });
+    });
+
+    render(<DeclarativePage pluginId="test" schema={refetchSchema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Two')).toBeTruthy();
+    });
+
+    // Start the delete on row r2 and leave it in flight.
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByText('Two').closest('tr')!).getByText('Delete'),
+      );
+    });
+
+    // Refetch reorders the rows while the delete is still in flight.
+    await act(async () => {
+      fireEvent.click(screen.getByText('Refresh'));
+    });
+    await waitFor(() => {
+      const rows = screen.getAllByRole('row');
+      expect(rows[1].textContent).toContain('Two');
+    });
+
+    const twoButton = within(screen.getByText('Two').closest('tr')!).getByText(
+      'Delete',
+    ).closest('button')!;
+    const oneButton = within(screen.getByText('One').closest('tr')!).getByText(
+      'Delete',
+    ).closest('button')!;
+    expect(twoButton.getAttribute('data-loading')).toBe('true');
+    expect(oneButton.getAttribute('data-loading')).toBe('false');
+
+    await act(async () => {
+      resolveDelete({ success: true });
+    });
+  });
+
+  // ── D4: malformed manifests degrade to readable errors, throws hit boundary
+
+  it('(an) table node without columns renders an inline error without throwing', async () => {
+    const schema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'broken',
+          source: { command: 'list_broken' },
+        } as unknown as UiNode,
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Table node is missing columns')).toBeTruthy();
+    });
+  });
+
+  it('(ao) card_grid node without card template renders an inline error without throwing', async () => {
+    const schema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'card_grid',
+          id: 'broken',
+          source: { command: 'list_broken' },
+        } as unknown as UiNode,
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Card grid node is missing the card template'),
+      ).toBeTruthy();
+    });
+  });
+
+  it('(ap) table source without command renders an inline error and never invokes', async () => {
+    const schema: PluginPageSchema = {
+      nodes: [
+        {
+          kind: 'table',
+          id: 'broken',
+          columns: [{ key: 'name', label: 'Name' }],
+          source: {},
+        } as unknown as UiNode,
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Table source is missing a command'),
+      ).toBeTruthy();
+    });
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it('(aq) a node that throws during render shows the error-boundary fallback', async () => {
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const schema: PluginPageSchema = {
+        nodes: [
+          {
+            kind: 'table',
+            id: 'throws',
+            columns: [null],
+            source: { command: 'list_throws' },
+          } as unknown as UiNode,
+        ],
+      };
+
+      render(<DeclarativePage pluginId="test" schema={schema} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Plugin UI failed to render')).toBeTruthy();
+      });
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

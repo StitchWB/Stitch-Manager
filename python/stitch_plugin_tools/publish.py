@@ -211,6 +211,9 @@ async def publish_package(
 ) -> dict[str, Any]:
     """Sign (optional), zip, and publish a package to the server.
 
+    Before signing, ``<module>/_vendor/`` is refreshed from the canonical
+    sources so a published package never ships a stale vendored server.
+
     When ``variant_index`` is provided, the upload is stored as a watermarked
     variant (``PluginVariant`` row) rather than the legacy
     ``PluginVersion.package_path``.  The caller is responsible for injecting
@@ -227,6 +230,12 @@ async def publish_package(
     manifest = crypto.read_manifest(package_dir)
     _require_publish_metadata(manifest)
     _require_ui_contributions(manifest)
+
+    # Refresh _vendor/ before signing — the signature must cover the refreshed files.
+    module = manifest.entry.get("module") if manifest.entry else None
+    if module and (package_dir / module).is_dir():
+        from stitch_plugin_tools.vendoring import vendor_all
+        vendor_all(package_dir / module)
 
     # Sign in place if a key is provided (updates plugin.json signature).
     if signing_key_pem is not None:
@@ -396,7 +405,8 @@ async def publish_all(
 
     Entries are processed sorted by manifest id.  With ``only`` given,
     non-matching entries are reported as ``skipped``.  ``dry_run=True``
-    validates each manifest and never touches the network.  A per-entry
+    applies the same gates as a real publish (report-only: a gate failure
+    is recorded as ``failed``) and never touches the network.  A per-entry
     failure is recorded as ``failed`` and never aborts the run.  Temp dirs
     are always removed.
 
@@ -456,7 +466,10 @@ async def publish_all(
                 continue
             try:
                 if dry_run:
-                    validate_manifest(raw)
+                    manifest = validate_manifest(raw)
+                    _require_publish_metadata(manifest)
+                    _require_ui_contributions(manifest)
+                    _assert_no_env_files(package_dir)
                     entry["status"] = "dry-run"
                 else:
                     await publish_package(

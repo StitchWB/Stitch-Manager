@@ -30,6 +30,12 @@ def configure_logging(level: str) -> None:
     # command_registry warnings are expected in dev mode with --reload.
     logging.getLogger("stitch_backend.core.command_registry").setLevel(logging.ERROR)
 
+    # uvicorn ships its own stderr-only handlers; route them through the root split.
+    for name in ("uvicorn", "uvicorn.error"):
+        uv_logger = logging.getLogger(name)
+        uv_logger.handlers.clear()
+        uv_logger.propagate = True
+
     # httpx/httpcore log one INFO line per request; KeyHealth probes ~35 keys every 5 min.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)

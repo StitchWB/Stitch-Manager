@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -50,9 +51,33 @@ def _cmd_keygen(args: argparse.Namespace) -> int:
 
 
 def _restrict_permissions(path: Path) -> None:
-    """Make the private key readable only by the owner (POSIX)."""
-    if os.name == "posix":
+    """Make the private key readable only by the owner (POSIX chmod, win32 ACL)."""
+    if os.name == "nt":
+        _restrict_permissions_windows(path)
+    elif os.name == "posix":
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def _restrict_permissions_windows(path: Path) -> None:
+    user = ""
+    try:
+        user = subprocess.run(
+            ["whoami"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        subprocess.run(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:F"],
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        grant_user = user or "%USERNAME%"
+        print(
+            f"warning: could not restrict permissions on {path}: "
+            f"the private key may be readable by other users; "
+            f"run icacls manually: icacls {path} /inheritance:r "
+            f"/grant:r {grant_user}:F",
+            file=sys.stderr,
+        )
 
 
 # ── sign ─────────────────────────────────────────────────────────────────
@@ -70,7 +95,11 @@ def _cmd_sign(args: argparse.Namespace) -> int:
         return 2
 
     priv_pem = key_path.read_bytes()
-    signature = crypto.sign_package(package_dir, priv_pem)
+    try:
+        signature = crypto.sign_package(package_dir, priv_pem)
+    except (ValueError, TypeError) as exc:
+        print(f"error: cannot load private key {key_path}: {exc}", file=sys.stderr)
+        return 2
     crypto.write_signature(package_dir, signature)
 
     manifest_path = package_dir / MANIFEST_FILENAME
@@ -84,16 +113,27 @@ def _cmd_sign(args: argparse.Namespace) -> int:
 
 def _cmd_verify(args: argparse.Namespace) -> int:
     package_dir = Path(args.package_dir)
-    pubkey_path = Path(args.pubkey)
 
     if not package_dir.is_dir():
         print(f"error: package dir not found: {package_dir}", file=sys.stderr)
         return 2
-    if not pubkey_path.is_file():
-        print(f"error: public key not found: {pubkey_path}", file=sys.stderr)
-        return 2
 
-    pub_b64 = pubkey_path.read_text(encoding="utf-8").strip()
+    if args.pubkey:
+        pubkey_path = Path(args.pubkey)
+        if not pubkey_path.is_file():
+            print(f"error: public key not found: {pubkey_path}", file=sys.stderr)
+            return 2
+        pub_b64 = pubkey_path.read_text(encoding="utf-8").strip()
+    else:
+        pub_b64 = crypto.load_embedded_pubkey()
+        if not pub_b64:
+            print(
+                "error: no public key available: pass --pubkey <file>, set "
+                "STITCH_PLUGIN_PUBKEY, or bundle plugin_pubkey.txt",
+                file=sys.stderr,
+            )
+            return 2
+
     manifest = crypto.read_manifest(package_dir)
     if not manifest.signature:
         print("error: package has no signature field", file=sys.stderr)
@@ -315,6 +355,10 @@ def _cmd_new(args: argparse.Namespace) -> int:
                 name=args.name,
                 author=args.author,
                 version=args.version,
+                description=args.description,
+                category=args.category,
+                status=args.status,
+                icon=args.icon,
             )
         else:
             from stitch_plugin_tools.scaffold import scaffold_service_plugin

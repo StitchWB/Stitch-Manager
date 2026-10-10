@@ -146,9 +146,9 @@ Built-in AI gateway (`python/stitch_backend/domains/ai_gateway/routing_engine.py
 
 ## 🧩 Plugin Ecosystem
 
-**17 official plugins** = 9 service plugins + engine-pack + 7 autoreg provider plugins + github-autoreg legacy v1.
+**18 official plugins** = 10 service plugins + engine-pack + 7 autoreg provider plugins + github-autoreg legacy v1.
 
-### Service Plugins (9)
+### Service Plugins (10)
 
 | Plugin | Description |
 |--------|-------------|
@@ -161,6 +161,7 @@ Built-in AI gateway (`python/stitch_backend/domains/ai_gateway/routing_engine.py
 | [`stitch-cards`](https://github.com/StitchWB/stitch-cards) | Card tools for registration workflows |
 | `stitch-freemodel` | FreeModel bridge: Claude models (FM-*) via local proxy |
 | [`stitch-antigravity`](https://github.com/StitchWB/stitch-antigravity) | Antigravity: Google OAuth login (PKCE+loopback) and auth files |
+| [`stitch-relaycheck`](https://github.com/StitchWB/stitch-relaycheck) | RelayCheck: local audit of AI providers and relays (fingerprint, watering, security scan, trust score) |
 
 ### Autoreg Provider Plugins (7)
 
@@ -458,9 +459,9 @@ MIT License — see [LICENSE](LICENSE)
 
 ## 🧩 Экосистема плагинов
 
-**17 официальных плагинов** = 9 сервисных + engine-pack + 7 плагинов autoreg провайдеров + github-autoreg legacy v1.
+**18 официальных плагинов** = 10 сервисных + engine-pack + 7 плагинов autoreg провайдеров + github-autoreg legacy v1.
 
-### Сервисные плагины (9)
+### Сервисные плагины (10)
 
 | Плагин | Описание |
 |--------|----------|
@@ -473,6 +474,7 @@ MIT License — see [LICENSE](LICENSE)
 | [`stitch-cards`](https://github.com/StitchWB/stitch-cards) | Карточные инструменты для рабочих процессов регистрации |
 | `stitch-freemodel` | Мост FreeModel: Claude-модели (FM-*) через локальный прокси |
 | [`stitch-antigravity`](https://github.com/StitchWB/stitch-antigravity) | Antigravity: вход через Google OAuth (PKCE+loopback) и auth-файлы |
+| [`stitch-relaycheck`](https://github.com/StitchWB/stitch-relaycheck) | RelayCheck: локальный аудит AI-провайдеров и relay-станций (fingerprint, «водность», security-скан, trust score) |
 
 ### Плагины autoreg провайдеров (7)
 

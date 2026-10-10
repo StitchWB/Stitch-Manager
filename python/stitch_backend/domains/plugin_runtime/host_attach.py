@@ -18,6 +18,24 @@ if TYPE_CHECKING:
     from stitch_backend.domains.plugin_runtime.host import ServicePluginHost
 
 
+def _pump_stderr(host: ServicePluginHost, proc: subprocess.Popen[bytes]) -> None:
+    """Pump child stderr into the log ring with proc bound.
+
+    host_logs.stderr_reader resolves host.rpc._proc — set only inside
+    attach() — so a pre-attach reader must read proc.stderr directly.
+    """
+    stream = proc.stderr
+    if stream is None:
+        return
+    try:
+        for raw in iter(stream.readline, b""):
+            host._log_buffer.append(
+                raw.decode("utf-8", errors="replace").rstrip("\r\n")
+            )
+    except Exception:  # noqa: BLE001 — pipe closed / process dead
+        pass
+
+
 def attach_rpc(
     host: ServicePluginHost, proc: subprocess.Popen[bytes], timeout: float = 10.0
 ) -> Any:
@@ -30,6 +48,9 @@ def attach_rpc(
     ordered around it:
 
     BEFORE attach:
+      - start stderr reader (host surfaces child logs via
+        get_service_plugin_logs; it starts before the handshake so
+        init-time crashes reach the ring).
       - memory caps (the child does no meaningful work before
         plugin.init; capping here bounds the handshake itself).
 
@@ -43,8 +64,6 @@ def attach_rpc(
       - parse capabilities from the init result (tolerant: missing/
         non-list → []).  Host-only — the playground does not parse
         capabilities.
-      - start stderr reader (host surfaces child logs via
-        get_service_plugin_logs; the reader is non-blocking).
 
     Intentional deltas from runtool._attach_client (documented so the
     next diverger sees them):
@@ -52,9 +71,15 @@ def attach_rpc(
       - engine.oauth handlers: host registers real handlers (playground
         stubs them via _RunRpcPluginClient._handle_plugin_request).
       - capabilities parsing: host-only (playground does not parse).
-      - stderr reader: host starts AFTER attach; playground starts
-        BEFORE attach (playground wants init-time stderr visible).
     """
+    if proc.stderr is not None:
+        host._stderr_thread = threading.Thread(
+            target=_pump_stderr,
+            args=(host, proc),
+            name=f"plugin-stderr:{host.plugin_id}",
+            daemon=True,
+        )
+        host._stderr_thread.start()
     host.data_dir.mkdir(parents=True, exist_ok=True)
     # Host-specific: memory caps BEFORE attach.
     host._apply_memory_caps_best_effort(proc)
@@ -84,12 +109,4 @@ def attach_rpc(
     host._capabilities = host._parse_capabilities(
         host.rpc.init_result
     )
-    # Start stderr reader after attach.
-    if proc.stderr is not None:
-        host._stderr_thread = threading.Thread(
-            target=host._stderr_reader,
-            name=f"plugin-stderr:{host.plugin_id}",
-            daemon=True,
-        )
-        host._stderr_thread.start()
     return host.rpc.init_result

@@ -75,7 +75,7 @@ export function DevboxLogs() {
           <div className="flex flex-col gap-3">
             {visible.map(s => (
               <div key={s.name} className="flex flex-col gap-1">
-                <span className="text-2xs uppercase tracking-wider text-slate-500">{s.name}</span>
+                <span className="text-2xs uppercase tracking-wider text-slate-300">{s.name}</span>
                 <pre
                   data-testid={`devbox-logs-source-${s.name}`}
                   className="max-h-64 overflow-auto rounded-lg border border-white/5 bg-black/40 p-3 font-mono text-2xs leading-5 text-slate-300 whitespace-pre-wrap"

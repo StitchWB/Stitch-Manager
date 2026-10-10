@@ -96,6 +96,12 @@ from stitch_plugin_tools.upgrade_regions import (
     SKIPPED_AUTHOR_REGIONS as SKIPPED_AUTHOR_REGIONS,
 )
 from stitch_plugin_tools.upgrade_regions import (
+    VENDOR_BACKUP_SUFFIX as VENDOR_BACKUP_SUFFIX,
+)
+from stitch_plugin_tools.upgrade_regions import (
+    VENDOR_RPC_REL_SUFFIX as VENDOR_RPC_REL_SUFFIX,
+)
+from stitch_plugin_tools.upgrade_regions import (
     RegionResult as RegionResult,
 )
 from stitch_plugin_tools.upgrade_regions import (
@@ -219,6 +225,13 @@ def _apply_upgraded_files(
     try:
         for staged_path, target in staged:
             target.parent.mkdir(parents=True, exist_ok=True)
+            if (
+                target.is_file()
+                and target.as_posix().endswith(VENDOR_RPC_REL_SUFFIX)
+            ):
+                # Preserve the drifted vendor bytes before the atomic swap overwrites them.
+                backup = target.parent / (target.name + VENDOR_BACKUP_SUFFIX)
+                backup.write_bytes(target.read_bytes())
             os.replace(staged_path, target)
     except OSError as exc:
         # A move failed; earlier moves are already atomic and the failing file's original is untouched.

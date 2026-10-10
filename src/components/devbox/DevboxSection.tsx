@@ -29,7 +29,7 @@ export function DevboxSection({
           <h3 className="text-sm font-semibold text-white truncate" data-testid={testId}>
             {title}
           </h3>
-          {caption && <p className="text-2xs text-slate-500 mt-0.5">{caption}</p>}
+          {caption && <p className="text-2xs text-slate-400 mt-0.5">{caption}</p>}
         </div>
         {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
       </div>

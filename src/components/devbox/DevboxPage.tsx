@@ -101,7 +101,6 @@ export function DevboxPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
           <DevboxVitals cards={cards} error={overview.error} onRetry={reloadOverview} />
           <DevboxControls
-            profiles={profiles}
             overviewCards={cards}
             actionStatus={status.data}
             busy={busy}
@@ -111,13 +110,18 @@ export function DevboxPage() {
             profiles={profiles}
             error={profilesError}
             busy={busy}
+            onAction={onAction}
             onRetry={reloadProfiles}
             onChanged={reloadProfiles}
           />
-          <DevboxJobs />
-          <DevboxPermissions />
-          <DevboxEvents />
-          <DevboxLogs />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DevboxJobs />
+            <DevboxPermissions />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DevboxEvents />
+            <DevboxLogs />
+          </div>
           <DevboxActions recent={status.data?.recent ?? null} />
         </div>
       </div>
