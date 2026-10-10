@@ -16,6 +16,7 @@ import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { appToast } from '@/lib/observability/toast';
 
 import Header from '../components/layout/Header';
+import AiAnalytics from './AiAnalytics';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
 import { PublicModelsSection } from '@/components/ai-gateway/PublicModelsSection';
@@ -60,6 +61,7 @@ type AiSection = 'providers' | 'routing' | 'monitor';
 const ROUTING_TABS = ['board', 'mappings', 'proxy', 'rotation', 'compression', 'holone'] as const;
 const MONITOR_TABS = ['overview', 'analytics'] as const;
 type RoutingTab = (typeof ROUTING_TABS)[number];
+type MonitorTab = (typeof MONITOR_TABS)[number];
 
 function resolveSection(pathname: string): AiSection {
   const suffix = pathname.replace(/^\/ai\/?/, '');
@@ -257,6 +259,9 @@ export default function AiProviders() {
   const routingTab: RoutingTab = (ROUTING_TABS as readonly string[]).includes(tabParam ?? '')
     ? (tabParam as RoutingTab)
     : 'board';
+  const monitorTab: MonitorTab = (MONITOR_TABS as readonly string[]).includes(tabParam ?? '')
+    ? (tabParam as MonitorTab)
+    : 'overview';
 
   useEffect(() => {
     if (tabParam === null) return;
@@ -627,19 +632,22 @@ export default function AiProviders() {
             )}
 
             {/* === MONITOR TAB === */}
-            {aiSection === 'monitor' && (
-              <MonitorOverview
-                proxyStatus={proxyStatus}
-                proxySettings={proxySettings}
-                providerCapabilities={providerCapabilities}
-                availableModels={availableModels}
-                historySummary={historySummary}
-                hasAccounts={filteredAccounts.length > 0}
-                accountReadiness={accountReadiness}
-                onOpenAnalytics={() => navigate('/ai/monitor?tab=analytics')}
-                onOpenDebugChat={() => setShowDebugDrawer(true)}
-              />
-            )}
+            {aiSection === 'monitor' &&
+              (monitorTab === 'overview' ? (
+                <MonitorOverview
+                  proxyStatus={proxyStatus}
+                  proxySettings={proxySettings}
+                  providerCapabilities={providerCapabilities}
+                  availableModels={availableModels}
+                  historySummary={historySummary}
+                  hasAccounts={filteredAccounts.length > 0}
+                  accountReadiness={accountReadiness}
+                  onOpenAnalytics={() => navigate('/ai/monitor?tab=analytics')}
+                  onOpenDebugChat={() => setShowDebugDrawer(true)}
+                />
+              ) : (
+                <AiAnalytics />
+              ))}
           </div>
       </div>
 

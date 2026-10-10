@@ -85,6 +85,11 @@ jest.mock('../../components/ai-gateway/PublicModelsSection', () => ({
   PublicModelsSection: () => null,
 }));
 
+jest.mock('../../pages/AiAnalytics', () => ({
+  __esModule: true,
+  default: () => <div data-testid="ai-analytics-page" />,
+}));
+
 const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
 
 let navigatedPath = '';
@@ -425,5 +430,18 @@ describe('AiProviders page', () => {
       expect(navigatedPath).toBe('/ai/providers');
       expect(navigatedSearch).toBe('?provider=openai');
     });
+  });
+
+  it('mounts AiAnalytics on the monitor analytics tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/monitor?tab=analytics']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('ai-analytics-page')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open Request Analytics' })).toBeNull();
   });
 });
