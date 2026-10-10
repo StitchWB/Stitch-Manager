@@ -456,6 +456,8 @@ _PACKAGE_EXCLUDE_FILES = frozenset(
         "ruff.toml",
         "pyproject.toml",
         "upgrade.diff",
+        "requirements-dev.txt",
+        "env.example",
     }
 )
 # Env files never ship: they carry operator secrets in repo checkouts.
