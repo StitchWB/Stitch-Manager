@@ -13,10 +13,14 @@ export const LEGACY_REDIRECTS: Array<{
   { from: '/ai/api-keys', to: '/ai/providers' },
   { from: '/ai/gateway', to: '/ai/providers' },
   { from: '/ai-providers', to: '/ai/providers' },
-  { from: '/ai-analytics', to: '/ai/analytics' },
+  { from: '/ai-analytics', to: '/ai/monitor?tab=analytics' },
   { from: '/antigravity', to: '/ai/antigravity' },
   { from: '/notebooklm', to: '/ai/notebooklm' },
   { from: '/api-keys', to: '/ai/providers' },
+  { from: '/ai/tools', to: search => '/ai/routing?tab=' + (search.get('tab') || 'holone') },
+  { from: '/ai/holone', to: '/ai/routing?tab=holone' },
+  { from: '/ai/analytics', to: '/ai/monitor?tab=analytics' },
+  { from: '/chat', to: '/ai/chat' },
 ];
 
 export function RedirectWithTab({ to }: { to: (search: URLSearchParams) => string }) {
