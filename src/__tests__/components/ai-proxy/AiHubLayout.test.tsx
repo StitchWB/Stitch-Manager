@@ -288,7 +288,6 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
   it('(i) core_page plugin tabs navigate to their real /ai host routes', async () => {
     // One plugin per render: navigating away from /ai unmounts the rail.
     const cases = [
-      ['stitch-opencode', 'opencode', '/ai/opencode-config'],
       ['stitch-devbox', 'devbox', '/ai/devbox'],
     ] as const;
     for (const [pluginId, tabId, route] of cases) {
@@ -323,6 +322,19 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
       expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
     });
     expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-cards:cards')).toBeNull();
+  });
+
+  it('(j2) stitch-opencode core_page tab renders no rail item', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      corePagePlugin('stitch-opencode', 'opencode', 'OpenCode'),
+    ]);
+
+    renderAt('/ai');
+
+    await waitFor(() => {
+      expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
+    });
+    expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-opencode:opencode')).toBeNull();
   });
 
   it('(k) plugins without a declarative/core_page kind render no tab', async () => {

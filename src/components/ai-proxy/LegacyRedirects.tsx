@@ -23,6 +23,8 @@ export const LEGACY_REDIRECTS: Array<{
   { from: '/chat', to: '/ai/chat' },
   { from: '/ai/plugin/stitch-antigravity', to: '/ai/antigravity' },
   { from: '/ai/plugin/stitch-notebooklm', to: '/ai/notebooklm' },
+  { from: '/ai/plugin/stitch-opencode', to: '/ai/opencode-config' },
+  { from: '/ai/plugin/stitch-totp', to: '/totp' },
 ];
 
 export function RedirectWithTab({ to }: { to: (search: URLSearchParams) => string }) {
