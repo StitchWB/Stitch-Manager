@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import AiProviders from '../../pages/AiProviders';
+import AiProvidersPage from '../../pages/AiProvidersPage';
 import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
 
 jest.mock('../../components/layout/Header', () => ({
@@ -166,7 +166,7 @@ describe('AiProvidersPage', () => {
     render(
       <MemoryRouter initialEntries={['/ai/providers']}>
         <Routes>
-          <Route path="/ai/providers" element={<AiProviders />} />
+          <Route path="/ai/providers" element={<AiProvidersPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -185,7 +185,7 @@ describe('AiProvidersPage', () => {
     render(
       <MemoryRouter initialEntries={['/ai/providers']}>
         <Routes>
-          <Route path="/ai/providers" element={<AiProviders />} />
+          <Route path="/ai/providers" element={<AiProvidersPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -209,7 +209,7 @@ describe('AiProvidersPage', () => {
     render(
       <MemoryRouter initialEntries={['/ai/providers']}>
         <Routes>
-          <Route path="/ai/providers" element={<AiProviders />} />
+          <Route path="/ai/providers" element={<AiProvidersPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -228,7 +228,7 @@ describe('AiProvidersPage', () => {
       <MemoryRouter initialEntries={['/ai/providers']}>
         <LocationSpy />
         <Routes>
-          <Route path="/ai/providers" element={<AiProviders />} />
+          <Route path="/ai/providers" element={<AiProvidersPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -251,7 +251,7 @@ describe('AiProvidersPage', () => {
         <LocationSpy />
         <TestNav />
         <Routes>
-          <Route path="/ai/providers" element={<AiProviders />} />
+          <Route path="/ai/providers" element={<AiProvidersPage />} />
           <Route path="/ai/routing" element={<div data-testid="routing-page" />} />
         </Routes>
       </MemoryRouter>
