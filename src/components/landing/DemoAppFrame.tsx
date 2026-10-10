@@ -13,7 +13,9 @@ import { disableDemoBackend, enableDemoBackend } from '../../lib/backend/core/de
 const Accounts = lazy(() => import('../../pages/Accounts'));
 const AutoReg = lazy(() => import('../../pages/AutoReg'));
 const AiOverview = lazy(() => import('../../pages/AiOverview'));
-const AiProviders = lazy(() => import('../../pages/AiProviders'));
+const AiProvidersPage = lazy(() => import('../../pages/AiProvidersPage'));
+const AiRoutingPage = lazy(() => import('../../pages/AiRoutingPage'));
+const AiMonitorPage = lazy(() => import('../../pages/AiMonitorPage'));
 const Chat = lazy(() => import('../../pages/Chat'));
 const AiIntegrations = lazy(() => import('../../pages/AiIntegrations'));
 const OpenCodeConfig = lazy(() => import('../../pages/OpenCodeConfig'));
@@ -70,9 +72,9 @@ function DemoRoutes() {
       <Route path="/accounts" element={<Accounts />} />
       <Route path="/autoreg" element={<AutoReg />} />
       <Route path="/ai" element={<AiOverview />} />
-      <Route path="/ai/providers" element={<AiProviders />} />
-      <Route path="/ai/routing" element={<AiProviders />} />
-      <Route path="/ai/monitor" element={<AiProviders />} />
+      <Route path="/ai/providers" element={<AiProvidersPage />} />
+      <Route path="/ai/routing" element={<AiRoutingPage />} />
+      <Route path="/ai/monitor" element={<AiMonitorPage />} />
       <Route path="/ai/chat" element={<Chat />} />
       <Route path="/ai/integrations" element={<AiIntegrations />} />
       <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
