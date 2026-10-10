@@ -18,6 +18,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge, Tooltip } from '@/components/ui';
 import { ButtonBase } from '@/components/ui/ButtonBase';
+import { CORE_PAGE_ROUTES } from '@/components/ai-proxy/corePageRoutes';
 import { t } from '@/lib/i18n';
 import { fetchServicePlugins } from '@/lib/backend/modules/servicePlugins';
 import { useAppStore } from '@/stores/app';
@@ -155,18 +156,6 @@ function getPluginIcon(name?: string): LucideIcon {
   if (name && PLUGIN_ICON_MAP[name]) return PLUGIN_ICON_MAP[name];
   return Puzzle;
 }
-
-/**
- * Host routes of core_page plugins whose page is a built-in app route.
- * A core_page plugin absent here gets no rail tab at all.
- */
-const CORE_PAGE_ROUTES: Record<string, string> = {
-  'stitch-mail': '/mail',
-  'stitch-radar': '/radar',
-  'stitch-opencode': '/ai/opencode-config',
-  'stitch-devbox': '/ai/devbox',
-  'stitch-cards': '/tools',
-};
 
 /**
  * Resolve a plugin-contributed tab label. When the label looks like a
