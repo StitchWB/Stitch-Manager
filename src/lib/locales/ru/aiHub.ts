@@ -543,14 +543,16 @@ holone: {
       status: "Статус",
       testConnection: "Проверить соединение",
     },
-tabs: {
+    tabs: {
       compression: "Сжатие",
       holone: "HoloNe Security",
       tools: "Инструменты",
       chat: "Чат",
+      connections: "Подключения",
       integrations: "Интеграции",
       monitor: "Мониторинг",
       notebooklm: "NotebookLM",
+      overview: "Обзор",
       providers: "Провайдеры",
       routing: "Маршрутизация",
     },

@@ -4,14 +4,21 @@ import {
   Activity,
   BookOpen,
   Cable,
+  CreditCard,
   LayoutDashboard,
+  Mail,
   MessageSquare,
   Network,
   Orbit,
   Puzzle,
+  Radar,
   Route,
   Server,
+  Settings,
+  Shield,
+  Terminal,
   Users,
+  Waypoints,
   Wrench,
 } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -60,7 +67,7 @@ interface AiTabGroup {
 const AI_TAB_GROUPS: AiTabGroup[] = [
   {
     id: 'top',
-    tabs: [{ id: 'overview', label: 'Overview', to: '/ai', icon: LayoutDashboard }],
+    tabs: [{ id: 'overview', label: 'aiHub.tabs.overview', to: '/ai', icon: LayoutDashboard }],
   },
   {
     id: 'sources',
@@ -74,7 +81,7 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     header: 'aiHub.groups.processing',
     tabs: [
       { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
-      { id: 'connections', label: 'Connections', to: '/ai/integrations', icon: Cable },
+      { id: 'connections', label: 'aiHub.tabs.connections', to: '/ai/integrations', icon: Cable },
       { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
     ],
   },
@@ -116,14 +123,21 @@ const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   Activity,
   BookOpen,
   Cable,
+  CreditCard,
   LayoutDashboard,
+  Mail,
   MessageSquare,
   Network,
   Orbit,
   Puzzle,
+  Radar,
   Route,
   Server,
+  Settings,
+  Shield,
+  Terminal,
   Users,
+  Waypoints,
   Wrench,
 };
 
@@ -266,8 +280,6 @@ export function AiHubLayout() {
     : groups;
 
   const resolveLabel = (tab: AiTab): string => {
-    if (tab.id === 'overview') return language === 'ru' ? 'Обзор' : 'Overview';
-    if (tab.id === 'connections') return language === 'ru' ? 'Подключения' : 'Connections';
     if (tab.pluginId) return getPluginTabLabel(tab.pluginId, tab.label);
     return getLabel(tab.label);
   };

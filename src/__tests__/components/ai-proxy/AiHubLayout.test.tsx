@@ -142,10 +142,10 @@ describe('AiHubLayout rail navigation', () => {
     // builtin rail item.
     expect(screen.queryByText('aiHub.tabs.antigravity')).toBeNull();
     expect(screen.getByText('aiHub.tabs.routing')).toBeTruthy();
-    expect(screen.getByText('Connections')).toBeTruthy();
+    expect(screen.getByText('aiHub.tabs.connections')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.monitor')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.chat')).toBeTruthy();
-    expect(screen.getByText('Overview')).toBeTruthy();
+    expect(screen.getByText('aiHub.tabs.overview')).toBeTruthy();
 
     // No plugins → no plugins group.
     expect(screen.queryByTestId('ai-hub-group-plugins')).toBeNull();
@@ -426,6 +426,56 @@ describe('AiHubLayout rail cleanup (P2.4)', () => {
     expect(
       await screen.findByTestId('ai-hub-rail-item-plugin:stitch-bridges:main'),
     ).toBeTruthy();
+  });
+});
+
+// ── W3/P2.7: rail labels through i18n + plugin icon map ─────────────────────
+
+describe('AiHubLayout rail labels and plugin icons (P2.7)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _resetForTests();
+    navigatedPath = '/ai';
+    navigatedSearch = '';
+    (safeInvoke as jest.Mock).mockResolvedValue([]);
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+  });
+
+  it('resolves the overview and connections labels through i18n keys', () => {
+    renderAt('/ai');
+
+    expect(screen.getByText('aiHub.tabs.overview')).toBeTruthy();
+    expect(screen.getByText('aiHub.tabs.connections')).toBeTruthy();
+  });
+
+  it('renders the mapped lucide icon for a plugin tab instead of the Puzzle fallback', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      {
+        id: 'stitch-radar',
+        version: '1.0.0',
+        status: {
+          status: 'running',
+          port: null,
+          pid: 9,
+          uptimeSeconds: 5,
+          error: null,
+          plugin_id: 'stitch-radar',
+          restarts: 0,
+          stopping: false,
+        },
+        ui: {
+          kind: 'declarative',
+          tabs: [{ id: 'radar', label: 'Radar', icon: 'Radar' }],
+        },
+      },
+    ] satisfies ServicePluginInfo[]);
+
+    renderAt('/ai');
+
+    const item = await screen.findByTestId('ai-hub-rail-item-plugin:stitch-radar:radar');
+    const svgClass = item.querySelector('svg')?.getAttribute('class') ?? '';
+    expect(svgClass).toContain('lucide-radar');
+    expect(svgClass).not.toContain('lucide-puzzle');
   });
 });
 
