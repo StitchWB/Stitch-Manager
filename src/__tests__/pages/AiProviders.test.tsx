@@ -240,6 +240,28 @@ describe('AiProviders page', () => {
     });
   });
 
+  it('lands the monitor request-history analytics action on /ai/monitor?tab=analytics', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/monitor']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+          <Route path="/ai/chat" element={<div data-testid="chat-page" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('button', { name: 'Open Request Analytics' });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open Request Analytics' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath + navigatedSearch).toBe('/ai/monitor?tab=analytics');
+    });
+  });
+
   it('lands the monitor debug-chat menu action on /ai/chat', async () => {
     render(
       <MemoryRouter initialEntries={['/ai/monitor']}>
