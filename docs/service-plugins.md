@@ -1288,7 +1288,7 @@ test.
 |---------|-------------|
 | `new <out_dir> --id <id> [--name …] [--author …] [--version …]` | Scaffold a kind=service plugin package. |
 | `upgrade <package_dir> [--apply]` | Migrate an authored plugin to the current scaffold conventions. Previews to `<package>/upgrade.diff`; `--apply` writes. Only canonical regions are rewritten (vendored `_vendor/rpc_server.py`, `_generated_by` marker, generated manifest fields) — author code is never clobbered. Legacy (unmarked) packages get a manual-migration checklist. Handles v2→v3 generation migration (inline fallback → try-import + vendored server). |
-| `sync-template [--out <dir>] [--license <file>]` | Regenerate the repo-root `template/` directory (published as the GitHub template repo [StitchWB/stitch-plugin-template](https://github.com/StitchWB/stitch-plugin-template)) from the scaffold internals: scaffolded `stitch-plugin-template` package + vendored server + CI workflow, `.gitignore`, LICENSE, template-grade README, and a raw-stdin starter test. |
+| `sync-template [--out <dir>] [--license <file>]` | Regenerate the repo-root `template/` directory (published as the GitHub template repo [StitchWB/stitch-plugin-template](https://github.com/StitchWB/stitch-plugin-template)) from the scaffold internals: scaffolded `stitch-plugin-template` package + vendored server + CI workflow, `.gitignore`, LICENSE, template-grade README, a raw-stdin starter test, `env.example`, and `requirements-dev.txt`. |
 | `keygen --out <dir>` | Generate an ed25519 keypair. |
 | `sign <package_dir> --key <private.key>` | Sign a plugin package. |
 | `verify <package_dir> --pubkey <public.key>` | Verify a package signature. |
