@@ -351,8 +351,6 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
   it('(i) core_page plugin tabs navigate to their real host routes', async () => {
     // One plugin per render: navigating away from /ai unmounts the rail.
     const cases = [
-      ['stitch-mail', 'mail', '/mail'],
-      ['stitch-radar', 'radar', '/radar'],
       ['stitch-opencode', 'opencode', '/ai/opencode-config'],
       ['stitch-devbox', 'devbox', '/ai/devbox'],
     ] as const;
@@ -377,8 +375,10 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
     }
   });
 
-  it('(j) stitch-cards core_page tab maps to the Tools host route', async () => {
+  it('(j) core_page plugins whose host route has a left-bar entry render no rail tab', async () => {
     (safeInvoke as jest.Mock).mockResolvedValue([
+      corePagePlugin('stitch-mail', 'mail', 'Mail'),
+      corePagePlugin('stitch-radar', 'radar', 'Radar'),
       corePagePlugin('stitch-cards', 'cards', 'Cards'),
     ]);
 
@@ -387,13 +387,13 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
     await waitFor(() => {
       expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
     });
-    const tab = await screen.findByTestId('ai-hub-rail-item-plugin:stitch-cards:cards');
-    await act(async () => {
-      fireEvent.click(tab);
-    });
     await waitFor(() => {
-      expect(navigatedPath).toBe('/tools');
+      expect(
+        screen.queryByTestId('ai-hub-rail-item-plugin:stitch-mail:mail'),
+      ).toBeNull();
     });
+    expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-radar:radar')).toBeNull();
+    expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-cards:cards')).toBeNull();
   });
 
   it('(k) plugins without a declarative/core_page kind render no tab', async () => {
