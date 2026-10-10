@@ -197,12 +197,11 @@ describe('AiProviders page', () => {
     expect(await screen.findByText('Server offline — data may be stale')).toBeTruthy();
   });
 
-  it('saves model mappings on routing section', async () => {
+  it('saves model mappings on the routing mappings tab', async () => {
     const user = userEvent.setup();
 
-    // Navigate straight to the routing section where MappingsEditor lives.
     render(
-      <MemoryRouter initialEntries={['/ai/routing']}>
+      <MemoryRouter initialEntries={['/ai/routing?tab=mappings']}>
         <Routes>
           <Route path="/ai/:section?" element={<AiProviders />} />
         </Routes>
@@ -215,6 +214,46 @@ describe('AiProviders page', () => {
 
     await waitFor(() => {
       expect(proxy.setProviderModelMappings).toHaveBeenCalled();
+    });
+  });
+
+  it('shows the routing board by default on the routing page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Request path')).toBeTruthy();
+  });
+
+  it('shows proxy controls instead of the board on the routing proxy tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing?tab=proxy']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('IDE Proxy')).toBeTruthy();
+    expect(screen.queryByText('Request path')).toBeNull();
+  });
+
+  it('replaces an unknown routing tab with the default board tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing?tab=zzz']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?tab=board');
     });
   });
 
