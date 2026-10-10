@@ -1,17 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Bot, Package, Save, Server, Settings, Sliders, TestTube } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { AiSectionNav, type AiSectionNavItem } from '@/components/ai-proxy/AiSectionNav';
-import { ConnectionsNav } from '@/components/ai-proxy/ConnectionsNav';
 import { AgentsSection } from '@/components/opencode/AgentsSection';
 import { ApiTesterSection } from '@/components/opencode/ApiTesterSection';
 import { GeneralSection } from '@/components/opencode/GeneralSection';
 import { ModelsSection } from '@/components/opencode/ModelsSection';
 import { ProvidersSection } from '@/components/opencode/ProvidersSection';
 import Header from '@/components/layout/Header';
-import { Button, LoadingSpinner, PageHeader, StatusBadge } from '@/components/ui';
-import { useUIState } from '@/hooks/useUIState';
+import { Button, LoadingSpinner, PageHeader, StatusBadge, TabButton } from '@/components/ui';
 import { useAppStore } from '@/stores/app';
 import {
   getOhMyOpenAgentConfig,
@@ -26,12 +24,18 @@ import {
 
 type ConfigTab = 'providers' | 'agents' | 'general' | 'models' | 'tester';
 
+const CONFIG_TABS: readonly ConfigTab[] = ['providers', 'agents', 'general', 'models', 'tester'];
+const LEGACY_TAB_STORAGE_KEY = 'opencode-config-active-tab';
+
+function normalizeTab(value: string | null): ConfigTab {
+  return CONFIG_TABS.includes(value as ConfigTab) ? (value as ConfigTab) : 'providers';
+}
+
 export default function OpenCodeConfig() {
-  const [activeTab, setActiveTab] = useUIState<ConfigTab>(
-    'opencode-config-active-tab',
-    'providers',
-    'persist'
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
+  const activeTab = normalizeTab(rawTab);
+  const migratedLegacyTab = useRef(false);
   const language = useAppStore(state => state.language);
   const copy =
     language === 'ru'
@@ -53,22 +57,22 @@ export default function OpenCodeConfig() {
           save: 'Save configuration',
           loading: 'Loading configuration…',
         };
-  const tabOptions = useMemo<AiSectionNavItem<ConfigTab>[]>(
+  const tabOptions = useMemo(
     () =>
       language === 'ru'
         ? [
-            { value: 'providers', label: 'Провайдеры', description: 'Endpoints и ключи', icon: Server },
-            { value: 'agents', label: 'Агенты', description: 'Роли, модели и fallback', icon: Bot },
-            { value: 'general', label: 'Общее', description: 'Defaults, MCP и плагины', icon: Sliders },
-            { value: 'models', label: 'Модели', description: 'Каталог и назначения', icon: Package },
-            { value: 'tester', label: 'API-тестер', description: 'Поиск и импорт моделей', icon: TestTube },
+            { value: 'providers', label: 'Провайдеры', icon: Server },
+            { value: 'agents', label: 'Агенты', icon: Bot },
+            { value: 'general', label: 'Общее', icon: Sliders },
+            { value: 'models', label: 'Модели', icon: Package },
+            { value: 'tester', label: 'API-тестер', icon: TestTube },
           ]
         : [
-            { value: 'providers', label: 'Providers', description: 'Endpoints and credentials', icon: Server },
-            { value: 'agents', label: 'Agents', description: 'Roles, models and fallbacks', icon: Bot },
-            { value: 'general', label: 'General', description: 'Defaults, MCP and plugins', icon: Sliders },
-            { value: 'models', label: 'Models', description: 'Catalog and assignments', icon: Package },
-            { value: 'tester', label: 'API Tester', description: 'Discover and import models', icon: TestTube },
+            { value: 'providers', label: 'Providers', icon: Server },
+            { value: 'agents', label: 'Agents', icon: Bot },
+            { value: 'general', label: 'General', icon: Sliders },
+            { value: 'models', label: 'Models', icon: Package },
+            { value: 'tester', label: 'API Tester', icon: TestTube },
           ],
     [language]
   );
@@ -83,6 +87,22 @@ export default function OpenCodeConfig() {
     [config, ohMyConfig]
   );
   const isDirty = savedSnapshot !== '' && currentSnapshot !== savedSnapshot;
+
+  useEffect(() => {
+    if (rawTab !== null && rawTab !== activeTab) {
+      setSearchParams({ tab: activeTab }, { replace: true });
+    }
+  }, [rawTab, activeTab, setSearchParams]);
+
+  useEffect(() => {
+    if (migratedLegacyTab.current) return;
+    migratedLegacyTab.current = true;
+    if (searchParams.get('tab')) return;
+    const legacy = window.localStorage.getItem(LEGACY_TAB_STORAGE_KEY);
+    if (!legacy) return;
+    setSearchParams({ tab: normalizeTab(legacy) }, { replace: true });
+    window.localStorage.removeItem(LEGACY_TAB_STORAGE_KEY);
+  }, [searchParams, setSearchParams]);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -193,7 +213,30 @@ export default function OpenCodeConfig() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-void-base">
       <Header title="AI Hub" icon={<Settings size={18} />} />
-      <ConnectionsNav />
+      <nav
+        aria-label={copy.sectionsLabel}
+        className="shrink-0 overflow-x-auto border-b border-vsc-border bg-vsc-sidebar/85 px-3 md:px-5 [scrollbar-width:thin]"
+      >
+        <div className="flex h-11 min-w-max items-center gap-1">
+          {tabOptions.map(option => {
+            const Icon = option.icon;
+            const active = option.value === activeTab;
+            return (
+              <TabButton
+                key={option.value}
+                active={active}
+                appearance="section"
+                size="sm"
+                onClick={() => setSearchParams({ tab: option.value })}
+                aria-current={active ? 'page' : undefined}
+                title={option.label}
+                icon={<Icon size={14} />}
+                label={option.label}
+              />
+            );
+          })}
+        </div>
+      </nav>
       <PageHeader
         eyebrow={copy.eyebrow}
         title={copy.title}
@@ -207,15 +250,8 @@ export default function OpenCodeConfig() {
           {copy.loading}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          <AiSectionNav
-            label={copy.sectionsLabel}
-            items={tabOptions}
-            value={activeTab}
-            onChange={value => setActiveTab(value)}
-          />
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
-            <div className="mx-auto w-full max-w-7xl">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="mx-auto w-full max-w-7xl">
               {activeTab === 'providers' ? (
                 <ProvidersSection
                   providers={config.provider || {}}
@@ -255,8 +291,7 @@ export default function OpenCodeConfig() {
                 </div>
               ) : null}
             </div>
-          </main>
-        </div>
+        </main>
       )}
     </div>
   );
