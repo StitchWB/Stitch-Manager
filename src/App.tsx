@@ -193,6 +193,12 @@ function RouteTracker() {
         'notebooklm',
         'antigravity',
         'devbox',
+        'overview',
+        'groups',
+        'usage',
+        'diagnostics',
+        'freemodel',
+        'gateway',
       ].map(section => `/ai/${section}`);
       const exists = (path: string) =>
         validRoutes.includes(path) ||
