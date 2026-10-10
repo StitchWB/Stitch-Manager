@@ -34,7 +34,9 @@ type AiTabId =
   | 'monitor'
   | 'chat'
   | 'tools'
-  | 'notebooklm';
+  | 'notebooklm'
+  | 'antigravity'
+  | 'devbox';
 
 interface AiTabChild {
   id: string;
@@ -120,6 +122,8 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/notebooklm')) return 'notebooklm';
   // Redirect old api-keys route to providers
   if (pathname.startsWith('/ai/api-keys')) return 'providers';
+  if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
+  if (pathname.startsWith('/ai/devbox')) return 'devbox';
   return 'providers';
 }
 
@@ -357,8 +361,10 @@ export function AiHubLayout() {
                     current === tab.id
                       ? tab.children?.find(child => child.tabParam === tabParam)
                       : undefined;
+                  // plugin tab ids are `plugin:{id}:{tabId}` — the manifest tabId may name the active section
                   const isActive = tab.pluginId
-                    ? location.pathname.startsWith(tab.to)
+                    ? location.pathname.startsWith(tab.to) ||
+                      current === tab.id.split(':').pop()
                     : current === tab.id && !activeChild;
                   const label = resolveLabel(tab);
                   const isCommunity = tab.source === 'community';
