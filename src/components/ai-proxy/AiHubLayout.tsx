@@ -4,18 +4,26 @@ import {
   Activity,
   BookOpen,
   Cable,
+  CreditCard,
   LayoutDashboard,
+  Mail,
   MessageSquare,
   Network,
   Orbit,
   Puzzle,
+  Radar,
   Route,
   Server,
+  Settings,
+  Shield,
+  Terminal,
   Users,
+  Waypoints,
   Wrench,
 } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+import { BreadcrumbBar } from '@/components/ai-proxy/BreadcrumbBar';
 import { Badge, Tooltip } from '@/components/ui';
 import { ButtonBase } from '@/components/ui/ButtonBase';
 import { CORE_PAGE_ROUTES } from '@/components/ai-proxy/corePageRoutes';
@@ -34,18 +42,8 @@ type AiTabId =
   | 'connections'
   | 'monitor'
   | 'chat'
-  | 'tools'
-  | 'notebooklm'
   | 'antigravity'
   | 'devbox';
-
-interface AiTabChild {
-  id: string;
-  label: string;
-  to: string;
-  /** Query-param value under the parent route that marks this child active. */
-  tabParam: string;
-}
 
 interface AiTab {
   id: string;
@@ -58,8 +56,6 @@ interface AiTab {
   pluginId?: string;
   /** Origin of the plugin: "community" tabs get a warning badge. */
   source?: string;
-  /** Sub-pages rendered indented under this item; active via ?tab= param. */
-  children?: AiTabChild[];
 }
 
 interface AiTabGroup {
@@ -72,7 +68,7 @@ interface AiTabGroup {
 const AI_TAB_GROUPS: AiTabGroup[] = [
   {
     id: 'top',
-    tabs: [{ id: 'overview', label: 'Overview', to: '/ai', icon: LayoutDashboard }],
+    tabs: [{ id: 'overview', label: 'aiHub.tabs.overview', to: '/ai', icon: LayoutDashboard }],
   },
   {
     id: 'sources',
@@ -86,7 +82,7 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     header: 'aiHub.groups.processing',
     tabs: [
       { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
-      { id: 'connections', label: 'Connections', to: '/ai/integrations', icon: Cable },
+      { id: 'connections', label: 'aiHub.tabs.connections', to: '/ai/integrations', icon: Cable },
       { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
     ],
   },
@@ -95,17 +91,6 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     header: 'aiHub.groups.usage',
     tabs: [
       { id: 'chat', label: 'aiHub.tabs.chat', to: '/ai/chat', icon: MessageSquare },
-      {
-        id: 'tools',
-        label: 'aiHub.tabs.tools',
-        to: '/ai/tools',
-        icon: Wrench,
-        children: [
-          { id: 'compression', label: 'aiHub.tabs.compression', to: '/ai/tools?tab=compression', tabParam: 'compression' },
-          { id: 'holone', label: 'aiHub.tabs.holone', to: '/ai/tools?tab=holone', tabParam: 'holone' },
-        ],
-      },
-      { id: 'notebooklm', label: 'aiHub.tabs.notebooklm', to: '/ai/notebooklm', icon: BookOpen },
     ],
   },
 ];
@@ -119,8 +104,6 @@ function activeTab(pathname: string): AiTabId {
   }
   if (pathname.startsWith('/ai/monitor') || pathname.startsWith('/ai/analytics')) return 'monitor';
   if (pathname.startsWith('/ai/chat')) return 'chat';
-  if (pathname.startsWith('/ai/tools') || pathname.startsWith('/ai/holone')) return 'tools';
-  if (pathname.startsWith('/ai/notebooklm')) return 'notebooklm';
   // Redirect old api-keys route to providers
   if (pathname.startsWith('/ai/api-keys')) return 'providers';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
@@ -132,6 +115,15 @@ function getLabel(label: string): string {
   return label.includes('.') ? t(label) : label;
 }
 
+export function currentRailLabel(pathname: string): string {
+  const id = activeTab(pathname);
+  for (const group of AI_TAB_GROUPS) {
+    const tab = group.tabs.find(tab => tab.id === id);
+    if (tab) return getLabel(tab.label);
+  }
+  return id;
+}
+
 /**
  * Whitelist of lucide-react icon names service plugins may reference in
  * `ui.tabs[].icon`. Names not in this map fall back to Puzzle. Keeping the
@@ -141,14 +133,21 @@ const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   Activity,
   BookOpen,
   Cable,
+  CreditCard,
   LayoutDashboard,
+  Mail,
   MessageSquare,
   Network,
   Orbit,
   Puzzle,
+  Radar,
   Route,
   Server,
+  Settings,
+  Shield,
+  Terminal,
   Users,
+  Waypoints,
   Wrench,
 };
 
@@ -234,33 +233,6 @@ function RailItem({ tab, label, active, title, community, iconOnly, onClick }: R
   );
 }
 
-interface RailSubItemProps {
-  child: AiTabChild;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}
-
-function RailSubItem({ child, label, active, onClick }: RailSubItemProps) {
-  return (
-    <ButtonBase
-      type="button"
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      title={label}
-      data-testid={`ai-hub-rail-subitem-${child.id}`}
-      className={cn(
-        'flex h-7 w-full items-center rounded-md border border-transparent py-1 pl-2.5 pr-2 text-left text-[11px] font-medium transition-colors duration-150',
-        active
-          ? 'border-white/[0.08] bg-white/[0.05] text-white'
-          : 'text-slate-400 hover:bg-white/[0.035] hover:text-slate-200'
-      )}
-    >
-      <span className="truncate whitespace-nowrap">{label}</span>
-    </ButtonBase>
-  );
-}
-
 export function AiHubLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -268,7 +240,6 @@ export function AiHubLayout() {
   const authEnabled = useAuthStore(state => state.enabled);
   const isMdUp = useMediaQuery('(min-width: 768px)');
   const current = activeTab(location.pathname);
-  const tabParam = new URLSearchParams(location.search).get('tab');
 
   const plugins = useServicePlugins();
 
@@ -290,7 +261,7 @@ export function AiHubLayout() {
       to = `/ai/plugin/${plugin.id}`;
     } else if (kind === 'core_page') {
       const hostRoute = CORE_PAGE_ROUTES[plugin.id];
-      if (!hostRoute) continue;
+      if (!hostRoute || !hostRoute.startsWith('/ai')) continue;
       to = hostRoute;
     } else {
       continue;
@@ -319,8 +290,6 @@ export function AiHubLayout() {
     : groups;
 
   const resolveLabel = (tab: AiTab): string => {
-    if (tab.id === 'overview') return language === 'ru' ? 'Обзор' : 'Overview';
-    if (tab.id === 'connections') return language === 'ru' ? 'Подключения' : 'Connections';
     if (tab.pluginId) return getPluginTabLabel(tab.pluginId, tab.label);
     return getLabel(tab.label);
   };
@@ -346,48 +315,27 @@ export function AiHubLayout() {
               )}
               <div className="flex flex-col gap-0.5">
                 {group.tabs.map(tab => {
-                  const activeChild =
-                    current === tab.id
-                      ? tab.children?.find(child => child.tabParam === tabParam)
-                      : undefined;
                   // plugin tab ids are `plugin:{id}:{tabId}` — the manifest tabId may name the active section
                   const isActive = tab.pluginId
                     ? location.pathname.startsWith(tab.to) ||
                       current === tab.id.split(':').pop()
-                    : current === tab.id && !activeChild;
+                    : current === tab.id;
                   const label = resolveLabel(tab);
                   const isCommunity = tab.source === 'community';
                   const title = isCommunity
                     ? `${label} — ${t('admin.plugins.servicePluginCommunityTabTooltip')}`
                     : label;
                   return (
-                    <div key={tab.id} className="flex flex-col gap-0.5">
-                      <RailItem
-                        tab={tab}
-                        label={label}
-                        active={isActive}
-                        title={title}
-                        community={isCommunity}
-                        iconOnly={!isMdUp}
-                        onClick={() => navigate(tab.to)}
-                      />
-                      {tab.children && tab.children.length > 0 && (
-                        <div
-                          className="hidden ml-4 flex-col gap-0.5 border-l border-white/[0.08] pl-1 md:flex"
-                          data-testid={`ai-hub-rail-subitems-${tab.id}`}
-                        >
-                          {tab.children.map(child => (
-                            <RailSubItem
-                              key={child.id}
-                              child={child}
-                              label={getLabel(child.label)}
-                              active={activeChild?.id === child.id}
-                              onClick={() => navigate(child.to)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <RailItem
+                      key={tab.id}
+                      tab={tab}
+                      label={label}
+                      active={isActive}
+                      title={title}
+                      community={isCommunity}
+                      iconOnly={!isMdUp}
+                      onClick={() => navigate(tab.to)}
+                    />
                   );
                 })}
               </div>
@@ -396,6 +344,7 @@ export function AiHubLayout() {
         })}
       </nav>
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <BreadcrumbBar />
         <Outlet />
       </div>
     </div>

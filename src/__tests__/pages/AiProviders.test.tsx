@@ -1,8 +1,8 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { useEffect } from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import AiProviders from '../../pages/AiProviders';
 import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
 
@@ -85,6 +85,11 @@ jest.mock('../../components/ai-gateway/PublicModelsSection', () => ({
   PublicModelsSection: () => null,
 }));
 
+jest.mock('../../pages/AiAnalytics', () => ({
+  __esModule: true,
+  default: () => <div data-testid="ai-analytics-page" />,
+}));
+
 const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
 
 let navigatedPath = '';
@@ -97,6 +102,16 @@ function LocationSpy() {
     navigatedSearch = loc.search;
   }, [loc.pathname, loc.search]);
   return null;
+}
+
+function TestNav() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button data-testid="nav-away" onClick={() => navigate('/ai/routing')}>away</button>
+      <button data-testid="nav-back" onClick={() => navigate(-1)}>back</button>
+    </>
+  );
 }
 
 const testAccount = {
@@ -197,12 +212,11 @@ describe('AiProviders page', () => {
     expect(await screen.findByText('Server offline — data may be stale')).toBeTruthy();
   });
 
-  it('saves model mappings on routing section', async () => {
+  it('saves model mappings on the routing mappings tab', async () => {
     const user = userEvent.setup();
 
-    // Navigate straight to the routing section where MappingsEditor lives.
     render(
-      <MemoryRouter initialEntries={['/ai/routing']}>
+      <MemoryRouter initialEntries={['/ai/routing?tab=mappings']}>
         <Routes>
           <Route path="/ai/:section?" element={<AiProviders />} />
         </Routes>
@@ -215,6 +229,64 @@ describe('AiProviders page', () => {
 
     await waitFor(() => {
       expect(proxy.setProviderModelMappings).toHaveBeenCalled();
+    });
+  });
+
+  it('shows the routing board by default on the routing page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Request path')).toBeTruthy();
+  });
+
+  it('shows proxy controls instead of the board on the routing proxy tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing?tab=proxy']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('IDE Proxy')).toBeTruthy();
+    expect(screen.queryByText('Request path')).toBeNull();
+  });
+
+  it('replaces an unknown routing tab with the default board tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing?tab=zzz']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?tab=board');
+    });
+  });
+
+  it('navigates to the proxy tab when the board proxy node config action fires', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const proxyNode = await screen.findByTestId('routing-node-4');
+    fireEvent.click(within(proxyNode).getByRole('button', { name: 'Config' }));
+
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?tab=proxy');
     });
   });
 
@@ -286,5 +358,90 @@ describe('AiProviders page', () => {
     await waitFor(() => {
       expect(navigatedPath).toBe('/ai/chat');
     });
+  });
+
+  it('replaces the provider sidebar with the url-state filter bar', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/providers']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('OpenAI Main');
+
+    expect(screen.queryByTestId('ai-providers-sidebar')).toBeNull();
+    const filterBar = screen.getByTestId('provider-filter-bar');
+    expect(within(filterBar).getByRole('button', { name: /OpenAI/ })).toBeTruthy();
+    expect(within(filterBar).getByRole('button', { name: /All Providers/ })).toBeTruthy();
+  });
+
+  it('writes the filter bar search query to ?q= and keeps it across re-renders', async () => {
+    const user = userEvent.setup();
+    const tree = (
+      <MemoryRouter initialEntries={['/ai/providers']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    const { rerender } = render(tree);
+
+    const input = await screen.findByPlaceholderText('Provider, account, or model…');
+    await user.type(input, 'gpt');
+
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?q=gpt');
+    });
+
+    rerender(tree);
+    expect(screen.getByPlaceholderText('Provider, account, or model…')).toHaveValue('gpt');
+  });
+
+  it('keeps ?provider= when navigating away and back', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/providers']}>
+        <LocationSpy />
+        <TestNav />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+          <Route path="/ai/routing" element={<div data-testid="routing-page" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('OpenAI Main');
+
+    const filterBar = screen.getByTestId('provider-filter-bar');
+    fireEvent.click(within(filterBar).getByRole('button', { name: /OpenAI/ }));
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?provider=openai');
+    });
+
+    fireEvent.click(screen.getByTestId('nav-away'));
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/routing');
+    });
+
+    fireEvent.click(screen.getByTestId('nav-back'));
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/providers');
+      expect(navigatedSearch).toBe('?provider=openai');
+    });
+  });
+
+  it('mounts AiAnalytics on the monitor analytics tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/monitor?tab=analytics']}>
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('ai-analytics-page')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open Request Analytics' })).toBeNull();
   });
 });
