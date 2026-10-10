@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+import { BreadcrumbBar } from '@/components/ai-proxy/BreadcrumbBar';
 import { Badge, Tooltip } from '@/components/ui';
 import { ButtonBase } from '@/components/ui/ButtonBase';
 import { CORE_PAGE_ROUTES } from '@/components/ai-proxy/corePageRoutes';
@@ -112,6 +113,15 @@ function activeTab(pathname: string): AiTabId {
 
 function getLabel(label: string): string {
   return label.includes('.') ? t(label) : label;
+}
+
+export function currentRailLabel(pathname: string): string {
+  const id = activeTab(pathname);
+  for (const group of AI_TAB_GROUPS) {
+    const tab = group.tabs.find(tab => tab.id === id);
+    if (tab) return getLabel(tab.label);
+  }
+  return id;
 }
 
 /**
@@ -334,6 +344,7 @@ export function AiHubLayout() {
         })}
       </nav>
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <BreadcrumbBar />
         <Outlet />
       </div>
     </div>

@@ -18,7 +18,7 @@
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { useEffect } from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { AiHubLayout } from '@/components/ai-proxy/AiHubLayout';
 import { safeInvoke } from '@/lib/backend/core/invoke';
@@ -145,7 +145,8 @@ describe('AiHubLayout rail navigation', () => {
     expect(screen.getByText('aiHub.tabs.connections')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.monitor')).toBeTruthy();
     expect(screen.getByText('aiHub.tabs.chat')).toBeTruthy();
-    expect(screen.getByText('aiHub.tabs.overview')).toBeTruthy();
+    // rail item + breadcrumb page label both render the overview key at /ai
+    expect(screen.getAllByText('aiHub.tabs.overview').length).toBeGreaterThan(0);
 
     // No plugins → no plugins group.
     expect(screen.queryByTestId('ai-hub-group-plugins')).toBeNull();
@@ -444,7 +445,7 @@ describe('AiHubLayout rail labels and plugin icons (P2.7)', () => {
   it('resolves the overview and connections labels through i18n keys', () => {
     renderAt('/ai');
 
-    expect(screen.getByText('aiHub.tabs.overview')).toBeTruthy();
+    expect(screen.getAllByText('aiHub.tabs.overview').length).toBeGreaterThan(0);
     expect(screen.getByText('aiHub.tabs.connections')).toBeTruthy();
   });
 
@@ -476,6 +477,42 @@ describe('AiHubLayout rail labels and plugin icons (P2.7)', () => {
     const svgClass = item.querySelector('svg')?.getAttribute('class') ?? '';
     expect(svgClass).toContain('lucide-radar');
     expect(svgClass).not.toContain('lucide-puzzle');
+  });
+});
+
+// ── W3/P2.9: breadcrumb bar above the outlet ─────────────────────────────────
+
+describe('AiHubLayout breadcrumb bar (P2.9)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _resetForTests();
+    navigatedPath = '/ai';
+    navigatedSearch = '';
+    (safeInvoke as jest.Mock).mockResolvedValue([]);
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+  });
+
+  it('renders three segments at /ai/routing?tab=proxy with only the last non-link', () => {
+    renderAt('/ai/routing?tab=proxy');
+
+    const breadcrumb = screen.getByTestId('ai-hub-breadcrumb');
+    expect(breadcrumb).toBeTruthy();
+
+    expect(within(breadcrumb).getByText('sidebar.aiHub').closest('a')).toBeTruthy();
+    expect(within(breadcrumb).getByText('aiHub.tabs.routing').closest('a')).toBeTruthy();
+    const tabSegment = within(breadcrumb).getByText('proxy');
+    expect(tabSegment).toBeTruthy();
+    expect(tabSegment.closest('a')).toBeNull();
+  });
+
+  it('renders two segments without a tab param and the page is the non-link', () => {
+    renderAt('/ai/routing');
+
+    const breadcrumb = screen.getByTestId('ai-hub-breadcrumb');
+    expect(within(breadcrumb).getByText('sidebar.aiHub').closest('a')).toBeTruthy();
+    const pageSegment = within(breadcrumb).getByText('aiHub.tabs.routing');
+    expect(pageSegment.closest('a')).toBeNull();
+    expect(within(breadcrumb).queryByText('proxy')).toBeNull();
   });
 });
 
