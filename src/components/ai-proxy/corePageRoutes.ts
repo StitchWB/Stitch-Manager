@@ -5,7 +5,6 @@
 export const CORE_PAGE_ROUTES: Record<string, string> = {
   'stitch-mail': '/mail',
   'stitch-radar': '/radar',
-  'stitch-opencode': '/ai/opencode-config',
   'stitch-devbox': '/ai/devbox',
   'stitch-cards': '/tools',
 };

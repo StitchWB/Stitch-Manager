@@ -42,6 +42,8 @@ const TERMINAL_TARGETS = [
   '/ai/chat',
   '/ai/antigravity',
   '/ai/notebooklm',
+  '/ai/opencode-config',
+  '/totp',
 ];
 
 describe('LegacyRedirects', () => {
@@ -83,6 +85,8 @@ describe('LegacyRedirects plugin path redirects', () => {
   const PLUGIN_PATH_CASES: Array<{ from: string; expected: string }> = [
     { from: '/ai/plugin/stitch-antigravity', expected: '/ai/antigravity' },
     { from: '/ai/plugin/stitch-notebooklm', expected: '/ai/notebooklm' },
+    { from: '/ai/plugin/stitch-opencode', expected: '/ai/opencode-config' },
+    { from: '/ai/plugin/stitch-totp', expected: '/totp' },
   ];
 
   for (const { from, expected } of PLUGIN_PATH_CASES) {
