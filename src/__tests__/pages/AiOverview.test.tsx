@@ -3,8 +3,7 @@
  *
  * Verifies the hub action cards navigate to their declared targets:
  * the Antigravity card must aim at the /ai/antigravity oauth wrapper
- * route (not the declarative plugin page), while the API keys card
- * keeps its /ai/api-keys target.
+ * route (not the declarative plugin page).
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
@@ -68,7 +67,7 @@ function renderOverview() {
       <Routes>
         <Route path="/ai" element={<AiOverview />} />
         <Route path="/ai/antigravity" element={<div data-testid="terminal" />} />
-        <Route path="/ai/api-keys" element={<div data-testid="terminal" />} />
+        <Route path="/ai/providers" element={<div data-testid="terminal" />} />
         <Route path="/ai/plugin/:id" element={<div data-testid="terminal" />} />
       </Routes>
     </MemoryRouter>,
@@ -93,7 +92,7 @@ describe('AiOverview card navigation', () => {
     });
   });
 
-  it('keeps the API keys card at /ai/api-keys', async () => {
+  it('navigates the API keys card to the providers section', async () => {
     renderOverview();
 
     await act(async () => {
@@ -101,7 +100,7 @@ describe('AiOverview card navigation', () => {
     });
 
     await waitFor(() => {
-      expect(navigatedPath).toBe('/ai/api-keys');
+      expect(navigatedPath).toBe('/ai/providers');
     });
   });
 });
