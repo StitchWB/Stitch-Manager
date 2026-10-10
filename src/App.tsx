@@ -51,7 +51,9 @@ import Landing from './pages/Landing';
 import Setup from './pages/Setup';
 import TelegramLogin from './components/auth/TelegramLogin';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
-const AiProviders = lazy(() => import('./pages/AiProviders'));
+const AiProvidersPage = lazy(() => import('./pages/AiProvidersPage'));
+const AiRoutingPage = lazy(() => import('./pages/AiRoutingPage'));
+const AiMonitorPage = lazy(() => import('./pages/AiMonitorPage'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
 const AiGroupsPage = lazy(() => import('./pages/AiGroupsPage'));
 const Antigravity = lazy(() => import('./pages/Antigravity'));
@@ -236,8 +238,7 @@ function RouteTracker() {
  * land the user on the dashboard/landing instead of a dead surface.
  *
  * The "Create Group" button lives in the PageHeader actions slot and
- * controls <AiGroupsPage />'s createGroupOpen prop — the same pattern
- * AiProviders.tsx uses for the legacy /ai/groups tab.
+ * controls <AiGroupsPage />'s createGroupOpen prop.
  */
 function GroupsPage() {
   const authUser = useAuthStore(state => state.user);
@@ -599,9 +600,9 @@ function App() {
               <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
               <Route path="/ai/chat" element={<Chat />} />
               <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
-              <Route path="/ai/providers" element={<AiProviders />} />
-              <Route path="/ai/routing" element={<AiProviders />} />
-              <Route path="/ai/monitor" element={<AiProviders />} />
+              <Route path="/ai/providers" element={<AiProvidersPage />} />
+              <Route path="/ai/routing" element={<AiRoutingPage />} />
+              <Route path="/ai/monitor" element={<AiMonitorPage />} />
               <Route path="/ai/notebooklm" element={<NotebookLM />} />
               <Route path="/ai/*" element={<NotFound />} />
             </Route>

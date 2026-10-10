@@ -32,4 +32,25 @@ describe('resolveRestoreRoute', () => {
     ]);
     expect(resolved).toBe('/ai-analytics');
   });
+
+  it('keeps the query string when the pathname is a live route', () => {
+    const resolved = resolveRestoreRoute(
+      '/ai/routing?tab=proxy',
+      path => path === '/ai/routing',
+      [],
+    );
+    expect(resolved).toBe('/ai/routing?tab=proxy');
+  });
+
+  it('keeps the query string on a redirect source', () => {
+    const resolved = resolveRestoreRoute('/ai/tools?tab=compression', () => false, [
+      { from: '/ai/tools' },
+    ]);
+    expect(resolved).toBe('/ai/tools?tab=compression');
+  });
+
+  it('rejects an unknown pathname carrying a query', () => {
+    const resolved = resolveRestoreRoute('/ai/zzz?tab=x', () => false, []);
+    expect(resolved).toBeNull();
+  });
 });

@@ -6,13 +6,17 @@ export function resolveRestoreRoute(
   let path = candidate;
   if (/^https?:/i.test(path)) {
     try {
-      path = new URL(path).pathname || '/';
+      const url = new URL(path);
+      path = (url.pathname || '/') + url.search;
     } catch {
       return null;
     }
   }
   if (!path.startsWith('/')) return null;
-  if (exists(path)) return path;
-  if (redirects.some(redirect => redirect.from === path)) return path;
+  const queryIndex = path.indexOf('?');
+  const pathname = queryIndex === -1 ? path : path.slice(0, queryIndex);
+  if (exists(pathname) || redirects.some(redirect => redirect.from === pathname)) {
+    return path;
+  }
   return null;
 }
