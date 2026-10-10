@@ -28,8 +28,8 @@ let locations: string[] = [];
 function LocationSpy() {
   const loc = useLocation();
   useEffect(() => {
-    locations.push(loc.pathname);
-  }, [loc.pathname]);
+    locations.push(loc.pathname + loc.search);
+  }, [loc.pathname, loc.search]);
   return null;
 }
 
@@ -38,7 +38,8 @@ const TERMINAL_TARGETS = [
   '/groups',
   '/ai/monitor',
   '/ai/providers',
-  '/ai/analytics',
+  '/ai/routing',
+  '/ai/chat',
   '/ai/antigravity',
   '/ai/notebooklm',
 ];
@@ -67,6 +68,43 @@ describe('LegacyRedirects', () => {
       );
 
       expect(locations[locations.length - 1]).toBe(target);
+      expect(locations).toHaveLength(2);
+      expect(screen.getByTestId('terminal')).toBeTruthy();
+    });
+  }
+});
+
+describe('LegacyRedirects dedup kills', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    locations = [];
+  });
+
+  const KILL_CASES: Array<{ from: string; expected: string }> = [
+    { from: '/ai/tools', expected: '/ai/routing?tab=holone' },
+    { from: '/ai/tools?tab=compression', expected: '/ai/routing?tab=compression' },
+    { from: '/ai/holone', expected: '/ai/routing?tab=holone' },
+    { from: '/ai/analytics', expected: '/ai/monitor?tab=analytics' },
+    { from: '/ai-analytics', expected: '/ai/monitor?tab=analytics' },
+    { from: '/chat', expected: '/ai/chat' },
+  ];
+
+  for (const { from, expected } of KILL_CASES) {
+    it(`redirects ${from} to ${expected} in a single hop`, () => {
+      render(
+        <MemoryRouter initialEntries={[from]}>
+          <LocationSpy />
+          <Routes>
+            {LegacyRedirectRoutes('ai-hub')}
+            {LegacyRedirectRoutes('top-level')}
+            {TERMINAL_TARGETS.map(path => (
+              <Route key={path} path={path} element={<div data-testid="terminal" />} />
+            ))}
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(locations[locations.length - 1]).toBe(expected);
       expect(locations).toHaveLength(2);
       expect(screen.getByTestId('terminal')).toBeTruthy();
     });
