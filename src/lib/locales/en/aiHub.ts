@@ -552,6 +552,7 @@ export const aiHub: AiHubTranslations = {
       integrations: "Integrations",
       monitor: "Monitor",
       notebooklm: "NotebookLM",
+      opencode: "OpenCode",
       overview: "Overview",
       providers: "Providers",
       routing: "Routing",
