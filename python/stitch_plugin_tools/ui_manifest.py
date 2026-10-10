@@ -25,9 +25,11 @@ Errors (block dev-install / publish / CI):
 
 Warnings (never block): a ``paramsFromRow`` target that is not a declared
 table column — rows may legitimately carry extra keys (e.g. totp rows expose
-``id`` without a visible column); and a ``refreshOnSuccess`` node id that is
-not on the page — the renderer ignores unknown ids.  Dead-key detection is
-skipped for ``ui.kind=core_page`` because the core React page owns those keys.
+``id`` without a visible column); a ``refreshOnSuccess`` node id that is not
+on the page — the renderer ignores unknown ids; and a ``core_page`` manifest
+carrying ``ui.page`` — the host page owns the page tree.  Dead-key detection
+is skipped for ``ui.kind=core_page`` because the core React page owns those
+keys.
 
 Honest scope: see docs/service-plugins.md — semantic param inversion and
 runtime data strings are NOT caught.
@@ -308,6 +310,12 @@ def lint_contributions(
             f"got {ui_kind!r}"
         )
         return errors, warnings
+
+    if ui_kind == "core_page" and isinstance(ui.get("page"), dict):
+        warnings.append(
+            "ui.page: core_page ui ignores the page object (the host page "
+            "owns the page tree)"
+        )
 
     linter = _PageLinter(plugin_id, declared, bundles)
 

@@ -21,6 +21,10 @@ export const LEGACY_REDIRECTS: Array<{
   { from: '/ai/holone', to: '/ai/routing?tab=holone' },
   { from: '/ai/analytics', to: '/ai/monitor?tab=analytics' },
   { from: '/chat', to: '/ai/chat' },
+  { from: '/ai/plugin/stitch-antigravity', to: '/ai/antigravity' },
+  { from: '/ai/plugin/stitch-notebooklm', to: '/ai/notebooklm' },
+  { from: '/ai/plugin/stitch-opencode', to: '/ai/opencode-config' },
+  { from: '/ai/plugin/stitch-totp', to: '/totp' },
 ];
 
 export function RedirectWithTab({ to }: { to: (search: URLSearchParams) => string }) {
