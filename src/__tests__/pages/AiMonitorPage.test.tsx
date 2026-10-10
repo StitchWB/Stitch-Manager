@@ -2,7 +2,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { useEffect } from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import AiProviders from '../../pages/AiProviders';
+import AiMonitorPage from '../../pages/AiMonitorPage';
 import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
 
 jest.mock('../../components/layout/Header', () => ({
@@ -154,7 +154,7 @@ describe('AiMonitorPage', () => {
       <MemoryRouter initialEntries={['/ai/monitor']}>
         <LocationSpy />
         <Routes>
-          <Route path="/ai/monitor" element={<AiProviders />} />
+          <Route path="/ai/monitor" element={<AiMonitorPage />} />
           <Route path="/ai/chat" element={<div data-testid="chat-page" />} />
         </Routes>
       </MemoryRouter>
@@ -176,7 +176,7 @@ describe('AiMonitorPage', () => {
       <MemoryRouter initialEntries={['/ai/monitor']}>
         <LocationSpy />
         <Routes>
-          <Route path="/ai/monitor" element={<AiProviders />} />
+          <Route path="/ai/monitor" element={<AiMonitorPage />} />
           <Route path="/ai/chat" element={<div data-testid="chat-page" />} />
         </Routes>
       </MemoryRouter>
@@ -198,7 +198,7 @@ describe('AiMonitorPage', () => {
       <MemoryRouter initialEntries={['/ai/monitor']}>
         <LocationSpy />
         <Routes>
-          <Route path="/ai/monitor" element={<AiProviders />} />
+          <Route path="/ai/monitor" element={<AiMonitorPage />} />
           <Route path="/ai/chat" element={<div data-testid="chat-page" />} />
         </Routes>
       </MemoryRouter>
@@ -223,7 +223,7 @@ describe('AiMonitorPage', () => {
     render(
       <MemoryRouter initialEntries={['/ai/monitor?tab=analytics']}>
         <Routes>
-          <Route path="/ai/monitor" element={<AiProviders />} />
+          <Route path="/ai/monitor" element={<AiMonitorPage />} />
         </Routes>
       </MemoryRouter>
     );

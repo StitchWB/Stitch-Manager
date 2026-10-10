@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import AiProviders from '../../pages/AiProviders';
+import AiRoutingPage from '../../pages/AiRoutingPage';
 import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
 
 jest.mock('../../components/layout/Header', () => ({
@@ -156,7 +156,7 @@ describe('AiRoutingPage', () => {
     render(
       <MemoryRouter initialEntries={['/ai/routing?tab=mappings']}>
         <Routes>
-          <Route path="/ai/routing" element={<AiProviders />} />
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -174,7 +174,7 @@ describe('AiRoutingPage', () => {
     render(
       <MemoryRouter initialEntries={['/ai/routing']}>
         <Routes>
-          <Route path="/ai/routing" element={<AiProviders />} />
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -186,7 +186,7 @@ describe('AiRoutingPage', () => {
     render(
       <MemoryRouter initialEntries={['/ai/routing?tab=proxy']}>
         <Routes>
-          <Route path="/ai/routing" element={<AiProviders />} />
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -200,7 +200,7 @@ describe('AiRoutingPage', () => {
       <MemoryRouter initialEntries={['/ai/routing?tab=zzz']}>
         <LocationSpy />
         <Routes>
-          <Route path="/ai/routing" element={<AiProviders />} />
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -215,7 +215,7 @@ describe('AiRoutingPage', () => {
       <MemoryRouter initialEntries={['/ai/routing']}>
         <LocationSpy />
         <Routes>
-          <Route path="/ai/routing" element={<AiProviders />} />
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
         </Routes>
       </MemoryRouter>
     );
