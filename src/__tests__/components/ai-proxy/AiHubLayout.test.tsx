@@ -87,6 +87,7 @@ function renderAt(path: string) {
           <Route path="/ai/routing" element={<div data-testid="page-content" />} />
           <Route path="/ai/antigravity" element={<div data-testid="page-content" />} />
           <Route path="/ai/devbox" element={<div data-testid="page-content" />} />
+          <Route path="/ai/opencode-config" element={<div data-testid="page-content" />} />
           <Route path="/ai/plugin/:id" element={<div data-testid="page-content" />} />
         </Route>
       </Routes>
@@ -288,7 +289,6 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
   it('(i) core_page plugin tabs navigate to their real /ai host routes', async () => {
     // One plugin per render: navigating away from /ai unmounts the rail.
     const cases = [
-      ['stitch-opencode', 'opencode', '/ai/opencode-config'],
       ['stitch-devbox', 'devbox', '/ai/devbox'],
     ] as const;
     for (const [pluginId, tabId, route] of cases) {
@@ -323,6 +323,19 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
       expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
     });
     expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-cards:cards')).toBeNull();
+  });
+
+  it('(j2) stitch-opencode core_page tab renders no rail item', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue([
+      corePagePlugin('stitch-opencode', 'opencode', 'OpenCode'),
+    ]);
+
+    renderAt('/ai');
+
+    await waitFor(() => {
+      expect(safeInvoke).toHaveBeenCalledWith('list_service_plugins');
+    });
+    expect(screen.queryByTestId('ai-hub-rail-item-plugin:stitch-opencode:opencode')).toBeNull();
   });
 
   it('(k) plugins without a declarative/core_page kind render no tab', async () => {
@@ -513,6 +526,40 @@ describe('AiHubLayout breadcrumb bar (P2.9)', () => {
     const pageSegment = within(breadcrumb).getByText('aiHub.tabs.routing');
     expect(pageSegment.closest('a')).toBeNull();
     expect(within(breadcrumb).queryByText('proxy')).toBeNull();
+  });
+});
+
+// ── W4/P3.4: opencode gets its own rail item ─────────────────────────────────
+
+describe('AiHubLayout opencode rail item (P3)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    _resetForTests();
+    navigatedPath = '/ai';
+    navigatedSearch = '';
+    (safeInvoke as jest.Mock).mockResolvedValue([]);
+    (useMediaQuery as jest.Mock).mockReturnValue(false);
+  });
+
+  it('renders the opencode rail item and navigates to /ai/opencode-config', async () => {
+    renderAt('/ai');
+
+    const item = screen.getByTestId('ai-hub-rail-item-opencode');
+    await act(async () => {
+      fireEvent.click(item);
+    });
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/opencode-config');
+    });
+  });
+
+  it('marks the opencode item active at /ai/opencode-config, not connections', () => {
+    renderAt('/ai/opencode-config');
+
+    expect(screen.getByTestId('ai-hub-rail-item-opencode').getAttribute('aria-current')).toBe(
+      'page',
+    );
+    expect(screen.getByTestId('ai-hub-rail-item-connections').getAttribute('aria-current')).toBeNull();
   });
 });
 

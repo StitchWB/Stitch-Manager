@@ -100,6 +100,7 @@ function renderHeader(item: MarketplaceItem) {
           }
         />
         <Route path="/tools" element={<div data-testid="terminal" />} />
+        <Route path="/ai/antigravity" element={<div data-testid="terminal" />} />
         <Route path="/ai/plugin/:id" element={<div data-testid="terminal" />} />
       </Routes>
     </MemoryRouter>,
@@ -123,6 +124,22 @@ describe('MarketplaceDetailHeader Open action', () => {
 
     await waitFor(() => {
       expect(navigatedPath).toBe('/tools');
+    });
+  });
+
+  it('opens a canonical plugin at its /ai route', async () => {
+    (useServicePlugins as jest.Mock).mockReturnValue([
+      mkPlugin('stitch-antigravity', 'declarative'),
+    ]);
+
+    renderHeader(mkItem({ id: 'stitch-antigravity', name: 'Antigravity' }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'marketplace.open' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/antigravity');
     });
   });
 

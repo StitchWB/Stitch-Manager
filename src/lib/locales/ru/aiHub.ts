@@ -552,6 +552,7 @@ holone: {
       integrations: "Интеграции",
       monitor: "Мониторинг",
       notebooklm: "NotebookLM",
+      opencode: "OpenCode",
       overview: "Обзор",
       providers: "Провайдеры",
       routing: "Маршрутизация",
