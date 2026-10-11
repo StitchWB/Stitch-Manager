@@ -287,6 +287,7 @@ pip install -r python/requirements-dev.txt    # Python dev dependencies
 
 # Development mode (auto-installs missing Python deps)
 .\start-dev.ps1
+# Optional: .\start-dev.ps1 -SeedFromHub <hub-path> [-ForceSeed] -WebRoot <other-frontend>
 
 # Production mode
 .\start.ps1
@@ -318,6 +319,7 @@ pip install -r python/requirements-dev.txt    # Python dev dependencies
 
 # Development mode (auto-installs missing Python deps)
 .\start-dev.ps1
+# Optional: .\start-dev.ps1 -SeedFromHub <hub-path> [-ForceSeed] -WebRoot <other-frontend>
 
 # Production mode
 .\start.ps1
@@ -598,6 +600,7 @@ pip install -r python/requirements-dev.txt    # Python dev dependencies
 
 # Development mode (auto-installs missing Python deps)
 .\start-dev.ps1
+# Optional: .\start-dev.ps1 -SeedFromHub <hub-path> [-ForceSeed] -WebRoot <other-frontend>
 
 # Production mode
 .\start.ps1
