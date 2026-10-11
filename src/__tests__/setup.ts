@@ -39,7 +39,7 @@ if (typeof globalThis.crypto === 'undefined') {
 }
 
 // Polyfill fetch for jsdom — jsdom does not ship fetch, but some components
-// (e.g. AiProviders) call it indirectly. The mock returns an empty success
+// (e.g. AiRoutingPage) call it indirectly. The mock returns an empty success
 // response; individual tests can override it with jest.spyOn(globalThis, 'fetch').
 if (typeof globalThis.fetch === 'undefined') {
   (globalThis as any).fetch = jest.fn(async () => ({

@@ -1,11 +1,4 @@
-/**
- * AI Hub route table tests.
- *
- * Renders the real <App /> (stores and pages stubbed) inside a MemoryRouter
- * and asserts the /ai/* route table: the three canonical hub pages render
- * AiProviders, legacy section paths redirect, and any other /ai/* path
- * falls through to NotFound instead of the old /ai/:section catch-all.
- */
+// /ai/* route table: canonical hub pages render their split components, legacy paths redirect, unknown → NotFound
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -148,9 +141,19 @@ jest.mock('../pages/AiOverview', () => ({
   default: () => <div data-testid="ai-overview-page" />,
 }));
 
-jest.mock('../pages/AiProviders', () => ({
+jest.mock('../pages/AiProvidersPage', () => ({
   __esModule: true,
   default: () => <div data-testid="ai-providers-page" />,
+}));
+
+jest.mock('../pages/AiRoutingPage', () => ({
+  __esModule: true,
+  default: () => <div data-testid="ai-routing-page" />,
+}));
+
+jest.mock('../pages/AiMonitorPage', () => ({
+  __esModule: true,
+  default: () => <div data-testid="ai-monitor-page" />,
 }));
 
 jest.mock('../pages/NotFound', () => ({
@@ -189,20 +192,21 @@ describe('App /ai route table', () => {
     });
   });
 
-  it.each(['/ai/providers', '/ai/routing', '/ai/monitor'])(
-    'renders AiProviders at %s',
-    async (path) => {
-      renderAppAt(path);
-      await waitFor(() => {
-        expect(screen.getByTestId('ai-providers-page')).toBeTruthy();
-      });
-    }
-  );
+  it.each([
+    ['/ai/providers', 'ai-providers-page'],
+    ['/ai/routing', 'ai-routing-page'],
+    ['/ai/monitor', 'ai-monitor-page'],
+  ])('renders the split page at %s', async (path, testId) => {
+    renderAppAt(path);
+    await waitFor(() => {
+      expect(screen.getByTestId(testId)).toBeTruthy();
+    });
+  });
 
   it('redirects the legacy usage section to monitor', async () => {
     renderAppAt('/ai/usage');
     await waitFor(() => {
-      expect(screen.getByTestId('ai-providers-page')).toBeTruthy();
+      expect(screen.getByTestId('ai-monitor-page')).toBeTruthy();
     });
   });
 
@@ -212,5 +216,7 @@ describe('App /ai route table', () => {
       expect(screen.getByTestId('not-found-page')).toBeTruthy();
     });
     expect(screen.queryByTestId('ai-providers-page')).toBeNull();
+    expect(screen.queryByTestId('ai-routing-page')).toBeNull();
+    expect(screen.queryByTestId('ai-monitor-page')).toBeNull();
   });
 });

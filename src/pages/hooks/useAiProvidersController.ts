@@ -38,7 +38,9 @@ export function maskKey(key: string, visibleTail: number = 4): string {
   return `${'•'.repeat(Math.max(0, key.length - visibleTail))}${key.slice(-visibleTail)}`;
 }
 
-export function useAiProvidersController() {
+export type AiHubPage = 'providers' | 'routing' | 'monitor';
+
+export function useAiProvidersController(page?: AiHubPage) {
   const setProviderQuotas = useAiProxyStore(state => state.setProviderQuotas);
   const setOpenAiAccountQuotas = useAiProxyStore(state => state.setOpenAiAccountQuotas);
   const setKiroAccountQuotas = useAiProxyStore(state => state.setKiroAccountQuotas);
@@ -643,13 +645,21 @@ export function useAiProvidersController() {
 
   useEffect(() => {
     queueMicrotask(() => {
-    void fetchAccounts();
-    void fetchCapabilitiesAndModels();
-    void fetchProviderQuotas();
-    void fetchHistorySummary();
-    void refreshProxyInfo();
+      const fetchAll = page === undefined;
+      void fetchAccounts();
+      if (fetchAll || page === 'providers' || page === 'monitor') {
+        void fetchProviderQuotas();
+      }
+      if (fetchAll || page === 'routing' || page === 'monitor') {
+        void fetchCapabilitiesAndModels();
+      }
+      if (fetchAll || page === 'monitor') {
+        void fetchHistorySummary();
+      }
+      void refreshProxyInfo();
     });
   }, [
+    page,
     fetchAccounts,
     fetchCapabilitiesAndModels,
     fetchProviderQuotas,
