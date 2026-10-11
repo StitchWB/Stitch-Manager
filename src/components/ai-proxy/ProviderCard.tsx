@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { AlertCircle, PenSquare, PlugZap, Server, Trash2, Wand2 } from 'lucide-react';
+import { AlertCircle, ClipboardPaste, PenSquare, PlugZap, Server, Trash2, Wand2 } from 'lucide-react';
 import {
   Badge,
+  Button,
   ButtonBase,
   ConfirmActionButton,
   GlassCard,
@@ -35,6 +36,7 @@ interface ProviderCardProps {
   onEditEndpoint?: (endpoint: ProviderEndpoint) => void;
   onDeleteEndpoint?: (endpoint: ProviderEndpoint) => void;
   onDiscoverModels?: (endpoint: ProviderEndpoint) => void;
+  onPasteKey?: () => void;
 }
 
 function accountStatus(
@@ -101,6 +103,7 @@ export function ProviderCard({
   onEditEndpoint,
   onDeleteEndpoint,
   onDiscoverModels,
+  onPasteKey,
 }: ProviderCardProps) {
   const [modelsExpanded, setModelsExpanded] = useState(false);
 
@@ -153,6 +156,16 @@ export function ProviderCard({
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              {onPasteKey && (
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  leftIcon={<ClipboardPaste size={12} />}
+                  onClick={onPasteKey}
+                >
+                  {t('aiHub.pasteFirst.pasteKey')}
+                </Button>
+              )}
               {onDiscoverModels && (
                 <ButtonBase
                   type="button"
@@ -201,6 +214,18 @@ export function ProviderCard({
                 {t('aiGateway.accountPanel.noLinkDesc')}
               </div>
             </div>
+            {onPasteKey && (
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  leftIcon={<ClipboardPaste size={12} />}
+                  onClick={onPasteKey}
+                >
+                  {t('aiHub.pasteFirst.pasteKey')}
+                </Button>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -279,8 +304,20 @@ export function ProviderCard({
             <div className="text-xs font-medium text-slate-400">
               {t('aiGateway.cards.accountsEmpty')}
             </div>
-            <div className="mt-0.5 text-[10px] text-slate-600">
-              {t('aiGateway.cards.accountsEmptyDesc')}
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              {onPasteKey && (
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  leftIcon={<ClipboardPaste size={12} />}
+                  onClick={onPasteKey}
+                >
+                  {t('aiHub.pasteFirst.pasteKey')}
+                </Button>
+              )}
+              <span className="text-[10px] text-slate-600">
+                {t('aiHub.pasteFirst.emptyHint')}
+              </span>
             </div>
           </div>
         )}

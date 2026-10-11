@@ -129,6 +129,7 @@ function renderSection(searchQuery: string) {
     onDeleteAccount: jest.fn(),
     onTestConnection: jest.fn(),
     onPastePackage: jest.fn(),
+    onPasteKey: jest.fn(),
   };
   render(
     <ProviderCardsSection

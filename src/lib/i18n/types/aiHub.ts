@@ -513,6 +513,35 @@ export interface AiHubTranslations {
       exponentialBackoffLabel: string;
       exponentialBackoffHint: string;
     }
+    pasteFirst: {
+      title: string;
+      hint: string;
+      keysLabel: string;
+      providerLabel: string;
+      providerAuto: string;
+      baseUrlLabel: string;
+      baseUrlToggle: string;
+      newNameLabel: string;
+      newProviderHint: string;
+      test: string;
+      add: string;
+      statusPending: string;
+      statusOk: string;
+      statusInvalid: string;
+      statusError: string;
+      noBaseUrl: string;
+      addedToast: string;
+      addFailed: string;
+      nothingToAdd: string;
+      pasteKey: string;
+      emptyHint: string;
+    }
+    keysOverview: {
+      title: string;
+      accounts: string;
+      keys: string;
+      empty: string;
+    }
     search: {
       placeholder: string;
     }

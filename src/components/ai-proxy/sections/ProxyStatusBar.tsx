@@ -21,7 +21,7 @@ export interface ProxyStatusBarProps {
   hideConfigureLink?: boolean;
 }
 
-function CopyField({
+function InlineCopyField({
   label,
   value,
   onCopy,
@@ -31,24 +31,21 @@ function CopyField({
   onCopy: (label: string, value: string, requireConfirm?: boolean) => void;
 }) {
   return (
-    <div className="min-w-0">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="mt-0.5 flex items-center gap-1 rounded-md border border-white/[0.06] bg-black/30 px-2 py-1">
-        <span className="truncate font-mono text-[11px] text-slate-200" title={value}>
-          {value}
-        </span>
-        <Tooltip content={t('aiHub.actions.copy')}>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            onClick={() => onCopy(label, value)}
-            aria-label={t('aiHub.actions.copy')}
-          >
-            <Copy size={12} />
-          </IconButton>
-        </Tooltip>
-      </div>
-    </div>
+    <span className="flex min-w-0 items-center gap-0.5 rounded-md border border-white/[0.06] bg-black/30 px-2 py-1">
+      <span className="max-w-[180px] truncate font-mono text-[11px] text-slate-300" title={value}>
+        {value}
+      </span>
+      <Tooltip content={`${t('aiHub.actions.copy')} · ${label}`}>
+        <IconButton
+          size="sm"
+          variant="ghost"
+          onClick={() => onCopy(label, value)}
+          aria-label={`${t('aiHub.actions.copy')} ${label}`}
+        >
+          <Copy size={12} />
+        </IconButton>
+      </Tooltip>
+    </span>
   );
 }
 
@@ -85,83 +82,82 @@ export function ProxyStatusBar({
     .join(' · ');
 
   return (
-    <div className={cn('rounded-xl border px-4 py-3', tint)}>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <div className="flex items-center gap-3">
-          <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
-            {running && !unreachable && (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
-            )}
-            <span className={cn('relative h-2.5 w-2.5 rounded-full', dotTone)} />
-          </span>
-          <div>
-            <div className="text-sm font-semibold text-white">
-              {running ? t('aiHub.proxy.running') : t('aiHub.proxy.stopped')}
-            </div>
-            {unreachable && (
-              <div className="text-[10px] font-medium text-red-300">
-                {t('aiHub.proxy.unreachable')}
-              </div>
-            )}
-          </div>
-        </div>
+    <div
+      data-testid="proxy-status-bar"
+      role="status"
+      className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-1.5', tint)}
+    >
+      <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+        {running && !unreachable && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+        )}
+        <span className={cn('relative h-2 w-2 rounded-full', dotTone)} />
+      </span>
+      <span
+        className={cn(
+          'shrink-0 text-xs font-semibold',
+          unreachable ? 'text-red-300' : running ? 'text-emerald-300' : 'text-amber-300'
+        )}
+      >
+        {unreachable
+          ? t('aiHub.proxy.unreachable')
+          : running
+            ? t('aiHub.proxy.running')
+            : t('aiHub.proxy.stopped')}
+      </span>
+      {secondaryLine && (
+        <span className="hidden shrink-0 text-[10px] uppercase tracking-wider tabular-nums text-slate-500 md:inline">
+          {secondaryLine}
+        </span>
+      )}
 
-        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-4 gap-y-2">
-          <CopyField label={t('aiHub.proxy.baseUrl')} value={baseUrl} onCopy={onCopy} />
-          <CopyField
-            label={t('aiHub.proxy.clientApiKey')}
-            value={clientApiKey}
-            onCopy={onCopy}
-          />
-        </div>
+      <InlineCopyField label={t('aiHub.proxy.baseUrl')} value={baseUrl} onCopy={onCopy} />
+      <InlineCopyField
+        label={t('aiHub.proxy.clientApiKey')}
+        value={clientApiKey}
+        onCopy={onCopy}
+      />
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant={running ? 'danger' : 'primary'}
+      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        <Button
+          variant={running ? 'danger' : 'primary'}
+          size="xs"
+          leftIcon={<Power size={12} />}
+          onClick={onStartStopProxy}
+          disabled={proxyBusy || proxySaving}
+        >
+          {proxyBusy
+            ? t('aiHub.actions.working')
+            : running
+              ? t('aiHub.actions.stopProxy')
+              : t('aiHub.actions.startProxy')}
+        </Button>
+
+        <Tooltip content={t('aiHub.actions.refresh')}>
+          <IconButton
             size="sm"
-            leftIcon={<Power size={14} />}
-            onClick={onStartStopProxy}
+            variant="ghost"
+            onClick={onRefreshProxyInfo}
             disabled={proxyBusy || proxySaving}
+            aria-label={t('aiHub.actions.refresh')}
           >
-            {proxyBusy
-              ? t('aiHub.actions.working')
-              : running
-                ? t('aiHub.actions.stopProxy')
-                : t('aiHub.actions.startProxy')}
-          </Button>
+            <RefreshCw size={13} className={cn(proxyBusy && 'animate-spin')} />
+          </IconButton>
+        </Tooltip>
 
-          <Tooltip content={t('aiHub.actions.refresh')}>
+        {!hideConfigureLink && (
+          <Tooltip content={t('aiHub.tabs.routing')}>
             <IconButton
               size="sm"
               variant="ghost"
-              onClick={onRefreshProxyInfo}
-              disabled={proxyBusy || proxySaving}
-              aria-label={t('aiHub.actions.refresh')}
+              onClick={() => navigate('/ai/routing')}
+              aria-label={t('aiHub.tabs.routing')}
             >
-              <RefreshCw size={14} className={cn(proxyBusy && 'animate-spin')} />
+              <Settings size={13} />
             </IconButton>
           </Tooltip>
-
-          {!hideConfigureLink && (
-            <Tooltip content={t('aiHub.tabs.routing')}>
-              <IconButton
-                size="sm"
-                variant="ghost"
-                onClick={() => navigate('/ai/routing')}
-                aria-label={t('aiHub.tabs.routing')}
-              >
-                <Settings size={14} />
-              </IconButton>
-            </Tooltip>
-          )}
-        </div>
-      </div>
-
-      {secondaryLine && (
-        <div className="mt-2 text-[10px] uppercase tracking-wider text-slate-500 tabular-nums">
-          {secondaryLine}
-        </div>
-      )}
+        )}
+      </span>
     </div>
   );
 }

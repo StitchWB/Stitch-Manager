@@ -515,6 +515,35 @@ export const aiHub: AiHubTranslations = {
       exponentialBackoffLabel: "Экспоненциальная задержка",
       exponentialBackoffHint: "Удваивать длительность охлаждения при каждом сбое"
     },
+    pasteFirst: {
+      title: "Вставить ключи",
+      hint: "Вставьте один или несколько API-ключей, по одному на строку",
+      keysLabel: "API-ключи",
+      providerLabel: "Провайдер",
+      providerAuto: "Автоопределение",
+      baseUrlLabel: "Base URL",
+      baseUrlToggle: "Свой base URL",
+      newNameLabel: "Название провайдера",
+      newProviderHint: "Провайдер не распознан — укажите название и base URL, чтобы создать его",
+      test: "Проверить",
+      add: "Добавить",
+      statusPending: "Не проверен",
+      statusOk: "Валиден",
+      statusInvalid: "Невалиден",
+      statusError: "Ошибка",
+      noBaseUrl: "Нужен base URL",
+      addedToast: "Добавлено ключей: {count}",
+      addFailed: "Не удалось добавить: {msg}",
+      nothingToAdd: "Нет ключей для добавления",
+      pasteKey: "Вставить ключ",
+      emptyHint: "Вставьте API-ключ, чтобы добавить аккаунт"
+    },
+    keysOverview: {
+      title: "Аккаунты и ключи",
+      accounts: "Аккаунты",
+      keys: "Ключи",
+      empty: "Пока нет аккаунтов и ключей"
+    },
     search: {
       placeholder: "Провайдер, аккаунт или модель…"
     },

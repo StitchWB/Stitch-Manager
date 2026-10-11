@@ -515,6 +515,35 @@ export const aiHub: AiHubTranslations = {
       exponentialBackoffLabel: "Exponential backoff",
       exponentialBackoffHint: "Double cooldown duration on each failure"
     },
+    pasteFirst: {
+      title: "Paste keys",
+      hint: "Paste one or more API keys, one per line",
+      keysLabel: "API keys",
+      providerLabel: "Provider",
+      providerAuto: "Auto-detect",
+      baseUrlLabel: "Base URL",
+      baseUrlToggle: "Custom base URL",
+      newNameLabel: "Provider name",
+      newProviderHint: "Provider not recognized — give it a name and base URL to create it",
+      test: "Test",
+      add: "Add",
+      statusPending: "Not tested",
+      statusOk: "Valid",
+      statusInvalid: "Invalid",
+      statusError: "Error",
+      noBaseUrl: "Base URL required",
+      addedToast: "Added {count} key(s)",
+      addFailed: "Failed to add: {msg}",
+      nothingToAdd: "No keys to add",
+      pasteKey: "Paste key",
+      emptyHint: "Paste an API key to add an account"
+    },
+    keysOverview: {
+      title: "Accounts & keys",
+      accounts: "Accounts",
+      keys: "Keys",
+      empty: "No accounts or keys yet"
+    },
     search: {
       placeholder: "Provider, account, or model…"
     },

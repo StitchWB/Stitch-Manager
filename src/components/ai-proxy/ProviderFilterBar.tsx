@@ -1,12 +1,10 @@
-import { LayoutGrid, Search } from 'lucide-react';
+import { LayoutGrid, Plus, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import { AI_PROXY_PROVIDER_FILTERS } from './providerMeta';
-import { ButtonBase, Input, OverflowMenu, ProviderLogo } from '@/components/ui';
+import { ButtonBase, Input, ProviderLogo } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-
-const TOP_CHIP_COUNT = 5;
 
 const ALL_PROVIDERS_LABEL = AI_PROXY_PROVIDER_FILTERS[0].label;
 
@@ -33,10 +31,7 @@ export function ProviderFilterBar({ providerCounts }: ProviderFilterBarProps) {
     .filter(id => id !== 'all' && !knownIds.has(id))
     .map(id => ({ id, label: id, count: providerCounts[id] }));
 
-  const all = [...registered, ...extras];
-  const top = all.filter(c => c.count > 0).sort((a, b) => b.count - a.count).slice(0, TOP_CHIP_COUNT);
-  const topIds = new Set(top.map(c => c.id));
-  const overflow = all.filter(c => !topIds.has(c.id));
+  const chips = [...registered, ...extras];
 
   const selectProvider = (id: string) => {
     setSearchParams(prev => {
@@ -59,6 +54,7 @@ export function ProviderFilterBar({ providerCounts }: ProviderFilterBarProps) {
 
   const chip = (id: string, label: string, count: number, icon: React.ReactNode) => {
     const active = activeProvider === id;
+    const empty = count === 0;
     return (
       <ButtonBase
         key={id}
@@ -69,7 +65,9 @@ export function ProviderFilterBar({ providerCounts }: ProviderFilterBarProps) {
           'flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
           active
             ? 'bg-indigo-500/12 text-white ring-1 ring-inset ring-indigo-400/20'
-            : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'
+            : empty
+              ? 'text-slate-600 opacity-60 hover:bg-white/[0.04] hover:text-slate-300 hover:opacity-100'
+              : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'
         )}
       >
         <span className={cn('shrink-0', active ? 'text-indigo-300' : 'text-slate-600')}>{icon}</span>
@@ -89,20 +87,18 @@ export function ProviderFilterBar({ providerCounts }: ProviderFilterBarProps) {
       <div className="min-w-0 flex-1 overflow-x-auto">
         <div className="flex min-w-max items-center gap-1">
           {chip('all', ALL_PROVIDERS_LABEL, providerCounts.all ?? 0, <LayoutGrid size={15} />)}
-          {top.map(c =>
+          {chips.map(c =>
             chip(c.id, c.label, c.count, <ProviderLogo provider={c.id} size={16} colored />)
           )}
-          {overflow.length > 0 && (
-            <OverflowMenu
-              triggerLabel={t('aiHub.labels.providers')}
-              size="sm"
-              items={overflow.map(c => ({
-                id: c.id,
-                label: `${c.label} · ${c.count}`,
-                onSelect: () => selectProvider(c.id),
-              }))}
-            />
-          )}
+          <ButtonBase
+            type="button"
+            onClick={() => selectProvider('custom')}
+            aria-label={t('aiHub.addProvider')}
+            className="flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-indigo-300 transition-colors hover:bg-indigo-500/10 hover:text-white"
+          >
+            <Plus size={13} className="shrink-0" />
+            <span className="whitespace-nowrap">{t('aiHub.addProvider')}</span>
+          </ButtonBase>
         </div>
       </div>
       <Input
