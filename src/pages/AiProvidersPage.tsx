@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { AlertTriangle, ClipboardPaste, Database, Plus, Zap } from 'lucide-react';
+import { ClipboardPaste, Database, Plus, Zap } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import Header from '../components/layout/Header';
@@ -7,10 +7,10 @@ import AccountModal from '../components/ai-proxy/AccountModal';
 import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
 import { PublicModelsSection } from '@/components/ai-gateway/PublicModelsSection';
 import { ProviderEndpointForm } from '@/components/ai-gateway/ProviderEndpointForm';
-import { useAiProxyStore } from '../stores/aiProxy';
 import { ProviderFilterBar } from '../components/ai-proxy/ProviderFilterBar';
 import { ProviderCardsSection } from '../components/ai-proxy/ProviderCardsSection';
 import { AiProxyAccountDrawer } from '../components/ai-proxy/AiProxyAccountDrawer';
+import { PasteFirstModal } from '../components/ai-proxy/PasteFirstModal';
 import { ProxyStatusBar } from '../components/ai-proxy/sections/ProxyStatusBar';
 import { AiProvidersKeysSection } from '../components/ai-proxy/sections/AiProvidersKeysSection';
 import { useAiProvidersController } from './hooks/useAiProvidersController';
@@ -26,11 +26,12 @@ export default function AiProvidersPage() {
   const [searchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteFirstOpen, setPasteFirstOpen] = useState(false);
+  const [pasteFirstProvider, setPasteFirstProvider] = useState<string | null>(null);
+  const [pasteFirstSeq, setPasteFirstSeq] = useState(0);
   const [editingAccount, setEditingAccount] = useState<AiProxyAccount | null>(null);
   const [drawerAccount, setDrawerAccount] = useState<AiProxyAccount | null>(null);
   const [addEndpointOpen, setAddEndpointOpen] = useState(false);
-  const proxyStoreStatus = useAiProxyStore(s => s.status);
-  const serverOffline = !(proxyStoreStatus?.running ?? false);
   const controller = useAiProvidersController('providers');
   const { gatewayActionBusy, handleImportOpencode, handleMigrateLegacy } = useGatewayActions();
 
@@ -71,6 +72,21 @@ export default function AiProvidersPage() {
     setIsModalOpen(true);
   }, []);
 
+  const handleOpenPasteFirst = useCallback((provider?: string) => {
+    setPasteFirstProvider(provider ?? null);
+    setPasteFirstSeq(seq => seq + 1);
+    setPasteFirstOpen(true);
+  }, []);
+
+  const handleClosePasteFirst = useCallback(() => {
+    setPasteFirstOpen(false);
+    setPasteFirstProvider(null);
+  }, []);
+
+  const handlePasteFirstSubmit = useCallback(async () => {
+    await fetchAccounts();
+  }, [fetchAccounts]);
+
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
     setEditingAccount(null);
@@ -102,6 +118,14 @@ export default function AiProvidersPage() {
           <>
             <Button
               variant="primary"
+              size="sm"
+              onClick={() => handleOpenPasteFirst()}
+              leftIcon={<ClipboardPaste size={14} />}
+            >
+              {t('aiHub.pasteFirst.title')}
+            </Button>
+            <Button
+              variant="outline"
               size="sm"
               onClick={handleAddNew}
               leftIcon={<Plus size={14} />}
@@ -141,16 +165,6 @@ export default function AiProvidersPage() {
         <ProviderFilterBar providerCounts={providerCounts} />
 
         <div className="flex-1 space-y-4 overflow-auto p-4 md:p-6">
-          {serverOffline && (
-            <div
-              role="status"
-              className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs font-medium text-amber-300"
-            >
-              <AlertTriangle size={14} className="shrink-0" />
-              {t('aiHub.warnings.serverOffline')}
-            </div>
-          )}
-
           <ProxyStatusBar
             proxyStatus={proxyStatus}
             proxySettings={proxySettings}
@@ -189,6 +203,7 @@ export default function AiProvidersPage() {
               void handleTestConnection(account);
             }}
             onPastePackage={() => setPasteOpen(true)}
+            onPasteKey={handleOpenPasteFirst}
           />
 
           <AiProvidersKeysSection providerFilter={providerFilter} />
@@ -219,6 +234,14 @@ export default function AiProvidersPage() {
       />
 
       <PastePackageDialog open={pasteOpen} onClose={() => setPasteOpen(false)} />
+
+      <PasteFirstModal
+        key={pasteFirstSeq}
+        isOpen={pasteFirstOpen}
+        initialProvider={pasteFirstProvider ?? undefined}
+        onClose={handleClosePasteFirst}
+        onSubmit={handlePasteFirstSubmit}
+      />
 
       <ProviderEndpointForm
         endpoint={null}

@@ -50,6 +50,7 @@ interface ProviderCardsSectionProps {
   onDeleteAccount: (id: number) => void;
   onTestConnection: (account: AiProxyAccount) => void;
   onPastePackage: () => void;
+  onPasteKey: (provider?: string) => void;
 }
 
 function providerDisplayName(provider: string): string {
@@ -104,6 +105,7 @@ export function ProviderCardsSection({
   onDeleteAccount,
   onTestConnection,
   onPastePackage,
+  onPasteKey,
 }: ProviderCardsSectionProps) {
   const endpoints = useAiGatewayStore(s => s.endpoints);
   const credentials = useAiGatewayStore(s => s.credentials);
@@ -287,6 +289,10 @@ export function ProviderCardsSection({
           <h3 className="mb-2 text-lg font-semibold">{t('aiGateway.list.noEndpoints')}</h3>
           <p className="mb-4 text-slate-400">{t('aiGateway.list.noEndpointsDesc')}</p>
           <div className="flex items-center justify-center gap-2">
+            <Button variant="primary" onClick={() => onPasteKey()}>
+              <ClipboardPaste className="mr-2 h-4 w-4" />
+              {t('aiHub.pasteFirst.title')}
+            </Button>
             <Button onClick={() => setEndpointForm({ open: true, endpoint: null })}>
               <Plus className="mr-2 h-4 w-4" />
               {t('aiGateway.list.addEndpoint')}
@@ -315,6 +321,9 @@ export function ProviderCardsSection({
                 onEditEndpoint={ep => setEndpointForm({ open: true, endpoint: ep })}
                 onDeleteEndpoint={ep => void handleDeleteEndpoint(ep)}
                 onDiscoverModels={ep => void handleDiscover(ep)}
+                onPasteKey={() =>
+                  onPasteKey(ADAPTER_PROVIDER_LOGO[endpoint.adapterType] ?? endpoint.adapterType)
+                }
               />
             ))}
 
@@ -328,6 +337,7 @@ export function ProviderCardsSection({
                 onEditAccount={onEditAccount}
                 onDeleteAccount={onDeleteAccount}
                 onTestConnection={onTestConnection}
+                onPasteKey={() => onPasteKey(visibleUnlinked[0]?.provider)}
               />
             )}
           </div>

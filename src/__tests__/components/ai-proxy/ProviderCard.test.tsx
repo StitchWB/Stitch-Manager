@@ -31,6 +31,11 @@ jest.mock('@/components/ui', () => ({
     </span>
   ),
   ButtonBase: ({ children, ...rest }: any) => <button {...rest}>{children}</button>,
+  Button: ({ children, onClick, disabled, isLoading: _isLoading, leftIcon: _leftIcon, rightIcon: _rightIcon, ...rest }: any) => (
+    <button onClick={onClick} disabled={disabled} {...rest}>
+      {children}
+    </button>
+  ),
   ConfirmActionButton: ({ children, onConfirm, title, disabled }: any) => (
     <button title={title} disabled={disabled} onClick={onConfirm}>
       {children}
@@ -249,5 +254,18 @@ describe('ProviderCard', () => {
     render(<ProviderCard endpoint={endpoint} accounts={[]} models={[]} {...props} />);
 
     expect(screen.getByLabelText('aiGateway.cards.accountsEmpty')).toBeTruthy();
+  });
+
+  it('offers paste-key from the empty state and the card header', () => {
+    props.onPasteKey = jest.fn();
+    render(<ProviderCard endpoint={endpoint} accounts={[]} models={[]} {...props} />);
+
+    expect(screen.queryByText('aiGateway.cards.accountsEmptyDesc')).toBeNull();
+    expect(screen.getByText('aiHub.pasteFirst.emptyHint')).toBeTruthy();
+
+    const pasteButtons = screen.getAllByText('aiHub.pasteFirst.pasteKey');
+    expect(pasteButtons.length).toBe(2);
+    fireEvent.click(pasteButtons[0]);
+    expect(props.onPasteKey).toHaveBeenCalled();
   });
 });

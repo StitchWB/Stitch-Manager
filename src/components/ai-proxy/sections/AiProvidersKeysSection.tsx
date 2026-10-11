@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, UserPlus } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { KeyList } from '@/components/api-keys/KeyList';
@@ -12,8 +13,9 @@ import { getAiProxyAccounts } from '@/lib/backend/modules/aiProxy';
 import { useServicePlugins } from '@/hooks/useServicePlugins';
 import type { ApiKeyEntry, KeyFilter } from '@/types/apiKeys';
 import type { AiProxyAccount } from '@/types/generated';
-import { Button, GlassCard, Modal, Input, MetricStrip } from '@/components/ui';
+import { Button, ButtonBase, GlassCard, Modal, Input, MetricStrip, ProviderLogo } from '@/components/ui';
 import type { MetricSegment } from '@/components/ui';
+import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
 import { FireworksCheckerSection } from './FireworksCheckerSection';
 import { FreeModelBridgeSection } from './FreeModelBridgeSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
@@ -49,9 +51,23 @@ const providerLabel: Record<string, string> = {
   zai: 'Z.AI / GLM',
 };
 
+const SHARED_KEY_LOADERS: Record<string, () => Promise<unknown[]>> = {
+  gemini: () => apiKeys.getGeminiApiKeys(),
+  openai: () => apiKeys.getOpenAIApiKeys(),
+  anthropic: () => apiKeys.getAnthropicApiKeys(),
+  antigravity: () => apiKeys.getAntigravityApiKeys(),
+  zai: () => apiKeys.getZaiApiKeys(),
+};
+
+const FILTER_LABELS: Record<string, string> = Object.fromEntries(
+  AI_PROXY_PROVIDER_FILTERS.map(f => [f.id, f.label])
+);
+
 export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectionProps) {
+  const [, setSearchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
   const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
+  const [sharedKeyCounts, setSharedKeyCounts] = useState<Record<string, number>>({});
   const [activeFilter, setActiveFilter] = useState<KeyFilter>('all');
   const [testingKeys, setTestingKeys] = useState<Set<string>>(new Set());
   const [isBulkDrawerOpen, setIsBulkDrawerOpen] = useState(false);
@@ -119,6 +135,23 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
   useEffect(() => {
     queueMicrotask(() => void refreshAiProxyAccounts());
   }, [refreshAiProxyAccounts]);
+
+  const loadSharedKeyCounts = useCallback(async () => {
+    const entries = Object.entries(SHARED_KEY_LOADERS);
+    const results = await Promise.allSettled(entries.map(([, load]) => load()));
+    const counts: Record<string, number> = {};
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+        counts[entries[index][0]] = result.value.length;
+      }
+    });
+    setSharedKeyCounts(counts);
+  }, []);
+
+  useEffect(() => {
+    if (providerFilter !== 'all') return;
+    queueMicrotask(() => void loadSharedKeyCounts());
+  }, [providerFilter, loadSharedKeyCounts]);
 
   const persistKeys = useCallback(async (newKeys: ApiKeyEntry[]) => {
     const toBackend = (entries: ApiKeyEntry[]) => entries.map(e => ({
@@ -290,8 +323,69 @@ export function AiProvidersKeysSection({ providerFilter }: AiProvidersKeysSectio
     ];
   }, [keys.length, linkedAccountsForProvider.length]);
 
+  const overviewRows = useMemo(() => {
+    const accountCounts: Record<string, number> = {};
+    for (const account of aiProxyAccounts) {
+      accountCounts[account.provider] = (accountCounts[account.provider] ?? 0) + 1;
+    }
+    const ids = new Set([...Object.keys(accountCounts), ...Object.keys(sharedKeyCounts)]);
+    return [...ids]
+      .map(id => ({
+        id,
+        label: providerLabel[id] ?? FILTER_LABELS[id] ?? id,
+        accounts: accountCounts[id] ?? 0,
+        keys: sharedKeyCounts[id] ?? 0,
+      }))
+      .filter(row => row.accounts > 0 || row.keys > 0)
+      .sort((a, b) => b.accounts + b.keys - (a.accounts + a.keys));
+  }, [aiProxyAccounts, sharedKeyCounts]);
+
+  const selectOverviewProvider = useCallback(
+    (id: string) => {
+      setSearchParams(prev => {
+        prev.set('provider', id);
+        return prev;
+      });
+    },
+    [setSearchParams]
+  );
+
   if (providerFilter === 'all') {
-    return null;
+    return (
+      <div data-testid="keys-overview">
+        <GlassCard className="p-4">
+          <h3 className="mb-3 text-sm font-semibold text-slate-200">{t('aiHub.keysOverview.title')}</h3>
+          {overviewRows.length === 0 ? (
+            <p className="text-xs text-slate-500">{t('aiHub.keysOverview.empty')}</p>
+          ) : (
+            <div className="divide-y divide-white/[0.04]">
+              {overviewRows.map(row => (
+                <ButtonBase
+                  key={row.id}
+                  type="button"
+                  data-testid={`keys-overview-row-${row.id}`}
+                  className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-white/[0.03]"
+                  onClick={() => selectOverviewProvider(row.id)}
+                >
+                  <span className="shrink-0 text-slate-400">
+                    <ProviderLogo provider={row.id} size={16} colored />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200">
+                    {row.label}
+                  </span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
+                    {t('aiHub.keysOverview.accounts')}: {row.accounts}
+                  </span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
+                    {t('aiHub.keysOverview.keys')}: {row.keys}
+                  </span>
+                </ButtonBase>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+      </div>
+    );
   }
 
   // Special sections for specific providers

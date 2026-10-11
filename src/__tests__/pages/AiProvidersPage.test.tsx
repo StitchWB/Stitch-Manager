@@ -181,7 +181,7 @@ describe('AiProvidersPage', () => {
     });
   });
 
-  it('renders the consolidated toolbar, overflow actions and offline banner on providers section', async () => {
+  it('renders the paste-first header action, overflow actions and the compact proxy strip', async () => {
     render(
       <MemoryRouter initialEntries={['/ai/providers']}>
         <Routes>
@@ -194,6 +194,7 @@ describe('AiProvidersPage', () => {
 
     expect(screen.getByPlaceholderText('Provider, account, or model…')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add Endpoint' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Paste keys' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add Account' })).toBeTruthy();
     expect(screen.getByLabelText('More')).toBeTruthy();
 
@@ -201,8 +202,26 @@ describe('AiProvidersPage', () => {
     expect(screen.queryByRole('button', { name: 'Import from OpenCode' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Paste Package' })).toBeNull();
 
-    // Backend unreachable in jsdom → proxy store status stays null → banner shows.
-    expect(await screen.findByText('Server offline — data may be stale')).toBeTruthy();
+    expect(screen.queryByText('Server offline — data may be stale')).toBeNull();
+    expect(screen.getByTestId('proxy-status-bar')).toBeTruthy();
+  });
+
+  it('opens the paste-first modal from the header action', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/ai/providers']}>
+        <Routes>
+          <Route path="/ai/providers" element={<AiProvidersPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('OpenAI Main');
+
+    expect(screen.queryByTestId('paste-first-modal')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Paste keys' }));
+    expect(await screen.findByTestId('paste-first-modal')).toBeTruthy();
   });
 
   it('replaces the provider sidebar with the url-state filter bar', async () => {
