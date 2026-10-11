@@ -178,7 +178,7 @@ const COMMAND_MAP: Record<string, unknown> = {
   get_provider_capabilities: [],
   get_provider_model_mappings: [],
   get_proxy_debug_logs: [],
-  get_marketplace: { plugins: [] },
+  get_marketplace: { items: [], activated: false, feeds: null },
   list_service_plugins: [],
 };
 

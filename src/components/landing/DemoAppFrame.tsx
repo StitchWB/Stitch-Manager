@@ -14,6 +14,15 @@ const Accounts = lazy(() => import('../../pages/Accounts'));
 const AutoReg = lazy(() => import('../../pages/AutoReg'));
 const AiOverview = lazy(() => import('../../pages/AiOverview'));
 const AiProviders = lazy(() => import('../../pages/AiProviders'));
+const Chat = lazy(() => import('../../pages/Chat'));
+const AiIntegrations = lazy(() => import('../../pages/AiIntegrations'));
+const OpenCodeConfig = lazy(() => import('../../pages/OpenCodeConfig'));
+const NotebookLM = lazy(() => import('../../pages/NotebookLM'));
+const Antigravity = lazy(() => import('../../pages/Antigravity'));
+const Devbox = lazy(() => import('../../pages/Devbox'));
+const PluginPageHost = lazy(() =>
+  import('../../components/plugin-ui/DeclarativePage').then(m => ({ default: m.PluginPageHost }))
+);
 const Radar = lazy(() => import('../../pages/Radar'));
 const Friends = lazy(() => import('../../pages/Friends'));
 const Marketplace = lazy(() => import('../../pages/Marketplace'));
@@ -61,7 +70,17 @@ function DemoRoutes() {
       <Route path="/accounts" element={<Accounts />} />
       <Route path="/autoreg" element={<AutoReg />} />
       <Route path="/ai" element={<AiOverview />} />
-      <Route path="/ai/:section" element={<AiProviders />} />
+      <Route path="/ai/providers" element={<AiProviders />} />
+      <Route path="/ai/routing" element={<AiProviders />} />
+      <Route path="/ai/monitor" element={<AiProviders />} />
+      <Route path="/ai/chat" element={<Chat />} />
+      <Route path="/ai/integrations" element={<AiIntegrations />} />
+      <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
+      <Route path="/ai/notebooklm" element={<NotebookLM />} />
+      <Route path="/ai/antigravity" element={<Antigravity />} />
+      <Route path="/ai/devbox" element={<Devbox />} />
+      <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
+      <Route path="/ai/*" element={<Navigate to="/ai" replace />} />
       <Route path="/radar" element={<Radar />} />
       <Route path="/friends" element={<Friends />} />
       <Route path="/marketplace" element={<Marketplace />} />

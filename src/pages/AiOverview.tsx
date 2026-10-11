@@ -55,7 +55,7 @@ export default function AiOverview() {
         {
           title: isRu ? 'API-ключи' : 'API keys',
           description: isRu ? 'Ключи Gemini, OpenAI и других API' : 'Gemini, OpenAI and other API credentials',
-          to: '/ai/api-keys',
+          to: '/ai/providers',
           icon: KeyRound,
           tone: 'text-violet-300 bg-violet-500/10',
         },

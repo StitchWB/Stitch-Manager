@@ -641,7 +641,7 @@ export default function Chat() {
                           <Button variant="secondary" size="xs" onClick={() => navigate('/ai/routing')}>
                             {t('chat.proxySettings')}
                           </Button>
-                          <Button variant="secondary" size="xs" onClick={() => navigate('/ai/api-keys')}>
+                          <Button variant="secondary" size="xs" onClick={() => navigate('/ai/providers')}>
                             {t('chat.apiKeys')}
                           </Button>
                           <Button variant="secondary" size="xs" onClick={() => navigate('/ai/providers')}>

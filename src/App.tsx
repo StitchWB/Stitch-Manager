@@ -53,12 +53,9 @@ import TelegramLogin from './components/auth/TelegramLogin';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProviders = lazy(() => import('./pages/AiProviders'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
-const AiAnalytics = lazy(() => import('./pages/AiAnalytics'));
 const AiGroupsPage = lazy(() => import('./pages/AiGroupsPage'));
 const Antigravity = lazy(() => import('./pages/Antigravity'));
 const Devbox = lazy(() => import('./pages/Devbox'));
-const HoloneSecurity = lazy(() => import('./pages/HoloneSecurity'));
-const ToolsPage = lazy(() => import('./pages/ToolsPage'));
 const Patcher = lazy(() => import('./pages/Patcher'));
 const Scheduler = lazy(() => import('./pages/Scheduler'));
 const Mail = lazy(() => import('./pages/Mail'));
@@ -174,18 +171,14 @@ function RouteTracker() {
         '/ai',
         '/ai/antigravity',
         '/ai/devbox',
-        '/ai/api-keys',
-        '/ai/tools',
         '/ai/chat',
         '/ai/:section',
-        '/ai-analytics',
         '/patcher',
         '/scheduler',
         '/automation',
         '/mail',
         '/settings',
         '/logs',
-        '/chat',
         '/scenarios',
         '/tools',
         '/marketplace',
@@ -205,7 +198,6 @@ function RouteTracker() {
         'usage',
         'diagnostics',
         'freemodel',
-        'api-keys',
         'gateway',
       ].map(section => `/ai/${section}`);
       const exists = (path: string) =>
@@ -595,7 +587,6 @@ function App() {
             <Route path="/radar" element={<Radar />} />
             <Route path="/friends" element={<Friends />} />
             <Route path="/marketplace" element={<Marketplace />} />
-            <Route path="/chat" element={<Chat />} />
             {/* Product surface — open to any authenticated user */}
             <Route path="/autoreg" element={<AutoReg />} />
             {/* AI Hub — vertical rail layout shared by all /ai/* pages */}
@@ -605,11 +596,8 @@ function App() {
               <Route path="/ai/integrations" element={<AiIntegrations />} />
               <Route path="/ai/antigravity" element={<Antigravity />} />
               <Route path="/ai/devbox" element={<Devbox />} />
-              <Route path="/ai/holone" element={<HoloneSecurity />} />
-              <Route path="/ai/tools" element={<ToolsPage />} />
               <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
               <Route path="/ai/chat" element={<Chat />} />
-              <Route path="/ai/analytics" element={<AiAnalytics />} />
               <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
               <Route path="/ai/:section" element={<AiProviders />} />
               <Route path="/ai/notebooklm" element={<NotebookLM />} />

@@ -1,7 +1,8 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import AiProviders from '../../pages/AiProviders';
 import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
 
@@ -86,6 +87,18 @@ jest.mock('../../components/ai-gateway/PublicModelsSection', () => ({
 
 const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
 
+let navigatedPath = '';
+let navigatedSearch = '';
+
+function LocationSpy() {
+  const loc = useLocation();
+  useEffect(() => {
+    navigatedPath = loc.pathname;
+    navigatedSearch = loc.search;
+  }, [loc.pathname, loc.search]);
+  return null;
+}
+
 const testAccount = {
   id: 1,
   provider: 'openai',
@@ -106,6 +119,8 @@ const testAccount = {
 describe('AiProviders page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    navigatedPath = '';
+    navigatedSearch = '';
 
     proxy.getAiProxyAccounts.mockResolvedValue([testAccount] as any);
     proxy.getAvailableModelsSafe.mockResolvedValue([
@@ -200,6 +215,76 @@ describe('AiProviders page', () => {
 
     await waitFor(() => {
       expect(proxy.setProviderModelMappings).toHaveBeenCalled();
+    });
+  });
+
+  it('lands the monitor analytics action on /ai/monitor?tab=analytics', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/monitor']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+          <Route path="/ai/chat" element={<div data-testid="chat-page" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('button', { name: 'Open Detailed Analytics' });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open Detailed Analytics' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath + navigatedSearch).toBe('/ai/monitor?tab=analytics');
+    });
+  });
+
+  it('lands the monitor request-history analytics action on /ai/monitor?tab=analytics', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/monitor']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+          <Route path="/ai/chat" element={<div data-testid="chat-page" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('button', { name: 'Open Request Analytics' });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open Request Analytics' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath + navigatedSearch).toBe('/ai/monitor?tab=analytics');
+    });
+  });
+
+  it('lands the monitor debug-chat menu action on /ai/chat', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/monitor']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/:section?" element={<AiProviders />} />
+          <Route path="/ai/chat" element={<div data-testid="chat-page" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('button', { name: 'Open Detailed Analytics' });
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('More'));
+    });
+    const debugChatItem = screen.getByRole('menuitem', { name: 'Open Debug Chat' });
+    await act(async () => {
+      fireEvent.click(debugChatItem);
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/chat');
     });
   });
 });
