@@ -18,6 +18,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge, Tooltip } from '@/components/ui';
 import { ButtonBase } from '@/components/ui/ButtonBase';
+import { CORE_PAGE_ROUTES } from '@/components/ai-proxy/corePageRoutes';
 import { t } from '@/lib/i18n';
 import { fetchServicePlugins } from '@/lib/backend/modules/servicePlugins';
 import { useAppStore } from '@/stores/app';
@@ -34,7 +35,9 @@ type AiTabId =
   | 'monitor'
   | 'chat'
   | 'tools'
-  | 'notebooklm';
+  | 'notebooklm'
+  | 'antigravity'
+  | 'devbox';
 
 interface AiTabChild {
   id: string;
@@ -120,6 +123,8 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/notebooklm')) return 'notebooklm';
   // Redirect old api-keys route to providers
   if (pathname.startsWith('/ai/api-keys')) return 'providers';
+  if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
+  if (pathname.startsWith('/ai/devbox')) return 'devbox';
   return 'providers';
 }
 
@@ -151,18 +156,6 @@ function getPluginIcon(name?: string): LucideIcon {
   if (name && PLUGIN_ICON_MAP[name]) return PLUGIN_ICON_MAP[name];
   return Puzzle;
 }
-
-/**
- * Host routes of core_page plugins whose page is a built-in app route.
- * A core_page plugin absent here gets no rail tab at all.
- */
-const CORE_PAGE_ROUTES: Record<string, string> = {
-  'stitch-mail': '/mail',
-  'stitch-radar': '/radar',
-  'stitch-opencode': '/ai/opencode-config',
-  'stitch-devbox': '/ai/devbox',
-  'stitch-cards': '/tools',
-};
 
 /**
  * Resolve a plugin-contributed tab label. When the label looks like a
@@ -357,8 +350,10 @@ export function AiHubLayout() {
                     current === tab.id
                       ? tab.children?.find(child => child.tabParam === tabParam)
                       : undefined;
+                  // plugin tab ids are `plugin:{id}:{tabId}` — the manifest tabId may name the active section
                   const isActive = tab.pluginId
-                    ? location.pathname.startsWith(tab.to)
+                    ? location.pathname.startsWith(tab.to) ||
+                      current === tab.id.split(':').pop()
                     : current === tab.id && !activeChild;
                   const label = resolveLabel(tab);
                   const isCommunity = tab.source === 'community';
