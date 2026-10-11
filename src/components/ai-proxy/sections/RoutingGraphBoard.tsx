@@ -52,6 +52,7 @@ function NodeCard({ data, stageNumber }: { data: StageNodeData; stageNumber: num
   const c = COLORS[data.color];
   return (
     <div
+      data-testid={`routing-node-${stageNumber}`}
       className={cn(
         'group relative flex w-[200px] flex-col gap-2.5 rounded-xl border p-3.5',
         'bg-gradient-to-br from-[#1a2340] to-[#0f172a]',

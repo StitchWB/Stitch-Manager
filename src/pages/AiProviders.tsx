@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   AlertTriangle,
   Bug,
@@ -7,16 +7,16 @@ import {
   MessageSquare,
   Plus,
   RefreshCw,
-  Search,
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { appToast } from '@/lib/observability/toast';
 
 import Header from '../components/layout/Header';
+import AiAnalytics from './AiAnalytics';
 import AccountModal from '../components/ai-proxy/AccountModal';
 import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
 import { PublicModelsSection } from '@/components/ai-gateway/PublicModelsSection';
@@ -25,7 +25,7 @@ import { importOpencodeProviders } from '@/lib/backend/modules/aiGateway';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import { useAiProxyStore } from '../stores/aiProxy';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
-import { AiProvidersSidebar } from '../components/ai-proxy/sections/AiProvidersSidebar';
+import { ProviderFilterBar } from '../components/ai-proxy/ProviderFilterBar';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
 import { UserProxyCard } from '../components/ai-proxy/UserProxyCard';
 import { RotationSettingsPanel } from '../components/ai-proxy/sections/RotationSettingsPanel';
@@ -46,7 +46,6 @@ import type { ProxySettings, AiProxyAccount } from '../types/generated';
 import {
   Button,
   IconButton,
-  Input,
   OverflowMenu,
   PageHeader,
   Tooltip,
@@ -59,56 +58,23 @@ const CLIENT_API_KEY = 'proxystitch-local';
 
 type AiSection = 'providers' | 'routing' | 'monitor';
 
-function resolveSection(param: string | undefined): AiSection {
-  if (param === 'routing') return 'routing';
-  if (param === 'monitor' || param === 'usage' || param === 'diagnostics') return 'monitor';
+const ROUTING_TABS = ['board', 'mappings', 'proxy', 'rotation', 'compression', 'holone'] as const;
+const MONITOR_TABS = ['overview', 'analytics'] as const;
+type RoutingTab = (typeof ROUTING_TABS)[number];
+type MonitorTab = (typeof MONITOR_TABS)[number];
+
+function resolveSection(pathname: string): AiSection {
+  const suffix = pathname.replace(/^\/ai\/?/, '');
+  if (suffix === 'routing') return 'routing';
+  if (suffix === 'monitor') return 'monitor';
   return 'providers';
-}
-
-/** Lazy-mount wrapper: renders a placeholder until an IntersectionObserver
- *  detects the section is near the viewport, then mounts children permanently.
- *  Falls back to immediate mount when IntersectionObserver is unavailable
- *  (jsdom, old engines). */
-function LazyMount({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(
-    () => typeof IntersectionObserver === 'undefined',
-  );
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (mounted) return;
-    if (typeof IntersectionObserver === 'undefined') {
-        queueMicrotask(() => {
-      setMounted(true);
-        });
-      return;
-    }
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setMounted(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '400px 0px' },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [mounted]);
-
-  return (
-    <div id="routing-holone" className="scroll-mt-4" ref={ref}>
-      {mounted ? children : null}
-    </div>
-  );
 }
 
 export default function AiProviders() {
   const navigate = useNavigate();
   const language = useAppStore(state => state.language);
-  const { section: sectionParam } = useParams<{ section?: string }>();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AiProxyAccount | null>(null);
@@ -287,7 +253,33 @@ export default function AiProviders() {
     }
   }, [migrateLegacyData, fetchEndpoints, fetchPublicModels]);
 
-  const aiSection = useMemo<AiSection>(() => resolveSection(sectionParam), [sectionParam]);
+  const aiSection = useMemo<AiSection>(() => resolveSection(location.pathname), [location.pathname]);
+
+  const tabParam = searchParams.get('tab');
+  const routingTab: RoutingTab = (ROUTING_TABS as readonly string[]).includes(tabParam ?? '')
+    ? (tabParam as RoutingTab)
+    : 'board';
+  const monitorTab: MonitorTab = (MONITOR_TABS as readonly string[]).includes(tabParam ?? '')
+    ? (tabParam as MonitorTab)
+    : 'overview';
+
+  useEffect(() => {
+    if (tabParam === null) return;
+    const validTabs = aiSection === 'routing' ? ROUTING_TABS : aiSection === 'monitor' ? MONITOR_TABS : null;
+    if (!validTabs || (validTabs as readonly string[]).includes(tabParam)) return;
+    setSearchParams(
+      prev => {
+        prev.set('tab', validTabs[0]);
+        return prev;
+      },
+      { replace: true },
+    );
+  }, [aiSection, tabParam, setSearchParams]);
+
+  useEffect(() => {
+    setSearchQuery(searchParams.get('q') ?? '');
+    setProviderFilter(searchParams.get('provider') ?? 'all');
+  }, [searchParams, setSearchQuery, setProviderFilter]);
 
   // Lightweight fetch of the background-manager autoSwitch flag for the routing flow.
   useEffect(() => {
@@ -354,18 +346,24 @@ export default function AiProviders() {
     };
   }, [aiSection]);
 
+  const openRoutingTab = useCallback(
+    (tab: RoutingTab) => {
+      setSearchParams(
+        prev => {
+          prev.set('tab', tab);
+          return prev;
+        },
+      );
+    },
+    [setSearchParams]
+  );
+
   const setProxyDraftWithUpdater = useCallback(
     (updater: (prev: ProxySettings | null) => ProxySettings | null) => {
       setProxyDraft(prev => updater(prev));
     },
     [setProxyDraft]
   );
-
-  const scrollToRoutingSection = useCallback((sectionId: string) => {
-    setTimeout(() => {
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
-  }, []);
 
   // === Page header config per section ===
   const headerForSection = (() => {
@@ -485,24 +483,16 @@ export default function AiProviders() {
         className={aiSection === 'routing' ? 'px-4 py-2.5 md:px-5 md:py-3' : undefined}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Filter Panel — only on Providers */}
-        {aiSection === 'providers' && (
-          <AiProvidersSidebar
-            providerFilter={providerFilter}
-            providerCounts={providerCounts}
-            onSelectProvider={setProviderFilter}
-          />
-        )}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {aiSection === 'providers' && <ProviderFilterBar providerCounts={providerCounts} />}
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div
-            className={
-              aiSection === 'routing'
-                ? 'flex-1 space-y-3 overflow-auto p-3 md:p-4'
-                : 'flex-1 space-y-4 overflow-auto p-4 md:p-6'
-            }
-          >
+        <div
+          className={
+            aiSection === 'routing'
+              ? 'flex-1 space-y-3 overflow-auto p-3 md:p-4'
+              : 'flex-1 space-y-4 overflow-auto p-4 md:p-6'
+          }
+        >
             {/* === PROVIDERS TAB === */}
             {aiSection === 'providers' && (
               <>
@@ -529,14 +519,6 @@ export default function AiProviders() {
                 />
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder={t('aiHub.search.placeholder')}
-                    leftIcon={<Search className="w-4 h-4" />}
-                    containerClassName="flex-1 min-w-0"
-                  />
                   <Button
                     size="sm"
                     variant="outline"
@@ -573,31 +555,33 @@ export default function AiProviders() {
             {/* === ROUTING TAB === */}
             {aiSection === 'routing' && (
               <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3">
-                <RoutingGraphBoard
-                  accounts={accounts}
-                  mappings={modelMappings}
-                  proxyStatus={proxyStatus}
-                  proxySettings={proxySettings}
-                  baseUrl={baseUrl}
-                  autoSwitchEnabled={autoSwitchEnabled}
-                  proxyBusy={proxyBusy}
-                  holoneEnabled={holoneEnabled}
-                  holoneMode={holoneMode}
-                  holoneRuleCount={holoneRuleCount}
-                  holoneFindingsCount={holoneFindingsCount}
-                  cavemanEnabled={cavemanEnabled}
-                  cavemanLevel={cavemanLevel}
-                  compressionEnabled={compressionEnabled}
-                  onOpenHolone={() => scrollToRoutingSection('routing-holone')}
-                  onOpenProviders={() => navigate('/ai/providers')}
-                  onOpenMappings={() => scrollToRoutingSection('routing-mappings')}
-                  onOpenRotation={() => scrollToRoutingSection('routing-rotation')}
-                  onOpenProxy={() => scrollToRoutingSection('routing-proxy')}
-                  onOpenCompression={() => scrollToRoutingSection('routing-compression')}
-                  onStartStopProxy={handleStartStopProxy}
-                />
+                {routingTab === 'board' && (
+                  <RoutingGraphBoard
+                    accounts={accounts}
+                    mappings={modelMappings}
+                    proxyStatus={proxyStatus}
+                    proxySettings={proxySettings}
+                    baseUrl={baseUrl}
+                    autoSwitchEnabled={autoSwitchEnabled}
+                    proxyBusy={proxyBusy}
+                    holoneEnabled={holoneEnabled}
+                    holoneMode={holoneMode}
+                    holoneRuleCount={holoneRuleCount}
+                    holoneFindingsCount={holoneFindingsCount}
+                    cavemanEnabled={cavemanEnabled}
+                    cavemanLevel={cavemanLevel}
+                    compressionEnabled={compressionEnabled}
+                    onOpenHolone={() => openRoutingTab('holone')}
+                    onOpenProviders={() => navigate('/ai/providers')}
+                    onOpenMappings={() => openRoutingTab('mappings')}
+                    onOpenRotation={() => openRoutingTab('rotation')}
+                    onOpenProxy={() => openRoutingTab('proxy')}
+                    onOpenCompression={() => openRoutingTab('compression')}
+                    onStartStopProxy={handleStartStopProxy}
+                  />
+                )}
 
-                <div id="routing-mappings" className="scroll-mt-4">
+                {routingTab === 'mappings' && (
                   <MappingsEditor
                     modelMappings={modelMappings}
                     onAddMapping={addMapping}
@@ -605,10 +589,10 @@ export default function AiProviders() {
                     onRemoveMapping={removeMapping}
                     onSaveMappings={handleSaveMappings}
                   />
-                </div>
+                )}
 
-                <div className="grid items-start gap-3 xl:grid-cols-2">
-                  <div id="routing-proxy" className="min-w-0 scroll-mt-4">
+                {routingTab === 'proxy' && (
+                  <>
                     <UserProxyCard />
                     <AiProxyControlsSection
                       visible
@@ -634,39 +618,37 @@ export default function AiProviders() {
                       showConfigActions
                       showRuntimeActions
                     />
-                  </div>
+                  </>
+                )}
 
-                  <div id="routing-rotation" className="min-w-0 scroll-mt-4">
-                    <RotationSettingsPanel capabilities={providerCapabilities} visible />
-                  </div>
-                </div>
+                {routingTab === 'rotation' && (
+                  <RotationSettingsPanel capabilities={providerCapabilities} visible />
+                )}
 
-                <div id="routing-compression" className="scroll-mt-4">
-                  <CompressionSection />
-                </div>
+                {routingTab === 'compression' && <CompressionSection />}
 
-                <LazyMount>
-                  <HoloneSection />
-                </LazyMount>
+                {routingTab === 'holone' && <HoloneSection />}
               </div>
             )}
 
             {/* === MONITOR TAB === */}
-            {aiSection === 'monitor' && (
-              <MonitorOverview
-                proxyStatus={proxyStatus}
-                proxySettings={proxySettings}
-                providerCapabilities={providerCapabilities}
-                availableModels={availableModels}
-                historySummary={historySummary}
-                hasAccounts={filteredAccounts.length > 0}
-                accountReadiness={accountReadiness}
-                onOpenAnalytics={() => navigate('/ai/monitor?tab=analytics')}
-                onOpenDebugChat={() => setShowDebugDrawer(true)}
-              />
-            )}
+            {aiSection === 'monitor' &&
+              (monitorTab === 'overview' ? (
+                <MonitorOverview
+                  proxyStatus={proxyStatus}
+                  proxySettings={proxySettings}
+                  providerCapabilities={providerCapabilities}
+                  availableModels={availableModels}
+                  historySummary={historySummary}
+                  hasAccounts={filteredAccounts.length > 0}
+                  accountReadiness={accountReadiness}
+                  onOpenAnalytics={() => navigate('/ai/monitor?tab=analytics')}
+                  onOpenDebugChat={() => setShowDebugDrawer(true)}
+                />
+              ) : (
+                <AiAnalytics />
+              ))}
           </div>
-        </div>
       </div>
 
       <AiTransferModal

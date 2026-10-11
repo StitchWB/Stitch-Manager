@@ -546,9 +546,11 @@ export interface AiHubTranslations {
       tools: string;
       holone: string;
       chat: string;
+      connections: string;
       integrations: string;
       monitor: string;
       notebooklm: string;
+      overview: string;
       providers: string;
       routing: string;
     }
