@@ -13,6 +13,11 @@ import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import type { AiProxyAccount } from '@/types/generated';
 import type { ProviderEndpoint, UpstreamModel } from '@/lib/backend/modules/aiGateway';
+import {
+  PROVIDER_AUTH_MECHANISM,
+  type AiProxyProviderName,
+  type AuthMechanism,
+} from './providerMeta';
 import type { ConnectionStateMap } from './sections/types';
 
 const MODEL_CHIP_LIMIT = 12;
@@ -90,6 +95,13 @@ export function isPlaceholderBaseUrl(baseUrl: string): boolean {
   return baseUrl.includes('.invalid');
 }
 
+export function adapterAuthMechanism(adapterType: string): AuthMechanism | null {
+  const provider = ADAPTER_PROVIDER_LOGO[adapterType] ?? adapterType;
+  return provider in PROVIDER_AUTH_MECHANISM
+    ? PROVIDER_AUTH_MECHANISM[provider as AiProxyProviderName]
+    : null;
+}
+
 export function ProviderCard({
   endpoint,
   accounts,
@@ -112,6 +124,7 @@ export function ProviderCard({
     ? enabledModels
     : enabledModels.slice(0, MODEL_CHIP_LIMIT);
   const statusDot = endpoint ? endpointStatusDot(endpoint, accounts.length) : null;
+  const mechanism = endpoint ? adapterAuthMechanism(endpoint.adapterType) : null;
 
   return (
     <div data-testid={`provider-card-${endpoint?.id ?? 'unlinked'}`}>
@@ -137,6 +150,11 @@ export function ProviderCard({
                 <Badge variant="indigo" size="sm">
                   {endpoint.adapterType}
                 </Badge>
+                {mechanism && (
+                  <Badge variant="outline" size="sm">
+                    {t(`aiHub.authMechanism.${mechanism}`)}
+                  </Badge>
+                )}
               </div>
               {isPlaceholderBaseUrl(endpoint.baseUrl) ? (
                 <Badge

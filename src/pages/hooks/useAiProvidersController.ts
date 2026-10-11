@@ -276,17 +276,33 @@ export function useAiProvidersController(page?: AiHubPage) {
     }
   }, [importPayload]);
 
+  const modelsByProvider = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const model of availableModels) {
+      const bucket = map.get(model.provider);
+      if (bucket) bucket.add(model.id.toLowerCase());
+      else map.set(model.provider, new Set([model.id.toLowerCase()]));
+    }
+    return map;
+  }, [availableModels]);
+
   const filteredAccounts = useMemo(() => {
     let filtered = [...accounts];
     if (providerFilter !== 'all') filtered = filtered.filter(a => a.provider === providerFilter);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        a => a.name.toLowerCase().includes(q) || a.provider.toLowerCase().includes(q)
-      );
+      filtered = filtered.filter(a => {
+        if (a.name.toLowerCase().includes(q) || a.provider.toLowerCase().includes(q)) return true;
+        const models = modelsByProvider.get(a.provider);
+        if (!models) return false;
+        for (const id of models) {
+          if (id.includes(q)) return true;
+        }
+        return false;
+      });
     }
     return filtered;
-  }, [accounts, providerFilter, searchQuery]);
+  }, [accounts, providerFilter, searchQuery, modelsByProvider]);
 
   const providerCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };

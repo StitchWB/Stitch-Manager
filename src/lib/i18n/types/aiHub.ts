@@ -279,6 +279,12 @@ export interface AiHubTranslations {
         keyDeleted: string;
       }
     }
+    authMechanism: {
+      api_key: string;
+      oauth: string;
+      web: string;
+      local: string;
+    }
     authScan: {
       failed: string;
       found: string;
@@ -363,6 +369,7 @@ export interface AiHubTranslations {
       apiKey: string;
     }
     labels: {
+      moreProviders: string;
       providers: string;
       providersHint: string;
     }
@@ -535,6 +542,13 @@ export interface AiHubTranslations {
       nothingToAdd: string;
       pasteKey: string;
       emptyHint: string;
+      fromClipboard: string;
+      clipboardFailed: string;
+      mechanismHint: {
+        oauth: string;
+        web: string;
+        local: string;
+      }
     }
     keysOverview: {
       title: string;

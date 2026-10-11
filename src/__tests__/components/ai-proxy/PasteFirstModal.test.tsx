@@ -39,6 +39,11 @@ jest.mock('@/components/ui', () => ({
       {children}
     </button>
   ),
+  IconButton: ({ children, tooltip, ...rest }: any) => (
+    <button aria-label={tooltip} {...rest}>
+      {children}
+    </button>
+  ),
   Input: ({ label, containerClassName: _containerClassName, ...rest }: any) => (
     <input aria-label={label} {...rest} />
   ),
@@ -251,5 +256,57 @@ describe('PasteFirstModal', () => {
     expect(screen.queryByLabelText('aiHub.pasteFirst.baseUrlLabel')).toBeNull();
     fireEvent.click(screen.getByRole('switch', { name: 'aiHub.pasteFirst.baseUrlToggle' }));
     expect(screen.getByLabelText('aiHub.pasteFirst.baseUrlLabel')).toBeTruthy();
+  });
+
+  it('appends non-empty clipboard lines to the textarea content', async () => {
+    const readText = jest.fn(async () => `${ANTHROPIC_KEY}\n\n  ${GEMINI_KEY}  \n`);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { readText },
+      configurable: true,
+      writable: true,
+    });
+    renderModal();
+    pasteKeys('sk-first-key');
+
+    fireEvent.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('aiHub.pasteFirst.keysLabel')).toHaveValue(
+        `sk-first-key\n${ANTHROPIC_KEY}\n${GEMINI_KEY}`
+      );
+    });
+    expect(screen.getAllByTestId('paste-row').length).toBe(3);
+  });
+
+  it('toasts when the clipboard read is rejected', async () => {
+    const readText = jest.fn(async () => {
+      throw new Error('denied');
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { readText },
+      configurable: true,
+      writable: true,
+    });
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('aiHub.pasteFirst.clipboardFailed');
+    });
+  });
+
+  it('shows the paste-only hint for oauth providers', () => {
+    renderModal({ initialProvider: 'claude' });
+
+    expect(screen.getByTestId('mechanism-hint').textContent).toBe(
+      'aiHub.pasteFirst.mechanismHint.oauth'
+    );
+  });
+
+  it('shows no mechanism hint for api-key providers', () => {
+    renderModal({ initialProvider: 'anthropic' });
+
+    expect(screen.queryByTestId('mechanism-hint')).toBeNull();
   });
 });
