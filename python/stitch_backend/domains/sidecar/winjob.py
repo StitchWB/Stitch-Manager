@@ -6,7 +6,8 @@ its grandchildren are unreachable — and walking a recycled pid is dangerous.
 A Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE is the correct
 primitive: every descendant a child spawns joins the job, and closing the
 supervisor's (last) handle terminates all members atomically, alive or
-orphaned.
+orphaned. Members spawned with CREATE_BREAKAWAY_FROM_JOB (rdm host services,
+watchdog) leave the job and survive plugin recycle; pidfiles own their lifecycle.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ def _create_kill_job() -> Any:
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000  # noqa: N806 (Win32 name)
+    JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x0800  # noqa: N806 (Win32 name)
 
     class _IO_COUNTERS(ctypes.Structure):  # noqa: N801 (Win32 struct name)
         _fields_ = [
@@ -83,7 +85,9 @@ def _create_kill_job() -> Any:
     if not h_job:
         raise ctypes.WinError()
     info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    info.BasicLimitInformation.LimitFlags = (
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK
+    )
     ok = kernel32.SetInformationJobObject(
         h_job, 9, ctypes.byref(info), ctypes.sizeof(info)
     )
