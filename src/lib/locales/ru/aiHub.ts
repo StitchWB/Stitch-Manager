@@ -281,6 +281,12 @@ export const aiHub: AiHubTranslations = {
         keyDeleted: "Ключ {provider} удалён"
       }
     },
+    authMechanism: {
+      api_key: "API-ключ",
+      oauth: "OAuth",
+      web: "Веб-сессия",
+      local: "Локально"
+    },
     authScan: {
       failed: "Ошибка сканирования: {msg}",
       found: "Найдено auth файлов: {count}"
@@ -365,6 +371,7 @@ export const aiHub: AiHubTranslations = {
       apiKey: "API ключ",
     },
     labels: {
+      moreProviders: "Ещё {count}",
       providers: "Провайдеры",
       providersHint: "Счётчики — число аккаунтов."
     },
@@ -536,7 +543,14 @@ export const aiHub: AiHubTranslations = {
       addFailed: "Не удалось добавить: {msg}",
       nothingToAdd: "Нет ключей для добавления",
       pasteKey: "Вставить ключ",
-      emptyHint: "Вставьте API-ключ, чтобы добавить аккаунт"
+      emptyHint: "Вставьте API-ключ, чтобы добавить аккаунт",
+      fromClipboard: "Вставить из буфера обмена",
+      clipboardFailed: "Не удалось прочитать буфер обмена",
+      mechanismHint: {
+        oauth: "Вставка принимает только API-ключи — OAuth-аккаунты добавляются через «Добавить аккаунт» с входом в браузере.",
+        web: "Вставка принимает только API-ключи — веб-аккаунты добавляются через сессию в браузере.",
+        local: "Вставка принимает только API-ключи — FreeModel работает из локального плагина и не требует ключей."
+      }
     },
     keysOverview: {
       title: "Аккаунты и ключи",

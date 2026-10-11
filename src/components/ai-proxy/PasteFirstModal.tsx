@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardPaste, XCircle } from 'lucide-react';
+import { CheckCircle2, ClipboardList, ClipboardPaste, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { Badge, Button, Input, Modal, Select, Textarea, Toggle } from '@/components/ui';
+import { Badge, Button, IconButton, Input, Modal, Select, Textarea, Toggle } from '@/components/ui';
 import { createAiProxyAccount } from '@/lib/backend/modules/aiProxy';
 import { addCustomProvider, setCustomProviderKeys } from '@/lib/backend/modules/customProviders';
 import { testOpenCodeApi } from '@/lib/backend/modules/opencodeConfig';
@@ -10,7 +10,11 @@ import { defaultBaseUrlFor, detectProvider } from '@/lib/aiHub/detectProvider';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { maskKey } from '@/lib/utils/maskKey';
-import { AI_PROXY_PROVIDER_FILTERS } from './providerMeta';
+import {
+  AI_PROXY_PROVIDER_FILTERS,
+  PROVIDER_AUTH_MECHANISM,
+  type AiProxyProviderName,
+} from './providerMeta';
 
 export interface PasteFirstModalProps {
   isOpen: boolean;
@@ -74,6 +78,27 @@ export function PasteFirstModal({ isOpen, onClose, initialProvider, onSubmit }: 
   const effectiveProvider = selectedProvider || firstDetected || '';
   const isCustomFlow = effectiveProvider === '' || effectiveProvider === 'custom';
   const baseUrlVisible = isCustomFlow || showBaseUrl;
+  const effectiveMechanism =
+    effectiveProvider in PROVIDER_AUTH_MECHANISM
+      ? PROVIDER_AUTH_MECHANISM[effectiveProvider as AiProxyProviderName]
+      : null;
+
+  const handleClipboard = async () => {
+    try {
+      const clip = await navigator.clipboard.readText();
+      const lines = clip
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line !== '');
+      if (lines.length === 0) return;
+      setText(prev => {
+        const base = prev.trimEnd();
+        return base ? `${base}\n${lines.join('\n')}` : lines.join('\n');
+      });
+    } catch {
+      toast.error(t('aiHub.pasteFirst.clipboardFailed'));
+    }
+  };
 
   const rowProvider = (key: string): string => selectedProvider || detectProvider(key) || '';
 
@@ -203,16 +228,27 @@ export function PasteFirstModal({ isOpen, onClose, initialProvider, onSubmit }: 
       }
     >
       <div className="space-y-4" data-testid="paste-first-modal">
-        <Textarea
-          label={t('aiHub.pasteFirst.keysLabel')}
-          hint={t('aiHub.pasteFirst.hint')}
-          value={text}
-          onChange={e => setText(e.target.value)}
-          rows={5}
-          className="font-mono text-xs"
-          placeholder={'sk-ant-...\nAIza...\nsk-...'}
-          disabled={adding}
-        />
+        <div className="flex items-start gap-2">
+          <Textarea
+            containerClassName="min-w-0 flex-1"
+            label={t('aiHub.pasteFirst.keysLabel')}
+            hint={t('aiHub.pasteFirst.hint')}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            rows={5}
+            className="font-mono text-xs"
+            placeholder={'sk-ant-...\nAIza...\nsk-...'}
+            disabled={adding}
+          />
+          <IconButton
+            tooltip={t('aiHub.pasteFirst.fromClipboard')}
+            onClick={() => void handleClipboard()}
+            disabled={adding}
+            className="mt-6 shrink-0"
+          >
+            <ClipboardList size={15} />
+          </IconButton>
+        </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <Select
@@ -232,6 +268,12 @@ export function PasteFirstModal({ isOpen, onClose, initialProvider, onSubmit }: 
             />
           )}
         </div>
+
+        {effectiveMechanism && effectiveMechanism !== 'api_key' && (
+          <p data-testid="mechanism-hint" className="-mt-2 text-[11px] text-slate-500">
+            {t(`aiHub.pasteFirst.mechanismHint.${effectiveMechanism}`)}
+          </p>
+        )}
 
         {baseUrlVisible && (
           <Input

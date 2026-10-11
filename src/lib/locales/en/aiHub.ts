@@ -281,6 +281,12 @@ export const aiHub: AiHubTranslations = {
         keyDeleted: "{provider} API key deleted"
       }
     },
+    authMechanism: {
+      api_key: "API key",
+      oauth: "OAuth",
+      web: "Web session",
+      local: "Local"
+    },
     authScan: {
       failed: "Scan failed: {msg}",
       found: "Found {count} auth file(s)"
@@ -365,6 +371,7 @@ export const aiHub: AiHubTranslations = {
       apiKey: "API Key",
     },
     labels: {
+      moreProviders: "{count} more",
       providers: "Providers",
       providersHint: "Counts are accounts."
     },
@@ -536,7 +543,14 @@ export const aiHub: AiHubTranslations = {
       addFailed: "Failed to add: {msg}",
       nothingToAdd: "No keys to add",
       pasteKey: "Paste key",
-      emptyHint: "Paste an API key to add an account"
+      emptyHint: "Paste an API key to add an account",
+      fromClipboard: "Insert from clipboard",
+      clipboardFailed: "Failed to read the clipboard",
+      mechanismHint: {
+        oauth: "Paste accepts API keys only — add OAuth accounts via Add Account with browser sign-in.",
+        web: "Paste accepts API keys only — web accounts are added through the browser session flow.",
+        local: "Paste accepts API keys only — FreeModel runs from the local plugin and needs no keys."
+      }
     },
     keysOverview: {
       title: "Accounts & keys",

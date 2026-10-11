@@ -62,13 +62,16 @@ jest.mock('@/stores/aiProxy', () => ({
 // ── Mock backend aiProxy module ──────────────────────────────────────────────
 const updateAiProxyAccount = jest.fn(async () => undefined);
 const getAiProxyAccounts = jest.fn(async () => [] as AiProxyAccount[]);
+const getAvailableModelsSafe = jest.fn(
+  async () => [] as Array<{ id: string; provider: string; ownedBy: string }>
+);
 
 jest.mock('@/lib/backend/modules/aiProxy', () => ({
   getAiProxyAccounts: (...args: unknown[]) => getAiProxyAccounts(...(args as [])),
   deleteAiProxyAccount: jest.fn(async () => undefined),
   updateAiProxyAccount: (...args: unknown[]) => updateAiProxyAccount(...(args as [])),
   debugRunAiProxyMigration: jest.fn(async () => ''),
-  getAvailableModelsSafe: jest.fn(async () => []),
+  getAvailableModelsSafe: () => getAvailableModelsSafe(),
   getProviderCapabilities: jest.fn(async () => []),
   getProviderModelMappings: jest.fn(async () => []),
   setProviderModelMappings: jest.fn(async () => undefined),
@@ -114,6 +117,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   updateAiProxyAccount.mockResolvedValue(undefined);
   getAiProxyAccounts.mockResolvedValue([]);
+  getAvailableModelsSafe.mockResolvedValue([]);
 });
 
 describe('useAiProvidersController — handleToggleEnabled masked-secret strip', () => {
@@ -167,5 +171,50 @@ describe('useAiProvidersController — handleToggleEnabled masked-secret strip',
     expect(payload.sessionToken).toBe('real-session-token');
     expect(payload.oauthRefreshToken).toBe('real-refresh-token');
     expect(payload.enabled).toBe(false);
+  });
+});
+
+describe('useAiProvidersController — search matches provider models', () => {
+  it('keeps accounts whose provider exposes a model id matching the query', async () => {
+    getAvailableModelsSafe.mockResolvedValue([
+      { id: 'gpt-4o', provider: 'openai', ownedBy: 'openai' },
+      { id: 'claude-sonnet-4', provider: 'claude', ownedBy: 'claude' },
+    ]);
+    getAiProxyAccounts.mockResolvedValue([
+      makeMaskedAccount({ id: 1, provider: 'openai', name: 'Billing Only' }),
+      makeMaskedAccount({ id: 2, provider: 'claude', name: 'Subscription' }),
+    ]);
+
+    const { result } = renderHook(() => useAiProvidersController());
+
+    await waitFor(() => {
+      expect(result.current.accounts.length).toBe(2);
+      expect(result.current.availableModels.length).toBe(2);
+    });
+
+    act(() => {
+      result.current.setSearchQuery('gpt-4o');
+    });
+    expect(result.current.filteredAccounts.map(a => a.id)).toEqual([1]);
+
+    act(() => {
+      result.current.setSearchQuery('GPT-4');
+    });
+    expect(result.current.filteredAccounts.map(a => a.id)).toEqual([1]);
+
+    act(() => {
+      result.current.setSearchQuery('sonnet');
+    });
+    expect(result.current.filteredAccounts.map(a => a.id)).toEqual([2]);
+
+    act(() => {
+      result.current.setSearchQuery('Subscription');
+    });
+    expect(result.current.filteredAccounts.map(a => a.id)).toEqual([2]);
+
+    act(() => {
+      result.current.setSearchQuery('no-such-model');
+    });
+    expect(result.current.filteredAccounts).toEqual([]);
   });
 });
