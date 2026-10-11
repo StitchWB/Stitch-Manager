@@ -160,7 +160,7 @@ export default function AiOverview() {
                 {group.actions.map(action => {
                   const Icon = action.icon;
                   return (
-                    <GlassCard key={action.to} className="group p-4 transition-colors hover:border-white/15">
+                    <GlassCard key={action.title} className="group p-4 transition-colors hover:border-white/15">
                       <div className="flex items-start gap-3">
                         <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', action.tone)}>
                           <Icon size={17} />

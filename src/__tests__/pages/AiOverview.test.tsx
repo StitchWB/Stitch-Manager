@@ -103,4 +103,19 @@ describe('AiOverview card navigation', () => {
       expect(navigatedPath).toBe('/ai/providers');
     });
   });
+
+  it('renders action cards without duplicate React keys', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    renderOverview();
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button').length).toBeGreaterThan(0);
+    });
+
+    const dupKeyCalls = errorSpy.mock.calls.filter(args =>
+      String(args[0] ?? '').includes('same key'),
+    );
+    expect(dupKeyCalls).toEqual([]);
+    errorSpy.mockRestore();
+  });
 });
