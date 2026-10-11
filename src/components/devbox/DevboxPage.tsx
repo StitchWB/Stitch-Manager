@@ -109,6 +109,7 @@ export function DevboxPage() {
           />
           <DevboxProfiles
             profiles={profiles}
+            overviewCards={cards}
             error={profilesError}
             busy={busy}
             onAction={onAction}
