@@ -18,6 +18,7 @@ export interface DevboxPageTranslations {
     loadError: string;
     vitalsEmpty: string;
     controlStart: string;
+    restart: string;
     controlUse: string;
     controlStopServices: string;
     controlStopAll: string;
@@ -115,6 +116,7 @@ export interface DevboxPageTranslations {
     tipWatchdog: string;
     tipCockpit: string;
     tipStart: string;
+    tipRestart: string;
     tipUse: string;
     tipDelete: string;
     tipCancelJob: string;
