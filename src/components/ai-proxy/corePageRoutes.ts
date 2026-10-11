@@ -5,7 +5,12 @@
 export const CORE_PAGE_ROUTES: Record<string, string> = {
   'stitch-mail': '/mail',
   'stitch-radar': '/radar',
-  'stitch-opencode': '/ai/opencode-config',
   'stitch-devbox': '/ai/devbox',
   'stitch-cards': '/tools',
+};
+
+// checked by link resolvers before CORE_PAGE_ROUTES
+export const CANONICAL_PLUGIN_ROUTES: Record<string, string> = {
+  'stitch-antigravity': '/ai/antigravity',
+  'stitch-notebooklm': '/ai/notebooklm',
 };

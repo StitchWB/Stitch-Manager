@@ -40,6 +40,7 @@ type AiTabId =
   | 'providers'
   | 'routing'
   | 'connections'
+  | 'opencode'
   | 'monitor'
   | 'chat'
   | 'antigravity'
@@ -83,6 +84,7 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     tabs: [
       { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
       { id: 'connections', label: 'aiHub.tabs.connections', to: '/ai/integrations', icon: Cable },
+      { id: 'opencode', label: 'aiHub.tabs.opencode', to: '/ai/opencode-config', icon: Settings },
       { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
     ],
   },
@@ -99,9 +101,10 @@ function activeTab(pathname: string): AiTabId {
   if (pathname === '/ai' || pathname === '/ai/overview') return 'overview';
   if (pathname.startsWith('/ai/gateway')) return 'providers';
   if (pathname.startsWith('/ai/routing')) return 'routing';
-  if (pathname.startsWith('/ai/integrations') || pathname.startsWith('/ai/opencode-config')) {
+  if (pathname.startsWith('/ai/integrations')) {
     return 'connections';
   }
+  if (pathname.startsWith('/ai/opencode-config')) return 'opencode';
   if (pathname.startsWith('/ai/monitor') || pathname.startsWith('/ai/analytics')) return 'monitor';
   if (pathname.startsWith('/ai/chat')) return 'chat';
   // Redirect old api-keys route to providers
