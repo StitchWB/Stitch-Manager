@@ -304,6 +304,13 @@ try {
         }
     }
 
+    # present only in hub checkouts (Zone-2/3 stub providers)
+    $devPluginsScript = Join-Path $PSScriptRoot "install-dev-plugins.ps1"
+    if (Test-Path -LiteralPath $devPluginsScript) {
+        Write-Host "[dev-plugins] Installing stub provider packages..." -ForegroundColor DarkCyan
+        & $devPluginsScript -Force 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+    }
+
     Write-Host "[API] Starting backend with polling watchfiles supervisor..." -ForegroundColor Magenta
     $previousForcePolling = $env:WATCHFILES_FORCE_POLLING
     $previousPollDelay = $env:WATCHFILES_POLL_DELAY_MS
