@@ -31,8 +31,10 @@ import {
   devboxProfilePut,
   devboxProfileUse,
   devboxStackStart,
+  devboxVitalValue,
   type DevboxAccepted,
   type DevboxProfileRow,
+  type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
 
@@ -153,6 +155,7 @@ function PortsField({
 
 export interface DevboxProfilesProps {
   profiles: DevboxProfileRow[] | null;
+  overviewCards: DevboxVitalCard[] | null;
   error: string | null;
   busy: boolean;
   onAction: (action: Promise<DevboxAccepted>) => void;
@@ -162,6 +165,7 @@ export interface DevboxProfilesProps {
 
 export function DevboxProfiles({
   profiles,
+  overviewCards,
   error,
   busy,
   onAction,
@@ -169,6 +173,10 @@ export function DevboxProfiles({
   onChanged,
 }: DevboxProfilesProps) {
   const rows = Array.isArray(profiles) ? profiles : [];
+  const stackRunning =
+    devboxVitalValue(overviewCards, 'ingress') === 'up' ||
+    devboxVitalValue(overviewCards, 'bridge') === 'up' ||
+    devboxVitalValue(overviewCards, 'runner') === 'up';
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
@@ -449,10 +457,16 @@ export function DevboxProfiles({
                       variant="secondary"
                       disabled={busy}
                       data-testid={`devbox-profile-start-${row.name}`}
-                      title={t('devboxPage.tipStart')}
+                      title={
+                        row.active && stackRunning
+                          ? t('devboxPage.tipRestart')
+                          : t('devboxPage.tipStart')
+                      }
                       onClick={() => onAction(devboxStackStart(row.name, false))}
                     >
-                      {t('devboxPage.controlStart')}
+                      {row.active && stackRunning
+                        ? t('devboxPage.restart')
+                        : t('devboxPage.controlStart')}
                     </Button>
                     <Button
                       size="xs"

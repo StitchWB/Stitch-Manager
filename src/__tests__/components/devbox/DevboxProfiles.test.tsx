@@ -16,20 +16,26 @@ jest.mock('sonner', () => ({
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { DevboxProfiles } from '@/components/devbox/DevboxProfiles';
+import type { DevboxVitalCard } from '@/lib/backend/modules/devbox';
 import {
   devboxRouter,
   devboxCalls,
   devboxCallArgs,
   profilesFixture,
   pageRoutes,
+  overviewFixture,
 } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
-function renderProfiles(onChanged = jest.fn(() => undefined)) {
+function renderProfiles(
+  onChanged = jest.fn(() => undefined),
+  overviewCards: DevboxVitalCard[] | null = overviewFixture.cards,
+) {
   render(
     <DevboxProfiles
       profiles={profilesFixture}
+      overviewCards={overviewCards}
       error={null}
       busy={false}
       onAction={jest.fn()}
@@ -205,6 +211,46 @@ describe('Devbox profile editor', () => {
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
         { name: 'example-simple', preview: false },
+      ]);
+    });
+  });
+
+  it('labels the active project row Restart while the stack is running', () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    renderProfiles();
+
+    expect(screen.getByTestId('devbox-profile-start-midsai').textContent).toBe('Restart');
+    expect(screen.getByTestId('devbox-profile-start-example-simple').textContent).toBe('Start');
+  });
+
+  it('labels the active project row Start while the stack is down', () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    const cards = overviewFixture.cards.map(c => ({
+      ...c,
+      value: 'down',
+      tone: 'down' as const,
+    }));
+    renderProfiles(jest.fn(() => undefined), cards);
+
+    expect(screen.getByTestId('devbox-profile-start-midsai').textContent).toBe('Start');
+  });
+
+  it('labels the active project row Start when vitals are unavailable', () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    renderProfiles(jest.fn(() => undefined), null);
+
+    expect(screen.getByTestId('devbox-profile-start-midsai').textContent).toBe('Start');
+  });
+
+  it('restart on the active row still sends stack_start with the profile name', async () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    renderProfiles();
+
+    fireEvent.click(screen.getByTestId('devbox-profile-start-midsai'));
+
+    await waitFor(() => {
+      expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
+        { name: 'midsai', preview: false },
       ]);
     });
   });
@@ -441,6 +487,7 @@ describe('Devbox profile editor', () => {
     render(
       <DevboxProfiles
         profiles={[]}
+        overviewCards={overviewFixture.cards}
         error={null}
         busy={false}
         onAction={jest.fn()}
@@ -465,6 +512,7 @@ function renderProfilesOnPut(putResult: { valid: boolean; errors: string[] }) {
   render(
     <DevboxProfiles
       profiles={profilesFixture}
+      overviewCards={overviewFixture.cards}
       error={null}
       busy={false}
       onAction={jest.fn()}
