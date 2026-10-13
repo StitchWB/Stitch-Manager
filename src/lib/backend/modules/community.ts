@@ -15,6 +15,13 @@ import { safeInvoke } from '../core';
 // Types
 // ============================================
 
+export interface CommunityCatalogUpstream {
+  type: 'git' | 'release';
+  url: string;
+  ref?: string;
+  sha256?: string;
+}
+
 export interface CommunityCatalogPlugin {
   id: string;
   name: string;
@@ -24,6 +31,10 @@ export interface CommunityCatalogPlugin {
   path: string;
   services: string[];
   sha256: string;
+  sourceType?: 'git' | 'release' | 'zip-legacy' | 'malformed';
+  sourceUrl?: string | null;
+  status?: 'active' | 'archived';
+  upstream?: CommunityCatalogUpstream;
 }
 
 export interface GetCommunityCatalogResponse {

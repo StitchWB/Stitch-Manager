@@ -19,6 +19,7 @@ export function CommunityCatalogCard({
   onUninstall,
 }: CommunityCatalogCardProps) {
   const isInstalled = Boolean(installed);
+  const isArchived = plugin.status === 'archived';
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 space-y-3 flex flex-col">
@@ -32,6 +33,11 @@ export function CommunityCatalogCard({
             <Badge variant="outline" size="sm">
               {t('settings.community.communityBadge')}
             </Badge>
+            {isArchived && (
+              <Badge variant="warning" size="sm">
+                {t('settings.community.archived')}
+              </Badge>
+            )}
           </div>
         </div>
         <span className="text-xs text-slate-500 font-mono shrink-0">
@@ -50,6 +56,16 @@ export function CommunityCatalogCard({
           </span>{' '}
           <span className="text-slate-400">{plugin.author}</span>
         </span>
+        {plugin.upstream?.url && (
+          <a
+            href={plugin.upstream.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-indigo-400 hover:text-indigo-300 truncate"
+          >
+            {t('settings.community.upstreamLabel')}
+          </a>
+        )}
       </div>
 
       {plugin.services.length > 0 && (
@@ -78,6 +94,15 @@ export function CommunityCatalogCard({
             {actionInProgress
               ? t('settings.community.uninstalling')
               : t('settings.community.uninstall')}
+          </Button>
+        ) : isArchived ? (
+          <Button
+            size="xs"
+            variant="outline"
+            disabled
+            leftIcon={<Download className="w-3 h-3" />}
+          >
+            {t('settings.community.archivedHint')}
           </Button>
         ) : (
           <Button

@@ -387,6 +387,9 @@ export interface SettingsTranslations {
       installFailed: string;
       uninstallSuccess: string;
       uninstallFailed: string;
+      archived: string;
+      archivedHint: string;
+      upstreamLabel: string;
       installedTitle: string;
       installedDescription: string;
       installedEmpty: string;
