@@ -31,15 +31,18 @@ async def _save_registration_account(
 
         async def _save(session):
             svc = AccountService(session)
+            # Provider-generated credentials (e.g. dahl fingerprint) have no
+            # config-side password; email-less providers identify by username.
+            reg_username = str(result.get("username") or "")
             account = await svc.add_registered_account(
                 provider=provider_name,
-                email=reg_email,
-                password=config.get("password"),
+                email=reg_email or reg_username,
+                password=config.get("password") or result.get("password"),
                 token=result.get("token"),
                 refresh_token=result.get("refresh_token")
                 or result.get("refreshToken"),
                 api_key=result.get("api_key") or result.get("apiKey"),
-                display_name=reg_email,
+                display_name=reg_email or reg_username,
                 account_type=result.get("plan")
                 or result.get("accountType")
                 or "free",
