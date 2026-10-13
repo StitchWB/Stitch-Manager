@@ -94,6 +94,42 @@ describe('CommunitySection', () => {
     expect(body).toEqual({ id: 'demo-plugin', version: '1.2.0' });
   });
 
+  it('renders archived entries without an install action', async () => {
+    mockFetchMulti({
+      get_settings: { community_enabled: 'true' },
+      get_community_catalog: {
+        plugins: [
+          {
+            id: 'dead-plugin',
+            name: 'Dead Plugin',
+            version: '0.9.0',
+            author: 'danya',
+            description: 'Removed by author upstream.',
+            path: '/plugins/dead',
+            services: [],
+            sha256: 'def',
+            status: 'archived',
+            upstream: { type: 'git', url: 'https://github.com/danya/plugin1' },
+          },
+        ],
+      },
+      list_installed_community: { packages: [] },
+      list_local_packages: { packages: [] },
+    });
+
+    render(<CommunitySection />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Dead Plugin')).toBeInTheDocument();
+    });
+    expect(screen.getByText('archived')).toBeInTheDocument();
+    expect(screen.queryByText('Install')).not.toBeInTheDocument();
+    expect(screen.getByText('upstream').closest('a')).toHaveAttribute(
+      'href',
+      'https://github.com/danya/plugin1',
+    );
+  });
+
   it('shows empty state when catalog is empty', async () => {
     mockFetchMulti({
       get_settings: { community_enabled: 'true' },
