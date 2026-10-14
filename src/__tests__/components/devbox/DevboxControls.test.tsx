@@ -155,39 +155,6 @@ describe('Devbox controls ingress toggle', () => {
 });
 
 describe('Devbox controls payload surfaces (A1)', () => {
-  it('renders a copyable chatBlock from a finished issue_tokens payload', async () => {
-    const chatBlock = 'INGRESS=https://x.trycloudflare.com\nMCP_TOKEN=abc123';
-    const writeText = jest.fn(async () => undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    });
-
-    renderControls({
-      recent: [
-        {
-          id: 'a1',
-          cmd: 'issue_tokens',
-          status: 'finished',
-          startedAt: 1791536987.76,
-          finishedAt: 1791536990.1,
-          exit: 0,
-          payload: { chatBlock },
-        },
-      ],
-    });
-
-    const block = screen.getByTestId('devbox-chat-block');
-    expect(block).toBeTruthy();
-    const textarea = screen.getByTestId('devbox-chat-block-text') as HTMLTextAreaElement;
-    expect(textarea.value).toBe(chatBlock);
-
-    fireEvent.click(screen.getByTestId('devbox-chat-block-copy'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(chatBlock);
-    });
-  });
-
   it('renders the doctor report from a finished run_doctor payload in a scrollable pre', () => {
     renderControls({
       recent: [
@@ -234,48 +201,5 @@ describe('Devbox controls payload surfaces (A1)', () => {
       'noopener,noreferrer',
     );
     openSpy.mockRestore();
-  });
-
-  it('ignores payloads of failed actions', () => {
-    renderControls({
-      recent: [
-        {
-          id: 'a4',
-          cmd: 'issue_tokens',
-          status: 'finished',
-          startedAt: 1791536987.76,
-          finishedAt: 1791536990.1,
-          exit: 1,
-          payload: { chatBlock: 'SECRET' },
-        },
-      ],
-    });
-
-    expect(screen.queryByTestId('devbox-chat-block')).toBeNull();
-  });
-
-  it('shows the next-steps hint while no chatBlock payload exists', () => {
-    renderControls();
-
-    expect(screen.getByTestId('devbox-next-steps')).toBeTruthy();
-  });
-
-  it('hides the next-steps hint once a chatBlock payload arrives', () => {
-    renderControls({
-      recent: [
-        {
-          id: 'a5',
-          cmd: 'issue_tokens',
-          status: 'finished',
-          startedAt: 1791536987.76,
-          finishedAt: 1791536988.0,
-          exit: 0,
-          payload: { chatBlock: 'paste me' },
-        },
-      ],
-    });
-
-    expect(screen.queryByTestId('devbox-next-steps')).toBeNull();
-    expect(screen.getByTestId('devbox-chat-block')).toBeTruthy();
   });
 });

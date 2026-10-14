@@ -177,6 +177,15 @@ export function devboxCockpitOpen(): Promise<DevboxAccepted> {
   return safeInvoke<DevboxAccepted>(`${NS}.cockpit_open`, {});
 }
 
+export interface DevboxHandoffBlock {
+  block: string;
+  masked: boolean;
+}
+
+export function devboxHandoffBlock(reveal: boolean): Promise<DevboxHandoffBlock> {
+  return safeInvoke<DevboxHandoffBlock>(`${NS}.handoff_block`, { reveal }, NO_CACHE);
+}
+
 export function devboxActionStatus(): Promise<DevboxActionStatus> {
   return safeInvoke<DevboxActionStatus>(`${NS}.action_status`, {}, NO_CACHE);
 }

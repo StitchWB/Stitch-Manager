@@ -57,6 +57,16 @@ export const profilesFixture: DevboxProfileRow[] = [
 
 export const idleActionStatus: DevboxActionStatus = { busy: false, current: null, recent: [] };
 
+export const maskedHandoffFixture = {
+  block: 'INGRESS=https://x.trycloudflare.com\nMCP_TOKEN=••••••',
+  masked: true,
+};
+
+export const revealedHandoffFixture = {
+  block: 'INGRESS=https://x.trycloudflare.com\nMCP_TOKEN=abc123',
+  masked: false,
+};
+
 export function pageRoutes(overrides: DevboxRoutes = {}): DevboxRoutes {
   return {
     overview: overviewFixture,
@@ -66,6 +76,7 @@ export function pageRoutes(overrides: DevboxRoutes = {}): DevboxRoutes {
     permissions_pending: [],
     events_tail: [],
     logs: { sources: [] },
+    handoff_block: maskedHandoffFixture,
     ...overrides,
   };
 }
