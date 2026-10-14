@@ -26,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from autoreg.plugin.crypto import load_embedded_pubkey
 from autoreg.plugin.install import list_installed_versions
 from autoreg.plugin.layout import plugins_cache_dir, plugins_local_dir, resolve_link
 from autoreg.plugin.manifest import parse_semver, resolve_i18n, validate_manifest
@@ -77,6 +78,15 @@ def _safe_semver(version: str) -> tuple[int, int, int]:
         return parse_semver(version)
     except ValueError:
         return (0, 0, 0)
+
+
+def _update_available(version: str, installed_version: str | None) -> bool:
+    """True when the catalog ``version`` is strictly newer than the installed one."""
+    return (
+        installed_version is not None
+        and bool(version)
+        and _safe_semver(version) > _safe_semver(installed_version)
+    )
 
 
 def _badges_of(entry: dict[str, Any]) -> list[str]:
@@ -206,6 +216,8 @@ def _community_item(
         "entitled": True,
         "installed": is_installed,
         "installed_version": version if is_installed else None,
+        "update_available": False,
+        "dev_shadow": False,
         "can_download": True,
         "required_tier": None,
         "badges": _badges_of(entry),
@@ -332,6 +344,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                 if isinstance(e, dict) and e.get("id") and e.get("version")
             ]
             required_tiers = await get_required_tiers(manifest_plugin_ids)
+            pubkey = load_embedded_pubkey()
             for entry in manifest.get("plugins", []):
                 plugin_id = str(entry.get("id", ""))
                 version = str(entry.get("version", ""))
@@ -346,7 +359,9 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     if use_grants
                     else _is_entitled(plugin_id, state.entitlements)
                 )
-                installed_versions = list_installed_versions(plugin_id)
+                installed_versions = list_installed_versions(
+                    plugin_id, signed_only=True, public_key_b64=pubkey
+                )
                 installed = bool(installed_versions)
                 installed_version = (
                     max(installed_versions, key=lambda v: _safe_semver(v))
@@ -364,6 +379,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "entitled": entitled,
                         "installed": installed,
                         "installed_version": installed_version,
+                        "update_available": _update_available(version, installed_version),
+                        "dev_shadow": False,
                         "can_download": entitled,
                         "required_tier": required_tiers.get(plugin_id),
                         "badges": _badges_of(entry),
@@ -386,6 +403,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                 if isinstance(e, dict) and e.get("id") and e.get("version")
             ]
             public_tiers = await get_required_tiers(public_ids)
+            pubkey = load_embedded_pubkey()
             for entry in public_catalog.get("plugins", []):
                 plugin_id = str(entry.get("id", ""))
                 version = str(entry.get("version", ""))
@@ -393,7 +411,14 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     continue
                 if _is_community_approved(entry):
                     continue  # merged from the server /catalog below
-                installed_versions = list_installed_versions(plugin_id)
+                installed_versions = list_installed_versions(
+                    plugin_id, signed_only=True, public_key_b64=pubkey
+                )
+                installed_version = (
+                    max(installed_versions, key=lambda v: _safe_semver(v))
+                    if installed_versions
+                    else None
+                )
                 items.append(
                     {
                         "id": plugin_id,
@@ -404,11 +429,9 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "source": "official",
                         "entitled": False,
                         "installed": bool(installed_versions),
-                        "installed_version": (
-                            max(installed_versions, key=lambda v: _safe_semver(v))
-                            if installed_versions
-                            else None
-                        ),
+                        "installed_version": installed_version,
+                        "update_available": _update_available(version, installed_version),
+                        "dev_shadow": False,
                         "can_download": False,
                         "required_tier": public_tiers.get(plugin_id),
                         "badges": _badges_of(entry),
@@ -456,6 +479,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     "entitled": True,
                     "installed": is_installed,
                     "installed_version": version if is_installed else None,
+                    "update_available": False,
+                    "dev_shadow": False,
                     "can_download": True,
                     "badges": _badges_of(entry),
                     **_rich_metadata(entry),
@@ -478,6 +503,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     if i.get("id") == plugin_id:
                         i["installed"] = True
                         i["installed_version"] = version
+                        i["update_available"] = False
+                        i["dev_shadow"] = True
                         # Feed rows predating the manifest fields shadow the on-disk dev manifest; backfill from it.
                         if i.get("description_i18n") is None:
                             i.update(local["rich"])
@@ -497,6 +524,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
                     "entitled": True,
                     "installed": True,
                     "installed_version": version,
+                    "update_available": False,
+                    "dev_shadow": True,
                     "can_download": False,
                     "required_tier": None,
                     "badges": [],
