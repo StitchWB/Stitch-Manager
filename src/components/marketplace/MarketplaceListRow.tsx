@@ -143,16 +143,6 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
           <span className="text-[11px] text-slate-500 truncate">
             {secondaryLine}
           </span>
-          {hasUpdate && (
-            <Badge variant="warning" size="sm" className="shrink-0">
-              {t('marketplace.updateAvailable')}
-            </Badge>
-          )}
-          {item.dev_shadow && (
-            <Badge variant="slate" size="sm" className="shrink-0">
-              {t('marketplace.devCopy')}
-            </Badge>
-          )}
         </div>
       </div>
 
@@ -161,6 +151,16 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
         className="shrink-0 flex flex-col items-end gap-1"
         onClick={e => e.stopPropagation()}
       >
+        {hasUpdate && (
+          <Badge variant="warning" size="sm">
+            {t('marketplace.updateAvailable')}
+          </Badge>
+        )}
+        {!hasUpdate && item.dev_shadow && (
+          <Badge variant="slate" size="sm">
+            {t('marketplace.devCopy')}
+          </Badge>
+        )}
         {item.installed && item.installed_version !== null && !hasUpdate && (
           // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
           <span className="text-[10px] text-slate-500 tabular-nums">
