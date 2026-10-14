@@ -3,9 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { Toggle } from '@/components/ui/Toggle';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { Textarea } from '@/components/ui/Textarea';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { appToast } from '@/lib/observability/toast';
 import { t } from '@/lib/i18n';
 import {
   devboxCockpitOpen,
@@ -47,19 +45,8 @@ export function DevboxControls({
   const watchdogValue = devboxVitalValue(overviewCards, 'watchdog');
   const watchdogOn = watchdogValue === 'on' || watchdogValue === 'up' || watchdogValue === 'true';
 
-  const chatBlock = payloadString(devboxLatestFinishedPayload(recent, 'issue_tokens'), 'chatBlock');
   const doctorReport = payloadString(devboxLatestFinishedPayload(recent, 'run_doctor'), 'report');
   const cockpitUrl = payloadString(devboxLatestFinishedPayload(recent, 'cockpit_open'), 'url');
-
-  const copyChatBlock = async () => {
-    if (!chatBlock) return;
-    try {
-      await navigator.clipboard.writeText(chatBlock);
-      appToast.success(t('pluginUi.copied'));
-    } catch {
-      appToast.error(t('pluginUi.actionFailed'));
-    }
-  };
 
   const current = actionStatus?.current;
 
@@ -76,12 +63,6 @@ export function DevboxControls({
               })}
             </span>
           </div>
-        )}
-
-        {!chatBlock && (
-          <p className="text-2xs text-slate-400" data-testid="devbox-next-steps">
-            {t('devboxPage.nextStepsHint')}
-          </p>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -160,30 +141,6 @@ export function DevboxControls({
             </Button>
           </Tooltip>
         </div>
-
-        {chatBlock && (
-          <div className="flex flex-col gap-2" data-testid="devbox-chat-block">
-            <span className="text-2xs uppercase tracking-wider text-slate-400">
-              {t('devboxPage.chatBlockLabel')}
-            </span>
-            <Textarea
-              readOnly
-              rows={Math.min(8, chatBlock.split('\n').length + 1)}
-              value={chatBlock}
-              className="font-mono text-xs"
-              data-testid="devbox-chat-block-text"
-            />
-            <Button
-              size="xs"
-              variant="secondary"
-              className="self-start"
-              data-testid="devbox-chat-block-copy"
-              onClick={() => void copyChatBlock()}
-            >
-              {t('common.copy')}
-            </Button>
-          </div>
-        )}
 
         {doctorReport && (
           <div className="flex flex-col gap-2">
