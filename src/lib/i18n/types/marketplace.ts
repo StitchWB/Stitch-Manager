@@ -48,6 +48,7 @@ export interface MarketplaceTranslations {
     badgeVerifiedTooltip: string;
     badgeFilterAll: string;
     updateAvailable: string;
+    devCopy: string;
     open: string;
     featuresTitle: string;
     changelogTitle: string;

@@ -8,6 +8,7 @@ import { t } from '@/lib/i18n';
 import { resolveI18n } from '@/lib/i18nText';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app';
+import { hasPluginUpdate } from '@/lib/backend/modules/marketplace';
 import type { MarketplaceItem, MarketplaceStatus } from '@/lib/backend/modules/marketplace';
 import { PluginBadgeChips } from './PluginBadgeChips';
 
@@ -79,11 +80,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
     }
   };
 
-  const hasUpdate =
-    item.installed &&
-    item.installed_version !== null &&
-    item.version !== null &&
-    item.installed_version !== item.version;
+  const hasUpdate = hasPluginUpdate(item) && !item.dev_shadow;
 
   // Line 2: localized description, else "version · author", else id.
   const versionAuthor =
@@ -149,6 +146,11 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
           {hasUpdate && (
             <Badge variant="warning" size="sm" className="shrink-0">
               {t('marketplace.updateAvailable')}
+            </Badge>
+          )}
+          {item.dev_shadow && (
+            <Badge variant="slate" size="sm" className="shrink-0">
+              {t('marketplace.devCopy')}
             </Badge>
           )}
         </div>

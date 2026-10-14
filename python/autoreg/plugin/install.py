@@ -14,6 +14,7 @@ is never created — the cache is left untouched.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import uuid
@@ -47,8 +48,18 @@ class InstallError(Exception):
 # ── Installed-version inspection ───────────────────────────────────────────
 
 
-def list_installed_versions(plugin_id: str) -> list[str]:
-    """Return installed versions for ``plugin_id`` in the cache, sorted ascending."""
+def list_installed_versions(
+    plugin_id: str,
+    *,
+    signed_only: bool = False,
+    public_key_b64: str | None = None,
+) -> list[str]:
+    """Return installed versions for ``plugin_id`` in the cache, sorted ascending.
+
+    With ``signed_only=True``, keep only versions whose manifest signature
+    verifies against ``public_key_b64``; when no key is given verification is
+    impossible, so the unfiltered list is returned.
+    """
     plugin_root = plugins_cache_dir() / plugin_id
     if not plugin_root.is_dir():
         return []
@@ -58,7 +69,26 @@ def list_installed_versions(plugin_id: str) -> list[str]:
             versions.append(entry.name)
     # Sort by semver tuple; invalid versions sort last (defensive).
     versions.sort(key=lambda v: parse_semver(v) if _is_valid_semver(v) else (0, 0, 0))
+    if signed_only and public_key_b64:
+        versions = [
+            v for v in versions if _signature_valid(plugin_root / v, public_key_b64)
+        ]
     return versions
+
+
+def _signature_valid(version_dir: Path, public_key_b64: str) -> bool:
+    """True if ``version_dir``'s manifest carries a signature that verifies.
+
+    A missing or broken manifest counts as unsigned; never raises.
+    """
+    try:
+        raw = json.loads((version_dir / "plugin.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    signature = raw.get("signature") if isinstance(raw, dict) else None
+    if not isinstance(signature, str) or not signature:
+        return False
+    return crypto.verify_package(version_dir, signature, public_key_b64)
 
 
 def _is_valid_semver(version: str) -> bool:

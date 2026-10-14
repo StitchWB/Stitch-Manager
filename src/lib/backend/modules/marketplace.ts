@@ -59,6 +59,17 @@ export interface MarketplaceItem {
   can_download: boolean;
   required_tier?: string;
   /**
+   * True when the server catalog version is strictly newer than the signed
+   * installed version. Optional for older backends that predate the flag.
+   */
+  update_available?: boolean;
+  /**
+   * True when the runtime-effective package is a plugins-local dev copy —
+   * a server update would be shadowed and is a no-op. Optional for older
+   * backends.
+   */
+  dev_shadow?: boolean;
+  /**
    * Badge chips: 'recommended' | 'verified' | 'works' | 'not_works'.
    * 'verified' is computed server-side from the offline attestation.
    * Optional for older backends that predate the badges field.
@@ -112,6 +123,34 @@ export interface UninstallMarketplacePluginParams {
 export interface UninstallMarketplacePluginResult {
   success: boolean;
   error: string | null;
+}
+
+/** Coarse semver "a > b" on the 3 numeric core parts; unparseable side loses. */
+function semverGt(a: string, b: string): boolean {
+  const pa = a.split(/[-+]/)[0].split('.');
+  const pb = b.split(/[-+]/)[0].split('.');
+  if (pa.length !== 3 || pb.length !== 3) return false;
+  for (let i = 0; i < 3; i++) {
+    const na = Number(pa[i]);
+    const nb = Number(pb[i]);
+    if (!Number.isInteger(na) || !Number.isInteger(nb)) return false;
+    if (na !== nb) return na > nb;
+  }
+  return false;
+}
+
+/**
+ * True when an installed item has a newer catalog version. Trusts the
+ * server-computed `update_available` flag; falls back to a local semver
+ * comparison for older backends that predate the flag.
+ */
+export function hasPluginUpdate(item: MarketplaceItem): boolean {
+  return (
+    item.installed &&
+    item.installed_version !== null &&
+    item.version !== null &&
+    (item.update_available ?? semverGt(item.version, item.installed_version))
+  );
 }
 
 // ============================================
