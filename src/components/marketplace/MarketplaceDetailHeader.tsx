@@ -7,6 +7,7 @@ import { TierBadge } from '@/components/ui/TierBadge';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useServicePlugins } from '@/hooks/useServicePlugins';
 import { t } from '@/lib/i18n';
+import { hasPluginUpdate } from '@/lib/backend/modules/marketplace';
 import type { MarketplaceItem, MarketplaceStatus } from '@/lib/backend/modules/marketplace';
 import { CATEGORY_LABEL_KEYS } from './categories';
 import { PluginBadgeChips } from './PluginBadgeChips';
@@ -35,11 +36,7 @@ export function MarketplaceDetailHeader({
   onLockedClick,
 }: MarketplaceDetailHeaderProps) {
   const locked = !item.can_download && !item.installed;
-  const hasUpdate =
-    item.installed &&
-    item.installed_version !== null &&
-    item.version !== null &&
-    item.installed_version !== item.version;
+  const hasUpdate = hasPluginUpdate(item) && !item.dev_shadow;
 
   const navigate = useNavigate();
   const servicePlugins = useServicePlugins();
@@ -77,6 +74,11 @@ export function MarketplaceDetailHeader({
           {item.installed && (
             <Badge variant="success" size="sm">
               {t('marketplace.installed')}
+            </Badge>
+          )}
+          {item.dev_shadow && (
+            <Badge variant="slate" size="sm">
+              {t('marketplace.devCopy')}
             </Badge>
           )}
           <PluginBadgeChips badges={item.badges} />
