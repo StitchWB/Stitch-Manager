@@ -17,6 +17,12 @@ const _inFlightRequests = new Map<string, Promise<unknown>>();
 const _responseCache = new Map<string, { data: unknown; expires: number }>();
 const CACHE_TTL_MS = 50;
 
+/** Test-only: drops in-flight dedup and response cache between test cases. */
+export function _resetForTests(): void {
+  _inFlightRequests.clear();
+  _responseCache.clear();
+}
+
 function getRequestKey(command: string, args?: Record<string, unknown>): string {
   return `${command}:${JSON.stringify(args || {})}`;
 }

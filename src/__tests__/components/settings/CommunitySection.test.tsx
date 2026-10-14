@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { CommunitySection } from '../../../components/settings/CommunitySection';
+import { _resetForTests as resetInvoke } from '../../../lib/backend/core/invoke';
 
 const originalFetch = globalThis.fetch;
 
@@ -33,6 +34,7 @@ function countCalls(mockFn: jest.Mock, command: string): number {
 describe('CommunitySection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetInvoke();
   });
 
   afterEach(() => {
