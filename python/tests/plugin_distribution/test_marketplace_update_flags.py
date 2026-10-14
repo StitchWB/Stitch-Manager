@@ -45,7 +45,6 @@ def _isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     _clear_feed_cache()
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
 
 
 def _write_activation(tmp_path: Path) -> None:
@@ -173,7 +172,6 @@ def _official_items(result: dict) -> list[dict]:
     return [i for i in result["items"] if i["source"] == "official"]
 
 
-# ── update_available: official, activated path ───────────────────────────────
 
 
 async def test_update_available_when_catalog_newer(
@@ -284,7 +282,6 @@ async def test_guest_official_flags(
     assert item["dev_shadow"] is False
 
 
-# ── dev merge: dev_shadow ─────────────────────────────────────────────────────
 
 
 async def test_dev_merge_shadows_official_row(
@@ -331,7 +328,6 @@ async def test_dev_local_only_row_flags(
     assert item["installed_version"] == "0.1.0"
 
 
-# ── list_installed_versions: signed_only filter ──────────────────────────────
 
 
 def test_list_installed_versions_signed_only(
