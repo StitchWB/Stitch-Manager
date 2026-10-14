@@ -36,7 +36,6 @@ describe('CommunitySection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetInvoke();
-    // assertions below match the en locale literals
     useAppStore.setState({ language: 'en' });
   });
 
