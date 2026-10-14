@@ -151,16 +151,25 @@ def register_secret_handlers(client: Any, plugin_id: str) -> None:
     """
     store = PluginSecretStore(plugin_id)
 
-    def _get(params: dict[str, Any]) -> dict[str, Any]:
+    def _name_param(params: dict[str, Any]) -> str:
         name = params.get("name")
+        if not isinstance(name, str):
+            raise ValueError(f"invalid secret name: {name!r}")
+        return name
+
+    def _get(params: dict[str, Any]) -> dict[str, Any]:
+        name = _name_param(params)
         return {"name": name, "value": store.get(name)}
 
     def _set(params: dict[str, Any]) -> dict[str, Any]:
-        store.set(params.get("name"), params.get("value"))
+        value = params.get("value")
+        if not isinstance(value, str):
+            raise ValueError("secret value must be a string")
+        store.set(_name_param(params), value)
         return {"ok": True}
 
     def _delete(params: dict[str, Any]) -> dict[str, Any]:
-        store.delete(params.get("name"))
+        store.delete(_name_param(params))
         return {"ok": True}
 
     def _list(params: dict[str, Any]) -> dict[str, Any]:
