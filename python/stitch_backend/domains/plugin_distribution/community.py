@@ -309,6 +309,9 @@ def list_community_plugins() -> list[dict[str, Any]]:
         else:
             enriched["sourceType"] = "zip-legacy"
             enriched["sourceUrl"] = None
+        enriched["status"] = entry.get("status", "active")
+        if entry.get("upstream") is not None:
+            enriched["upstream"] = entry["upstream"]
         out.append(enriched)
     return out
 
@@ -344,6 +347,15 @@ async def install_community_plugin(
     entry = _find_catalog_entry(fetch_catalog(), plugin_id, version)
     if entry is None:
         return {"success": False, "error": f"not in catalog: {plugin_id}@{version}"}
+
+    if entry.get("status") == "archived":
+        return {
+            "success": False,
+            "error": (
+                f"plugin {plugin_id}@{version} is archived in the catalog — "
+                "installs are closed; already installed copies keep working"
+            ),
+        }
 
     parsed = _parse_source(entry)
 

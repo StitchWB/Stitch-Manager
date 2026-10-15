@@ -96,6 +96,38 @@ async def run_legacy_auto_migration() -> None:
         logger.warning("Legacy auto-migration skipped: %s", _exc)
 
 
+async def run_ai_gateway_auto_migration() -> None:
+    """One-time legacy → ai_gateway backfill, guarded by a settings flag.
+
+    Runs :func:`ai_gateway.migration.migrate_legacy_credentials` (additive,
+    idempotent, read-only on legacy stores) on the first boot only.  The
+    ``ai_gateway_migration_v1_done`` flag is written after a successful
+    pass, so later boots skip the work entirely and a failed pass retries
+    on the next boot.
+
+    On any exception → warning + continue (boot must never fail).
+    """
+    try:
+        from stitch_backend.database import get_session_factory
+        from stitch_backend.domains.ai_gateway.migration import (
+            migrate_legacy_credentials,
+        )
+        from stitch_backend.domains.settings.service import SettingsService
+
+        factory = get_session_factory()
+        async with factory() as _db:
+            settings = await SettingsService(_db).get_all()
+            if settings.get("ai_gateway_migration_v1_done"):
+                return
+            await migrate_legacy_credentials(_db)
+            await SettingsService(_db).update(
+                {"ai_gateway_migration_v1_done": True}
+            )
+            await _db.commit()
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("AI Gateway auto-migration skipped: %s", _exc)
+
+
 async def migrate_legacy_group_usage() -> None:
     # Idempotent (INSERT OR IGNORE) copy into group_usage_by_model (model='').
     try:
@@ -381,15 +413,6 @@ async def start_gateway_workers() -> None:
         logger.warning("AI Gateway workers init skipped: %s", _exc)
 
 
-async def start_key_health_worker() -> None:
-    try:
-        from stitch_backend.domains.key_health.worker import KeyHealthWorker
-        await KeyHealthWorker.start()
-        logger.info("KeyHealth worker started")
-    except Exception as _exc:
-        logger.warning("KeyHealth worker init skipped: %s", _exc)
-
-
 async def emit_app_started(settings: Settings) -> None:
     from stitch_backend.core.event_bus import event_bus
     event_bus.set_loop(asyncio.get_event_loop())
@@ -441,14 +464,6 @@ async def stop_gateway_workers() -> None:
         from stitch_backend.domains.ai_gateway.probe_worker import ProbeWorker
         await DiscoveryWorker.stop()
         await ProbeWorker.stop()
-    except Exception:
-        pass
-
-
-async def stop_key_health_worker() -> None:
-    try:
-        from stitch_backend.domains.key_health.worker import KeyHealthWorker
-        await KeyHealthWorker.stop()
     except Exception:
         pass
 

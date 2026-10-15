@@ -4,7 +4,7 @@ import { TestTube, Plus, Loader2, Eye, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { GlassCard, Button, Input, Checkbox, Badge, Textarea, StatusBadge } from '@/components/ui';
 import { testOpenCodeApi, bulkTestOpenCodeApi, type BulkTestKeyResult } from '@/lib/backend/modules/opencodeConfig';
-import { setOpenAIApiKeys } from '@/lib/backend/modules/apiKeys';
+import { createCredential, createProviderEndpoint, listProviderEndpoints } from '@/lib/backend/modules/aiGateway';
 
 type ModelInfo = {
   id: string;
@@ -100,8 +100,26 @@ export function ApiTesterSection({ onAddProvider }: ApiTesterSectionProps) {
 
     setBulkImporting(true);
     try {
-      const keys = workingKeys.map(k => ({ apiKey: k, baseUrl: baseUrl || null }));
-      await setOpenAIApiKeys(keys);
+      const endpoints = await listProviderEndpoints();
+      const normalized = baseUrl.replace(/\/+$/, '');
+      let endpoint = endpoints.find(e => e.baseUrl.replace(/\/+$/, '') === normalized);
+      if (!endpoint) {
+        let name: string;
+        try {
+          name = new URL(baseUrl).host;
+        } catch {
+          name = baseUrl;
+        }
+        endpoint = await createProviderEndpoint({
+          name,
+          adapterType: 'openai_compatible',
+          baseUrl,
+          enabled: true,
+        });
+      }
+      for (const key of workingKeys) {
+        await createCredential({ providerEndpointId: endpoint.id, authType: 'api_key', secret: key });
+      }
       toast.success(`Imported ${workingKeys.length} keys`);
       setBulkResults([]);
       setBulkKeysText('');

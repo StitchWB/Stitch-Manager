@@ -1,12 +1,15 @@
 /**
  * Users page — admin-only user management.
  *
- * Lists all users, supports creating new users (username/password/role) and
- * deleting existing ones via the shared ConfirmDialog. Surfaces 400
- * self/last-admin errors as toasts.
+ * Lists all users with client-side search, supports creating new users
+ * (username/password/role). Row actions (profile, plugin grants, delete) are
+ * consolidated in a per-row OverflowMenu; delete previews backend ownership
+ * impact — plain ConfirmDialog when nothing is owned, otherwise a transfer
+ * dialog requiring a successor. Surfaces 400 self/last-admin and 409
+ * unsafe-delete errors as toasts.
  */
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users as UsersIcon, Trash2, Plus, Loader2, AlertCircle, ShieldCheck, User as UserIcon, Puzzle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,18 +18,30 @@ import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '../lib/utils';
-import { listUsers, createUser, deleteUser, updateUserRole, type AuthUser } from '../lib/backend/modules/auth';
+import { listUsers, createUser, deleteUser, getDeleteImpact, updateUserRole, type AuthUser, type DeleteImpact } from '../lib/backend/modules/auth';
+import { errorMessage } from '../lib/errorText';
 import { askConfirm } from '../components/ui/ConfirmDialogHost';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
+import { ToolbarSearchField } from '../components/ui/ToolbarSearchField';
+import { OverflowMenu } from '../components/ui/OverflowMenu';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { Modal } from '@/components/ui/Modal';
 import { UserPluginGrants } from '@/components/admin/UserPluginGrants';
 
 type NewUserRole = AuthUser['role'];
+
+function hasTransferableImpact(impact: DeleteImpact): boolean {
+  return (
+    impact.owned_groups.length > 0 ||
+    impact.owned_accounts > 0 ||
+    impact.owned_credentials > 0 ||
+    impact.owned_endpoints > 0
+  );
+}
 
 const ROLE_OPTIONS: { value: NewUserRole; labelKey: string }[] = [
   { value: 'user', labelKey: 'auth.users.roleUser' },
@@ -45,6 +60,15 @@ export default function Users() {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      u => u.username.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
+    );
+  }, [users, search]);
 
   // Create form state
   const [newUsername, setNewUsername] = useState('');
@@ -54,6 +78,9 @@ export default function Users() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [roleUpdatingId, setRoleUpdatingId] = useState<string | number | null>(null);
   const [pluginsUser, setPluginsUser] = useState<AuthUser | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<{ user: AuthUser; impact: DeleteImpact } | null>(null);
+  const [successorId, setSuccessorId] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -115,7 +142,49 @@ export default function Users() {
     }
   };
 
+  const performDelete = async (user: AuthUser, transferTo?: string) => {
+    setDeleting(true);
+    try {
+      await deleteUser(user.id, transferTo);
+      toast.success(t('auth.users.deleted'));
+      setDeleteImpact(null);
+      await refresh();
+    } catch (err) {
+      const status = (err as Error & { status?: number })?.status;
+      if (status === 409) {
+        // Unsafe delete (race): surface the backend's detail.message verbatim.
+        toast.error(errorMessage(err, t('auth.users.deleteFailed')));
+      } else {
+        const message =
+          status === 400
+            ? // Backend returns 400 for both self-delete and last-admin;
+              // disambiguate by checking if it's the current user.
+              user.id === currentUser?.id
+              ? 'auth.users.errorSelfDelete'
+              : 'auth.users.errorLastAdmin'
+            : 'auth.users.deleteFailed';
+        toast.error(t(message));
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const onDelete = async (user: AuthUser) => {
+    let impact: DeleteImpact;
+    try {
+      impact = await getDeleteImpact(user.id);
+    } catch {
+      toast.error(t('auth.users.impactLoadFailed'));
+      return;
+    }
+
+    if (hasTransferableImpact(impact)) {
+      setSuccessorId('');
+      setDeleteImpact({ user, impact });
+      return;
+    }
+
     const confirmed = await askConfirm({
       title: t('auth.users.deleteTitle'),
       message: t('auth.users.deleteMessage', { username: user.username }),
@@ -123,23 +192,7 @@ export default function Users() {
       variant: 'danger',
     });
     if (!confirmed) return;
-
-    try {
-      await deleteUser(user.id);
-      toast.success(t('auth.users.deleted'));
-      await refresh();
-    } catch (err) {
-      const status = (err as Error & { status?: number })?.status;
-      const message =
-        status === 400
-          ? // Backend returns 400 for both self-delete and last-admin;
-            // disambiguate by checking if it's the current user.
-            user.id === currentUser?.id
-            ? 'auth.users.errorSelfDelete'
-            : 'auth.users.errorLastAdmin'
-          : 'auth.users.deleteFailed';
-      toast.error(t(message));
-    }
+    await performDelete(user);
   };
 
   const onRoleChange = async (user: AuthUser, nextRole: string) => {
@@ -227,9 +280,18 @@ export default function Users() {
 
           {/* Users table */}
           <div className="rounded-xl border border-white/[0.06] bg-black/40 backdrop-blur-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between">
+            <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-white">{t('auth.users.title')}</h2>
-              {loading && <Loader2 className="w-4 h-4 text-slate-500 animate-spin" />}
+              <div className="flex items-center gap-3">
+                {loading && <Loader2 className="w-4 h-4 text-slate-500 animate-spin" />}
+                <ToolbarSearchField
+                  value={search}
+                  onValueChange={setSearch}
+                  placeholder={t('auth.users.searchPlaceholder')}
+                  aria-label={t('auth.users.searchPlaceholder')}
+                  containerClassName="w-64"
+                />
+              </div>
             </div>
 
             {loadError ? (
@@ -241,6 +303,11 @@ export default function Users() {
               <div className="p-10 text-center">
                 <UsersIcon className="w-10 h-10 text-slate-600 mx-auto mb-3" />
                 <p className="text-sm text-slate-500">{t('auth.users.empty')}</p>
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="p-10 text-center">
+                <UsersIcon className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                <p className="text-sm text-slate-500">{t('auth.users.noMatch')}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -256,13 +323,13 @@ export default function Users() {
                       <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
                         {t('users.tier')}
                       </TableHead>
-                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-40 text-right">
+                      <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-16 text-right">
                         {t('auth.users.colActions')}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map(u => {
+                    {filteredUsers.map(u => {
                       const isCurrentUser = u.id === currentUser?.id;
                       return (
                         <TableRow
@@ -312,37 +379,32 @@ export default function Users() {
                             )}
                           </TableCell>
                           <TableCell className="px-5 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Tooltip content={t('admin.userProfile.title')} side="top">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => navigate(`/users/${String(u.id)}`)}
-                                  leftIcon={<Eye className="w-3.5 h-3.5" />}
-                                  className="text-slate-500 hover:text-indigo-400"
-                                  aria-label={t('admin.userProfile.title')}
-                                />
-                              </Tooltip>
-                              <Tooltip content={t('admin.plugins.pluginsActionTooltip')} side="top">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setPluginsUser(u)}
-                                  leftIcon={<Puzzle className="w-3.5 h-3.5" />}
-                                  className="text-slate-500 hover:text-indigo-400"
-                                  aria-label={t('admin.plugins.pluginsAction')}
-                                />
-                              </Tooltip>
-                              <Button
-                                variant="ghost"
+                            <div className="flex items-center justify-end">
+                              <OverflowMenu
+                                triggerLabel={t('auth.users.colActions')}
                                 size="sm"
-                                onClick={() => void onDelete(u)}
-                                leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                                className="text-slate-500 hover:text-red-400"
-                                aria-label={t('auth.users.delete')}
-                              >
-                                {t('auth.users.delete')}
-                              </Button>
+                                items={[
+                                  {
+                                    id: 'profile',
+                                    label: t('admin.userProfile.title'),
+                                    icon: <Eye className="w-3.5 h-3.5" />,
+                                    onSelect: () => navigate(`/users/${String(u.id)}`),
+                                  },
+                                  {
+                                    id: 'plugins',
+                                    label: t('admin.plugins.pluginsAction'),
+                                    icon: <Puzzle className="w-3.5 h-3.5" />,
+                                    onSelect: () => setPluginsUser(u),
+                                  },
+                                  {
+                                    id: 'delete',
+                                    label: t('auth.users.delete'),
+                                    icon: <Trash2 className="w-3.5 h-3.5" />,
+                                    tone: 'danger',
+                                    onSelect: () => void onDelete(u),
+                                  },
+                                ]}
+                              />
                             </div>
                           </TableCell>
                         </TableRow>
@@ -370,6 +432,94 @@ export default function Users() {
             username={pluginsUser.username}
             role={pluginsUser.role}
           />
+        </Modal>
+      )}
+
+      {/* Impact-aware delete: transfer ownership before deleting */}
+      {deleteImpact && (
+        <Modal
+          isOpen
+          onClose={() => {
+            if (!deleting) setDeleteImpact(null);
+          }}
+          title={t('auth.users.deleteImpactTitle')}
+          icon={<Trash2 size={18} />}
+          size="sm"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setDeleteImpact(null)}
+                disabled={deleting}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => void performDelete(deleteImpact.user, successorId)}
+                disabled={!successorId || deleting}
+                isLoading={deleting}
+              >
+                {t('auth.users.deleteImpactConfirm')}
+              </Button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-slate-300 leading-relaxed">
+              {t('auth.users.deleteImpactMessage', { username: deleteImpact.user.username })}
+            </p>
+
+            {deleteImpact.impact.owned_groups.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  {t('auth.users.impactGroups')}
+                </span>
+                <ul className="flex flex-col gap-1">
+                  {deleteImpact.impact.owned_groups.map(g => (
+                    <li
+                      key={String(g.id)}
+                      className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]"
+                    >
+                      <span className="text-sm text-slate-200 truncate">{g.name}</span>
+                      <span className="text-xs text-slate-400 shrink-0">
+                        {t('auth.users.impactGroupMembers', { count: g.member_count })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(
+              [
+                ['impactAccounts', deleteImpact.impact.owned_accounts],
+                ['impactCredentials', deleteImpact.impact.owned_credentials],
+                ['impactEndpoints', deleteImpact.impact.owned_endpoints],
+              ] as const
+            )
+              .filter(([, count]) => count > 0)
+              .map(([key, count]) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]"
+                >
+                  <span className="text-sm text-slate-300">{t(`auth.users.${key}`)}</span>
+                  <span className="text-sm text-slate-200 font-medium">{count}</span>
+                </div>
+              ))}
+
+            <Select
+              label={t('auth.users.transferTo')}
+              value={successorId}
+              onValueChange={setSuccessorId}
+              placeholder={t('auth.users.transferPlaceholder')}
+              disabled={deleting}
+              options={users
+                .filter(u => u.id !== deleteImpact.user.id)
+                .map(u => ({ value: String(u.id), label: u.username }))}
+            />
+          </div>
         </Modal>
       )}
     </div>

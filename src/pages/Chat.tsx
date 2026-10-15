@@ -35,12 +35,7 @@ import {
   getLocalChatToken,
 } from '@/lib/backend/modules/aiProxy';
 import { fetchProxyStatusNow } from '@/stores/aiProxy';
-import {
-  getAntigravityApiKeys,
-  getGeminiApiKeys,
-  getOpenAIApiKeys,
-  getZaiApiKeys,
-} from '@/lib/backend/modules/apiKeys';
+import { listCredentials } from '@/lib/backend/modules/aiGateway';
 import { Button, ButtonBase, Checkbox, EmptyState, Input, LoadingSpinner, Select, StatusBadge, Textarea, Tooltip } from '@/components/ui';
 
 interface ChatModelInfo extends ModelInfo {
@@ -48,10 +43,7 @@ interface ChatModelInfo extends ModelInfo {
 }
 
 interface SetupSnapshot {
-  geminiKeys: number;
-  openaiKeys: number;
-  antigravityKeys: number;
-  zaiKeys: number;
+  gatewayCredentials: number;
   freemodelKey: boolean;
   enabledProviderAccounts: number;
   totalProviderAccounts: number;
@@ -101,10 +93,7 @@ export default function Chat() {
   const [proxyMode, setProxyMode] = useState('full');
   const [proxyPort, setProxyPort] = useState(25583);
   const [setup, setSetup] = useState<SetupSnapshot>({
-    geminiKeys: 0,
-    openaiKeys: 0,
-    antigravityKeys: 0,
-    zaiKeys: 0,
+    gatewayCredentials: 0,
     freemodelKey: false,
     enabledProviderAccounts: 0,
     totalProviderAccounts: 0,
@@ -178,11 +167,8 @@ export default function Chat() {
         getProxySettings(),
       ]);
 
-      const [geminiKeys, openaiKeys, antigravityKeys, zaiKeys, capabilities, mappings] = await Promise.all([
-        getGeminiApiKeys(),
-        getOpenAIApiKeys(),
-        getAntigravityApiKeys(),
-        getZaiApiKeys(),
+      const [credentials, capabilities, mappings] = await Promise.all([
+        listCredentials(),
         getProviderCapabilities(),
         getProviderModelMappings(),
       ]);
@@ -196,7 +182,7 @@ export default function Chat() {
       ]);
 
       const hasAnyConfiguredKey =
-        geminiKeys.length > 0 || openaiKeys.length > 0 || antigravityKeys.length > 0 || zaiKeys.length > 0 || !!proxySettings.freemodelApiKey;
+        credentials.length > 0 || !!proxySettings.freemodelApiKey;
 
       setProxyRunning(proxyStatus?.running ?? false);
       setProxyMode(proxySettings.appMode);
@@ -209,10 +195,7 @@ export default function Chat() {
       const totalProviderAccounts = capabilities.reduce((acc, item) => acc + item.totalAccounts, 0);
 
       setSetup({
-        geminiKeys: geminiKeys.length,
-        openaiKeys: openaiKeys.length,
-        antigravityKeys: antigravityKeys.length,
-        zaiKeys: zaiKeys.length,
+        gatewayCredentials: credentials.length,
         freemodelKey: !!proxySettings.freemodelApiKey,
         enabledProviderAccounts,
         totalProviderAccounts,
@@ -248,8 +231,7 @@ export default function Chat() {
     }
   }, []);
 
-  const totalApiKeys = setup.geminiKeys + setup.openaiKeys + setup.antigravityKeys + setup.zaiKeys;
-  const hasProviderSetup = setup.enabledProviderAccounts > 0 || totalApiKeys > 0 || setup.freemodelKey;
+  const hasProviderSetup = setup.enabledProviderAccounts > 0 || setup.gatewayCredentials > 0 || setup.freemodelKey;
   const hasModels = modelList.length > 0;
 
   const setupBlockReason = !selectedModelUsesZaiRoute && !proxyRunning
@@ -604,7 +586,7 @@ export default function Chat() {
                       {setupError && <p className="text-2xs text-vsc-red mt-1">{setupError}</p>}
                       <div className="mt-2 text-2xs text-vsc-text-muted space-y-1">
                         <div>
-                          {t('chat.setupApiKeys', { gemini: setup.geminiKeys, openai: setup.openaiKeys, antigravity: setup.antigravityKeys })}
+                          {t('chat.setupGatewayKeys', { count: setup.gatewayCredentials })}
                         </div>
                         <div>
                           {t('chat.setupProviderAccounts', { active: setup.enabledProviderAccounts, total: setup.totalProviderAccounts })}

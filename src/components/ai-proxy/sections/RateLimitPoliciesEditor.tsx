@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Gauge, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 
-import { AI_PROXY_PROVIDER_FILTERS } from '@/components/ai-proxy/providerMeta';
+import { AI_PROXY_PROVIDER_FILTERS } from '@/constants/providerRegistry';
 import {
   Button,
   EmptyState,

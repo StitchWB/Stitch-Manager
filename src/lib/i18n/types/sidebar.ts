@@ -1,6 +1,7 @@
 export interface SidebarTranslations {
   sidebar: {
     accounts: string;
+    adminOverview: string;
     aiHub: string;
     automation: string;
     autoReg: string;
@@ -14,7 +15,9 @@ export interface SidebarTranslations {
     logs: string;
     mail: string;
     marketplace: string;
+    partners: string;
     plugins: string;
+    privileges: string;
     radar: string;
     scheduler: string;
     settings: string;

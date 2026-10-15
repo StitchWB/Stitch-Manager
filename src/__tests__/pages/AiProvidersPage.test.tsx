@@ -1,28 +1,57 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { useEffect } from 'react';
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AiProvidersPage from '../../pages/AiProvidersPage';
-import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
+import * as aiGatewayModule from '../../lib/backend/modules/aiGateway';
+import * as customProvidersModule from '../../lib/backend/modules/customProviders';
+import { useAiGatewayStore } from '../../stores/aiGateway';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
+
+jest.mock('@/hooks/useServicePlugins', () => ({
+  useServicePlugins: jest.fn(() => []),
+}));
+
+jest.mock('@/lib/backend/modules/apiKeys', () => ({
+  getZaiApiKeys: jest.fn(async () => []),
+  setZaiApiKeys: jest.fn(),
+}));
+
+jest.mock('@/lib/backend/modules/freeModelBridge', () => ({
+  getFreeModelBridgeStatus: jest.fn(async () => ({
+    status: 'stopped',
+    port: null,
+    pid: null,
+    uptimeSeconds: null,
+  })),
+  startFreeModelBridge: jest.fn(),
+  stopFreeModelBridge: jest.fn(),
+}));
+
+jest.mock('@/lib/backend/modules/accounts', () => {
+  const actual = jest.requireActual('@/lib/backend/modules/accounts') as object;
+  return {
+    ...actual,
+    checkFireworksApiKey: jest.fn(),
+  };
+});
 
 jest.mock('../../components/layout/Header', () => ({
   __esModule: true,
   default: ({ title }: { title: string }) => <div>{title}</div>,
 }));
 
-// const-exports (fetchAllQuotasSafe etc.) can't be redefined by jest.spyOn — mock the whole module
 jest.mock('../../lib/backend/modules/aiProxy', () => {
   const actual = jest.requireActual('../../lib/backend/modules/aiProxy') as object;
   return {
     ...actual,
-    getAiProxyAccounts: jest.fn(),
-    getAvailableModelsSafe: jest.fn(),
-    getProviderCapabilities: jest.fn(),
-    getProviderModelMappings: jest.fn(),
-    getRequestHistory: jest.fn(),
-    testProviderConnection: jest.fn(),
-    setProviderModelMappings: jest.fn(),
+    getAiProxyAccounts: jest.fn(async () => []),
+    getAvailableModelsSafe: jest.fn(async () => []),
+    getProviderCapabilities: jest.fn(async () => []),
+    getProviderModelMappings: jest.fn(async () => []),
+    getRequestHistory: jest.fn(async () => []),
+    testProviderConnection: jest.fn(async () => ({ success: true })),
+    setProviderModelMappings: jest.fn(async () => undefined),
     fetchAllQuotas: jest.fn(async () => []),
     fetchAllQuotasSafe: jest.fn(async () => []),
     fetchOpenAiAccountQuotas: jest.fn(async () => []),
@@ -32,32 +61,31 @@ jest.mock('../../lib/backend/modules/aiProxy', () => {
   };
 });
 
-jest.mock('../../components/ai-proxy/AccountModal', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
-jest.mock(
-  '../../components/ai-proxy/QuotaDashboard',
-  () => ({ QuotaDashboard: () => null }),
-  { virtual: true },
-);
-
-// HoloneSection subscribes over WS — mock it to keep the page test off the WS architecture
-jest.mock('../../components/ai-proxy/sections/HoloneSection', () => ({
-  __esModule: true,
-  HoloneSection: () => null,
-}));
-
-// gateway catalog fetches are stubbed to empty lists so the test stays on the accounts surface
 jest.mock('../../lib/backend/modules/aiGateway', () => ({
   listProviderEndpoints: jest.fn(async () => []),
   listCredentials: jest.fn(async () => []),
   listUpstreamModels: jest.fn(async () => []),
+  createProviderEndpoint: jest.fn(),
+  updateProviderEndpoint: jest.fn(),
+  deleteProviderEndpoint: jest.fn(),
+  createCredential: jest.fn(),
+  updateCredential: jest.fn(),
+  deleteCredential: jest.fn(),
+  rotateCredentialSecret: jest.fn(),
+  createUpstreamModel: jest.fn(),
+  updateUpstreamModel: jest.fn(),
+  deleteUpstreamModel: jest.fn(),
+  upsertCredentialModelAccess: jest.fn(),
+  deleteCredentialModelAccess: jest.fn(),
+  createPublicModel: jest.fn(),
+  updatePublicModel: jest.fn(),
+  deletePublicModel: jest.fn(),
+  createRouteTarget: jest.fn(),
+  updateRouteTarget: jest.fn(),
+  deleteRouteTarget: jest.fn(),
   listPublicModels: jest.fn(async () => []),
-  listCredentialModelAccess: jest.fn(async () => []),
   listRouteTargetsForPublicModel: jest.fn(async () => []),
-  discoverModelsForEndpoint: jest.fn(async () => ({ models_count: 0 })),
+  listCredentialModelAccess: jest.fn(async () => []),
   migrateLegacyData: jest.fn(async () => ({ endpoints_created: 0, credentials_created: 0 })),
   importOpencodeProviders: jest.fn(async () => ({
     imported: [],
@@ -66,6 +94,7 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
     public_models: [],
     shared_to_group: null,
   })),
+  discoverModelsForEndpoint: jest.fn(async () => ({ models_count: 0 })),
   testCredentialConnection: jest.fn(async () => ({ success: true })),
   proxyKeysList: jest.fn(async () => ({
     baseUrl: '',
@@ -76,223 +105,195 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
   proxyKeysRevoke: jest.fn(async () => ({ success: true })),
 }));
 
-jest.mock('../../components/ai-gateway/PublicModelsSection', () => ({
-  PublicModelsSection: () => null,
+jest.mock('../../lib/backend/modules/customProviders', () => ({
+  getCustomProviders: jest.fn(async () => []),
 }));
 
-jest.mock('../../pages/AiAnalytics', () => ({
-  __esModule: true,
-  default: () => <div data-testid="ai-analytics-page" />,
-}));
+const gw = aiGatewayModule as jest.Mocked<typeof aiGatewayModule>;
+const cp = customProvidersModule as jest.Mocked<typeof customProvidersModule>;
 
-const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
+const endpointOpenAi = {
+  id: 'ep-openai',
+  name: 'OpenAI',
+  adapterType: 'openai_compatible',
+  baseUrl: 'https://api.openai.com/v1',
+  enabled: true,
+  circuitState: 'closed',
+  createdAt: '2026-01-01T00:00:00Z',
+};
 
-let navigatedPath = '';
-let navigatedSearch = '';
+const endpointDeepSeek = {
+  id: 'ep-deepseek',
+  name: 'DeepSeek CN',
+  adapterType: 'openai_compatible',
+  baseUrl: 'https://api.deepseek.com/v1',
+  enabled: true,
+  circuitState: 'closed',
+  createdAt: '2026-01-02T00:00:00Z',
+};
 
-function LocationSpy() {
-  const loc = useLocation();
-  useEffect(() => {
-    navigatedPath = loc.pathname;
-    navigatedSearch = loc.search;
-  }, [loc.pathname, loc.search]);
-  return null;
-}
+const credentialActive = {
+  id: 'cred-1',
+  providerEndpointId: 'ep-openai',
+  authType: 'api_key',
+  fingerprint: 'abcdef1234567890',
+  enabled: true,
+  runtimeStatus: 'active',
+  consecutiveFailures: 0,
+  createdAt: '2026-01-01T00:00:00Z',
+};
 
-function TestNav() {
-  const navigate = useNavigate();
-  return (
-    <>
-      <button data-testid="nav-away" onClick={() => navigate('/ai/routing')}>away</button>
-      <button data-testid="nav-back" onClick={() => navigate(-1)}>back</button>
-    </>
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={['/ai/providers']}>
+      <Routes>
+        <Route path="/ai/providers" element={<AiProvidersPage />} />
+      </Routes>
+    </MemoryRouter>
   );
 }
 
-const testAccount = {
-  id: 1,
-  provider: 'openai',
-  name: 'OpenAI Main',
-  oauthToken: null,
-  apiKey: 'sk-test',
-  sessionToken: null,
-  enabled: true,
-  accountType: 'free',
-  requestsToday: 1,
-  requestsTotal: 10,
-  tokensUsed: 123,
-  lastUsedAt: null,
-  createdAt: 0,
-  updatedAt: 0,
-};
-
-describe('AiProvidersPage', () => {
+describe('AiProvidersPage (unified master-detail)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    navigatedPath = '';
-    navigatedSearch = '';
-
-    proxy.getAiProxyAccounts.mockResolvedValue([testAccount] as any);
-    proxy.getAvailableModelsSafe.mockResolvedValue([
-      { id: 'gpt-4-turbo', provider: 'openai', ownedBy: 'openai' },
-    ] as any);
-    proxy.getProviderCapabilities.mockResolvedValue([
-      {
-        provider: 'openai',
-        supportsApiKeys: true,
-        supportsOauth: true,
-        totalAccounts: 1,
-        enabledAccounts: 1,
-        totalApiKeys: 1,
-        configured: true,
-      },
-    ] as any);
-    proxy.getProviderModelMappings.mockResolvedValue([
-      { modelPattern: '^gpt-', provider: 'openai', modelId: 'gpt-4-turbo' },
-    ] as any);
-    proxy.getRequestHistory.mockResolvedValue([] as any);
-    proxy.testProviderConnection.mockResolvedValue({
-      success: true,
-      provider: 'openai',
-      modelId: null,
-      message: 'ok',
-    } as any);
-    proxy.setProviderModelMappings.mockResolvedValue(undefined as any);
-  });
-
-  it('loads accounts and supports connection test on providers section', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <MemoryRouter initialEntries={['/ai/providers']}>
-        <Routes>
-          <Route path="/ai/providers" element={<AiProvidersPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    await screen.findByText('OpenAI Main');
-
-    const testButton = screen.getByTitle('Test connection');
-    await user.click(testButton);
-
-    await waitFor(() => {
-      expect(proxy.testProviderConnection).toHaveBeenCalledWith('openai');
+    useAiGatewayStore.setState({
+      endpoints: [],
+      credentials: [],
+      upstreamModels: [],
     });
+    gw.listProviderEndpoints.mockResolvedValue([endpointOpenAi, endpointDeepSeek] as never);
+    gw.listCredentials.mockResolvedValue([credentialActive] as never);
+    gw.listUpstreamModels.mockResolvedValue([] as never);
+    cp.getCustomProviders.mockResolvedValue([] as never);
   });
 
-  it('renders the paste-first header action, overflow actions and the compact proxy strip', async () => {
-    render(
-      <MemoryRouter initialEntries={['/ai/providers']}>
-        <Routes>
-          <Route path="/ai/providers" element={<AiProvidersPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+  it('renders the provider roster, the add action and the proxy strip', async () => {
+    renderPage();
 
-    await screen.findByText('OpenAI Main');
+    await screen.findByText('OpenAI');
 
-    expect(screen.getByPlaceholderText('Provider, account, or model…')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Add Endpoint' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Paste keys' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Add Account' })).toBeTruthy();
-    expect(screen.getByLabelText('More')).toBeTruthy();
-
-    // Secondary actions live behind the overflow menu, not in the header.
-    expect(screen.queryByRole('button', { name: 'Import from OpenCode' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Paste Package' })).toBeNull();
-
-    expect(screen.queryByText('Server offline — data may be stale')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Paste keys' }).length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText('Search providers…')).toBeTruthy();
     expect(screen.getByTestId('proxy-status-bar')).toBeTruthy();
+    expect(screen.getByText('DeepSeek CN')).toBeTruthy();
   });
 
-  it('opens the paste-first modal from the header action', async () => {
+  it('lands on the fleet overview when no provider is selected', async () => {
+    renderPage();
+
+    await screen.findByText('OpenAI');
+
+    expect(await screen.findByText('Fleet overview')).toBeTruthy();
+    expect(screen.queryByText('Select a provider')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Paste keys' }).length).toBeGreaterThan(1);
+  });
+
+  it('shows provider and key counts in the roster footer', async () => {
+    renderPage();
+
+    await screen.findByText('OpenAI');
+
+    expect(await screen.findByText(/2 providers · 1 keys/)).toBeTruthy();
+  });
+
+  it('shows the detail tabs after selecting a provider', async () => {
     const user = userEvent.setup();
+    renderPage();
 
-    render(
-      <MemoryRouter initialEntries={['/ai/providers']}>
-        <Routes>
-          <Route path="/ai/providers" element={<AiProvidersPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
 
-    await screen.findByText('OpenAI Main');
-
-    expect(screen.queryByTestId('paste-first-modal')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Paste keys' }));
-    expect(await screen.findByTestId('paste-first-modal')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Keys' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Models' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
+    expect(screen.getByText('https://api.openai.com/v1 · openai_compatible')).toBeTruthy();
   });
 
-  it('replaces the provider sidebar with the url-state filter bar', async () => {
-    render(
-      <MemoryRouter initialEntries={['/ai/providers']}>
-        <Routes>
-          <Route path="/ai/providers" element={<AiProvidersPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    await screen.findByText('OpenAI Main');
-
-    expect(screen.queryByTestId('ai-providers-sidebar')).toBeNull();
-    const filterBar = screen.getByTestId('provider-filter-bar');
-    expect(within(filterBar).getByRole('button', { name: /OpenAI/ })).toBeTruthy();
-    expect(within(filterBar).getByRole('button', { name: /All Providers/ })).toBeTruthy();
-  });
-
-  it('writes the filter bar search query to ?q= and keeps it across re-renders', async () => {
+  it('switches the detail pane when another provider is selected', async () => {
     const user = userEvent.setup();
-    const tree = (
-      <MemoryRouter initialEntries={['/ai/providers']}>
-        <LocationSpy />
-        <Routes>
-          <Route path="/ai/providers" element={<AiProvidersPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
-    const { rerender } = render(tree);
+    renderPage();
 
-    const input = await screen.findByPlaceholderText('Provider, account, or model…');
-    await user.type(input, 'gpt');
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('DeepSeek CN'));
 
     await waitFor(() => {
-      expect(navigatedSearch).toBe('?q=gpt');
+      expect(screen.getByText('https://api.deepseek.com/v1 · openai_compatible')).toBeTruthy();
     });
-
-    rerender(tree);
-    expect(screen.getByPlaceholderText('Provider, account, or model…')).toHaveValue('gpt');
   });
 
-  it('keeps ?provider= when navigating away and back', async () => {
-    render(
-      <MemoryRouter initialEntries={['/ai/providers']}>
-        <LocationSpy />
-        <TestNav />
-        <Routes>
-          <Route path="/ai/providers" element={<AiProvidersPage />} />
-          <Route path="/ai/routing" element={<div data-testid="routing-page" />} />
-        </Routes>
-      </MemoryRouter>
-    );
+  it('returns to the fleet overview when the selected roster row is clicked again', async () => {
+    const user = userEvent.setup();
+    renderPage();
 
-    await screen.findByText('OpenAI Main');
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    expect(await screen.findByText('https://api.openai.com/v1 · openai_compatible')).toBeTruthy();
 
-    const filterBar = screen.getByTestId('provider-filter-bar');
-    fireEvent.click(within(filterBar).getByRole('button', { name: /OpenAI/ }));
-    await waitFor(() => {
-      expect(navigatedSearch).toBe('?provider=openai');
-    });
+    await user.click(screen.getAllByText('OpenAI')[0]);
+    expect(await screen.findByText('Fleet overview')).toBeTruthy();
+    expect(screen.queryByText('https://api.openai.com/v1 · openai_compatible')).toBeNull();
+  });
 
-    fireEvent.click(screen.getByTestId('nav-away'));
-    await waitFor(() => {
-      expect(navigatedPath).toBe('/ai/routing');
-    });
+  it('returns to the fleet overview via the detail back button', async () => {
+    const user = userEvent.setup();
+    renderPage();
 
-    fireEvent.click(screen.getByTestId('nav-back'));
-    await waitFor(() => {
-      expect(navigatedPath).toBe('/ai/providers');
-      expect(navigatedSearch).toBe('?provider=openai');
-    });
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    expect(await screen.findByText('https://api.openai.com/v1 · openai_compatible')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Fleet overview' }));
+    expect(await screen.findByText('Fleet overview')).toBeTruthy();
+    expect(screen.queryByText('https://api.openai.com/v1 · openai_compatible')).toBeNull();
+  });
+
+  it('switches between detail tabs', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(screen.getByRole('button', { name: 'Models' }));
+
+    expect(await screen.findByRole('button', { name: 'Discover models' })).toBeTruthy();
+  });
+
+  it('shows the legacy migration banner and empty roster when the gateway is empty', async () => {
+    gw.listProviderEndpoints.mockResolvedValue([] as never);
+    gw.listCredentials.mockResolvedValue([] as never);
+    cp.getCustomProviders.mockResolvedValue([{ id: 'legacy-1' }] as never);
+
+    renderPage();
+
+    expect(await screen.findByText('Legacy data not migrated')).toBeTruthy();
+    expect(screen.getAllByText('No providers yet').length).toBeGreaterThan(0);
+  });
+
+  it('hides the migration banner on a fresh install with no legacy data', async () => {
+    gw.listProviderEndpoints.mockResolvedValue([] as never);
+    gw.listCredentials.mockResolvedValue([] as never);
+    cp.getCustomProviders.mockResolvedValue([] as never);
+
+    renderPage();
+
+    await screen.findByText('No providers yet');
+    expect(screen.queryByText('Legacy data not migrated')).toBeNull();
+  });
+
+  it('renders the Fireworks checker and hides FreeModel when the plugin is absent', async () => {
+    (useServicePlugins as jest.Mock).mockReturnValue([]);
+
+    renderPage();
+
+    expect(await screen.findByPlaceholderText('fw_...')).toBeTruthy();
+    expect(screen.queryByText('FreeModel Bridge')).toBeNull();
+  });
+
+  it('renders the FreeModel section when the stitch-freemodel plugin is present', async () => {
+    (useServicePlugins as jest.Mock).mockReturnValue([{ id: 'stitch-freemodel' } as any]);
+
+    renderPage();
+
+    expect(await screen.findByText('FreeModel Bridge')).toBeTruthy();
   });
 });

@@ -96,7 +96,7 @@ describe('DevboxHandoff block display', () => {
     expect(devboxCallArgs(invokeMock, 'handoff_block')[3]).toEqual({ reveal: true });
   });
 
-  it('renders the section error with retry when the command fails', async () => {
+  it('renders the section error with retry and no body when the command fails', async () => {
     invokeMock.mockImplementation(
       handoffRoutes({
         handoff_block: () => {
@@ -108,44 +108,89 @@ describe('DevboxHandoff block display', () => {
 
     const error = await screen.findByTestId('devbox-handoff-error');
     expect(error.textContent).toContain('handoff_block unavailable');
+    expect(screen.queryByTestId('devbox-handoff-block')).toBeNull();
+    expect(screen.queryByTestId('devbox-handoff-copy')).toBeNull();
+    expect(screen.queryByTestId('devbox-handoff-task')).toBeNull();
+    expect(screen.queryByTestId('devbox-handoff-reveal')).toBeNull();
 
     fireEvent.click(screen.getByText('Retry'));
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'handoff_block').length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  it('shows the stale-plugin hint instead of the raw JSON-RPC error', async () => {
+    invokeMock.mockImplementation(
+      handoffRoutes({
+        handoff_block: () => {
+          throw new Error('Method not found: plugin.stitch-devbox.handoff_block (-32601)');
+        },
+      }),
+    );
+    render(<DevboxHandoff />);
+
+    const error = await screen.findByTestId('devbox-handoff-error');
+    expect(error.textContent).toContain(t('devboxPage.handoffErrorStale'));
+    expect(error.textContent).not.toContain('-32601');
+  });
 });
 
 describe('DevboxHandoff clipboard', () => {
-  it('copy writes exactly the block', async () => {
+  it('copy with empty task fetches the full block and writes intro + block + no-task closer', async () => {
     render(<DevboxHandoff />);
     await screen.findByTestId('devbox-handoff-block');
+    expect(devboxCallArgs(invokeMock, 'handoff_block')).toEqual([{ reveal: false }]);
 
     fireEvent.click(screen.getByTestId('devbox-handoff-copy'));
     await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(maskedHandoffFixture.block);
+      expect(writeText).toHaveBeenCalledWith(
+        `${t('devboxPage.handoffPromptIntro')}\n\n${revealedHandoffFixture.block}\n\n${t('devboxPage.handoffNoTask')}`,
+      );
     });
+    expect(devboxCallArgs(invokeMock, 'handoff_block')).toEqual([
+      { reveal: false },
+      { reveal: true },
+    ]);
+    expect(screen.getByTestId('devbox-handoff-masked')).toBeTruthy();
+    expect(screen.getByTestId('devbox-handoff-block').textContent).toBe(
+      maskedHandoffFixture.block,
+    );
   });
 
-  it('copy with task appends the task brief and stays disabled while empty', async () => {
+  it('copy with a task writes intro + full block + task header + task', async () => {
     render(<DevboxHandoff />);
     await screen.findByTestId('devbox-handoff-block');
 
-    const copyTask = screen.getByTestId('devbox-handoff-copy-task');
-    expect(copyTask).toBeDisabled();
-
     const task = 'Fix the ingress tunnel';
     fireEvent.change(screen.getByTestId('devbox-handoff-task'), { target: { value: task } });
-    expect(copyTask).not.toBeDisabled();
-
-    fireEvent.click(copyTask);
+    fireEvent.click(screen.getByTestId('devbox-handoff-copy'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(
-        t('devboxPage.handoffTaskWrap', { block: maskedHandoffFixture.block, task }),
+        `${t('devboxPage.handoffPromptIntro')}\n\n${revealedHandoffFixture.block}\n\n${t('devboxPage.handoffTaskHeader')}\n${task}`,
       );
     });
-    expect(writeText.mock.calls[0][0]).toContain(maskedHandoffFixture.block);
-    expect(writeText.mock.calls[0][0]).toContain(task);
+  });
+
+  it('reveal fills the full block so copy does not refetch', async () => {
+    render(<DevboxHandoff />);
+    await screen.findByTestId('devbox-handoff-block');
+
+    fireEvent.click(screen.getByTestId('devbox-handoff-reveal'));
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-handoff-block').textContent).toBe(
+        revealedHandoffFixture.block,
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('devbox-handoff-copy'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalled();
+    });
+    expect(devboxCallArgs(invokeMock, 'handoff_block')).toEqual([
+      { reveal: false },
+      { reveal: true },
+    ]);
+    expect(writeText.mock.calls[0][0]).toContain(revealedHandoffFixture.block);
   });
 
   it('template button inserts the task brief skeleton', async () => {

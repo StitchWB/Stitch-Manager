@@ -51,7 +51,7 @@ export const chat: ChatTranslations = {
     sessions: "Чаты",
     sendMessage: "Отправить сообщение",
     settings: "Настройки",
-    setupApiKeys: "Настроить API-ключи",
+    setupGatewayKeys: "Учётные данные шлюза: {count}",
     setupEstimatedCost: "Оценка стоимости",
     setupModelMappings: "Настроить сопоставления моделей",
     setupProviderAccounts: "Настроить аккаунты провайдеров",

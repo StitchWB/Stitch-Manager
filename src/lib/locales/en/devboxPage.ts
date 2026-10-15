@@ -35,17 +35,22 @@ export const devboxPage: DevboxPageTranslations = {
     queued: "Command accepted into the queue",
     progress: "Running: {cmd} · started {time}",
     sectionHandoff: "Agent hand-off",
-    handoffCaption: "Copy the block into the agent chat - it connects to the devbox itself",
+    handoffCaption:
+      "Copy the prompt into the agent chat (arena.ai and similar) - the agent connects to the devbox itself and does the task.",
     handoffMasked: "Tokens masked",
     handoffReveal: "Reveal tokens",
     handoffHide: "Hide tokens",
-    handoffCopyBlock: "Copy block",
-    handoffCopyBlockTask: "Copy block + task",
+    handoffCopyPrompt: "Copy prompt for the agent",
+    handoffPromptIntro:
+      "Connect to my devbox: clone the repository locally using the link from the block below, read ARENA.md and skills/remote-devbox/SKILL.md inside it, connect with the token, and verify the link using the bridge tools.",
+    handoffNoTask: "I will send the task in the next message.",
+    handoffTaskHeader: "Task:",
+    handoffErrorStale:
+      "The plugin does not know the handoff_block command: the plugin code was updated - restart the app or the plugin on the Plugins page.",
     handoffTemplate: "Task template",
     handoffTaskTemplate:
       "Goal: \nScope: \nAcceptance criteria: \nVerification procedure: \nDo not touch: \nReport: ",
     handoffTaskPlaceholder: "Describe the task for the agent...",
-    handoffTaskWrap: "{block}\n\nTask:\n{task}",
     tipRefreshHandoff: "Refresh the block - tokens are re-read from the server.",
     doctorReportLabel: "Doctor report",
     cockpitUrlLabel: "Cockpit URL",

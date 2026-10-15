@@ -622,12 +622,15 @@ export * as overrides from './modules/overrides';
 
 export {
   getFriends,
-  getRadarOffers,
-  getRadarStats,
   type FriendType,
   type FriendBadge,
   type FriendItem,
   type FriendsResponse,
+} from './modules/friends';
+
+export {
+  getRadarOffers,
+  getRadarStats,
   type RadarEffort,
   type RadarOffer,
   type RadarOffersResponse,
@@ -636,6 +639,7 @@ export {
 } from './modules/radar';
 
 export * as radar from './modules/radar';
+export * as friends from './modules/friends';
 
 // ============================================
 // Plugin Grants (role-based plugin entitlements)

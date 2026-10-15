@@ -239,7 +239,25 @@ async def evaluate_quota(
     rules: list[RuleView] | None = None,
     today: str | None = None,
 ) -> QuotaVerdict:
-    """Evaluate member + pool rules for one (group, user, model)."""
+    """Evaluate member + pool rules for one (group, user, model).
+
+    Enforcement contract — a SOFT control, not a hard cap:
+
+    - The verdict reads committed ``group_usage_by_model`` rows only.
+      The request path accumulates usage in memory
+      (``ai_gateway.usage_tracker.record_usage``) and a background task
+      flushes every ~10 s, so a burst inside one flush window is
+      invisible here: usage can overshoot the cap by up to that window.
+      The in-process ``_over_keys`` flags give immediate visibility
+      after a flush commits; they do not close the window itself.
+    - Counters are per group.  One credential shared into N groups of
+      the caller yields N candidate rows
+      (``routing_engine._fetch_pool_credentials`` outer-joins every
+      matching share); each row is evaluated against its own group's
+      counter and usage is recorded against the group that survives the
+      quota filter.  A caller's effective budget is the SUM of the caps
+      over the groups sharing the credential.
+    """
     if rules is None:
         rules = await rules_for_group(db, group)
     if today is None:

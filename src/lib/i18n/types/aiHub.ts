@@ -440,6 +440,7 @@ export interface AiHubTranslations {
       modeLabel: string;
       modeQuota: string;
       portLabel: string;
+      details: string;
       portPlaceholder: string;
       reachabilityLabel: string;
       reachable: string;
@@ -500,6 +501,10 @@ export interface AiHubTranslations {
         title: string;
         description: string;
       }
+      hint: {
+        text: string;
+        action: string;
+      }
     }
     topology: {
       keys: string;
@@ -519,6 +524,14 @@ export interface AiHubTranslations {
       cooldownHint: string;
       exponentialBackoffLabel: string;
       exponentialBackoffHint: string;
+    }
+    validateAll: {
+      title: string;
+      description: string;
+      running: string;
+      done: string;
+      summary: string;
+      startFailed: string;
     }
     pasteFirst: {
       title: string;
@@ -544,6 +557,16 @@ export interface AiHubTranslations {
       emptyHint: string;
       fromClipboard: string;
       clipboardFailed: string;
+      providerPresetLabel: string;
+      providerPresetOther: string;
+      modelsHint: string;
+      modelsFound: string;
+      modelsLater: string;
+      batchTitle: string;
+      batchAddAll: string;
+      batchKeys: string;
+      batchModels: string;
+      batchBack: string;
       mechanismHint: {
         oauth: string;
         web: string;
@@ -555,6 +578,117 @@ export interface AiHubTranslations {
       accounts: string;
       keys: string;
       empty: string;
+    }
+    providersPage: {
+      searchProviders: string;
+      rosterEmpty: string;
+      rosterEmptyHint: string;
+      addProvider: string;
+      pasteKeys: string;
+      importOpencode: string;
+      importPackage: string;
+      addManually: string;
+      keysShort: string;
+      modelsShort: string;
+      failingShort: string;
+      health: {
+        healthy: string;
+        degraded: string;
+        down: string;
+        untested: string;
+        empty: string;
+      }
+      overview: {
+        title: string;
+        providers: string;
+        keys: string;
+        active: string;
+        failing: string;
+        models: string;
+        needsAttention: string;
+        allHealthy: string;
+        open: string;
+        actions: string;
+      }
+      roster: {
+        footerProviders: string;
+        footerKeys: string;
+        footerHealthy: string;
+        footerProblems: string;
+        footerEmpty: string;
+      }
+      detail: {
+        activeChip: string;
+        failingChip: string;
+        modelsChip: string;
+      }
+      keysSearchPlaceholder: string;
+      noSelection: string;
+      noSelectionHint: string;
+      tabKeys: string;
+      tabModels: string;
+      tabSettings: string;
+      toolsTitle: string;
+      enabled: string;
+      disabled: string;
+      adapterLabel: string;
+      baseUrlLabel: string;
+      discover: string;
+      discovering: string;
+      endpointModelsHint: string;
+      edit: string;
+      deleteEndpoint: string;
+      deleteEndpointConfirm: string;
+      testSelected: string;
+      deleteSelected: string;
+      addKeys: string;
+      filterAll: string;
+      filterProblems: string;
+      keysEmpty: string;
+      keysEmptyHint: string;
+      selectAll: string;
+      selectedCount: string;
+      test: string;
+      colKey: string;
+      colStatus: string;
+      colModels: string;
+      colLastUsed: string;
+      modelsEmpty: string;
+      modelsEmptyHint: string;
+      modelId: string;
+      modelDisplay: string;
+      modelSource: string;
+      exposeModel: string;
+      endpointSettings: string;
+      nameLabel: string;
+      saveLabel: string;
+      savedLabel: string;
+      saveFailedLabel: string;
+      legacyTitle: string;
+      legacyDescription: string;
+      legacyCta: string;
+      legacyRunning: string;
+      legacyDone: string;
+      legacyFailed: string;
+      zaiTitle: string;
+      zaiHint: string;
+      zaiApiKeyLabel: string;
+      zaiBaseUrlLabel: string;
+      zaiPrefixLabel: string;
+      zaiAdd: string;
+      zaiEmpty: string;
+      zaiSaved: string;
+      zaiSaveFailed: string;
+    }
+    credStatus: {
+      unknown: string;
+      active: string;
+      cooldown: string;
+      rate_limited: string;
+      quota_exhausted: string;
+      auth_failed: string;
+      degraded: string;
+      disabled: string;
     }
     search: {
       placeholder: string;
@@ -585,7 +719,12 @@ export interface AiHubTranslations {
       testConnection: string;
     }
     tabs: {
+      board: string;
       compression: string;
+      mappings: string;
+      models: string;
+      proxy: string;
+      rotation: string;
       tools: string;
       holone: string;
       chat: string;

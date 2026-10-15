@@ -38,6 +38,15 @@ export async function openInFileManager(params: { path: string }): Promise<void>
   return safeInvoke<void>('open_in_file_manager', { path: params.path });
 }
 
+/**
+ * Resolve a project-relative path to its absolute location (null when missing).
+ */
+export async function resolveProjectPath(params: {
+  path: string;
+}): Promise<{ path: string | null }> {
+  return safeInvoke<{ path: string | null }>('resolve_project_path', { path: params.path });
+}
+
 // ============================================
 // Dashboard & Statistics
 // ============================================

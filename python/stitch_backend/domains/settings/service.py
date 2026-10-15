@@ -58,6 +58,8 @@ _BOOL_KEYS = {
     # Compression layer toggles (persisted; restored at startup).
     "compressionEnabled", "rtkEnabled", "cavemanEnabled",
     "inputCompressionEnabled", "outputCompressionEnabled", "preserveSystemPrompt",
+    # AI Gateway one-time legacy→gateway auto-migration guard (written by startup, not the UI).
+    "ai_gateway_migration_v1_done",
 }
 _FLOAT_KEYS = {"uiScale", "speedMultiplier"}
 _JSON_KEYS = {"customIdePaths", "fleetTargets"}

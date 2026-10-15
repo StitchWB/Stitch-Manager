@@ -79,6 +79,15 @@ export interface MyPartnerInfo {
   quota_left: number | null;
 }
 
+/** A row of the local `partner_members` table (GET /api/partners/members). */
+export interface PartnerMemberRow {
+  channel_id: string;
+  user_id: number;
+  granted_role: string;
+  invited_by_tg_id: number | null;
+  created_at: string | null;
+}
+
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -286,6 +295,28 @@ export async function deletePartnerChannel(id: string): Promise<void> {
     const detail = extractDetail(data);
     throw makeError(detailToMessage(detail, 'Failed to delete partner channel'), response.status, detail);
   }
+}
+
+/**
+ * GET /api/partners/members — every local partner-member row (admin only).
+ * @throws {Error} with `status` property = 401/403 on auth/permission failure.
+ */
+export async function listPartnerMembers(): Promise<PartnerMemberRow[]> {
+  const response = await fetch(`${getApiBaseUrl()}/api/partners/members`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+
+  const data = await parseJson(response);
+
+  if (!response.ok) {
+    const detail = extractDetail(data);
+    throw makeError(detailToMessage(detail, 'Failed to list partner members'), response.status, detail);
+  }
+
+  const members = (data as { members?: unknown } | null)?.members;
+  return Array.isArray(members) ? (members as PartnerMemberRow[]) : [];
 }
 
 // ── Public API (owner) ───────────────────────────────────────────────────────

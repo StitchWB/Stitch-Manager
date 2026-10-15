@@ -18,13 +18,18 @@ Rules:
   5. Legacy entries (no ``source``): ``path`` (non-empty str) +
      ``sha256`` (hex64) required — the documented zip-era shape.
   6. Duplicate ``id`` + ``version`` pairs → error.
-  7. ``i18n`` (optional): when present must be a dict of locale → bundle.
+  7. ``source.url`` for git/release entries must live in a controlled org
+     (StitchWB/WhiteBite) — third-party upstreams are snapshotted via
+     ``catalog-snapshot`` and kept in the entry's ``upstream`` field.
+     Optional ``status`` ∈ {active, archived}; optional ``upstream`` object
+     requires ``type`` ∈ {git, release} + non-empty ``url``.
+  8. ``i18n`` (optional): when present must be a dict of locale → bundle.
      Each bundle must be a dict.  A top-level key in a bundle that
      contains ``.`` is rejected as a *flat key* — the FE
      ``i18nPluginBundles.ts`` walkBundle walks dot-paths through nested
      objects, so a flat top-level key like ``"my.plugin.title"`` silently
      never resolves.  Authors must nest: ``{"my": {"plugin": {"title": …}}}``.
-  8. ``attestation`` (optional): when present, must be a dict with
+  9. ``attestation`` (optional): when present, must be a dict with
      ``reviewed_by`` (non-empty str), ``reviewed_at`` (ISO 8601 datetime),
      ``sha256`` (hex64), and ``signature`` (``"ed25519:<base64>"``).
      When the env var ``STITCH_CATALOG_PUBKEY`` is set to a base64 ed25519
@@ -64,6 +69,16 @@ _ISO8601_RE = re.compile(
 _ATTESTATION_PUBKEY_ENV = "STITCH_CATALOG_PUBKEY"
 
 _ATTESTATION_SIG_PREFIX = "ed25519:"
+
+# Controlled orgs only: third-party authors deleting repos must not break installs.
+_CONTROLLED_ORG_PREFIXES = (
+    "https://github.com/StitchWB/",
+    "git@github.com:StitchWB/",
+    "https://github.com/WhiteBite/",
+    "git@github.com:WhiteBite/",
+)
+
+_ENTRY_STATUSES = ("active", "archived")
 
 
 def _is_hex64(s: str) -> bool:
@@ -274,6 +289,35 @@ def lint_entry(entry: Any) -> list[str]:
                 errors.append("release source 'sha256' must be hex64")
         else:
             errors.append(f"unknown source type: {stype!r}")
+
+        # Controlled-org snapshot rule (upstream-vanish class): installs must
+        # not depend on a third-party remote staying alive.
+        url = source.get("url")
+        if stype in ("git", "release") and isinstance(url, str) and url:
+            if not url.startswith(_CONTROLLED_ORG_PREFIXES):
+                errors.append(
+                    "source.url must be a controlled-org snapshot "
+                    "(StitchWB/WhiteBite); snapshot third-party upstreams via "
+                    "`stitch_plugin_tools catalog-snapshot` and keep the "
+                    "author URL in the 'upstream' field"
+                )
+
+    status = entry.get("status")
+    if status is not None and status not in _ENTRY_STATUSES:
+        errors.append(
+            f"status must be one of {sorted(_ENTRY_STATUSES)}, got {status!r}"
+        )
+
+    upstream = entry.get("upstream")
+    if upstream is not None:
+        if (
+            not isinstance(upstream, dict)
+            or not isinstance(upstream.get("url"), str)
+            or not upstream.get("url")
+        ):
+            errors.append("upstream must be an object with a non-empty 'url'")
+        elif upstream.get("type") not in ("git", "release"):
+            errors.append("upstream 'type' must be 'git' or 'release'")
 
     # i18n (optional) — flat-key check (FE walkBundle walks dot-paths).
     errors.extend(lint_i18n(entry))

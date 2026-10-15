@@ -1,8 +1,7 @@
 /**
- * Radar & Friends Module
+ * Radar Module
  *
- * Typed wrappers for the community feed backend commands:
- * - get_friends      → friend/partner cards
+ * Typed wrappers for the AiApiRadar feed backend commands:
  * - get_radar_offers → paginated AI free-tier / credit offer feed
  * - get_radar_stats  → aggregate feed statistics
  *
@@ -12,28 +11,6 @@
  */
 
 import { safeInvoke } from '../core';
-
-// ============================================
-// Friends
-// ============================================
-
-export type FriendType = 'telegram' | 'discord' | 'github' | 'other';
-export type FriendBadge = 'official' | 'partner' | 'friend' | null;
-
-export interface FriendItem {
-  id: string;
-  type: FriendType;
-  title: string;
-  url: string;
-  description?: string | null;
-  badge?: FriendBadge;
-  tg_chat_id?: number | null;
-  member_count?: number | null;
-}
-
-export interface FriendsResponse {
-  items: FriendItem[];
-}
 
 // ============================================
 // Radar Offers
@@ -100,13 +77,6 @@ export interface RadarStats {
 // ============================================
 // Commands
 // ============================================
-
-/**
- * Fetch the friends/partners list.
- */
-export async function getFriends(): Promise<FriendsResponse> {
-  return safeInvoke<FriendsResponse>('get_friends');
-}
 
 /**
  * Fetch a paginated batch of radar offers.

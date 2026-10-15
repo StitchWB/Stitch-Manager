@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from stitch_backend.core.exceptions import StitchError
-from stitch_backend.database import run_in_session
+from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.auth import service as auth_service
 from stitch_backend.domains.auth.helpers import (
     UserPublic,
@@ -17,6 +17,12 @@ from stitch_backend.domains.auth.helpers import (
     require_role,
 )
 from stitch_backend.domains.auth.roles import SELECTABLE_ROLES
+from stitch_backend.domains.auth.user_delete import (
+    UserDeleteBlockedError,
+    UserDeleteImpact,
+    delete_user_guarded,
+    user_delete_impact,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,6 +112,30 @@ async def update_user_role(user_id: int, body: UpdateRoleRequest) -> UserPublic:
     return _user_public(user)
 
 
+@router.get(
+    "/users/{user_id}/delete_impact",
+    response_model=UserDeleteImpact,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def get_user_delete_impact(user_id: int) -> UserDeleteImpact:
+    """Preview what deleting a user would destroy or pool (admin only).
+
+    Returns the owned groups with member counts plus owned accounts /
+    credentials / endpoints counts — the payload the FE shows in the
+    confirm dialog and the 409 refusal carries.
+    """
+    async def _op(db: AsyncSession):
+        target = await auth_service.get_user(db, user_id)
+        if target is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User not found: {user_id}",
+            )
+        return await user_delete_impact(db, user_id)
+
+    return await run_in_read_session(_op)
+
+
 @router.delete(
     "/users/{user_id}",
     dependencies=[Depends(require_role("admin"))],
@@ -113,6 +143,7 @@ async def update_user_role(user_id: int, body: UpdateRoleRequest) -> UserPublic:
 async def delete_user(
     user_id: int,
     current_user: User = Depends(get_current_user),
+    transfer_to: int | None = None,
 ) -> dict[str, bool]:
     """Delete a user (admin only).
 
@@ -121,6 +152,12 @@ async def delete_user(
       - Cannot delete the last admin (400) — checked before self-delete so
         the more severe constraint wins when both apply.
       - Cannot delete yourself (400).
+      - Without ``transfer_to``: refused (409, impact payload attached)
+        when the user owns a group with other members or any accounts /
+        credentials / endpoints — those would be cascade-deleted or
+        SET-NULLed into the instance-shared pool.
+      - With ``transfer_to``: ownership of everything the user owns moves
+        to that user first, then the delete proceeds.
     """
     async def _op(db: AsyncSession):
         target = await auth_service.get_user(db, user_id)
@@ -143,8 +180,21 @@ async def delete_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot delete your own account",
             )
-        await auth_service.delete_user(db, user_id)
+        await delete_user_guarded(db, user_id, transfer_to=transfer_to)
         return None
 
-    await run_in_session(_op)
+    try:
+        await run_in_session(_op)
+    except UserDeleteBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": exc.detail, "impact": exc.impact.model_dump()},
+        ) from exc
+    except StitchError as exc:
+        code = (
+            status.HTTP_404_NOT_FOUND
+            if "not found" in exc.detail.lower()
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=code, detail=exc.detail) from exc
     return {"success": True}

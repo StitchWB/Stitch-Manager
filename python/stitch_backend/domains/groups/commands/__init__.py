@@ -13,6 +13,7 @@ returns the field names verbatim — the wire format is unchanged.
 Response shapes (snake_case — the frontend agent codes against these):
   - groups_create          → GroupCreateResponse{group: GroupResponse}
   - groups_list            → GroupListResponse{groups, invites}
+  - groups_admin_list      → GroupAdminListResponse{groups}  (admin only)
   - groups_get             → GroupDetailResponse{group, members, invites, is_owner}
   - groups_invite          → InviteCreateResponse{invite: InviteResponse}
   - groups_invite_resolve  → SuccessResponse
@@ -30,8 +31,14 @@ Response shapes (snake_case — the frontend agent codes against these):
   - groups_share_account   → SuccessResponse
   - groups_unshare_account → SuccessResponse
   - groups_list_accounts   → list[GroupAccountItemResponse]  (camelCase aliases)
+
+Forward rule: camelCase on the wire is only what ``by_alias=True`` produces
+for schemas that declare aliases; ``groups_list_accounts`` is the single
+frozen exception. New response schemas must declare plain snake_case fields
+with no ``alias=``.
 """
 
+from stitch_backend.domains.groups.commands.admin import cmd_groups_admin_list
 from stitch_backend.domains.groups.commands.invites import (
     cmd_groups_invite,
     cmd_groups_invite_resolve,
@@ -68,6 +75,7 @@ from stitch_backend.domains.groups.commands.usage import (
 )
 
 __all__ = [
+    "cmd_groups_admin_list",
     "cmd_groups_create",
     "cmd_groups_delete",
     "cmd_groups_get",

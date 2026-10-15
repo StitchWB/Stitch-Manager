@@ -35,17 +35,22 @@ export const devboxPage: DevboxPageTranslations = {
     queued: "Команда принята в очередь",
     progress: "Выполняется: {cmd} · начато {time}",
     sectionHandoff: "Hand-off агенту",
-    handoffCaption: "Скопируй блок в чат агента - он подключится к devbox сам",
+    handoffCaption:
+      "Скопируй промпт в чат агента (arena.ai и подобные) - он подключится к devbox сам и выполнит задачу.",
     handoffMasked: "Токены скрыты",
     handoffReveal: "Показать токены",
     handoffHide: "Скрыть токены",
-    handoffCopyBlock: "Скопировать блок",
-    handoffCopyBlockTask: "Скопировать блок + задачу",
+    handoffCopyPrompt: "Скопировать промпт агенту",
+    handoffPromptIntro:
+      "Подключись к моему devbox: склонируй репозиторий локально по ссылке из блока ниже, прочитай в нём ARENA.md и skills/remote-devbox/SKILL.md, подключись по токену и проверь связь инструментами моста.",
+    handoffNoTask: "Задачу сформулирую следующим сообщением.",
+    handoffTaskHeader: "Задача:",
+    handoffErrorStale:
+      "Плагин не знает команду handoff_block: код плагина обновился - перезапусти приложение или плагин на странице «Плагины».",
     handoffTemplate: "Шаблон задачи",
     handoffTaskTemplate:
       "Цель: \nScope: \nКритерии приёмки: \nПроцедура проверки: \nЧто не трогать: \nОтчёт: ",
     handoffTaskPlaceholder: "Опиши задачу для агента...",
-    handoffTaskWrap: "{block}\n\nЗадача:\n{task}",
     tipRefreshHandoff: "Обновить блок - токены перечитываются с сервера.",
     doctorReportLabel: "Отчёт doctor",
     cockpitUrlLabel: "Cockpit URL",

@@ -8,8 +8,10 @@ Five tables on the shared :class:`stitch_backend.database.Base`:
   - ``group_members``             — (group_id, user_id) composite PK,
     role 'owner'|'member', joined_at.  Both FKs CASCADE.
   - ``group_invites``             — id PK, group_id FK CASCADE,
-    invitee_username, invited_by FK→auth_users, status
-    'pending'|'accepted'|'declined'|'revoked', created_at, resolved_at.
+    invitee_username, invitee_user_id FK→auth_users (nullable, bound at
+    invite time when the user exists), invited_by FK→auth_users, status
+    'pending'|'accepted'|'declined'|'revoked', created_at, expires_at
+    (TTL; NULL = legacy row, never expires), resolved_at.
     Uniqueness of a pending invite per (group, invitee) is enforced in
     service logic (anti-enumeration + SQLite-friendly).
   - ``group_usage``               — (group_id, user_id, day) composite
@@ -145,6 +147,13 @@ class GroupInvite(Base):
         String, nullable=False, index=True,
         comment="Normalized username (strip @, lower) of the invitee",
     )
+    invitee_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Bound at invite time when the user exists; NULL = not registered yet",
+    )
     invited_by: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("auth_users.id", ondelete="CASCADE"),
@@ -157,6 +166,10 @@ class GroupInvite(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False,
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="UTC expiry for pending invites; NULL = legacy row, never expires",
     )
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,

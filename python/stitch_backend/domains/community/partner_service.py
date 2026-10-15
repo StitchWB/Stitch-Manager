@@ -200,3 +200,20 @@ async def count_partner_members(db: AsyncSession, channel_id: str) -> int:
         .where(PartnerMember.channel_id == channel_id)
     )
     return int(result.scalar_one())
+
+
+async def list_partner_members(db: AsyncSession) -> list[dict[str, Any]]:
+    """All ``partner_members`` rows, newest first (admin overview panel)."""
+    result = await db.execute(
+        select(PartnerMember).order_by(PartnerMember.created_at.desc())
+    )
+    return [
+        {
+            "channel_id": row.channel_id,
+            "user_id": row.user_id,
+            "granted_role": row.granted_role,
+            "invited_by_tg_id": row.invited_by_tg_id,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in result.scalars().all()
+    ]

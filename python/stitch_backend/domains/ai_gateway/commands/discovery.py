@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy import and_, select
 
 from stitch_backend.core.command_decorator import command
-from stitch_backend.domains.ai_gateway.adapters.base import get_adapter
+from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError, get_adapter
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.commands._common import (
     _caller_uid,
     _owner_filter,
 )
+from stitch_backend.domains.ai_gateway.credential_state import transition_credential
 from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
 from stitch_backend.domains.ai_gateway.models import Credential, ProviderEndpoint
 from stitch_backend.domains.ai_gateway.schemas import (
@@ -61,7 +62,8 @@ async def cmd_test_credential_connection(db: AsyncSession, params: dict) -> dict
     """Probe one credential's health on-demand.
 
     Fetches the credential secret, resolves its endpoint, calls
-    ``adapter.probe_credential(...)``, and returns the raw probe result.
+    ``adapter.probe_credential(...)``, persists the resulting
+    ``runtime_status`` transition, and returns the raw probe result.
     """
     req = CredentialIdRequest.model_validate(params)
     owner_id = _caller_uid(params)
@@ -91,6 +93,22 @@ async def cmd_test_credential_connection(db: AsyncSession, params: dict) -> dict
         secret=secret,
         default_headers=endpoint.default_headers,
     )
+
+    classified: ClassifiedError | None = None
+    if not probe.success:
+        if probe.http_status is not None:
+            classified = adapter.classify_error(
+                RuntimeError(probe.error or f"HTTP {probe.http_status}"),
+                http_status=probe.http_status,
+            )
+        else:
+            classified = ClassifiedError(
+                category="transport_error", is_endpoint_wide=True,
+            )
+    await transition_credential(
+        db, req.id, error=classified, http_status=probe.http_status,
+    )
+
     return {
         "success": probe.success,
         "latency_ms": probe.latency_ms,

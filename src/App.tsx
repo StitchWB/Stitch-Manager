@@ -77,9 +77,11 @@ const Radar = lazy(() => import('./pages/Radar'));
 const Friends = lazy(() => import('./pages/Friends'));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
 const NotebookLM = lazy(() => import('./pages/NotebookLM'));
+const AdminOverview = lazy(() => import('./pages/AdminOverview'));
 const Users = lazy(() => import('./pages/Users'));
 const UserProfile = lazy(() => import('./pages/UserProfile'));
 const Codes = lazy(() => import('./pages/Codes'));
+const PartnerChannels = lazy(() => import('./pages/PartnerChannels'));
 const Monitoring = lazy(() => import('./pages/Monitoring'));
 const Privileges = lazy(() => import('./pages/Privileges'));
 const Plugins = lazy(() => import('./pages/Plugins'));
@@ -618,9 +620,11 @@ function App() {
             <Route path="/tools" element={<Tools />} />
             <Route path="/totp" element={<Totp />} />
             {/* Admin zone — guarded by AdminRoute */}
+            <Route path="/admin" element={<AdminRoute><AdminOverview /></AdminRoute>} />
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
             <Route path="/users/:userId" element={<AdminRoute><UserProfile /></AdminRoute>} />
             <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />
+            <Route path="/partners" element={<AdminRoute><PartnerChannels /></AdminRoute>} />
             <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
             <Route path="/privileges" element={<AdminRoute><Privileges /></AdminRoute>} />
             <Route path="/plugins" element={<AdminRoute><Plugins /></AdminRoute>} />

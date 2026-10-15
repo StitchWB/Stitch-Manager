@@ -9,9 +9,9 @@ credential via ``credential_state.transition_credential(...)``.
 Network calls (``adapter.probe_credential``) happen OUTSIDE any DB session so
 the single write connection is never held hostage during HTTP I/O.  Data is
 loaded via a read session, probed outside, then batch-persisted in one short
-write session — same pattern as ``KeyHealthWorker``.
+write session.
 
-Start/stop lifecycle mirrors ``KeyHealthWorker``::
+Start/stop lifecycle::
 
     await ProbeWorker.start()
     await ProbeWorker.stop()
@@ -117,7 +117,7 @@ class ProbeWorker:
     async def _probe_all(cls) -> None:
         """Probe all credentials in non-active states that are due for retry.
 
-        Three-phase flow (mirrors ``KeyHealthWorker``):
+        Three-phase flow:
           1. READ session  — load credentials + endpoints + secrets, close.
           2. OUTSIDE session — call ``adapter.probe_credential()`` per cred.
           3. WRITE session — batch-transition all credentials, close.

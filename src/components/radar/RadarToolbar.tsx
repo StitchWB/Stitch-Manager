@@ -4,8 +4,8 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { t } from '@/lib/i18n';
-import { useCommunityStore } from '@/stores/community';
-import type { RadarTab, RadarSort, RadarPeriod } from '@/stores/community';
+import { useCommunityStore } from '@/stores/radar';
+import type { RadarTab, RadarSort, RadarPeriod } from '@/stores/radar';
 
 /**
  * Sticky filter toolbar for the radar feed.

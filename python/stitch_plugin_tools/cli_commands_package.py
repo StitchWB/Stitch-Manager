@@ -463,7 +463,8 @@ def _cmd_sync_template(args: argparse.Namespace) -> int:
     print(f"template regenerated at {result}")
     print(f"  plugin id: {TEMPLATE_PLUGIN_ID}")
     print("  extras:    .github/workflows/ci.yml, .gitignore, LICENSE,")
-    print("             README.md, tests/test_plugin_protocol.py")
+    print("             README.md, tests/test_plugin_protocol.py,")
+    print("             .opencode/skills/stitch-plugin/SKILL.md")
     return 0
 
 

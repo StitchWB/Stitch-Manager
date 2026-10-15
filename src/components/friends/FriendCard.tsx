@@ -20,6 +20,12 @@ const BADGE_CLASS: Record<NonNullable<FriendBadge>, string> = {
   friend: 'bg-white/5 text-slate-300',
 };
 
+const BADGE_LABEL_KEY: Record<NonNullable<FriendBadge>, string> = {
+  official: 'friends.badges.official',
+  partner: 'friends.badges.partner',
+  friend: 'friends.badges.friend',
+};
+
 interface FriendCardProps {
   item: FriendItem;
 }
@@ -39,7 +45,7 @@ export function FriendCard({ item }: FriendCardProps) {
             <h3 className="text-sm font-medium text-white truncate">{item.title}</h3>
             {item.badge && badgeClass && (
               <Badge variant="default" size="sm" className={cn(badgeClass, 'normal-case')}>
-                {item.badge}
+                {t(BADGE_LABEL_KEY[item.badge])}
               </Badge>
             )}
           </div>

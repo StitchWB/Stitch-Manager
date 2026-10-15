@@ -209,6 +209,23 @@ def _cmd_catalog_lint(args: argparse.Namespace) -> int:
     return lint_catalog(args.catalog)
 
 
+def _cmd_catalog_snapshot(args: argparse.Namespace) -> int:
+    """Snapshot third-party catalog sources into the controlled-org store."""
+    from pathlib import Path
+
+    from stitch_plugin_tools.catalog_snapshot import snapshot_catalog
+
+    targets = None
+    if args.plugin_id:
+        targets = [(args.plugin_id, args.version or None)]
+    return snapshot_catalog(
+        args.catalog,
+        targets=targets,
+        store_dir=Path(args.store_dir) if args.store_dir else None,
+        repo=args.repo,
+    )
+
+
 # ── attest ────────────────────────────────────────────────────────────────
 
 

@@ -3,7 +3,7 @@ Proxy configuration utilities.
 
 Single source of truth for proxy URL parsing and ChromiumOptions formatting.
 Replaces inline parsing in ``BaseBrowser``, ``kiro/browser.py``,
-``fireworks/browser.py`` and ``openai/browser.py``.
+``fireworks/browser.py``, ``openai/browser.py`` and ``providers/gitclean``.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class ProxyConfig:
     """Normalized proxy configuration."""
 
     enabled: bool = False
-    scheme: str = "http"  # ``http`` or ``socks5``
+    scheme: str = "http"
     host: str = ""
     port: int = 0
     username: str | None = None
@@ -45,6 +45,16 @@ class ProxyConfig:
             auth = f"{self.username}:{password}@"
         port_part = f":{self.port}" if self.port else ""
         return f"{self.scheme}://{auth}{self.host}{port_part}"
+
+    def to_browser_kwargs(self) -> dict:
+        """Kwargs for ``BaseBrowser.__init__`` proxy parameters."""
+        return {
+            "proxy_enabled": self.enabled,
+            "proxy_type": self.scheme,
+            "proxy_url": self.to_url(include_auth=False),
+            "proxy_username": self.username or "",
+            "proxy_password": self.password or "",
+        }
 
 
 def proxy_from_params(
@@ -102,13 +112,45 @@ def proxy_from_env() -> ProxyConfig:
     )
 
 
+def parse_proxy_line(line: str) -> ProxyConfig | None:
+    """Parse a proxy-library line into a :class:`ProxyConfig`.
+
+    Accepts ``host:port``, ``host:port:user:pass``, ``user:pass@host:port``
+    and ``scheme://...`` URLs. Blank lines and ``#`` comments yield ``None``;
+    schemes outside ``http`` / ``https`` / ``socks5`` are rejected.
+    """
+    line = (line or "").strip()
+    if not line or line.startswith("#"):
+        return None
+    try:
+        host, port, scheme, user, password = _parse_proxy_url(line)
+    except ValueError:
+        return None
+    if not host or port == 0:
+        return None
+    if scheme is not None:
+        scheme = scheme.lower()
+        if scheme not in ("http", "https", "socks5"):
+            return None
+    else:
+        scheme = "http"
+    return ProxyConfig(
+        enabled=True,
+        scheme=scheme,
+        host=host,
+        port=port,
+        username=user or None,
+        password=password or None,
+    )
+
+
 def _parse_proxy_url(
     url: str,
 ) -> tuple[str, int, str | None, str | None, str | None]:
     """Parse a proxy URL into ``(host, port, scheme, user, password)``.
 
-    Accepts forms like ``host:port``, ``user:pass@host:port``, or
-    ``scheme://user:pass@host:port``.
+    Accepts forms like ``host:port``, ``host:port:user:pass``,
+    ``user:pass@host:port``, or ``scheme://user:pass@host:port``.
     """
     url = (url or "").strip()
     if not url:
@@ -134,7 +176,11 @@ def _parse_proxy_url(
         url = host_part
 
     if ":" in url:
-        host, port_str = url.split(":", 1)
+        parts = url.split(":")
+        if len(parts) == 4 and user is None:
+            host, port_str, user, password = parts
+        else:
+            host, port_str = url.split(":", 1)
         try:
             port = int(port_str)
         except ValueError:
@@ -146,4 +192,4 @@ def _parse_proxy_url(
     return host, port, None, user, password
 
 
-__all__ = ["ProxyConfig", "proxy_from_params", "proxy_from_env"]
+__all__ = ["ProxyConfig", "parse_proxy_line", "proxy_from_params", "proxy_from_env"]

@@ -273,25 +273,26 @@ def _display_name_for(provider: str) -> str:
     return provider.replace("_", " ").strip().title() or provider
 
 
+# Not every PROVIDER_DB_KEYS provider is mapped; unmapped ones get the placeholder below.
+_PROVIDER_BASE_URLS: dict[str, str] = {
+    "openai": "https://api.openai.com",
+    "antigravity": "https://api.openai.com",
+    "fireworks": "https://api.fireworks.ai/inference",
+    "dashscope": "https://dashscope.aliyuncs.com/compatible-mode",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta",
+    "anthropic": "https://api.anthropic.com",
+}
+
+
 def _default_base_url_for(provider: str) -> str:
     """Resolve a default base URL for a built-in provider.
 
-    Delegates to ``KeyHealthWorker._default_base_url`` (the single source of
-    truth for these URL literals elsewhere in the codebase) and falls back to
-    a generic placeholder for providers that helper doesn't know about
-    (e.g. ``qoder``, ``zai`` — not present in that mapping today) so the
-    migration never crashes on an unmapped provider.
+    Unknown providers get a clearly-a-placeholder URL so it's obvious in the
+    data that no real base URL was known at migration time.
     """
-    from stitch_backend.domains.key_health.worker import KeyHealthWorker
-
-    url = KeyHealthWorker._default_base_url(provider)
+    url = _PROVIDER_BASE_URLS.get(provider)
     if url:
         return url
-    # Not every provider in PROVIDER_DB_KEYS has an entry in the KeyHealthWorker
-    # mapping (e.g. qoder, zai). Use a clearly-a-placeholder URL so it's obvious
-    # in the data that no real base URL was known at migration time — a real
-    # base_url from a stored key (if any) always takes precedence over this,
-    # see call sites above.
     return f"https://unknown-base-url.invalid/{provider}"
 
 
