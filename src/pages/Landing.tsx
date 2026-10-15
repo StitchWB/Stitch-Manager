@@ -20,7 +20,7 @@
     inline bilingual (RU/EN) marketing text; it never goes through the
     locale files (product decision for the public page). */
 
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Github,
@@ -43,6 +43,7 @@ import {
   Lock,
   Download,
   CreditCard,
+  Store,
   Radar as RadarIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -298,6 +299,13 @@ export default function Landing({ authenticated = false }: LandingProps) {
               <span className="text-white font-black tracking-tight uppercase text-lg">Stitch Manager</span>
             </div>
             <nav className="flex items-center gap-1.5">
+              <Link
+                to="/catalog"
+                className="flex items-center gap-2 h-10 px-4 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors"
+              >
+                <Store className="w-4 h-4" />
+                Маркетплейс / Marketplace
+              </Link>
               <IconButton
                 onClick={() => openExternal(GITHUB_URL)}
                 aria-label="GitHub"

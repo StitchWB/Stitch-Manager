@@ -86,6 +86,7 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/deeplink/status",
     "/deeplink/exchange",
     "/partner-channels",
+    "/catalog",
     "/rights",
 })
 

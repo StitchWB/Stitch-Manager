@@ -17,7 +17,7 @@ import { runDevboxAction } from './runAction';
 import { DEVBOX_REFRESH_MS } from './constants';
 import { DevboxVitals } from './DevboxVitals';
 import { DevboxControls } from './DevboxControls';
-import { DevboxHandoff } from './DevboxHandoff';
+import { DevboxPrompt } from './DevboxPrompt';
 import { DevboxProfiles } from './DevboxProfiles';
 import { DevboxJobs } from './DevboxJobs';
 import { DevboxPermissions } from './DevboxPermissions';
@@ -59,7 +59,7 @@ export function DevboxPage() {
   }, [profilesTick]);
 
   const [pending, setPending] = useState(false);
-  const [handoffTick, setHandoffTick] = useState(0);
+  const [promptTick, setPromptTick] = useState(0);
   const onAction = useCallback(
     (action: Promise<DevboxAccepted>) => {
       setPending(true);
@@ -67,7 +67,7 @@ export function DevboxPage() {
         reloadProfiles();
         reloadOverview();
         reloadStatus();
-        setHandoffTick(x => x + 1);
+        setPromptTick(x => x + 1);
       }).finally(() => setPending(false));
     },
     [reloadProfiles, reloadOverview, reloadStatus],
@@ -103,14 +103,6 @@ export function DevboxPage() {
       />
       <div className="flex-1 overflow-y-auto p-4">
         <div className="flex w-full flex-col gap-4">
-          <DevboxVitals cards={cards} error={overview.error} onRetry={reloadOverview} />
-          <DevboxControls
-            overviewCards={cards}
-            actionStatus={status.data}
-            busy={busy}
-            onAction={onAction}
-          />
-          <DevboxHandoff reloadTick={handoffTick} />
           <DevboxProfiles
             profiles={profiles}
             overviewCards={cards}
@@ -120,6 +112,14 @@ export function DevboxPage() {
             onRetry={reloadProfiles}
             onChanged={reloadProfiles}
           />
+          <DevboxPrompt
+            profiles={profiles}
+            overviewCards={cards}
+            actionStatus={status.data}
+            onAction={onAction}
+            reloadTick={promptTick}
+          />
+          <DevboxVitals cards={cards} error={overview.error} onRetry={reloadOverview} />
           <div className="grid gap-4 lg:grid-cols-2">
             <DevboxJobs />
             <DevboxPermissions />
@@ -129,6 +129,12 @@ export function DevboxPage() {
             <DevboxLogs />
           </div>
           <DevboxActions recent={status.data?.recent ?? null} />
+          <DevboxControls
+            overviewCards={cards}
+            actionStatus={status.data}
+            busy={busy}
+            onAction={onAction}
+          />
         </div>
       </div>
     </div>

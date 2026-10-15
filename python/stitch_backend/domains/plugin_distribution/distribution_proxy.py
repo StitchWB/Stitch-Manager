@@ -12,6 +12,7 @@ serving the same paths directly for in-network callers.
 Forwarded set (client-called on the public origin):
   - ``/deeplink/start|status|exchange`` — deep-link login (public upstream)
   - ``/partner-channels``               — public channel list
+  - ``/catalog``                        — public plugin listing (metadata only)
   - ``/rights``                         — Bearer-protected upstream; the
     caller's ``Authorization`` header is forwarded verbatim
 
@@ -91,6 +92,12 @@ async def deeplink_exchange(body: dict) -> Response:
 async def partner_channels() -> Response:
     """Passthrough of ``GET {server}/partner-channels`` (public upstream)."""
     return await _forward("GET", "/partner-channels")
+
+
+@router.get("/catalog")
+async def catalog() -> Response:
+    """Passthrough of ``GET {server}/catalog`` (public upstream)."""
+    return await _forward("GET", "/catalog")
 
 
 @router.get("/rights")

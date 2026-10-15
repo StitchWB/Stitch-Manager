@@ -85,6 +85,13 @@ function basename(value: string): string {
   return parts.length > 0 ? parts[parts.length - 1] : '';
 }
 
+function modeTitle(mode: string): string {
+  if (mode === 'readonly') return t('devboxPage.modeReadonlyTitle');
+  if (mode === 'standard') return t('devboxPage.modeStandardTitle');
+  if (mode === 'full') return t('devboxPage.modeFullTitle');
+  return mode;
+}
+
 const RECENTS_KEY = 'devbox.recentProjectDirs';
 
 function readRecents(): string[] {
@@ -173,6 +180,8 @@ export function DevboxProfiles({
   onChanged,
 }: DevboxProfilesProps) {
   const rows = Array.isArray(profiles) ? profiles : [];
+  const activeRow = rows.find(row => row.active) ?? null;
+  const activeModeTitle = activeRow ? modeTitle(activeRow.mode) : '';
   const stackRunning =
     devboxVitalValue(overviewCards, 'ingress') === 'up' ||
     devboxVitalValue(overviewCards, 'bridge') === 'up' ||
@@ -417,6 +426,24 @@ export function DevboxProfiles({
         </Button>
       }
     >
+      {activeRow && (
+        <div
+          className="mb-3 flex flex-wrap items-center gap-x-2 text-2xs text-slate-400"
+          data-testid="devbox-profile-active-summary"
+        >
+          <span className="font-medium text-slate-200">{activeRow.name}</span>
+          <span aria-hidden>·</span>
+          <span className="font-mono">{activeRow.project_dir}</span>
+          <span aria-hidden>·</span>
+          <span>{activeModeTitle}</span>
+          <span aria-hidden>·</span>
+          <span>
+            {stackRunning
+              ? t('devboxPage.summaryStackUp')
+              : t('devboxPage.summaryStackDown')}
+          </span>
+        </div>
+      )}
       {rows.length === 0 && !error ? (
         <EmptyState
           compact

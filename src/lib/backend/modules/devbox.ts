@@ -177,13 +177,28 @@ export function devboxCockpitOpen(): Promise<DevboxAccepted> {
   return safeInvoke<DevboxAccepted>(`${NS}.cockpit_open`, {});
 }
 
-export interface DevboxHandoffBlock {
-  block: string;
-  masked: boolean;
+export interface DevboxAgentPromptReady {
+  profile: boolean;
+  bridge: boolean;
+  ingress: boolean;
+  runner: boolean;
 }
 
-export function devboxHandoffBlock(reveal: boolean): Promise<DevboxHandoffBlock> {
-  return safeInvoke<DevboxHandoffBlock>(`${NS}.handoff_block`, { reveal }, NO_CACHE);
+export interface DevboxAgentPrompt {
+  prompt: string;
+  masked: boolean;
+  ready?: DevboxAgentPromptReady;
+}
+
+export function devboxAgentPrompt(params: {
+  task: string;
+  acceptance: string;
+  reveal: boolean;
+}): Promise<DevboxAgentPrompt> {
+  const args: Record<string, unknown> = { reveal: params.reveal };
+  if (params.task !== '') args.task = params.task;
+  if (params.acceptance !== '') args.acceptance = params.acceptance;
+  return safeInvoke<DevboxAgentPrompt>(`${NS}.agent_prompt`, args, NO_CACHE);
 }
 
 export function devboxActionStatus(): Promise<DevboxActionStatus> {
