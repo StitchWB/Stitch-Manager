@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.orm import aliased
 
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.models import CredentialGroupShare
 from stitch_backend.domains.auth.models import User
+from stitch_backend.domains.groups.invites import invite_not_expired
 from stitch_backend.domains.groups.membership import (
     MAX_GROUPS_PER_OWNER,
     get_group,
@@ -36,6 +37,12 @@ async def create_group(
     """
     if owner_id is None:
         raise StitchError("Authentication required to create a group")
+
+    # No-op UPDATE takes SQLite's write lock, serializing the cap check (TOCTOU).
+    await db.execute(
+        text("UPDATE auth_users SET id = id WHERE id = :uid"),
+        {"uid": owner_id},
+    )
 
     count_result = await db.execute(
         select(func.count())
@@ -132,6 +139,7 @@ async def list_groups_for_user(
                 GroupInvite.invitee_username
                 == normalize_username(username or ""),
                 GroupInvite.status == "pending",
+                invite_not_expired(),
             )
         )
         .order_by(GroupInvite.created_at.desc())

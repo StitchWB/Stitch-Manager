@@ -24,6 +24,7 @@ Twenty-four subcommands:
     codes {issue|list}                          issue and list activation codes (admin)
     install-from <url> [--ref|--release] [--sha256] [--trust]  fetch+install from git/release
     catalog-lint <catalog.json>                 validate a community catalog offline (CI)
+  catalog-snapshot <catalog.json> --id X      snapshot third-party sources into controlled-org store
     attest --server … --submission ID …         offline-sign an approved submission attestation
 
 The signing key is OFFLINE — the developer stores it on media not reachable

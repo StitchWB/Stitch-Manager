@@ -90,6 +90,28 @@ class GroupListResponse(BaseModel):
     invites: list[InviteSummaryResponse]
 
 
+class GroupAdminRowResponse(BaseModel):
+    """A global group row for admin oversight (FE: ``GroupAdminRow``).
+
+    Used in ``groups_admin_list``.  ``share_count`` is the number of
+    credentials pooled into the group.
+    """
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: str
+    name: str
+    owner_username: str
+    member_count: int
+    share_count: int
+
+
+class GroupAdminListResponse(BaseModel):
+    """Response for ``groups_admin_list`` (FE: ``GroupsAdminListResponse``)."""
+
+    groups: list[GroupAdminRowResponse]
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Detail (group + members + invites)
 # ═══════════════════════════════════════════════════════════════════════════

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 #: Paths polled frequently by the frontend UI — logged at DEBUG to keep
 #: the INFO access log focused on meaningful user actions.
 #: (Dashboard/scheduler heartbeats, registration & replenishment status,
-#: background manager, proxy debug drawer, key health and metrics refresh.)
+#: background manager, proxy debug drawer, and metrics refresh.)
 NOISY_PATHS: frozenset[str] = frozenset({
     "/api/holone/status",
     "/api/holone/findings",
@@ -32,7 +32,6 @@ NOISY_PATHS: frozenset[str] = frozenset({
     "/api/get_replenishment_status",
     "/api/get_background_manager_status",
     "/api/get_proxy_debug_logs",
-    "/api/get_key_health",
     "/api/metrics/summary",
 })
 

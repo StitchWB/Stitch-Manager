@@ -77,7 +77,7 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
 }));
 
 jest.mock('../../components/ai-gateway/PublicModelsSection', () => ({
-  PublicModelsSection: () => null,
+  PublicModelsSection: () => <div data-testid="public-models-section" />,
 }));
 
 jest.mock('../../pages/AiAnalytics', () => ({
@@ -87,13 +87,11 @@ jest.mock('../../pages/AiAnalytics', () => ({
 
 const proxy = aiProxyModule as jest.Mocked<typeof aiProxyModule>;
 
-let navigatedPath = '';
 let navigatedSearch = '';
 
 function LocationSpy() {
   const loc = useLocation();
   useEffect(() => {
-    navigatedPath = loc.pathname;
     navigatedSearch = loc.search;
   }, [loc.pathname, loc.search]);
   return null;
@@ -119,7 +117,6 @@ const testAccount = {
 describe('AiRoutingPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    navigatedPath = '';
     navigatedSearch = '';
 
     proxy.getAiProxyAccounts.mockResolvedValue([testAccount] as any);
@@ -193,6 +190,38 @@ describe('AiRoutingPage', () => {
 
     expect(await screen.findByText('IDE Proxy')).toBeTruthy();
     expect(screen.queryByText('Request path')).toBeNull();
+  });
+
+  it('renders the public models section on the models tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing?tab=models']}>
+        <Routes>
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('public-models-section')).toBeTruthy();
+    expect(screen.queryByText('Request path')).toBeNull();
+  });
+
+  it('switches to the models tab via the tab strip', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/ai/routing']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Request path');
+    await user.click(screen.getByRole('button', { name: 'Models' }));
+
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?tab=models');
+    });
   });
 
   it('replaces an unknown routing tab with the default board tab', async () => {

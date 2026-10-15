@@ -44,12 +44,12 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
   }, [upstreamModels, endpoints]);
 
   const handleSubmit = async () => {
-    if (isNaN(priority)) { setError('Priority must be a valid number'); return; }
-    if (isNaN(weight)) { setError('Weight must be a valid number'); return; }
-    if (isNaN(costModifier)) { setError('Cost modifier must be a valid number'); return; }
-    if (priority < 0) { setError('Priority must be ≥ 0'); return; }
-    if (weight < 0) { setError('Weight must be ≥ 0'); return; }
-    if (costModifier < 0) { setError('Cost modifier must be ≥ 0'); return; }
+    if (isNaN(priority)) { setError(t('aiGateway.form.priorityNotNumber')); return; }
+    if (isNaN(weight)) { setError(t('aiGateway.form.weightNotNumber')); return; }
+    if (isNaN(costModifier)) { setError(t('aiGateway.form.costModifierNotNumber')); return; }
+    if (priority < 0) { setError(t('aiGateway.form.priorityNonNegative')); return; }
+    if (weight < 0) { setError(t('aiGateway.form.weightNonNegative')); return; }
+    if (costModifier < 0) { setError(t('aiGateway.form.costModifierNonNegative')); return; }
     setLoading(true);
     setError(null);
 
@@ -84,13 +84,13 @@ export function RouteTargetForm({ publicModel, target, open, onClose }: RouteTar
     <div className="flex justify-end gap-3">
       <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
       <Button disabled={loading} onClick={handleSubmit}>
-        {loading ? 'Saving...' : target ? 'Update' : 'Create'}
+        {loading ? t('aiGateway.cred.saving') : target ? t('aiGateway.cred.update') : t('aiGateway.cred.create')}
       </Button>
     </div>
   );
 
   return (
-    <Modal isOpen={open} onClose={onClose} title={target ? 'Edit Route Target' : 'Add Route Target'} size="sm" footer={footer}>
+    <Modal isOpen={open} onClose={onClose} title={target ? t('aiGateway.form.editRouteTargetTitle') : t('aiGateway.form.addRouteTargetTitle')} size="sm" footer={footer}>
       <div className="space-y-4">
         <div>
           <label className="text-sm font-medium">{t('aiGateway.form.upstreamModel')}</label>

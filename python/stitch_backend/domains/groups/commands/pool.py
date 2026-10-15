@@ -8,7 +8,10 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from stitch_backend.core.command_decorator import command
-from stitch_backend.domains.groups.commands._common import _caller_uid
+from stitch_backend.domains.groups.commands._common import (
+    _caller_uid,
+    _require_caller_identity,
+)
 from stitch_backend.domains.groups.schemas import PoolListResponse, SuccessResponse
 from stitch_backend.domains.groups.service import (
     list_pool,
@@ -20,6 +23,7 @@ from stitch_backend.domains.groups.service import (
 @command("groups_share_credential")
 async def cmd_groups_share_credential(db: AsyncSession, params: dict) -> SuccessResponse:
     """Share a credential to a group (credential owner + member; idempotent)."""
+    _require_caller_identity(params)
     credential_id = params["credentialId"]
     group_id = params["groupId"]
     uid = _caller_uid(params)
@@ -34,6 +38,7 @@ async def cmd_groups_share_credential(db: AsyncSession, params: dict) -> Success
 @command("groups_unshare_credential")
 async def cmd_groups_unshare_credential(db: AsyncSession, params: dict) -> SuccessResponse:
     """Unshare a credential (credential owner OR group owner)."""
+    _require_caller_identity(params)
     credential_id = params["credentialId"]
     group_id = params["groupId"]
     uid = _caller_uid(params)

@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '../stores/app';
-import { useCommunityStore } from '../stores/community';
+import { useCommunityStore } from '../stores/radar';
 
 const SKELETON_ROWS = 12;
 

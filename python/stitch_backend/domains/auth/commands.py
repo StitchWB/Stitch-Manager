@@ -245,23 +245,24 @@ async def _get_keys_counts(db: AsyncSession, user_id: int) -> dict:
 async def _get_usage_today(db: AsyncSession, user_id: int) -> dict:
     """Return today's group-usage totals for the user (best-effort).
 
-    Queries the ``group_usage`` table (per-group, per-user, per-day
-    accounting) for today's date.  Returns 0/0 when the groups domain is
-    not installed or no usage rows exist.
+    Queries the ``group_usage_by_model`` table (the live per-group,
+    per-user, per-model, per-day accounting written by the usage
+    tracker) summed across models for today's date.  Returns 0/0 when
+    the groups domain is not installed or no usage rows exist.
     """
     try:
-        from stitch_backend.domains.groups.models import GroupUsage
+        from stitch_backend.domains.groups.models import GroupUsageByModel
     except ImportError:
         return {"requests_today": 0, "tokens_today": 0}
 
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     result = await db.execute(
         select(
-            func.coalesce(func.sum(GroupUsage.requests), 0),
-            func.coalesce(func.sum(GroupUsage.tokens), 0),
+            func.coalesce(func.sum(GroupUsageByModel.requests), 0),
+            func.coalesce(func.sum(GroupUsageByModel.tokens), 0),
         ).where(
-            GroupUsage.user_id == user_id,
-            GroupUsage.day == today,
+            GroupUsageByModel.user_id == user_id,
+            GroupUsageByModel.day == today,
         )
     )
     row = result.one()

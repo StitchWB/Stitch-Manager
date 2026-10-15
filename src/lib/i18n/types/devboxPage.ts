@@ -35,12 +35,14 @@ export interface DevboxPageTranslations {
     handoffMasked: string;
     handoffReveal: string;
     handoffHide: string;
-    handoffCopyBlock: string;
-    handoffCopyBlockTask: string;
+    handoffCopyPrompt: string;
+    handoffPromptIntro: string;
+    handoffNoTask: string;
+    handoffTaskHeader: string;
+    handoffErrorStale: string;
     handoffTemplate: string;
     handoffTaskTemplate: string;
     handoffTaskPlaceholder: string;
-    handoffTaskWrap: string;
     tipRefreshHandoff: string;
     doctorReportLabel: string;
     cockpitUrlLabel: string;

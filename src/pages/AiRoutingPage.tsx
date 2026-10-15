@@ -11,16 +11,27 @@ import { CompressionSection } from '../components/ai-proxy/sections/CompressionS
 import { HoloneSection } from '../components/ai-proxy/sections/HoloneSection';
 import { RoutingGraphBoard } from '../components/ai-proxy/sections/RoutingGraphBoard';
 import { MappingsEditor } from '../components/ai-proxy/sections/MappingsEditor';
+import { PublicModelsSection } from '../components/ai-gateway/PublicModelsSection';
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
 import { useAiHubCopy } from './hooks/useAiHubCopy';
 import { useRoutingBoardStatus } from './hooks/useRoutingBoardStatus';
 import type { ProxySettings } from '../types/generated';
-import { PageHeader } from '@/components/ui';
+import { ButtonBase, PageHeader } from '@/components/ui';
 import { t } from '../lib/i18n';
 import { useAppStore } from '../stores/app';
 
-const ROUTING_TABS = ['board', 'mappings', 'proxy', 'rotation', 'compression', 'holone'] as const;
+const ROUTING_TABS = ['board', 'mappings', 'models', 'proxy', 'rotation', 'compression', 'holone'] as const;
 type RoutingTab = (typeof ROUTING_TABS)[number];
+
+const ROUTING_TAB_LABELS: Record<RoutingTab, string> = {
+  board: 'aiHub.tabs.board',
+  mappings: 'aiHub.tabs.mappings',
+  models: 'aiHub.tabs.models',
+  proxy: 'aiHub.tabs.proxy',
+  rotation: 'aiHub.tabs.rotation',
+  compression: 'aiHub.tabs.compression',
+  holone: 'aiHub.tabs.holone',
+};
 
 const CLIENT_API_KEY = 'proxystitch-local';
 
@@ -108,6 +119,29 @@ export default function AiRoutingPage() {
         className="px-4 py-2.5 md:px-5 md:py-3"
       />
 
+      <div className="shrink-0 border-b border-white/[0.06] px-4 md:px-6">
+        <div className="mx-auto flex w-full max-w-[1500px] items-center gap-1 overflow-x-auto py-2">
+          {ROUTING_TABS.map(tabId => {
+            const active = routingTab === tabId;
+            return (
+              <ButtonBase
+                key={tabId}
+                type="button"
+                onClick={() => openRoutingTab(tabId)}
+                aria-current={active ? 'true' : undefined}
+                className={
+                  active
+                    ? 'shrink-0 rounded-md bg-indigo-500/12 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-inset ring-indigo-400/20'
+                    : 'shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200'
+                }
+              >
+                {t(ROUTING_TAB_LABELS[tabId])}
+              </ButtonBase>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 space-y-3 overflow-auto p-3 md:p-4">
           <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3">
@@ -146,6 +180,8 @@ export default function AiRoutingPage() {
                 onSaveMappings={handleSaveMappings}
               />
             )}
+
+            {routingTab === 'models' && <PublicModelsSection />}
 
             {routingTab === 'proxy' && (
               <>

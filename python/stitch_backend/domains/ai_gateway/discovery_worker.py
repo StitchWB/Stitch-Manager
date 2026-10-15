@@ -8,9 +8,9 @@ calls ``adapter.list_models(...)``, and upserts :class:`UpstreamModel` +
 Network calls (``adapter.list_models``) happen OUTSIDE any DB session so
 the single write connection is never held hostage during HTTP I/O.  Data
 is loaded via a read session, probed outside, then batch-persisted in one
-short write session — same pattern as ``KeyHealthWorker``.
+short write session.
 
-Start/stop lifecycle mirrors ``KeyHealthWorker``::
+Start/stop lifecycle::
 
     await DiscoveryWorker.start()
     await DiscoveryWorker.stop()
@@ -95,7 +95,7 @@ class DiscoveryWorker:
     async def _discover_all(cls) -> None:
         """Iterate over all enabled endpoints and discover their models.
 
-        Three-phase flow (mirrors ``KeyHealthWorker``):
+        Three-phase flow:
           1. READ session  — load endpoints + credentials + secrets, close.
           2. OUTSIDE session — call ``adapter.list_models()`` per endpoint.
           3. WRITE session — batch-persist all discoveries, close.

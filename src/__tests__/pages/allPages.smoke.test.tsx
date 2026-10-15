@@ -235,6 +235,8 @@ const COMMAND_PAYLOADS: Record<string, unknown> = {
   get_radar_stats: { services: 0, offers: 0, active: 0, dead: 0, by_type: {} },
   get_radar_offers: { items: [], total: 0 },
   groups_list: { groups: [], invites: [] },
+  groups_admin_list: { groups: [] },
+  plugin_grants_audit_list: { entries: [] },
   groups_pool_list: { items: [] },
   groups_usage_list: { rows: [], max_per_member_daily: null },
   list_overrides: { overrides: [] },
@@ -252,6 +254,7 @@ const COMMAND_PAYLOADS: Record<string, unknown> = {
   detect_ides: [],
   get_key_health: [],
   get_custom_providers: [],
+  get_zai_api_keys: [],
   obs_timeline: [],
   get_python_job_status: null,
 };

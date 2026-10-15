@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select, text
 
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.auth.models import User
@@ -21,6 +22,38 @@ if TYPE_CHECKING:
 
 # Pinned: invite-rejection audit lines keep the historical service logger name.
 logger = logging.getLogger("stitch_backend.domains.groups.service")
+
+INVITE_TTL_DAYS = 7
+
+
+def _now_naive() -> datetime:
+    # SQLite DATETIME round-trips drop tzinfo; compare in naive UTC.
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def invite_not_expired() -> ColumnElement[bool]:
+    # NULL expires_at = pre-TTL legacy row: stays pending forever.
+    return or_(
+        GroupInvite.expires_at.is_(None),
+        GroupInvite.expires_at > _now_naive(),
+    )
+
+
+def _is_expired(expires_at: datetime | None) -> bool:
+    # ORM-fresh values are tz-aware; SQLite round-trips are naive UTC.
+    if expires_at is None:
+        return False
+    if expires_at.tzinfo is not None:
+        expires_at = expires_at.astimezone(UTC).replace(tzinfo=None)
+    return expires_at <= _now_naive()
+
+
+async def _take_group_write_lock(db: AsyncSession, group_id: str) -> None:
+    # No-op UPDATE takes SQLite's write lock, serializing check-then-insert (TOCTOU).
+    await db.execute(
+        text("UPDATE groups SET id = id WHERE id = :gid"),
+        {"gid": group_id},
+    )
 
 
 async def invite_user(
@@ -75,12 +108,15 @@ async def invite_user(
             )
             raise StitchError("Invitation could not be sent")
 
+    await _take_group_write_lock(db, group_id)
+
     pending_result = await db.execute(
         select(GroupInvite).where(
             and_(
                 GroupInvite.group_id == group_id,
                 GroupInvite.invitee_username == normalized,
                 GroupInvite.status == "pending",
+                invite_not_expired(),
             )
         )
     )
@@ -106,9 +142,11 @@ async def invite_user(
     invite = GroupInvite(
         group_id=group_id,
         invitee_username=normalized,
+        invitee_user_id=user.id if user is not None else None,
         invited_by=inviter_uid,
         status="pending",
         created_at=_utcnow(),
+        expires_at=_utcnow() + timedelta(days=INVITE_TTL_DAYS),
     )
     db.add(invite)
     await db.flush()
@@ -134,8 +172,11 @@ async def resolve_invite(
         invitee_username
     ):
         raise StitchError("Only the invitee can resolve this invitation")
+    if _is_expired(invite.expires_at):
+        raise StitchError("Invitation has expired")
 
     if accept:
+        await _take_group_write_lock(db, invite.group_id)
         count_result = await db.execute(
             select(func.count())
             .select_from(GroupMember)

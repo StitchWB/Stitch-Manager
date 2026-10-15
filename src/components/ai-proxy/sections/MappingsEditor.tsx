@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowRight, Layers, Plus, Save, Trash2 } from 'lucide-react';
 
 import type { ProviderModelMapping } from '../../../lib/backend/modules/aiProxy';
-import { AI_PROXY_PROVIDER_FILTERS } from '../providerMeta';
+import { AI_PROXY_PROVIDER_FILTERS } from '@/constants/providerRegistry';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '@/stores/app';
 import { Badge, Button, EmptyState, GlassCard, IconButton, Input, Select, Tooltip } from '@/components/ui';

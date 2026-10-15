@@ -298,7 +298,3 @@ export const AI_PROXY_PROVIDER_FILTERS: Array<{ id: 'all' | AiProxyProviderName;
     { id: 'all', label: 'All Providers' },
     ...AI_PROXY_PROVIDER_LIST.map(id => ({ id, label: PROVIDER_REGISTRY[id].label })),
   ];
-
-export const AI_PROXY_PROVIDER_COLORS: Record<string, ProviderBadgeColors> = Object.fromEntries(
-  AI_PROXY_PROVIDER_LIST.map(id => [id, PROVIDER_REGISTRY[id].badge])
-) as Record<string, ProviderBadgeColors>;

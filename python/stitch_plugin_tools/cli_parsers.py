@@ -37,6 +37,7 @@ from stitch_plugin_tools.cli_commands_server import (
     ENV_ADMIN_KEY,
     _cmd_attest,
     _cmd_catalog_lint,
+    _cmd_catalog_snapshot,
     _cmd_codes_issue,
     _cmd_codes_list,
     _cmd_drift,
@@ -447,6 +448,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "catalog", help="path to catalog.json to validate"
     )
     p_catalog_lint.set_defaults(func=_cmd_catalog_lint)
+
+    p_catalog_snapshot = sub.add_parser(
+        "catalog-snapshot",
+        help="snapshot third-party catalog sources into the controlled-org store",
+    )
+    p_catalog_snapshot.add_argument(
+        "catalog", help="path to catalog.json to rewrite in place"
+    )
+    p_catalog_snapshot.add_argument("--id", dest="plugin_id", help="entry id to snapshot (default: all third-party)")
+    p_catalog_snapshot.add_argument("--version", dest="version", help="entry version (with --id)")
+    p_catalog_snapshot.add_argument(
+        "--store-dir",
+        help="local dir for snapshot artifacts (test seam; default: gh release upload)",
+    )
+    p_catalog_snapshot.add_argument(
+        "--repo",
+        help="snapshot store repo for gh release upload (default StitchWB/stitch-plugin-snapshots)",
+    )
+    p_catalog_snapshot.set_defaults(func=_cmd_catalog_snapshot)
 
     # ── attest ───────────────────────────────────────────────────────────
     p_attest = sub.add_parser(

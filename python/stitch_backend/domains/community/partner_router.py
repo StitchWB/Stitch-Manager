@@ -30,7 +30,7 @@ from stitch_backend.domains.plugin_distribution.config import (
     standalone_mode,
 )
 
-from .partner_service import count_partner_members
+from .partner_service import count_partner_members, list_partner_members
 
 if TYPE_CHECKING:
     from stitch_backend.domains.auth.models import User
@@ -122,6 +122,13 @@ async def update_channel(channel_id: str, body: dict[str, Any]) -> Any:
 async def delete_channel(channel_id: str) -> Any:
     """DELETE /api/partners/channels/{id} — proxy to ``DELETE /admin/partner-channels/{id}``."""
     return await _proxy("DELETE", f"/admin/partner-channels/{channel_id}")
+
+
+@router.get("/members", dependencies=[Depends(require_role("admin"))])
+async def partners_members() -> dict[str, Any]:
+    """GET /api/partners/members — every local ``partner_members`` row."""
+    members = await run_in_read_session(list_partner_members)
+    return {"members": members}
 
 
 @router.get("/me")

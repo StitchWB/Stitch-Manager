@@ -4,6 +4,8 @@
  */
 
 import '@testing-library/jest-dom';
+import { webcrypto } from 'node:crypto';
+import { TextEncoder } from 'node:util';
 
 // jsdom does not ship with a `fetch` implementation. Polyfill it so tests that
 // exercise code paths using fetch (e.g. Backend command wrappers) do not throw
@@ -35,6 +37,21 @@ if (typeof globalThis.crypto === 'undefined') {
   Object.defineProperty(globalThis.crypto, 'randomUUID', {
     value: () => `test-uuid-${Math.random().toString(16).slice(2)}`,
     configurable: true,
+  });
+}
+
+// jsdom ships neither crypto.subtle nor TextEncoder
+if (typeof (globalThis.crypto as { subtle?: unknown })?.subtle === 'undefined') {
+  Object.defineProperty(globalThis.crypto, 'subtle', {
+    value: webcrypto.subtle,
+    configurable: true,
+  });
+}
+if (typeof globalThis.TextEncoder === 'undefined') {
+  Object.defineProperty(globalThis, 'TextEncoder', {
+    value: TextEncoder,
+    configurable: true,
+    writable: true,
   });
 }
 

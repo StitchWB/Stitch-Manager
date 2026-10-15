@@ -29,7 +29,8 @@ if ($WebRoot) {
 }
 $VITE_ENTRY = Join-Path $VITE_ROOT "node_modules\vite\bin\vite.js"
 $DEV_DB_PATH = Join-Path $REPO_ROOT "stitch.db"
-$LOG_ROOT = Join-Path $REPO_ROOT "dev-logs"
+# Outside the repo: uvicorn --reload watches the checkout and restarts on log writes.
+$LOG_ROOT = Join-Path $env:LOCALAPPDATA "stitch-manager\dev-logs"
 $script:devLogStreams = @()
 
 function Add-DevLogStream {
@@ -101,6 +102,7 @@ function Wait-PortWithLogs {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
         Show-NewDevLogs
+        if (Test-DevCtrlC) { throw "Ctrl+C received during startup." }
         if ((Get-PortOwners -Port $Port).Count -gt 0) { return $true }
         Start-Sleep -Milliseconds 200
     }
@@ -108,24 +110,34 @@ function Wait-PortWithLogs {
     return $false
 }
 
-function Wait-HealthEndpoint {
-    param(
-        [string]$Uri,
-        [int]$TimeoutSec = 40
-    )
-
-    $deadline = (Get-Date).AddSeconds($TimeoutSec)
-    while ((Get-Date) -lt $deadline) {
-        Show-NewDevLogs
-        try {
-            $response = Invoke-WebRequest -Uri $Uri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-            if ($response.StatusCode -eq 200) { return $true }
-        } catch {
-            # The service is still starting or restarting.
+function Test-DevCtrlC {
+    if (-not $script:ctrlCCaptured) { return $false }
+    try {
+        while ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq [ConsoleKey]::C -and ([int]$key.Modifiers -band [int][ConsoleModifiers]::Control) -ne 0) {
+                return $true
+            }
         }
-        Start-Sleep -Milliseconds 250
+    } catch {
+        return $false
     }
     return $false
+}
+
+function Add-DevJobMember {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$Name
+    )
+
+    if ($devKillJob -eq [IntPtr]::Zero) { return }
+    if (-not $Process -or $Process.HasExited) { return }
+    try {
+        [StitchDev.KillJob]::Assign($devKillJob, $Process.Id)
+    } catch {
+        Write-Host "      [WARN] job-object assign failed for ${Name}: $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
 }
 
 function Stop-TrackedProcess {
@@ -197,6 +209,8 @@ Write-Host ""
 $viteProcess = $null
 $apiProcess = $null
 $desktopProcess = $null
+$devKillJob = [IntPtr]::Zero
+$script:ctrlCCaptured = $false
 $exitCode = 0
 $previousPythonUtf8 = $env:PYTHONUTF8
 $previousPythonIoEncoding = $env:PYTHONIOENCODING
@@ -224,11 +238,52 @@ Add-DevLogStream -Path $desktopStderrLog -Prefix "[DESKTOP:STDERR]" -Color Red
 Write-Host "  Logs     : $LOG_ROOT" -ForegroundColor Gray
 Write-Host ""
 
+# Backstop: if this script dies by any path, the OS closes the job handle and kills every member tree.
+try {
+    $devKillJob = [StitchDev.KillJob]::Create()
+} catch {
+    Write-Host "[WARN] Job-object kill switch unavailable ($($_.Exception.Message)); relying on the finally cleanup alone." -ForegroundColor Yellow
+}
+
+try {
+    if (-not [Console]::IsInputRedirected) {
+        [Console]::TreatControlCAsInput = $true
+        $script:ctrlCCaptured = $true
+    }
+} catch { }
+
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 try {
-    Free-Port $VITE_PORT
-    Free-Port $API_PORT
+    # A live parent can be an interactive run of this very script; only orphaned supervisors are provably stale.
+    try {
+        $staleSupervisors = @(Get-CimInstance Win32_Process -Filter "Name LIKE '%python%'" | Where-Object {
+            $_.CommandLine -and
+            $_.CommandLine.IndexOf("stitch_backend.dev_supervise", [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+            $_.CommandLine.IndexOf($REPO_ROOT, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        })
+    } catch {
+        $staleSupervisors = @()
+    }
+    foreach ($stale in $staleSupervisors) {
+        $parentAlive = $null -ne (Get-Process -Id ([int]$stale.ParentProcessId) -ErrorAction SilentlyContinue)
+        if ($parentAlive) { continue }
+        Write-Host "[SWEEP] Killing stale dev supervisor pid $($stale.ProcessId) from a previous crashed run..." -ForegroundColor Yellow
+        Stop-ProcessTree -ProcessId $stale.ProcessId
+    }
+
+    foreach ($port in @($VITE_PORT, $API_PORT)) {
+        $owners = @(Get-PortOwners -Port $port)
+        if ($owners.Count -gt 0) {
+            Write-Host "[FREE] Port $port held by PID(s) $($owners -join ', ') - terminating..." -ForegroundColor Yellow
+            Free-Port $port
+            Start-Sleep -Milliseconds 300
+            if (-not (Test-PortFree -Port $port)) {
+                throw "Port $port is still bound after cleanup. Close the process holding it manually."
+            }
+            Write-Host "      Port $port released" -ForegroundColor Green
+        }
+    }
 
     Write-Host "[VITE] Starting frontend dev server..." -ForegroundColor Cyan
     # vite.config.ts reads STITCH_API_PORT for the /api proxy target so the frontend follows -ApiPort.
@@ -243,6 +298,7 @@ try {
             -RedirectStandardError $viteStderrLog `
             -PassThru `
             -WindowStyle Hidden
+        Add-DevJobMember -Process $viteProcess -Name "Vite"
     } finally {
         if ($null -eq $previousStitchApiPort) {
             Remove-Item Env:STITCH_API_PORT -ErrorAction SilentlyContinue
@@ -340,6 +396,7 @@ try {
             -RedirectStandardError $apiStderrLog `
             -PassThru `
             -WindowStyle Hidden
+        Add-DevJobMember -Process $apiProcess -Name "backend supervisor"
     } finally {
         if ($null -eq $previousForcePolling) {
             Remove-Item Env:WATCHFILES_FORCE_POLLING -ErrorAction SilentlyContinue
@@ -369,8 +426,26 @@ try {
     }
 
     Write-Host "      Waiting for backend health..." -ForegroundColor Gray -NoNewline
-    if (-not (Wait-HealthEndpoint -Uri $HEALTH_URL -TimeoutSec 45)) {
-        throw "Backend health check did not pass within 45 seconds."
+    $healthOk = $false
+    $deadline = (Get-Date).AddSeconds(45)
+    while ((Get-Date) -lt $deadline) {
+        Show-NewDevLogs
+        if (Test-DevCtrlC) { throw "Ctrl+C received during startup." }
+        if ($apiProcess.HasExited) { break }
+        try {
+            $response = Invoke-WebRequest -Uri $HEALTH_URL -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) { $healthOk = $true; break }
+        } catch {
+            # The service is still starting or restarting.
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    if (-not $healthOk) {
+        Show-NewDevLogs
+        if ($apiProcess.HasExited) {
+            throw "Backend exited during startup (code $($apiProcess.ExitCode)). Port $API_PORT likely already in use - see $apiStderrLog."
+        }
+        throw "Backend did not answer $HEALTH_URL within 45 seconds. Port $API_PORT may be held by a stale process - see $apiStderrLog."
     }
     Write-Host " ready" -ForegroundColor Green
 
@@ -383,6 +458,7 @@ try {
             -RedirectStandardOutput $desktopStdoutLog `
             -RedirectStandardError $desktopStderrLog `
             -PassThru
+        Add-DevJobMember -Process $desktopProcess -Name "desktop shell"
 
         Start-Sleep -Milliseconds 750
         $desktopProcess.Refresh()
@@ -401,6 +477,10 @@ try {
 
     while ($true) {
         Show-NewDevLogs
+        if (Test-DevCtrlC) {
+            Write-Host "`n[INFO] Ctrl+C received." -ForegroundColor Yellow
+            break
+        }
         Start-Sleep -Milliseconds 250
         $viteProcess.Refresh()
         $apiProcess.Refresh()
@@ -433,6 +513,10 @@ try {
     Stop-TrackedProcess -Process $desktopProcess -Name "desktop shell"
     Stop-TrackedProcess -Process $apiProcess -Name "backend supervisor"
     Stop-TrackedProcess -Process $viteProcess -Name "Vite"
+    if ($devKillJob -ne [IntPtr]::Zero) {
+        try { [StitchDev.KillJob]::Close($devKillJob) } catch { }
+        $devKillJob = [IntPtr]::Zero
+    }
     Start-Sleep -Milliseconds 250
     Show-NewDevLogs
 
@@ -449,6 +533,11 @@ try {
         Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue
     } else {
         $env:PYTHONIOENCODING = $previousPythonIoEncoding
+    }
+
+    if ($script:ctrlCCaptured) {
+        try { [Console]::TreatControlCAsInput = $false } catch { }
+        $script:ctrlCCaptured = $false
     }
 
     Write-Host "[OK] Dev services stopped." -ForegroundColor Green

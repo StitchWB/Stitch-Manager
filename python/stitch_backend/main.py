@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await startup.bootstrap_initial_admin(settings)
     await startup.migrate_plaintext_secrets()
     await startup.run_legacy_auto_migration()
+    await startup.run_ai_gateway_auto_migration()
     await startup.migrate_legacy_group_usage()
     await startup.convert_legacy_labels()
     await startup.auto_create_public_models()
@@ -78,7 +79,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     group_usage_flush_task = asyncio.create_task(workers.group_usage_flush_loop())
     sandbox_idle_task = asyncio.create_task(workers.sandbox_idle_stop_loop())
 
-    await startup.start_key_health_worker()
     await startup.emit_app_started(settings)
 
     yield
@@ -91,7 +91,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await workers.stop_task(proxy_key_flush_task)
     await workers.stop_task(group_usage_flush_task)
     await workers.stop_task(sandbox_idle_task)
-    await startup.stop_key_health_worker()
     await startup.emit_app_stopping()
     await dispose_engine()
 

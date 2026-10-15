@@ -26,6 +26,8 @@ import {
   Activity,
   Puzzle,
   Globe,
+  Crown,
+  Home,
 } from
   'lucide-react';
 import { useAppStore } from '../../stores/app';
@@ -298,6 +300,14 @@ export default function Sidebar() {
 
         {isAdmin && authEnabled && (
           <NavItem
+            to="/admin"
+            icon={<Home size={20} />}
+            label={t('sidebar.adminOverview')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && authEnabled && (
+          <NavItem
             to="/users"
             icon={<UserCircle size={20} />}
             label={t('auth.users.title')}
@@ -314,6 +324,14 @@ export default function Sidebar() {
 
         {isAdmin && authEnabled && (
           <NavItem
+            to="/partners"
+            icon={<Crown size={20} />}
+            label={t('sidebar.partners')}
+            collapsed={sidebarCollapsed} />
+        )}
+
+        {isAdmin && authEnabled && (
+          <NavItem
             to="/monitoring"
             icon={<Activity size={20} />}
             label={t('monitoring.title')}
@@ -324,7 +342,7 @@ export default function Sidebar() {
           <NavItem
             to="/privileges"
             icon={<ShieldCheck size={20} />}
-            label={t('privileges.title')}
+            label={t('sidebar.privileges')}
             collapsed={sidebarCollapsed} />
         )}
         {isAdmin && authEnabled && (

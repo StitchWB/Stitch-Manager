@@ -1,11 +1,18 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Chrome, FolderOpen, Link2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, SectionHeader } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { formatTime } from '@/lib/utils';
-import { copyToClipboard, openInBrowser, openInFileManager } from '@/lib/backend/modules/utils';
+import {
+  copyToClipboard,
+  openInBrowser,
+  openInFileManager,
+  resolveProjectPath,
+} from '@/lib/backend/modules/utils';
 import { useExtensionBridgeProbe } from '@/lib/scenarioRecorder/useExtensionBridgeProbe';
+
+const extensionRelativePath = 'extension/stitch-toolkit';
 
 export function ExtensionSettingsSection() {
   const bridge = useExtensionBridgeProbe({
@@ -13,8 +20,22 @@ export function ExtensionSettingsSection() {
     runnerMode: 'extension',
   });
 
-  const extensionRelativePath = 'extension/stitch-toolkit';
-  const extensionPathForUi = useMemo(() => extensionRelativePath, []);
+  const [extensionPath, setExtensionPath] = useState(extensionRelativePath);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resolved = await resolveProjectPath({ path: extensionRelativePath });
+        if (!cancelled && resolved.path) setExtensionPath(resolved.path);
+      } catch (e) {
+        console.warn('Failed to resolve extension path:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const bridgeStatusText = bridge.state.checking
     ? t('recorder.extensionBridgeChecking')
@@ -27,8 +48,11 @@ export function ExtensionSettingsSection() {
     : '—';
 
   const openExtensionsPage = async () => {
+    const url = 'chrome://extensions';
     try {
-      await openInBrowser({ url: 'chrome://extensions' });
+      await openInBrowser({ url });
+      await copyToClipboard({ text: url });
+      toast.info(t('settings.extension.chromeOpenedHint'));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
@@ -44,7 +68,7 @@ export function ExtensionSettingsSection() {
 
   const copyExtensionPath = async () => {
     try {
-      await copyToClipboard({ text: extensionPathForUi });
+      await copyToClipboard({ text: extensionPath });
       toast.success(t('notifications.copied'));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -73,7 +97,7 @@ export function ExtensionSettingsSection() {
               {t('settings.extension.extensionPath')}
             </div>
             <div className="text-xs text-slate-200 font-mono break-all">
-              {extensionPathForUi}
+              {extensionPath}
             </div>
             <div className="mt-1 text-[11px] text-slate-500">
               {t('settings.extension.pathHint')}
@@ -163,7 +187,7 @@ export function ExtensionSettingsSection() {
                 `2. ${t('settings.extension.installStep2')}`,
                 `3. ${t('settings.extension.installStep3')}`,
                 `4. ${t('settings.extension.installStep4')}`,
-                `${t('settings.extension.extensionPath')}: ${extensionPathForUi}`,
+                `${t('settings.extension.extensionPath')}: ${extensionPath}`,
               ].join('\n');
 
               try {

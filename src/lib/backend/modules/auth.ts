@@ -331,19 +331,70 @@ export async function updateUserRole(id: string | number, role: string): Promise
   return data.user;
 }
 
+export interface DeleteImpactGroup {
+  id: string | number;
+  name: string;
+  member_count: number;
+}
+
+export interface DeleteImpact {
+  owned_groups: DeleteImpactGroup[];
+  owned_accounts: number;
+  owned_credentials: number;
+  owned_endpoints: number;
+}
+
 /**
- * DELETE /api/auth/users/{id} — delete a user (admin only).
- * @throws {Error} with `status` property = 400 on self-delete or last-admin delete, 404 not found.
+ * GET /api/auth/users/{id}/delete_impact — ownership preview backing the
+ * impact-aware delete dialog (admin only).
+ * @throws {Error} with `status` property = 401/403 on auth, 404 not found.
  */
-export async function deleteUser(id: string | number): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/api/auth/users/${id}`, {
+export async function getDeleteImpact(userId: string | number): Promise<DeleteImpact> {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/users/${userId}/delete_impact`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+
+  const data = (await parseJson(response)) as
+    | (Partial<DeleteImpact> & { detail?: string })
+    | null;
+
+  if (!response.ok) {
+    const err = new Error(detailToMessage(data?.detail, 'Failed to load delete impact')) as Error & { status: number };
+    err.status = response.status;
+    throw err;
+  }
+
+  return {
+    owned_groups: Array.isArray(data?.owned_groups) ? data.owned_groups : [],
+    owned_accounts: Number(data?.owned_accounts ?? 0),
+    owned_credentials: Number(data?.owned_credentials ?? 0),
+    owned_endpoints: Number(data?.owned_endpoints ?? 0),
+  };
+}
+
+/**
+ * DELETE /api/auth/users/{id} — delete a user (admin only). When `transferTo`
+ * is given, ownership of the user's groups/accounts/credentials/endpoints is
+ * transferred to that user first (`?transfer_to=`).
+ * @throws {Error} with `status` property = 400 on self-delete or last-admin delete,
+ * 404 not found, 409 when the delete is unsafe and no `transferTo` was passed
+ * (message = backend `detail.message`).
+ */
+export async function deleteUser(id: string | number, transferTo?: string | number): Promise<void> {
+  const query =
+    transferTo !== undefined && transferTo !== null && `${transferTo}` !== ''
+      ? `?transfer_to=${encodeURIComponent(String(transferTo))}`
+      : '';
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/users/${id}${query}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
 
   if (!response.ok) {
-    const data = (await parseJson(response)) as { detail?: string } | null;
+    const data = (await parseJson(response)) as { detail?: unknown } | null;
     const err = new Error(detailToMessage(data?.detail, 'Failed to delete user')) as Error & { status: number };
     err.status = response.status;
     throw err;

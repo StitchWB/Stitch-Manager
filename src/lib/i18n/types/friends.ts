@@ -6,6 +6,11 @@ export interface FriendsTranslations {
     emptyTitle: string;
     emptyDescription: string;
     loadError: string;
+    badges: {
+      official: string;
+      partner: string;
+      friend: string;
+    };
     myChannel: {
       title: string;
       members: string;
@@ -15,6 +20,8 @@ export interface FriendsTranslations {
       hint: string;
     }
     admin: {
+      pageTitle: string;
+      pageSubtitle: string;
       title: string;
       subtitle: string;
       add: string;

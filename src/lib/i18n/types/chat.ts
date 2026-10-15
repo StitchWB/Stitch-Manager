@@ -49,7 +49,7 @@ export interface ChatTranslations {
     sessions: string;
     sendMessage: string;
     settings: string;
-    setupApiKeys: string;
+    setupGatewayKeys: string;
     setupEstimatedCost: string;
     setupModelMappings: string;
     setupProviderAccounts: string;

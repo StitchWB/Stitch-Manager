@@ -51,7 +51,7 @@ export const chat: ChatTranslations = {
     sessions: "Chats",
     sendMessage: "Send Message",
     settings: "Settings",
-    setupApiKeys: "Setup Api Keys",
+    setupGatewayKeys: "Gateway credentials: {count}",
     setupEstimatedCost: "Setup Estimated Cost",
     setupModelMappings: "Setup Model Mappings",
     setupProviderAccounts: "Setup Provider Accounts",

@@ -1,5 +1,40 @@
 export interface AdminTranslations {
   admin: {
+    overview: {
+      title: string;
+      subtitle: string;
+      refresh: string;
+      retry: string;
+      groupsTitle: string;
+      groupsEmpty: string;
+      colGroupName: string;
+      colOwner: string;
+      colMembers: string;
+      colShares: string;
+      partnersTitle: string;
+      partnersEmpty: string;
+      colChannel: string;
+      colUser: string;
+      colGrantedRole: string;
+      colInvitedBy: string;
+      colCreated: string;
+      loginTitle: string;
+      loginEnforce: string;
+      loginEnforceHint: string;
+      loginUpdated: string;
+      loginFailed: string;
+      auditTitle: string;
+      auditEmpty: string;
+      colTs: string;
+      colAdmin: string;
+      colAction: string;
+      colScope: string;
+      colTarget: string;
+      colPlugin: string;
+      colGranted: string;
+      grantedYes: string;
+      grantedNo: string;
+    };
     plugins: {
       title: string;
       subtitle: string;

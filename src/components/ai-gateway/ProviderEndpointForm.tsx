@@ -84,7 +84,13 @@ export function ProviderEndpointForm({ endpoint, open, onClose }: ProviderEndpoi
 
         <div>
           <label className="text-sm font-medium">{t('aiGateway.baseUrl')}</label>
-          <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder={t('aiGateway.form.phBaseUrl')} required />
+          <Input
+            value={baseUrl}
+            onChange={e => setBaseUrl(e.target.value)}
+            placeholder={t('aiGateway.form.phBaseUrl')}
+            hint={t('aiHub.providersPage.endpointModelsHint')}
+            required
+          />
         </div>
 
         <div className="flex items-center space-x-2">

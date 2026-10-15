@@ -1,70 +1,63 @@
-/**
- * Smart parser for provider paste posts.
- * Extracts base URL, API keys, provider name, and models from free-form text.
- */
-
-export interface ParsedProviderData {
-  name?: string;
-  baseUrl?: string;
+export interface ParsedProviderEntry {
+  name: string | null;
+  baseUrl: string;
   keys: string[];
   models: string[];
 }
 
-const URL_PATTERN = /https?:\/\/[^\s<>"'{}|\\^`[\]]+/gi;
-const KEY_PATTERN = /\b([a-zA-Z0-9_-]{20,})\b/g;
-const NAME_PATTERN = /^([^\n|]+?)(?:\s*\||\s*$)/m;
-const MODELS_SECTION = /(?:лучшие модели|models?|топ модели|available models)[:\s]*\n?([\s\S]*?)(?:\n\n|\nby|@|$)/gi;
-const MODEL_ITEM = /[-•*]\s*([a-zA-Z0-9._-]{3,})/g;
+const BASE_URL_PATTERN = /(?<![A-Za-zА-Яа-яЁё])(?:🌐\s*)?(?:Base\s*URL|URL)\s*[:：]\s*(\S+)/gi;
+const LABELED_KEY_PATTERN = /(?:🔑\s*)?(?:Ключ|Key|API[\s-]?key|Token)\s*[:：]\s*(\S{12,})/gi;
+const STRICT_KEY_PATTERN = /\b(?:sk-|gsk_|fw_|hf_|xai-|AIza|sk-proj-)[A-Za-z0-9_-]{8,}\b/g;
+const NAME_PATTERN = /(?<![A-Za-zА-Яа-яЁё])(?:Название|Name)\s*[:：]\s*([^\n]+)/i;
+const MODELS_SECTION_PATTERN = /(?<![A-Za-zА-Яа-яЁё])(?:Модели|Models)\s*[:：]/i;
+const MODEL_TOKEN_PATTERN = /^[a-z0-9][a-z0-9._:-]{2,}$/i;
+const MODEL_LABEL_TOKENS = new Set(['модели', 'models', 'работают', 'листятся', 'working', 'listed']);
 
-export function parseProviderText(text: string): ParsedProviderData {
-  const result: ParsedProviderData = { keys: [], models: [] };
+function lineStartAt(text: string, index: number): number {
+  const lastNewline = text.lastIndexOf('\n', index);
+  return lastNewline === -1 ? 0 : lastNewline + 1;
+}
 
-  // Extract provider name (first line, before |)
-  const nameMatch = text.match(NAME_PATTERN);
-  if (nameMatch) {
-    result.name = nameMatch[1].trim();
+function extractKeys(entryText: string): string[] {
+  const labeled = [...entryText.matchAll(LABELED_KEY_PATTERN)].map(match => match[1]);
+  const found = labeled.length > 0 ? labeled : entryText.match(STRICT_KEY_PATTERN) ?? [];
+  return [...new Set(found)];
+}
+
+function extractModels(entryText: string): string[] {
+  const sectionMatch = MODELS_SECTION_PATTERN.exec(entryText);
+  if (!sectionMatch) return [];
+  const section = entryText.slice(sectionMatch.index + sectionMatch[0].length);
+  const seen = new Set<string>();
+  const models: string[] = [];
+  for (const raw of section.split(/[\s,;]+/)) {
+    const token = raw.replace(/[.…]+$/, '');
+    if (!MODEL_TOKEN_PATTERN.test(token)) continue;
+    if (MODEL_LABEL_TOKENS.has(token.toLowerCase().replace(/[:：]$/, ''))) continue;
+    if (seen.has(token)) continue;
+    seen.add(token);
+    models.push(token);
   }
+  return models;
+}
 
-  // Extract base URL - prefer URL after "URL:" label
-  const urlLabelMatch = text.match(/URL[:\s]*\s*(https?:\/\/[^\s<>"'{}|\\^`[\]]+)/i);
-  if (urlLabelMatch) {
-    result.baseUrl = urlLabelMatch[1].trim();
-  } else {
-    // Fallback: first URL that looks like an API endpoint
-    const urls = text.match(URL_PATTERN) || [];
-    const apiUrls = urls.filter(u =>
-      /api|v1|v2|compatible|openai|anthropic|dashscope|groq|fireworks|together/i.test(u)
-    );
-    result.baseUrl = (apiUrls[0] || urls[0] || '').trim();
+export function parseProviderEntries(text: string): ParsedProviderEntry[] {
+  const matches = [...text.matchAll(BASE_URL_PATTERN)];
+  const entries: ParsedProviderEntry[] = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const baseUrl = matches[i][1];
+    if (!/^https?:\/\//i.test(baseUrl)) continue;
+    const start = lineStartAt(text, matches[i].index ?? 0);
+    const nextIndex = matches[i + 1]?.index;
+    const end = nextIndex === undefined ? text.length : lineStartAt(text, nextIndex);
+    const entryText = text.slice(start, end);
+    const nameMatch = entryText.match(NAME_PATTERN);
+    entries.push({
+      name: nameMatch ? nameMatch[1].trim() : null,
+      baseUrl,
+      keys: extractKeys(entryText),
+      models: extractModels(entryText),
+    });
   }
-
-  // Extract models
-  const modelsSectionMatch = text.match(MODELS_SECTION);
-  if (modelsSectionMatch) {
-    const section = modelsSectionMatch[0];
-    const modelMatches = section.match(MODEL_ITEM) || [];
-    result.models = modelMatches
-      .map(m => m.replace(/^[-•*]\s*/, '').trim())
-      .filter(m => m.length >= 3 && !/^https?:/i.test(m));
-  }
-
-  // Extract API keys - look for patterns like sk-xxx, key-xxx, or long alphanumeric tokens
-  // Primary: sk- prefixed keys
-  const skKeys = text.match(/\bsk-[a-zA-Z0-9_-]{16,}\b/g) || [];
-  if (skKeys.length > 0) {
-    result.keys = [...new Set(skKeys)];
-  } else {
-    // Fallback: any long alphanumeric token that looks like a key
-    const allTokens = text.match(KEY_PATTERN) || [];
-    result.keys = [...new Set(
-      allTokens.filter(t =>
-        t.length >= 20 &&
-        !/^https?:/i.test(t) &&
-        !/^(com|org|net|io|ru|dev|app|api|base|url|key|token|model|provider|format|working|best|top|all|the|and|for|not|but|with|from|that|this|have|been|will|would|could|should)/i.test(t) &&
-        !/^[A-Z][a-z]+$/.test(t) // exclude plain words
-      )
-    )];
-  }
-
-  return result;
+  return entries;
 }

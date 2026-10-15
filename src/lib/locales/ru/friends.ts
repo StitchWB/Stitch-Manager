@@ -2,12 +2,17 @@ import type { FriendsTranslations } from '../../i18n/types/friends';
 
 export const friends: FriendsTranslations = {
   friends: {
-    title: "Друзья",
+    title: "Сообщество",
     subtitle: "Партнёры и сообщество",
     open: "Открыть",
     emptyTitle: "Пока нет друзей",
     emptyDescription: "Загляните позже",
     loadError: "Не удалось загрузить друзей",
+    badges: {
+      official: "Официальный",
+      partner: "Партнёр",
+      friend: "Друг",
+    },
     myChannel: {
       title: "Мой канал",
       members: "Участники: {count} / {quota}",
@@ -17,6 +22,8 @@ export const friends: FriendsTranslations = {
       hint: "Приглашайте людей через бота: /invite <username_or_id> [role]",
     },
     admin: {
+      pageTitle: "Партнёры",
+      pageSubtitle: "Управление каталогом партнёрских каналов сообщества",
       title: "Партнёрские каналы",
       subtitle: "Управление каталогом друзей и партнёров",
       add: "Добавить канал",

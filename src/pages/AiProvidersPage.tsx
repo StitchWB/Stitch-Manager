@@ -1,113 +1,296 @@
-import { useState, useCallback, useEffect } from 'react';
-import { ClipboardPaste, Database, Plus, Zap } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ClipboardPaste, Pencil, Plus, Server, Trash2, UserPlus, Zap } from 'lucide-react';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 import Header from '../components/layout/Header';
-import AccountModal from '../components/ai-proxy/AccountModal';
-import { PastePackageDialog } from '@/components/ai-gateway/PastePackageDialog';
-import { PublicModelsSection } from '@/components/ai-gateway/PublicModelsSection';
-import { ProviderEndpointForm } from '@/components/ai-gateway/ProviderEndpointForm';
-import { ProviderFilterBar } from '../components/ai-proxy/ProviderFilterBar';
-import { ProviderCardsSection } from '../components/ai-proxy/ProviderCardsSection';
-import { AiProxyAccountDrawer } from '../components/ai-proxy/AiProxyAccountDrawer';
-import { PasteFirstModal } from '../components/ai-proxy/PasteFirstModal';
-import { ProxyStatusBar } from '../components/ai-proxy/sections/ProxyStatusBar';
-import { AiProvidersKeysSection } from '../components/ai-proxy/sections/AiProvidersKeysSection';
+import { Button, PageHeader, ButtonBase, EmptyState, StatusBadge, askConfirm } from '@/components/ui';
+import AccountModal from '@/components/ai-proxy/AccountModal';
+import { useAiGatewayStore } from '@/stores/aiGateway';
+import { discoverModelsForEndpoint, importOpencodeProviders, testCredentialConnection } from '@/lib/backend/modules/aiGateway';
+import type { UpstreamModel } from '@/lib/backend/modules/aiGateway';
+import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
+import { getCustomProviders } from '@/lib/backend/modules/customProviders';
 import { useAiProvidersController } from './hooks/useAiProvidersController';
 import { useAiHubCopy } from './hooks/useAiHubCopy';
-import { useGatewayActions } from './hooks/useGatewayActions';
-import type { AiProxyAccount } from '../types/generated';
-import { Button, OverflowMenu, PageHeader } from '@/components/ui';
+import { ProxyStatusBar } from '@/components/ai-proxy/sections/ProxyStatusBar';
+import { ProviderEndpointForm } from '@/components/ai-gateway/ProviderEndpointForm';
+import { ProviderRoster } from '@/components/ai-hub/providers/ProviderRoster';
+import { AddProviderMenu } from '@/components/ai-hub/providers/AddProviderMenu';
+import { LegacyMigrationBanner } from '@/components/ai-hub/providers/LegacyMigrationBanner';
+import { ProviderKeysTable } from '@/components/ai-hub/providers/ProviderKeysTable';
+import { ProviderModelsPanel } from '@/components/ai-hub/providers/ProviderModelsPanel';
+import { ProviderSettingsPanel } from '@/components/ai-hub/providers/ProviderSettingsPanel';
+import { PasteKeysDialog } from '@/components/ai-hub/providers/PasteKeysDialog';
+import { ProvidersOverview } from '@/components/ai-hub/providers/ProvidersOverview';
+import {
+  buildRosterItem,
+  credentialsForEndpoint,
+  isProblemStatus,
+  modelsForEndpoint,
+} from '@/components/ai-hub/providers/viewModel';
 import { t } from '../lib/i18n';
 
 const CLIENT_API_KEY = 'proxystitch-local';
 
-export default function AiProvidersPage() {
-  const [searchParams] = useSearchParams();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [pasteOpen, setPasteOpen] = useState(false);
-  const [pasteFirstOpen, setPasteFirstOpen] = useState(false);
-  const [pasteFirstProvider, setPasteFirstProvider] = useState<string | null>(null);
-  const [pasteFirstSeq, setPasteFirstSeq] = useState(0);
-  const [editingAccount, setEditingAccount] = useState<AiProxyAccount | null>(null);
-  const [drawerAccount, setDrawerAccount] = useState<AiProxyAccount | null>(null);
-  const [addEndpointOpen, setAddEndpointOpen] = useState(false);
-  const controller = useAiProvidersController('providers');
-  const { gatewayActionBusy, handleImportOpencode, handleMigrateLegacy } = useGatewayActions();
+type DetailTab = 'keys' | 'models' | 'settings';
 
+async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+}
+
+export default function AiProvidersPage() {
+  const navigate = useNavigate();
+  const controller = useAiProvidersController('providers');
   const {
-    accounts,
-    loading,
-    searchQuery,
-    setSearchQuery,
-    providerFilter,
-    setProviderFilter,
     proxyStatus,
     proxySettings,
     proxyBusy,
     proxySaving,
     baseUrl,
-    connectionState,
-    providerCounts,
-    fetchAccounts,
     refreshProxyInfo,
     handleStartStopProxy,
-    handleDelete,
-    handleTestConnection,
   } = controller;
-
   const handleCopy = useAiHubCopy();
 
-  const handleEdit = useCallback((account: AiProxyAccount) => {
-    setEditingAccount(account);
-    setIsModalOpen(true);
-  }, []);
+  const endpoints = useAiGatewayStore(state => state.endpoints);
+  const credentials = useAiGatewayStore(state => state.credentials);
+  const upstreamModels = useAiGatewayStore(state => state.upstreamModels);
+  const loading = useAiGatewayStore(state => state.loading);
+  const fetchEndpoints = useAiGatewayStore(state => state.fetchEndpoints);
+  const fetchCredentials = useAiGatewayStore(state => state.fetchCredentials);
+  const fetchUpstreamModels = useAiGatewayStore(state => state.fetchUpstreamModels);
+  const updateEndpoint = useAiGatewayStore(state => state.updateEndpoint);
+  const deleteEndpoint = useAiGatewayStore(state => state.deleteEndpoint);
+  const updateCredential = useAiGatewayStore(state => state.updateCredential);
+  const deleteCredential = useAiGatewayStore(state => state.deleteCredential);
+  const migrateLegacyData = useAiGatewayStore(state => state.migrateLegacyData);
 
-  const handleOpenDrawer = useCallback((account: AiProxyAccount) => {
-    setDrawerAccount(account);
-  }, []);
-
-  const handleAddNew = useCallback(() => {
-    setEditingAccount(null);
-    setIsModalOpen(true);
-  }, []);
-
-  const handleOpenPasteFirst = useCallback((provider?: string) => {
-    setPasteFirstProvider(provider ?? null);
-    setPasteFirstSeq(seq => seq + 1);
-    setPasteFirstOpen(true);
-  }, []);
-
-  const handleClosePasteFirst = useCallback(() => {
-    setPasteFirstOpen(false);
-    setPasteFirstProvider(null);
-  }, []);
-
-  const handlePasteFirstSubmit = useCallback(async () => {
-    await fetchAccounts();
-  }, [fetchAccounts]);
-
-  const handleModalClose = useCallback(() => {
-    setIsModalOpen(false);
-    setEditingAccount(null);
-  }, []);
-
-  const handleDrawerClose = useCallback(() => {
-    setDrawerAccount(null);
-  }, []);
-
-  const handleModalSubmit = useCallback(async () => {
-    await fetchAccounts();
-    handleModalClose();
-  }, [fetchAccounts, handleModalClose]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<DetailTab>('keys');
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [legacyCount, setLegacyCount] = useState(0);
+  const [addEndpointOpen, setAddEndpointOpen] = useState(false);
+  const [editEndpointOpen, setEditEndpointOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [exposeModel, setExposeModel] = useState<UpstreamModel | null>(null);
 
   useEffect(() => {
-    setSearchQuery(searchParams.get('q') ?? '');
-    setProviderFilter(searchParams.get('provider') ?? 'all');
-  }, [searchParams, setSearchQuery, setProviderFilter]);
+    void fetchEndpoints();
+    void fetchCredentials();
+    void fetchUpstreamModels();
+    getCustomProviders()
+      .then(list => setLegacyCount(list.length))
+      .catch(() => setLegacyCount(0));
+  }, [fetchEndpoints, fetchCredentials, fetchUpstreamModels]);
+
+  const rosterItems = useMemo(
+    () => endpoints.map(endpoint => buildRosterItem(endpoint, credentials, upstreamModels)),
+    [endpoints, credentials, upstreamModels]
+  );
+
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return rosterItems;
+    return rosterItems.filter(
+      item =>
+        item.endpoint.name.toLowerCase().includes(query) ||
+        item.endpoint.baseUrl.toLowerCase().includes(query)
+    );
+  }, [rosterItems, search]);
+
+  const selectedEndpoint = useMemo(
+    () => endpoints.find(endpoint => endpoint.id === selectedId) ?? null,
+    [endpoints, selectedId]
+  );
+  const selectedCredentials = useMemo(
+    () => (selectedEndpoint ? credentialsForEndpoint(credentials, selectedEndpoint.id) : []),
+    [credentials, selectedEndpoint]
+  );
+  const selectedModels = useMemo(
+    () => (selectedEndpoint ? modelsForEndpoint(upstreamModels, selectedEndpoint.id) : []),
+    [upstreamModels, selectedEndpoint]
+  );
+  const selectedActiveCount = useMemo(
+    () =>
+      selectedCredentials.filter(
+        credential => credential.enabled && credential.runtimeStatus === 'active'
+      ).length,
+    [selectedCredentials]
+  );
+  const selectedFailingCount = useMemo(
+    () =>
+      selectedCredentials.filter(
+        credential => credential.enabled && isProblemStatus(credential.runtimeStatus)
+      ).length,
+    [selectedCredentials]
+  );
+
+  const handleTestSelected = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      setKeyBusy(true);
+      try {
+        await runPool(ids, 8, async id => {
+          await testCredentialConnection(id);
+        });
+        toast.success(t('aiHub.controller.toasts.connectionOk'));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      } finally {
+        setKeyBusy(false);
+        await fetchCredentials();
+      }
+    },
+    [fetchCredentials]
+  );
+
+  const handleToggleCredential = useCallback(
+    async (id: string, enabled: boolean) => {
+      try {
+        await updateCredential({ id, enabled });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [updateCredential]
+  );
+
+  const handleDeleteSelected = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const ok = await askConfirm({
+        title: t('common.delete'),
+        message: t('aiHub.providersPage.deleteSelected'),
+        confirmText: t('common.delete'),
+        cancelText: t('common.cancel'),
+        variant: 'danger',
+      });
+      if (!ok) return;
+      setKeyBusy(true);
+      try {
+        await runPool(ids, 8, async id => {
+          await deleteCredential(id);
+        });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      } finally {
+        setKeyBusy(false);
+      }
+    },
+    [deleteCredential]
+  );
+
+  const handleSaveSettings = useCallback(
+    async (patch: { name: string; baseUrl: string; enabled: boolean }) => {
+      if (!selectedEndpoint) return;
+      try {
+        await updateEndpoint({ id: selectedEndpoint.id, ...patch });
+        toast.success(t('aiHub.providersPage.savedLabel'));
+      } catch {
+        toast.error(t('aiHub.providersPage.saveFailedLabel'));
+      }
+    },
+    [selectedEndpoint, updateEndpoint]
+  );
+
+  const handleDeleteEndpoint = useCallback(async () => {
+    if (!selectedEndpoint) return;
+    const ok = await askConfirm({
+      title: t('aiHub.providersPage.deleteEndpoint'),
+      message: t('aiHub.providersPage.deleteEndpointConfirm'),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteEndpoint(selectedEndpoint.id);
+      setSelectedId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [selectedEndpoint, deleteEndpoint]);
+
+  const handleDiscover = useCallback(async () => {
+    if (!selectedEndpoint) return;
+    setDiscovering(true);
+    try {
+      await discoverModelsForEndpoint(selectedEndpoint.id);
+      await fetchUpstreamModels(selectedEndpoint.id);
+      toast.success(t('aiHub.providersPage.discover'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDiscovering(false);
+    }
+  }, [selectedEndpoint, fetchUpstreamModels]);
+
+  const handleMigrate = useCallback(async () => {
+    setMigrating(true);
+    try {
+      const report = await migrateLegacyData();
+      await Promise.all([fetchEndpoints(), fetchCredentials(), fetchUpstreamModels()]);
+      toast.success(`${t('aiHub.providersPage.legacyDone')} · +${report.endpoints_created}/${report.credentials_created}`);
+    } catch {
+      toast.error(t('aiHub.providersPage.legacyFailed'));
+    } finally {
+      setMigrating(false);
+    }
+  }, [migrateLegacyData, fetchEndpoints, fetchCredentials, fetchUpstreamModels]);
+
+  const handleImportOpencode = useCallback(async () => {
+    try {
+      const report = await importOpencodeProviders();
+      await Promise.all([fetchEndpoints(), fetchCredentials(), fetchUpstreamModels()]);
+      toast.success(`${t('aiHub.providersPage.importOpencode')} · ${report.imported.length}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [fetchEndpoints, fetchCredentials, fetchUpstreamModels]);
+
+  const handleKeysAdded = useCallback(
+    (endpointId: string) => {
+      setSelectedId(endpointId);
+      void (async () => {
+        try {
+          const report = await discoverModelsForEndpoint(endpointId);
+          await fetchUpstreamModels();
+          toast.success(t('aiHub.pasteFirst.modelsFound', { count: report.models_count }));
+        } catch {
+          toast.info(t('aiHub.pasteFirst.modelsLater'));
+        }
+      })();
+    },
+    [fetchUpstreamModels]
+  );
+
+  const openAddManual = useCallback(() => setAddEndpointOpen(true), []);
+
+  const handleSelectProvider = useCallback((id: string) => {
+    setSelectedId(prev => (prev === id ? null : id));
+  }, []);
+
+  const tabs: Array<{ id: DetailTab; label: string }> = [
+    { id: 'keys', label: t('aiHub.providersPage.tabKeys') },
+    { id: 'models', label: t('aiHub.providersPage.tabModels') },
+    { id: 'settings', label: t('aiHub.providersPage.tabSettings') },
+  ];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-void-base">
+    <div className="flex h-full flex-col overflow-hidden bg-void-base">
       <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
 
       <PageHeader
@@ -116,131 +299,227 @@ export default function AiProvidersPage() {
         description={t('aiHub.sections.providers.subtitle')}
         actions={
           <>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => handleOpenPasteFirst()}
-              leftIcon={<ClipboardPaste size={14} />}
-            >
-              {t('aiHub.pasteFirst.title')}
-            </Button>
+            <AddProviderMenu
+              busy={loading.endpoints}
+              onPasteKeys={() => setPasteOpen(true)}
+              onAddManually={openAddManual}
+              onImportOpencode={() => void handleImportOpencode()}
+              onImportPackage={() => navigate('/ai/integrations')}
+            />
             <Button
               variant="outline"
               size="sm"
-              onClick={handleAddNew}
-              leftIcon={<Plus size={14} />}
+              leftIcon={<UserPlus size={14} />}
+              onClick={() => setAccountModalOpen(true)}
             >
               {t('aiHub.actions.addAccount')}
             </Button>
-            <OverflowMenu
-              triggerLabel={t('common.more')}
-              items={[
-                {
-                  id: 'import-opencode',
-                  label: t('aiGateway.importOpencode'),
-                  icon: <Zap size={14} />,
-                  onSelect: () => void handleImportOpencode(),
-                  disabled: gatewayActionBusy,
-                },
-                {
-                  id: 'migrate-legacy',
-                  label: t('aiGateway.migrate'),
-                  icon: <Database size={14} />,
-                  onSelect: () => void handleMigrateLegacy(),
-                  disabled: gatewayActionBusy,
-                },
-                {
-                  id: 'paste-package',
-                  label: t('aiGateway.paste.button'),
-                  icon: <ClipboardPaste size={14} />,
-                  onSelect: () => setPasteOpen(true),
-                },
-              ]}
-            />
           </>
         }
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <ProviderFilterBar providerCounts={providerCounts} />
+      <div className="shrink-0 px-4 pt-3 md:px-6">
+        <ProxyStatusBar
+          compact
+          proxyStatus={proxyStatus}
+          proxySettings={proxySettings}
+          baseUrl={baseUrl}
+          clientApiKey={CLIENT_API_KEY}
+          proxyBusy={proxyBusy}
+          proxySaving={proxySaving}
+          onStartStopProxy={handleStartStopProxy}
+          onRefreshProxyInfo={refreshProxyInfo}
+          onCopy={handleCopy}
+        />
+      </div>
 
-        <div className="flex-1 space-y-4 overflow-auto p-4 md:p-6">
-          <ProxyStatusBar
-            proxyStatus={proxyStatus}
-            proxySettings={proxySettings}
-            baseUrl={baseUrl}
-            clientApiKey={CLIENT_API_KEY}
-            proxyBusy={proxyBusy}
-            proxySaving={proxySaving}
-            onStartStopProxy={handleStartStopProxy}
-            onRefreshProxyInfo={refreshProxyInfo}
-            onCopy={handleCopy}
-          />
+      <div className="shrink-0 px-4 pt-2 md:px-6">
+        <LegacyMigrationBanner
+          visible={!loading.endpoints && endpoints.length === 0 && legacyCount > 0}
+          busy={migrating}
+          onMigrate={() => void handleMigrate()}
+        />
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              leftIcon={<Plus size={14} />}
-              onClick={() => setAddEndpointOpen(true)}
-            >
-              {t('aiGateway.list.addEndpointShort')}
-            </Button>
+      <div className="flex min-h-0 flex-1 gap-4 p-4 md:p-6">
+        {endpoints.length === 0 && !loading.endpoints ? (
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            <EmptyState
+              icon={Server}
+              title={t('aiHub.providersPage.rosterEmpty')}
+              description={t('aiHub.providersPage.rosterEmptyHint')}
+              action={
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<ClipboardPaste size={14} />}
+                    onClick={() => setPasteOpen(true)}
+                  >
+                    {t('aiHub.pasteFirst.title')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftIcon={<Plus size={14} />}
+                    onClick={openAddManual}
+                  >
+                    {t('aiHub.providersPage.addProvider')}
+                  </Button>
+                </div>
+              }
+            />
           </div>
+        ) : (
+          <>
+            <div className="w-full shrink-0 md:w-[260px]">
+              <ProviderRoster
+                items={filteredItems}
+                allItems={rosterItems}
+                selectedId={selectedId}
+                search={search}
+                loading={loading.endpoints}
+                onSearchChange={setSearch}
+                onSelect={handleSelectProvider}
+                onAddProvider={openAddManual}
+              />
+            </div>
 
-          <ProviderCardsSection
-            accounts={accounts}
-            loading={loading}
-            providerFilter={providerFilter}
-            searchQuery={searchQuery}
-            connectionState={connectionState}
-            onAccountClick={handleOpenDrawer}
-            onEditAccount={handleEdit}
-            onDeleteAccount={id => {
-              void handleDelete(id);
-            }}
-            onTestConnection={account => {
-              void handleTestConnection(account);
-            }}
-            onPastePackage={() => setPasteOpen(true)}
-            onPasteKey={handleOpenPasteFirst}
-          />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border border-white/[0.06] bg-white/[0.02]">
+              {selectedEndpoint ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ButtonBase
+                          type="button"
+                          onClick={() => setSelectedId(null)}
+                          className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
+                          aria-label={t('aiHub.providersPage.overview.title')}
+                        >
+                          <ArrowLeft size={14} />
+                        </ButtonBase>
+                        <h2 className="truncate text-sm font-semibold text-white">{selectedEndpoint.name}</h2>
+                        <StatusBadge
+                          status={selectedEndpoint.enabled ? 'active' : 'inactive'}
+                          withDot
+                          size="sm"
+                        />
+                        <span className="flex items-center gap-1 text-[11px] tabular-nums text-slate-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                          {selectedActiveCount} {t('aiHub.providersPage.detail.activeChip')}
+                        </span>
+                        {selectedFailingCount > 0 && (
+                          <span className="flex items-center gap-1 text-[11px] tabular-nums text-amber-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                            {selectedFailingCount} {t('aiHub.providersPage.detail.failingChip')}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 text-[11px] tabular-nums text-slate-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                          {selectedModels.length} {t('aiHub.providersPage.detail.modelsChip')}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
+                        {selectedEndpoint.baseUrl} · {selectedEndpoint.adapterType}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <ButtonBase
+                        type="button"
+                        onClick={() => setEditEndpointOpen(true)}
+                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
+                        aria-label={t('aiHub.providersPage.edit')}
+                      >
+                        <Pencil size={14} />
+                      </ButtonBase>
+                      <ButtonBase
+                        type="button"
+                        onClick={() => void handleDeleteEndpoint()}
+                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+                        aria-label={t('aiHub.providersPage.deleteEndpoint')}
+                      >
+                        <Trash2 size={14} />
+                      </ButtonBase>
+                    </div>
+                  </div>
 
-          <AiProvidersKeysSection providerFilter={providerFilter} />
+                  <div className="flex items-center gap-1 border-b border-white/[0.06] px-3 py-2">
+                    {tabs.map(item => {
+                      const active = tab === item.id;
+                      return (
+                        <ButtonBase
+                          key={item.id}
+                          type="button"
+                          onClick={() => setTab(item.id)}
+                          aria-current={active ? 'true' : undefined}
+                          className={
+                            active
+                              ? 'rounded-md bg-indigo-500/12 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-inset ring-indigo-400/20'
+                              : 'rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200'
+                          }
+                        >
+                          {item.label}
+                        </ButtonBase>
+                      );
+                    })}
+                  </div>
 
-          <PublicModelsSection />
-        </div>
+                  <div className="min-h-0 flex-1 overflow-hidden p-3">
+                    {tab === 'keys' && (
+                      <ProviderKeysTable
+                        credentials={selectedCredentials}
+                        loading={loading.credentials}
+                        busy={keyBusy}
+                        onAddKeys={() => setPasteOpen(true)}
+                        onTestSelected={ids => void handleTestSelected(ids)}
+                        onToggleEnabled={(id, enabled) => void handleToggleCredential(id, enabled)}
+                        onDeleteSelected={ids => void handleDeleteSelected(ids)}
+                      />
+                    )}
+                    {tab === 'models' && (
+                      <ProviderModelsPanel
+                        models={selectedModels}
+                        loading={loading.upstreamModels}
+                        busy={false}
+                        discovering={discovering}
+                        onDiscover={() => void handleDiscover()}
+                        onExposeModel={setExposeModel}
+                      />
+                    )}
+                    {tab === 'settings' && (
+                      <ProviderSettingsPanel
+                        endpoint={selectedEndpoint}
+                        busy={loading.endpoints}
+                        onSave={patch => void handleSaveSettings(patch)}
+                        onDelete={() => void handleDeleteEndpoint()}
+                      />
+                    )}
+                  </div>
+                </>
+              ) : (
+                <ProvidersOverview
+                  items={rosterItems}
+                  onSelectProvider={setSelectedId}
+                  onPasteKeys={() => setPasteOpen(true)}
+                  onAddProvider={openAddManual}
+                  onImportOpencode={() => void handleImportOpencode()}
+                  onOpenRouting={() => navigate('/ai/routing?tab=models')}
+                />
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <AccountModal
-        isOpen={isModalOpen}
-        account={editingAccount}
-        onClose={handleModalClose}
-        onSubmit={handleModalSubmit}
-      />
-
-      <AiProxyAccountDrawer
-        isOpen={Boolean(drawerAccount)}
-        account={drawerAccount}
-        onClose={handleDrawerClose}
-        onEdit={handleEdit}
-        onDelete={id => {
-          void handleDelete(id);
+        isOpen={accountModalOpen}
+        account={null}
+        onClose={() => setAccountModalOpen(false)}
+        onSubmit={() => {
+          setAccountModalOpen(false);
+          void fetchCredentials();
         }}
-        onTestConnection={account => {
-          void handleTestConnection(account);
-        }}
-        connection={drawerAccount?.id ? connectionState[drawerAccount.id] : undefined}
-      />
-
-      <PastePackageDialog open={pasteOpen} onClose={() => setPasteOpen(false)} />
-
-      <PasteFirstModal
-        key={pasteFirstSeq}
-        isOpen={pasteFirstOpen}
-        initialProvider={pasteFirstProvider ?? undefined}
-        onClose={handleClosePasteFirst}
-        onSubmit={handlePasteFirstSubmit}
       />
 
       <ProviderEndpointForm
@@ -248,6 +527,30 @@ export default function AiProvidersPage() {
         open={addEndpointOpen}
         onClose={() => setAddEndpointOpen(false)}
       />
+
+      {editEndpointOpen && selectedEndpoint && (
+        <ProviderEndpointForm
+          endpoint={selectedEndpoint}
+          open={editEndpointOpen}
+          onClose={() => setEditEndpointOpen(false)}
+        />
+      )}
+
+      <PasteKeysDialog
+        open={pasteOpen}
+        endpoint={selectedEndpoint}
+        onClose={() => setPasteOpen(false)}
+        onAdded={handleKeysAdded}
+      />
+
+      {exposeModel && (
+        <PublicModelForm
+          key={exposeModel.id}
+          open
+          prefill={{ id: exposeModel.upstreamModelId, upstreamModelId: exposeModel.id }}
+          onClose={() => setExposeModel(null)}
+        />
+      )}
     </div>
   );
 }

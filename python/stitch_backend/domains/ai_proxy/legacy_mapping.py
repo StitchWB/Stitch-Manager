@@ -16,7 +16,7 @@ _ADAPTER_MAP: dict[str, str] = {
     "gemini": "gemini",
 }
 
-# Default base URLs for built-in providers (mirrors KeyHealthWorker + commands).
+# Default base URLs for built-in providers.
 _BASE_URL_MAP: dict[str, str] = {
     "openai": "https://api.openai.com",
     "antigravity": "https://api.openai.com",

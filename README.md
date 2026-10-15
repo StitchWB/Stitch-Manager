@@ -101,7 +101,7 @@ Built-in providers from `python/autoreg/providers/registry.py`:
 - Automation scenarios + scheduler
 - Mail inbox profiles
 - TOTP / 2FA vault
-- Friends / referrals
+- Community partner channels
 - AiApiRadar offers
 - Plugin sandbox isolation (isolated subprocesses over stdio JSON-RPC, declarative contributions via `stitch.plugin/v2` schema)
 
@@ -199,7 +199,7 @@ One line per sidebar page:
 - **Mail** (`/mail`) — inbox profiles
 - **Tools** (`/tools`) — utility tools
 - **2FA** (`/totp`) — TOTP vault
-- **Friends** (`/friends`) — referrals
+- **Community** (`/friends`) — partner-channel directory
 - **Marketplace** (`/marketplace`) — plugin store
 - **Plugins admin** (`/plugins`) — plugin administration
 - **Settings** (`/settings`) — configuration
@@ -409,7 +409,7 @@ MIT License — see [LICENSE](LICENSE)
 - Автоматизация сценариев + планировщик
 - Профили почтовых ящиков
 - Хранилище TOTP / 2FA
-- Друзья / рефералы
+- Партнёрские каналы сообщества
 - Офферы AiApiRadar
 - Изоляция песочницы плагинов (изолированные подпроцессы через stdio JSON-RPC, схема `stitch.plugin/v2`)
 
@@ -514,7 +514,7 @@ kiro · kiro-v2 · windsurf · trae · fireworks · qoder · v0.dev
 - **Mail** (`/mail`) — профили почтовых ящиков
 - **Tools** (`/tools`) — утилиты
 - **2FA** (`/totp`) — хранилище TOTP
-- **Friends** (`/friends`) — рефералы
+- **Сообщество** (`/friends`) — каталог партнёрских каналов
 - **Marketplace** (`/marketplace`) — магазин плагинов
 - **Plugins admin** (`/plugins`) — администрирование плагинов
 - **Settings** (`/settings`) — конфигурация

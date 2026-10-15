@@ -1,6 +1,8 @@
 """Name generation utilities for account registration."""
 
+import random
 import re
+import string
 
 
 def generate_name_from_email(email: str) -> str:
@@ -110,3 +112,29 @@ def split_name(full_name: str) -> tuple[str, str]:
         return parts[0], "User"
     else:
         return "User", "User"
+
+
+_ADJECTIVES: list[str] = [
+    "swift", "brave", "calm", "eager", "fierce", "gentle", "happy",
+    "jolly", "keen", "lively", "merry", "noble", "proud", "quick",
+    "rapid", "silent", "smart", "sturdy", "vivid", "witty", "zen",
+    "cosmic", "digital", "electric", "frozen", "golden", "lucky",
+    "mystic", "neon", "quantum", "solar", "turbo", "vibrant", "wild",
+    "amber", "crimson", "azure", "emerald", "silver", "crystal",
+]
+
+_NOUNS: list[str] = [
+    "fox", "wolf", "eagle", "shark", "lion", "tiger", "bear", "hawk",
+    "falcon", "raven", "cobra", "panther", "dragon", "phoenix", "griffin",
+    "panda", "otter", "lynx", "bison", "moose", "raven", "heron",
+    "viper", "gecko", "puma", "jaguar", "leopard", "raccoon", "badger",
+    "coder", "hacker", "dev", "ninja", "samurai", "wizard", "sage",
+    "pilot", "rider", "ranger", "scout", "ghost", "shadow", "spark",
+]
+
+
+def generate_persona_username() -> str:
+    adjective = random.choice(_ADJECTIVES)
+    noun = random.choice(_NOUNS)
+    digits = "".join(random.choices(string.digits, k=random.randint(2, 4)))
+    return f"{adjective}{noun}{digits}".lower()

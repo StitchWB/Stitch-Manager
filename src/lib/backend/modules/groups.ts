@@ -33,6 +33,18 @@ export interface GroupsListResponse {
   invites: GroupInviteSummary[];
 }
 
+export interface GroupAdminRow {
+  id: string;
+  name: string;
+  owner_username: string;
+  member_count: number;
+  share_count: number;
+}
+
+export interface GroupsAdminListResponse {
+  groups: GroupAdminRow[];
+}
+
 export interface Group {
   id: string;
   name: string;
@@ -118,6 +130,10 @@ export async function groupsCreate(params: { name: string }): Promise<Group> {
 
 export async function groupsList(): Promise<GroupsListResponse> {
   return safeInvoke('groups_list', {}, { noCache: true });
+}
+
+export async function groupsAdminList(): Promise<GroupsAdminListResponse> {
+  return safeInvoke('groups_admin_list', {}, { noCache: true });
 }
 
 export async function groupsGet(params: { groupId: string }): Promise<GroupDetailResponse> {
@@ -273,7 +289,6 @@ export async function groupsQuotaRuleDelete(params: {
 // ═══════════════════════════════════════════════════════════════════════════
 // Account sharing (M:N account ↔ group)
 //
-// ``groups_share_account`` shares an account into a group (idempotent).
 // ``groups_unshare_account`` removes an account from a group (account-owner
 // OR group-owner gated). ``groups_list_accounts`` lists the accounts shared
 // into a group, with per-row action flags (``canRemoveShare`` /
@@ -294,13 +309,6 @@ export interface GroupAccountItem {
 
 export interface GroupAccountsListResponse {
   items: GroupAccountItem[];
-}
-
-export async function shareAccount(
-  groupId: string,
-  accountId: number,
-): Promise<{ success: boolean }> {
-  return safeInvoke('groups_share_account', { groupId, accountId }, { noCache: true });
 }
 
 export async function unshareAccount(

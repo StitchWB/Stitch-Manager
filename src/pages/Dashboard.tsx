@@ -15,7 +15,8 @@ import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { useMarketplaceStore } from '../stores/marketplace';
 import { useMailStore } from '../stores/mail';
 import { useTotpStore } from '../stores/totp';
-import { useCommunityStore } from '../stores/community';
+import { useCommunityStore } from '../stores/radar';
+import { useFriendsStore } from '../stores/friends';
 import {
   useSchedulerStore,
   startSchedulerStatusPolling,
@@ -66,7 +67,7 @@ export default function Dashboard() {
   const marketplaceItems = useMarketplaceStore(state => state.items);
   const mailProfiles = useMailStore(state => state.profiles);
   const totpKeys = useTotpStore(state => state.keys);
-  const friends = useCommunityStore(state => state.friends);
+  const friends = useFriendsStore(state => state.friends);
   const radarStats = useCommunityStore(state => state.stats);
   const pinnedProviders = useUIPreferencesStore(
     state => state.dashboard?.pinnedProviders ?? [],
@@ -88,7 +89,7 @@ export default function Dashboard() {
       void useMarketplaceStore.getState().fetchMarketplace();
       void useMailStore.getState().loadProfiles();
       void useTotpStore.getState().fetchKeys();
-      void useCommunityStore.getState().fetchFriends();
+      void useFriendsStore.getState().fetchFriends();
       void useCommunityStore.getState().fetchStats();
     });
     startSchedulerStatusPolling();

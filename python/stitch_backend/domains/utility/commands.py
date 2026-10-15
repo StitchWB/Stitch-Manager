@@ -12,10 +12,14 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+import json
 import logging
+import os
 import subprocess
+import sys
 import webbrowser
 from datetime import UTC
+from pathlib import Path
 
 from stitch_backend import __version__
 from stitch_backend.core.command_decorator import command
@@ -63,12 +67,97 @@ async def cmd_copy_to_clipboard(params: dict) -> dict:
         return {"success": False, "error": str(e)}
 
 
+# chrome://, edge:// and friends are browser-internal schemes with no OS handler,
+# so webbrowser/open cannot follow them — the browser binary must be launched.
+_CHROMIUM_URL_SCHEMES = {"chrome", "edge", "brave", "vivaldi", "opera"}
+
+
+def _find_chromium_browser() -> str | None:
+    if sys.platform == "win32":
+        import winreg
+
+        for hive, subkey in (
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+        ):
+            try:
+                with winreg.OpenKey(hive, subkey) as key:
+                    exe, _ = winreg.QueryValueEx(key, "")
+            except OSError:
+                continue
+            if exe and os.path.exists(exe):
+                return str(exe)
+        candidates = [
+            r"%ProgramFiles%\Google\Chrome\Application\chrome.exe",
+            r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe",
+            r"%LocalAppData%\Google\Chrome\Application\chrome.exe",
+            r"%ProgramFiles%\Chromium\Application\chrome.exe",
+            r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe",
+            r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe",
+        ]
+    elif sys.platform == "darwin":
+        candidates = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+    else:
+        candidates = [
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+        ]
+    for candidate in candidates:
+        resolved = os.path.expandvars(candidate)
+        if os.path.exists(resolved):
+            return resolved
+    return None
+
+
+def _chromium_last_used_profile(exe: str) -> str | None:
+    name = os.path.basename(exe).lower()
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "")
+        vendor = "Microsoft\\Edge" if "msedge" in name else "Google\\Chrome"
+        data_dir = os.path.join(local, vendor, "User Data") if local else ""
+    elif sys.platform == "darwin":
+        vendor = "Microsoft Edge" if "msedge" in name else "Google/Chrome"
+        data_dir = os.path.expanduser(f"~/Library/Application Support/{vendor}")
+    else:
+        vendor = "chromium" if "chromium" in name else "google-chrome"
+        data_dir = os.path.expanduser(f"~/.config/{vendor}")
+
+    if not data_dir:
+        return None
+    try:
+        with open(os.path.join(data_dir, "Local State"), encoding="utf-8") as handle:
+            return json.load(handle).get("profile", {}).get("last_used") or None
+    except (OSError, ValueError):
+        return None
+
+
+def _open_url(url: str) -> None:
+    if url.split(":", 1)[0].lower() in _CHROMIUM_URL_SCHEMES:
+        # Chrome ignores chrome:// command-line URLs, so only the browser opens.
+        exe = _find_chromium_browser()
+        if exe is None:
+            raise ValueError(f"No Chromium-based browser found to open {url}")
+        args = [exe]
+        profile = _chromium_last_used_profile(exe)
+        if profile:
+            args.append(f"--profile-directory={profile}")
+        subprocess.Popen(args)
+        return
+    if not webbrowser.open(url):
+        raise ValueError(f"Could not open URL: {url}")
+
+
 @register_command("open_in_browser")
 async def cmd_open_in_browser(params: dict) -> dict:
     url = params.get("url", "")
     if not url:
         return {"success": False, "error": "No URL provided"}
-    webbrowser.open(url)
+    _open_url(url)
     return {"success": True}
 
 
@@ -77,20 +166,45 @@ async def cmd_open_url_in_browser(params: dict) -> dict:
     url = params.get("url", "")
     if not url:
         return {"success": False, "error": "No URL provided"}
-    webbrowser.open(url)
+    _open_url(url)
     return {"success": True}
+
+
+def _resolve_project_path(raw: str) -> Path:
+    from stitch_backend.config import REPO_ROOT
+
+    path = Path(raw)
+    if not path.is_absolute():
+        path = (REPO_ROOT / path).resolve()
+    return path
+
+
+@register_command("resolve_project_path", readonly=True, admin_only=True)
+async def cmd_resolve_project_path(params: dict) -> dict:
+    raw = str(params.get("path", "")).strip()
+    if not raw:
+        return {"path": None}
+    path = _resolve_project_path(raw)
+    return {"path": str(path) if path.exists() else None}
 
 
 @register_command("open_in_file_manager", admin_only=True)
 async def cmd_open_in_file_manager(params: dict) -> dict:
-    path = params.get("path", "")
-    if not path:
+    raw = str(params.get("path", "")).strip()
+    if not raw:
         return {"success": False, "error": "No path provided"}
-    try:
-        subprocess.Popen(["explorer", path])
-        return {"success": True}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+
+    path = _resolve_project_path(raw)
+    if not path.exists():
+        raise ValueError(f"Path does not exist: {path}")
+
+    if sys.platform == "win32":
+        subprocess.Popen(["explorer", str(path)])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(path)])
+    return {"success": True}
 
 
 @register_command("check_fireworks_api_key_rust")
