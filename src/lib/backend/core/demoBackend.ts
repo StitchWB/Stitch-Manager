@@ -2,6 +2,7 @@
 
 import type { Account, SettingsData } from '../../../types/generated';
 import type { BackgroundManagerConfig } from '../modules/backgroundManager';
+import type { MarketplaceItem } from '../modules/marketplace';
 
 let enabled = false;
 
@@ -133,6 +134,130 @@ const DEMO_BG_CONFIG: BackgroundManagerConfig = {
   rateLimitPolicies: [],
 };
 
+const DEMO_MARKETPLACE: readonly MarketplaceItem[] = [
+  {
+    id: 'stitch-totp',
+    name: 'TOTP Vault',
+    description: '2FA keys, secrets and time-based codes.',
+    author: 'StitchWB',
+    version: '1.3.0',
+    source: 'community',
+    entitled: true,
+    installed: true,
+    installed_version: '1.2.0',
+    can_download: true,
+    update_available: true,
+    badges: ['recommended', 'verified', 'works'],
+    description_i18n: {
+      ru: '2FA: ключи, секреты и коды по времени.',
+      en: '2FA keys, secrets and time-based codes.',
+    },
+    category: 'security',
+    status: 'stable',
+    icon: '🔐',
+  },
+  {
+    id: 'stitch-mail',
+    name: 'Mail Inbox',
+    description: 'IMAP inboxes, wait-for-email and Mail.tm profiles.',
+    author: 'StitchWB',
+    version: '1.1.4',
+    source: 'community',
+    entitled: true,
+    installed: false,
+    installed_version: null,
+    can_download: true,
+    badges: ['verified', 'works'],
+    description_i18n: {
+      ru: 'Почта: IMAP, ожидание письма и профили Mail.tm.',
+      en: 'IMAP inboxes, wait-for-email and Mail.tm profiles.',
+    },
+    category: 'communication',
+    status: 'stable',
+    icon: '✉️',
+  },
+  {
+    id: 'stitch-sheets',
+    name: 'Identity Graph',
+    description: 'Ingest the Identity Graph from Google Sheets.',
+    author: 'StitchWB',
+    version: '1.0.7',
+    source: 'community',
+    entitled: true,
+    installed: false,
+    installed_version: null,
+    can_download: true,
+    badges: ['works'],
+    description_i18n: {
+      ru: 'Загрузка Identity Graph из Google Sheets.',
+      en: 'Ingest the Identity Graph from Google Sheets.',
+    },
+    category: 'data',
+    status: 'stable',
+    icon: '📊',
+  },
+  {
+    id: 'stitch-radar',
+    name: 'AiApiRadar',
+    description: 'Offer tracking and usage statistics.',
+    author: 'StitchWB',
+    version: '1.2.1',
+    source: 'community',
+    entitled: true,
+    installed: true,
+    installed_version: '1.2.1',
+    can_download: true,
+    badges: ['recommended', 'works'],
+    description_i18n: {
+      ru: 'Отслеживание офферов и статистика использования.',
+      en: 'Offer tracking and usage statistics.',
+    },
+    category: 'ai-tools',
+    status: 'stable',
+    icon: '📡',
+  },
+  {
+    id: 'stitch-opencode',
+    name: 'OpenCode Config',
+    description: 'OpenCode config management and API testing.',
+    author: 'StitchWB',
+    version: '1.0.3',
+    source: 'community',
+    entitled: true,
+    installed: false,
+    installed_version: null,
+    can_download: true,
+    badges: ['works'],
+    description_i18n: {
+      ru: 'Управление конфигом OpenCode и тест API.',
+      en: 'OpenCode config management and API testing.',
+    },
+    category: 'ide-integration',
+    status: 'stable',
+    icon: '🧩',
+  },
+  {
+    id: 'stitch-notebooklm',
+    name: 'NotebookLM',
+    description: 'Notebooks, Q&A and audio generation.',
+    author: 'StitchWB',
+    version: '0.9.2',
+    source: 'community',
+    entitled: true,
+    installed: false,
+    installed_version: null,
+    can_download: true,
+    badges: ['works'],
+    description_i18n: {
+      ru: 'Ноутбуки, Q&A и генерация аудио.',
+      en: 'Notebooks, Q&A and audio generation.',
+    },
+    category: 'productivity',
+    status: 'beta',
+    icon: '📓',
+  },
+];
+
 const COMMAND_MAP: Record<string, unknown> = {
   list_accounts: DEMO_ACCOUNTS,
   get_accounts: DEMO_ACCOUNTS,
@@ -178,7 +303,7 @@ const COMMAND_MAP: Record<string, unknown> = {
   get_provider_capabilities: [],
   get_provider_model_mappings: [],
   get_proxy_debug_logs: [],
-  get_marketplace: { items: [], activated: false, feeds: null },
+  get_marketplace: { items: DEMO_MARKETPLACE, activated: false, feeds: { community: 'ok' } },
   list_service_plugins: [],
 };
 
