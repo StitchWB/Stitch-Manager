@@ -23,7 +23,6 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  Terminal,
   Github,
   Send,
   LogIn,
@@ -291,9 +290,11 @@ export default function Landing({ authenticated = false }: LandingProps) {
           {/* Top nav */}
           <header className="flex items-center justify-between py-5">
             <div className="flex items-center gap-3">
-              <div className="rounded-xl w-10 h-10 flex items-center justify-center bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-900/40">
-                <Terminal className="w-5 h-5 text-white" />
-              </div>
+              <img
+                src="/stitchwb-mark.png"
+                alt="StitchWB"
+                className="w-10 h-10 object-contain drop-shadow-[0_4px_12px_rgba(99,102,241,0.35)]"
+              />
               <span className="text-white font-black tracking-tight uppercase text-lg">Stitch Manager</span>
             </div>
             <nav className="flex items-center gap-1.5">
@@ -487,9 +488,7 @@ export default function Landing({ authenticated = false }: LandingProps) {
       <footer className="border-t border-white/[0.06]">
         <div className="mx-auto w-full max-w-7xl 2xl:max-w-[90rem] px-6 lg:px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3 text-xs text-slate-500">
-            <div className="rounded-lg w-7 h-7 flex items-center justify-center bg-gradient-to-br from-indigo-500 to-indigo-700">
-              <Terminal className="w-3.5 h-3.5 text-white" />
-            </div>
+            <img src="/stitchwb-mark.png" alt="StitchWB" className="w-7 h-7 object-contain" />
             © {new Date().getFullYear()} Stitch Manager
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-center">
