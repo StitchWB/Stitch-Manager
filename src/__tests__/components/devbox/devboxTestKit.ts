@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import type {
   DevboxActionStatus,
+  DevboxAgentPrompt,
   DevboxProfileRow,
   DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
@@ -57,15 +58,49 @@ export const profilesFixture: DevboxProfileRow[] = [
 
 export const idleActionStatus: DevboxActionStatus = { busy: false, current: null, recent: [] };
 
-export const maskedHandoffFixture = {
-  block: 'INGRESS=https://x.trycloudflare.com\nMCP_TOKEN=••••••',
+const readyAll = { profile: true, bridge: true, ingress: true, runner: true };
+
+export const maskedAgentPromptFixture: DevboxAgentPrompt = {
+  prompt: 'CONNECT to devbox\nINGRESS=https://x.trycloudflare.com\nMCP_TOKEN=••••••',
+  masked: true,
+  ready: readyAll,
+};
+
+export const revealedAgentPromptFixture: DevboxAgentPrompt = {
+  prompt: 'CONNECT to devbox\nINGRESS=https://x.trycloudflare.com\nMCP_TOKEN=abc123',
+  masked: false,
+  ready: readyAll,
+};
+
+export const agentPromptNoReadyFixture = {
+  prompt: 'CONNECT to devbox\nMCP_TOKEN=••••••',
   masked: true,
 };
 
-export const revealedHandoffFixture = {
-  block: 'INGRESS=https://x.trycloudflare.com\nMCP_TOKEN=abc123',
-  masked: false,
-};
+export function agentPromptRoute(
+  revealed: DevboxAgentPrompt = revealedAgentPromptFixture,
+  masked: DevboxAgentPrompt = maskedAgentPromptFixture,
+): DevboxRouteHandler {
+  return (p: Record<string, unknown>) => (p.reveal === true ? revealed : masked);
+}
+
+export function rotatedTokensStatus(finishedAtEpochSec: number): DevboxActionStatus {
+  return {
+    busy: false,
+    current: null,
+    recent: [
+      {
+        id: 'act-tokens-1',
+        cmd: 'issue_tokens',
+        status: 'succeeded',
+        startedAt: finishedAtEpochSec - 5,
+        finishedAt: finishedAtEpochSec,
+        exit: 0,
+        payload: null,
+      },
+    ],
+  };
+}
 
 export function pageRoutes(overrides: DevboxRoutes = {}): DevboxRoutes {
   return {
@@ -76,7 +111,7 @@ export function pageRoutes(overrides: DevboxRoutes = {}): DevboxRoutes {
     permissions_pending: [],
     events_tail: [],
     logs: { sources: [] },
-    handoff_block: maskedHandoffFixture,
+    agent_prompt: agentPromptRoute(),
     ...overrides,
   };
 }

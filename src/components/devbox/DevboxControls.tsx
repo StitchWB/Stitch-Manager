@@ -51,7 +51,7 @@ export function DevboxControls({
   const current = actionStatus?.current;
 
   return (
-    <DevboxSection title={t('devboxPage.sectionControls')} testId="devbox-controls">
+    <DevboxSection title={t('devboxPage.sectionMaintenance')} testId="devbox-controls">
       <div className="flex flex-col gap-4">
         {busy && current && (
           <div className="flex items-center gap-2 text-2xs text-slate-400" data-testid="devbox-progress">

@@ -48,6 +48,7 @@ import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Login from './pages/Login';
 import Landing from './pages/Landing';
+import CatalogPage from './pages/CatalogPage';
 import Setup from './pages/Setup';
 import TelegramLogin from './components/auth/TelegramLogin';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
@@ -296,6 +297,8 @@ function App() {
   const authGuest = useAuthStore(state => state.guest);
   const authView = useAuthStore(state => state.authView);
   const authInit = useAuthStore(state => state.init);
+  const location = useLocation();
+  const isCatalogRoute = location.pathname === '/catalog';
 
   const hasInitialized = useRef(false);
 
@@ -544,7 +547,8 @@ function App() {
     if (isDesktopApp()) {
       return <Login />;
     }
-    return <Landing />;
+    // Web default surface; /catalog stays browsable while logged out.
+    return isCatalogRoute ? <CatalogPage /> : <Landing />;
   } else if (authEnabled && !authGuest) {
     // Optional auth, not yet a guest: TelegramLogin is the merged root
     // surface (Telegram login + guest entry + web-only password/setup);
@@ -558,7 +562,7 @@ function App() {
     if (authView === 'login' && !desktop) {
       return <Login />;
     }
-    return <TelegramLogin />;
+    return isCatalogRoute ? <CatalogPage /> : <TelegramLogin />;
   }
   // Otherwise: auth disabled, or guest mode, or user present → render the app.
 
@@ -590,6 +594,8 @@ function App() {
             <Route path="/radar" element={<Radar />} />
             <Route path="/friends" element={<Friends />} />
             <Route path="/marketplace" element={<Marketplace />} />
+            {/* Public plugin catalog — same page the logged-out gate serves */}
+            <Route path="/catalog" element={<CatalogPage authenticated={Boolean(authUser)} />} />
             {/* Product surface — open to any authenticated user */}
             <Route path="/autoreg" element={<AutoReg />} />
             {/* AI Hub — vertical rail layout shared by all /ai/* pages */}

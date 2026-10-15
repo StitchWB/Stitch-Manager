@@ -40,6 +40,7 @@ import type { FriendsTranslations } from './friends';
 import type { RadarTranslations } from './radar';
 import type { FoundKeysTranslations } from './foundKeys';
 import type { MarketplaceTranslations } from './marketplace';
+import type { CatalogTranslations } from './catalog';
 import type { AdminTranslations } from './admin';
 import type { SidebarTranslations } from './sidebar';
 import type { NotebooklmTranslations } from './notebooklm';
@@ -102,6 +103,7 @@ export interface Translations
     RadarTranslations,
     FoundKeysTranslations,
     MarketplaceTranslations,
+    CatalogTranslations,
     AdminTranslations,
     SidebarTranslations,
     NotebooklmTranslations,

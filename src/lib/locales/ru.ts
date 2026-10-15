@@ -56,6 +56,7 @@ import { friends } from './ru/friends';
 import { radar } from './ru/radar';
 import { foundKeys } from './ru/foundKeys';
 import { marketplace } from './ru/marketplace';
+import { catalog } from './ru/catalog';
 import { footer } from './ru/footer';
 import { users } from './ru/users';
 import { ai } from './ru/ai';
@@ -119,6 +120,7 @@ export const ru: Translations = {
   ...radar,
   ...foundKeys,
   ...marketplace,
+  ...catalog,
   ...footer,
   ...users,
   ...ai,

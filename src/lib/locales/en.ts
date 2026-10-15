@@ -56,6 +56,7 @@ import { friends } from './en/friends';
 import { radar } from './en/radar';
 import { foundKeys } from './en/foundKeys';
 import { marketplace } from './en/marketplace';
+import { catalog } from './en/catalog';
 import { footer } from './en/footer';
 import { users } from './en/users';
 import { ai } from './en/ai';
@@ -119,6 +120,7 @@ export const en: Translations = {
   ...radar,
   ...foundKeys,
   ...marketplace,
+  ...catalog,
   ...footer,
   ...users,
   ...ai,
