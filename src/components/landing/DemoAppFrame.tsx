@@ -9,6 +9,11 @@ import Sidebar from '../layout/Sidebar';
 import Dashboard from '../../pages/Dashboard';
 import { Badge } from '../ui/Badge';
 import { disableDemoBackend, enableDemoBackend } from '../../lib/backend/core/demoBackend';
+import { safeInvoke } from '../../lib/backend/core';
+import { useAccountsStore } from '../../stores/accounts';
+import { useSettingsStore } from '../../stores/settings';
+import type { Account, SettingsData } from '../../types/generated';
+import type { BackgroundManagerConfig } from '../../lib/backend/modules/backgroundManager';
 
 const Accounts = lazy(() => import('../../pages/Accounts'));
 const AutoReg = lazy(() => import('../../pages/AutoReg'));
@@ -38,6 +43,17 @@ const Logs = lazy(() => import('../../pages/Logs'));
 
 interface BoundaryState {
   error: string | null;
+}
+
+async function seedDemoStores(): Promise<void> {
+  const [accounts, settings, bgConfig] = await Promise.all([
+    safeInvoke<Account[]>('get_accounts'),
+    safeInvoke<SettingsData>('get_settings'),
+    safeInvoke<BackgroundManagerConfig>('get_background_manager_config'),
+  ]);
+  if (Array.isArray(accounts)) useAccountsStore.setState({ accounts });
+  if (settings) useSettingsStore.getState().setSettings(settings);
+  if (bgConfig) useSettingsStore.getState().setBackgroundManagerConfig(bgConfig);
 }
 
 class DemoFrameBoundary extends Component<{ children: ReactNode }, BoundaryState> {
@@ -140,6 +156,7 @@ export function DemoAppFrame() {
     if (!host) return;
     aliveRef.current = true;
     enableDemoBackend();
+    void seedDemoStores();
     if (!rootRef.current) {
       rootRef.current = createRoot(host);
     }

@@ -10,6 +10,7 @@ import { describe, it, expect, jest } from '@jest/globals';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { DemoAppFrame } from '@/components/landing/DemoAppFrame';
 import { useMarketplaceStore } from '@/stores/marketplace';
+import { useAccountsStore } from '@/stores/accounts';
 
 jest.mock('@/lib/events', () => ({
   listen: jest.fn(async () => jest.fn()),
@@ -84,6 +85,7 @@ describe('DemoAppFrame demo seeds', () => {
     });
 
     expect(Array.isArray(useMarketplaceStore.getState().items)).toBe(true);
+    expect(useAccountsStore.getState().accounts.length).toBeGreaterThan(0);
     expect(screen.queryByText(/Demo page failed to render/)).toBeNull();
   });
 });
