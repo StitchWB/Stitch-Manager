@@ -14,7 +14,9 @@ import Friends from '../../pages/Friends';
 
 jest.mock('../../components/layout/Header', () => ({
   __esModule: true,
-  default: ({ title }: { title: string }) => <div data-testid="header">{title}</div>,
+  default: ({ title, actions }: { title: string; actions?: React.ReactNode }) => (
+    <div data-testid="header">{title}{actions}</div>
+  ),
 }));
 
 jest.mock('../../stores/app', () => ({
@@ -34,8 +36,11 @@ jest.mock('../../stores/friends', () => ({
     }),
 }));
 
+let mockUser: { role?: string } | null = null;
+
 jest.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: null }),
+  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: mockUser }),
+  effectiveRole: (user: { role?: string } | null) => (user ? (user.role ?? null) : null),
 }));
 
 const getMyPartnerChannel = jest.fn(() => Promise.resolve(null));
@@ -47,6 +52,7 @@ jest.mock('../../lib/backend/modules/partners', () => ({
 describe('Friends page (public)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUser = null;
   });
 
   it('renders the catalog without any partner admin CRUD when logged out', () => {
@@ -65,5 +71,17 @@ describe('Friends page (public)', () => {
     expect(screen.queryByLabelText('Edit')).toBeNull();
     expect(fetchFriends).toHaveBeenCalledTimes(1);
     expect(getMyPartnerChannel).not.toHaveBeenCalled();
+  });
+
+  it('shows the admin an "Add channel" entry point to /partners', () => {
+    mockUser = { role: 'admin' };
+
+    render(
+      <MemoryRouter>
+        <Friends />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Add channel')).toBeTruthy();
   });
 });
