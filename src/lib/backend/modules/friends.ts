@@ -16,6 +16,7 @@ export interface FriendItem {
   title: string;
   url: string;
   description?: string | null;
+  logo_url?: string | null;
   badge?: FriendBadge;
   tg_chat_id?: number | null;
   member_count?: number | null;

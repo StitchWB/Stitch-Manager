@@ -16,7 +16,7 @@ export const sidebar: SidebarTranslations = {
     logs: "Логи",
     mail: "Почта",
     marketplace: "Плагины",
-    partners: "Партнёры",
+    partners: "Каналы сообщества",
     plugins: "Доступ к плагинам",
     privileges: "Доступ",
     radar: "AiApiRadar",

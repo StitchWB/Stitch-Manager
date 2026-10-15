@@ -1,20 +1,23 @@
 /**
- * PartnerChannels admin page tests.
+ * PartnerChannels admin page tests (community_channels_* command module).
  *
  * Verifies:
- *   - Renders the partner-channel list from GET /api/partners/channels.
- *   - Delete flow: click delete → askConfirm → DELETE /api/partners/channels/{id}
+ *   - Renders rows with logo / name / description from listCommunityChannels.
+ *   - Delete flow: click delete → askConfirm → deleteCommunityChannel(id)
  *     → list refreshes.
- *   - Create button opens the form modal.
- *
- * Mocks global.fetch (the partners module calls fetch directly), mirroring
- * the Codes.test.tsx pattern.
+ *   - Create button opens the form modal and the form has the logo field.
  */
 
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import PartnerChannels from '../../pages/PartnerChannels';
+
+jest.mock('../../lib/backend/modules/communityChannels', () => ({
+  listCommunityChannels: jest.fn(),
+  createCommunityChannel: jest.fn(),
+  updateCommunityChannel: jest.fn(),
+  deleteCommunityChannel: jest.fn(),
+}));
 
 jest.mock('../../components/layout/Header', () => ({
   __esModule: true,
@@ -38,144 +41,86 @@ jest.mock('../../components/ui/ConfirmDialogHost', () => ({
   askConfirm: jest.fn(() => Promise.resolve(true)),
 }));
 
-interface MockChannel {
-  id: string;
-  tg_chat_id: number | null;
-  title: string;
-  url: string;
-  description: string | null;
-  badge: string;
-  type: string;
-  owner_telegram_id: string | null;
-  allowed_grant_roles: string[];
-  max_members: number | null;
-  active: boolean;
-  member_count: number;
-}
+import PartnerChannels from '../../pages/PartnerChannels';
+import {
+  listCommunityChannels,
+  deleteCommunityChannel,
+  type ChannelItem,
+} from '../../lib/backend/modules/communityChannels';
 
-function mockChannel(): MockChannel {
+const mockList = jest.mocked(listCommunityChannels);
+const mockDelete = jest.mocked(deleteCommunityChannel);
+
+function mockChannel(): ChannelItem {
   return {
     id: 'ch-1',
-    tg_chat_id: -1001234567890,
-    title: 'Test Partner Channel',
+    title: 'Test Community Channel',
     url: 'https://t.me/test',
-    description: null,
-    badge: 'partner',
+    description: 'A great community channel',
+    logo_url: 'https://example.com/logo.png',
     type: 'telegram',
-    owner_telegram_id: '12345',
-    allowed_grant_roles: ['user'],
-    max_members: 10,
+    badge: 'partner',
     active: true,
-    member_count: 3,
   };
 }
 
-function makeJsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-    clone() { return this; },
-    headers: new Headers(),
-  };
-}
-
-function makeFetchHandler() {
-  const calls: Array<{ url: string; method: string }> = [];
-  const handler = async (url: string, init?: RequestInit) => {
-    const method = init?.method ?? 'GET';
-    calls.push({ url, method });
-    if (url.endsWith('/api/partners/channels') && method === 'GET') {
-      return makeJsonResponse(200, { channels: [mockChannel()] });
-    }
-    if (url.endsWith('/api/partners/channels/ch-1') && method === 'DELETE') {
-      return makeJsonResponse(200, {});
-    }
-    return makeJsonResponse(404, { detail: 'not found' });
-  };
-  return { handler, calls };
-}
-
-function installFetch(handler: (url: string, init?: RequestInit) => Promise<unknown>): void {
-  globalThis.fetch = handler as unknown as typeof fetch;
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <PartnerChannels />
+    </MemoryRouter>
+  );
 }
 
 describe('PartnerChannels page', () => {
-  const originalFetch = globalThis.fetch;
-
   beforeEach(() => {
     jest.clearAllMocks();
+    mockList.mockResolvedValue([mockChannel()]);
+    mockDelete.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  it('renders the partner-channel list from the partners REST module', async () => {
-    const { handler, calls } = makeFetchHandler();
-    installFetch(handler);
-
-    render(
-      <MemoryRouter>
-        <PartnerChannels />
-      </MemoryRouter>
-    );
+  it('renders rows with logo, name and description', async () => {
+    const { container } = renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Test Partner Channel')).toBeTruthy();
+      expect(screen.getByText('Test Community Channel')).toBeTruthy();
     });
 
-    expect(calls.some(c => c.url.endsWith('/api/partners/channels') && c.method === 'GET')).toBe(true);
+    expect(mockList).toHaveBeenCalled();
+    expect(screen.getByText('A great community channel')).toBeTruthy();
+    expect(screen.getByText('https://t.me/test')).toBeTruthy();
     expect(screen.getByText('partner')).toBeTruthy();
     expect(screen.getByText('Active')).toBeTruthy();
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toBe('https://example.com/logo.png');
   });
 
-  it('delete flow calls DELETE /api/partners/channels/{id} and refreshes the list', async () => {
-    const { handler, calls } = makeFetchHandler();
-    installFetch(handler);
-
-    render(
-      <MemoryRouter>
-        <PartnerChannels />
-      </MemoryRouter>
-    );
+  it('delete flow calls deleteCommunityChannel(id) and refreshes the list', async () => {
+    renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Test Partner Channel')).toBeTruthy();
+      expect(screen.getByText('Test Community Channel')).toBeTruthy();
     });
 
-    const deleteButton = screen.getByLabelText('Delete');
     await act(async () => {
-      fireEvent.click(deleteButton);
+      fireEvent.click(screen.getByLabelText('Delete'));
     });
 
     await waitFor(() => {
-      expect(
-        calls.some(c => c.url.endsWith('/api/partners/channels/ch-1') && c.method === 'DELETE'),
-      ).toBe(true);
+      expect(mockDelete).toHaveBeenCalledWith('ch-1');
     });
-
     await waitFor(() => {
-      const listCalls = calls.filter(
-        c => c.url.endsWith('/api/partners/channels') && c.method === 'GET',
-      );
-      expect(listCalls.length).toBeGreaterThanOrEqual(2);
+      expect(mockList.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 
-  it('create button opens the form modal', async () => {
-    const { handler } = makeFetchHandler();
-    installFetch(handler);
-
-    render(
-      <MemoryRouter>
-        <PartnerChannels />
-      </MemoryRouter>
-    );
+  it('create button opens the form modal with the logo field', async () => {
+    renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('Test Partner Channel')).toBeTruthy();
+      expect(screen.getByText('Test Community Channel')).toBeTruthy();
     });
 
     await act(async () => {
@@ -185,5 +130,6 @@ describe('PartnerChannels page', () => {
     await waitFor(() => {
       expect(screen.getByText('New channel')).toBeTruthy();
     });
+    expect(screen.getByLabelText('Logo URL')).toBeTruthy();
   });
 });

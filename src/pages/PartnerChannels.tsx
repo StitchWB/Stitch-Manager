@@ -7,92 +7,63 @@ import {
   Loader2,
   AlertCircle,
   Crown,
-  Send,
-  MessageCircle,
-  Github,
-  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
 import { BadgeChip } from '../components/friends/BadgeChip';
+import { ChannelLogo } from '../components/friends/ChannelLogo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Select } from '@/components/ui/Select';
 import { Toggle } from '@/components/ui/Toggle';
-import { Checkbox } from '@/components/ui/Checkbox';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
-import { TierBadge } from '@/components/ui/TierBadge';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '../stores/app';
 import {
-  listPartnerChannels,
-  createPartnerChannel,
-  updatePartnerChannel,
-  deletePartnerChannel,
-  type PartnerChannel,
-  type PartnerChannelForm,
-  type PartnerChannelType,
-  type PartnerBadge,
-  type PartnerGrantRole,
-} from '../lib/backend/modules/partners';
+  listCommunityChannels,
+  createCommunityChannel,
+  updateCommunityChannel,
+  deleteCommunityChannel,
+  type ChannelItem,
+  type ChannelForm,
+  type ChannelType,
+  type ChannelBadge,
+} from '../lib/backend/modules/communityChannels';
 
-const TYPE_ICON: Record<PartnerChannelType, typeof Send> = {
-  telegram: Send,
-  discord: MessageCircle,
-  github: Github,
-  other: Globe,
-};
-
-const TYPE_OPTIONS: { value: PartnerChannelType; label: string }[] = [
+const TYPE_OPTIONS: { value: ChannelType; label: string }[] = [
   { value: 'telegram', label: 'Telegram' },
   { value: 'discord', label: 'Discord' },
   { value: 'github', label: 'GitHub' },
   { value: 'other', label: 'Other' },
 ];
 
-const BADGE_OPTIONS: { value: PartnerBadge; label: string }[] = [
+const BADGE_OPTIONS: { value: NonNullable<ChannelBadge>; label: string }[] = [
   { value: 'friend', label: 'friend' },
   { value: 'partner', label: 'partner' },
   { value: 'official', label: 'official' },
 ];
 
-// Server hard cap: only these roles are ever offered/accepted for grants.
-const GRANT_ROLE_OPTIONS: PartnerGrantRole[] = ['user', 'vip', 'premium'];
-
 interface FormModalProps {
-  channel: PartnerChannel | null; // null = create mode
+  channel: ChannelItem | null; // null = create mode
   onClose: () => void;
   onSaved: () => Promise<void>;
 }
 
-function PartnerChannelFormModal({ channel, onClose, onSaved }: FormModalProps) {
+function ChannelFormModal({ channel, onClose, onSaved }: FormModalProps) {
   const [title, setTitle] = useState(channel?.title ?? '');
   const [url, setUrl] = useState(channel?.url ?? '');
   const [description, setDescription] = useState(channel?.description ?? '');
-  const [type, setType] = useState<PartnerChannelType>(channel?.type ?? 'telegram');
-  const [badge, setBadge] = useState<PartnerBadge>(channel?.badge ?? 'friend');
-  const [tgChatId, setTgChatId] = useState(
-    channel?.tg_chat_id != null ? String(channel.tg_chat_id) : '',
-  );
-  const [owner, setOwner] = useState(channel?.owner_telegram_id ?? '');
-  const [roles, setRoles] = useState<PartnerGrantRole[]>(
-    channel && channel.allowed_grant_roles.length > 0 ? channel.allowed_grant_roles : ['user'],
-  );
-  const [maxMembers, setMaxMembers] = useState(
-    channel?.max_members != null ? String(channel.max_members) : '',
-  );
+  const [logoUrl, setLogoUrl] = useState(channel?.logo_url ?? '');
+  const [type, setType] = useState<ChannelType>(channel?.type ?? 'telegram');
+  const [badge, setBadge] = useState<NonNullable<ChannelBadge>>(channel?.badge ?? 'friend');
   const [active, setActive] = useState(channel?.active ?? true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  const toggleRole = (role: PartnerGrantRole, checked: boolean) => {
-    setRoles(prev => (checked ? [...prev, role] : prev.filter(r => r !== role)));
-  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -103,57 +74,24 @@ function PartnerChannelFormModal({ channel, onClose, onSaved }: FormModalProps) 
       setFormError('friends.admin.errorValidation');
       return;
     }
-    if (roles.length === 0) {
-      setFormError('friends.admin.errorRoles');
-      return;
-    }
 
-    let parsedTgChatId: number | null = null;
-    if (tgChatId.trim()) {
-      const n = Number(tgChatId.trim());
-      if (!Number.isInteger(n)) {
-        setFormError('friends.admin.errorTgChatId');
-        return;
-      }
-      parsedTgChatId = n;
-    }
-
-    const ownerTrim = owner.trim().replace(/^@/, '');
-    if (ownerTrim && !/^\d+$/.test(ownerTrim)) {
-      setFormError('friends.admin.errorOwnerNumeric');
-      return;
-    }
-
-    let parsedMaxMembers: number | null = null;
-    if (maxMembers.trim()) {
-      const n = Number(maxMembers.trim());
-      if (!Number.isInteger(n) || n <= 0) {
-        setFormError('friends.admin.errorMaxMembers');
-        return;
-      }
-      parsedMaxMembers = n;
-    }
-
-    const form: PartnerChannelForm = {
+    const form: ChannelForm = {
       title: title.trim(),
       url: url.trim(),
       description: description.trim() || null,
+      logo_url: logoUrl.trim() || null,
       type,
       badge,
-      tg_chat_id: parsedTgChatId,
-      owner_telegram_id: ownerTrim || null,
-      allowed_grant_roles: roles,
-      max_members: parsedMaxMembers,
       active,
     };
 
     setSaving(true);
     try {
       if (channel) {
-        await updatePartnerChannel(channel.id, form);
+        await updateCommunityChannel(channel.id, form);
         toast.success(t('friends.admin.updated'));
       } else {
-        await createPartnerChannel(form);
+        await createCommunityChannel(form);
         toast.success(t('friends.admin.created'));
       }
       onClose();
@@ -208,63 +146,24 @@ function PartnerChannelFormModal({ channel, onClose, onSaved }: FormModalProps) 
           <Select
             label={t('friends.admin.fieldType')}
             value={type}
-            onValueChange={v => setType(v as PartnerChannelType)}
+            onValueChange={v => setType(v as ChannelType)}
             options={TYPE_OPTIONS}
           />
           <Select
             label={t('friends.admin.fieldBadge')}
             value={badge}
-            onValueChange={v => setBadge(v as PartnerBadge)}
+            onValueChange={v => setBadge(v as NonNullable<ChannelBadge>)}
             options={BADGE_OPTIONS}
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input
-            label={t('friends.admin.fieldTgChatId')}
-            hint={t('friends.admin.fieldTgChatIdHint')}
-            value={tgChatId}
-            onChange={e => setTgChatId(e.target.value)}
-            inputMode="numeric"
-            autoComplete="off"
-          />
-          <Input
-            label={t('friends.admin.fieldMaxMembers')}
-            hint={t('friends.admin.fieldMaxMembersHint')}
-            value={maxMembers}
-            onChange={e => setMaxMembers(e.target.value)}
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </div>
-
         <Input
-          label={t('friends.admin.fieldOwner')}
-          hint={t('friends.admin.fieldOwnerHint')}
-          value={owner}
-          onChange={e => setOwner(e.target.value)}
-          placeholder="@username or 123456789"
+          label={t('friends.admin.fieldLogoUrl')}
+          value={logoUrl}
+          onChange={e => setLogoUrl(e.target.value)}
+          placeholder="https://..."
           autoComplete="off"
         />
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-slate-400">
-            {t('friends.admin.fieldRoles')}
-          </span>
-          <div className="flex items-center gap-2">
-            {GRANT_ROLE_OPTIONS.map(role => (
-              <Checkbox
-                key={role}
-                label={<TierBadge tier={role} />}
-                checked={roles.includes(role)}
-                onChange={e => toggleRole(role, e.target.checked)}
-              />
-            ))}
-          </div>
-          <span className="text-[10px] text-slate-500 leading-tight">
-            {t('friends.admin.fieldRolesHint')}
-          </span>
-        </div>
 
         <Toggle
           label={t('friends.admin.fieldActive')}
@@ -296,16 +195,16 @@ function PartnerChannelFormModal({ channel, onClose, onSaved }: FormModalProps) 
 }
 
 interface AdminSectionProps {
-  channels: PartnerChannel[];
+  channels: ChannelItem[];
   loading: boolean;
   error: string | null;
   onRefresh: () => Promise<void>;
-  onEdit: (channel: PartnerChannel) => void;
+  onEdit: (channel: ChannelItem) => void;
   onCreate: () => void;
-  onDelete: (channel: PartnerChannel) => void;
+  onDelete: (channel: ChannelItem) => void;
 }
 
-function PartnerAdminSection({
+function ChannelAdminSection({
   channels,
   loading,
   error,
@@ -360,23 +259,14 @@ function PartnerAdminSection({
                 <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {t('friends.admin.colTitle')}
                 </TableHead>
-                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">
-                  {t('friends.admin.colType')}
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  {t('friends.admin.colDescription')}
+                </TableHead>
+                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  {t('friends.admin.colUrl')}
                 </TableHead>
                 <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-28">
                   {t('friends.admin.colBadge')}
-                </TableHead>
-                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">
-                  {t('friends.admin.colMembers')}
-                </TableHead>
-                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-40">
-                  {t('friends.admin.colRoles')}
-                </TableHead>
-                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">
-                  {t('friends.admin.colQuota')}
-                </TableHead>
-                <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-32">
-                  {t('friends.admin.colOwner')}
                 </TableHead>
                 <TableHead className="px-5 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider w-24">
                   {t('friends.admin.colStatus')}
@@ -387,93 +277,77 @@ function PartnerAdminSection({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {channels.map(ch => {
-                const Icon = TYPE_ICON[ch.type] ?? Globe;
-                return (
-                  <TableRow
-                    key={ch.id}
-                    className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors"
-                  >
-                    <TableCell className="px-5 py-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-full bg-white/5 text-slate-400 flex items-center justify-center shrink-0">
-                          <Icon className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-slate-200 font-medium truncate">{ch.title}</div>
-                          {ch.tg_chat_id != null && (
-                            <div className="text-[10px] text-slate-500 font-mono">
-                              {ch.tg_chat_id}
-                            </div>
-                          )}
-                        </div>
+              {channels.map(ch => (
+                <TableRow
+                  key={ch.id}
+                  className="border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors"
+                >
+                  <TableCell className="px-5 py-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <ChannelLogo
+                        src={ch.logo_url}
+                        type={ch.type}
+                        className="w-7 h-7 rounded-full text-slate-400"
+                        iconSize={14}
+                      />
+                      <div className="text-slate-200 font-medium truncate">{ch.title}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
+                    {ch.description ? (
+                      <div className="text-slate-400 text-xs max-w-[280px] truncate">
+                        {ch.description}
                       </div>
-                    </TableCell>
-                    <TableCell className="px-5 py-3 text-slate-400 text-xs">{ch.type}</TableCell>
-                    <TableCell className="px-5 py-3">
+                    ) : (
+                      <span className="text-slate-600 text-sm">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
+                    <div className="text-slate-400 text-xs max-w-[200px] truncate">{ch.url}</div>
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
+                    {ch.badge ? (
                       <BadgeChip badge={ch.badge} />
-                    </TableCell>
-                    <TableCell className="px-5 py-3 text-slate-300">
-                      {ch.member_count ?? <span className="text-slate-600">—</span>}
-                    </TableCell>
-                    <TableCell className="px-5 py-3">
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {ch.allowed_grant_roles.map(role => (
-                          <TierBadge key={role} tier={role} size="sm" />
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-5 py-3 text-slate-300">
-                      {ch.max_members ?? (
-                        <span className="text-slate-500 text-xs">{t('friends.admin.unlimited')}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-5 py-3">
-                      {ch.owner_telegram_id ? (
-                        <span className="text-slate-300 text-xs font-mono truncate">
-                          {ch.owner_telegram_id}
-                        </span>
-                      ) : (
-                        <span className="text-slate-600 text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-5 py-3">
-                      <Badge
-                        variant={ch.active ? 'success' : 'default'}
-                        size="sm"
-                        withDot
-                        className="normal-case"
-                      >
-                        {ch.active ? t('friends.admin.statusActive') : t('friends.admin.statusInactive')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-5 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Tooltip content={t('friends.admin.edit')} side="top">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onEdit(ch)}
-                            leftIcon={<Pencil className="w-3.5 h-3.5" />}
-                            className="text-slate-500 hover:text-indigo-400"
-                            aria-label={t('friends.admin.edit')}
-                          />
-                        </Tooltip>
-                        <Tooltip content={t('friends.admin.delete')} side="top">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onDelete(ch)}
-                            leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                            className="text-slate-500 hover:text-red-400"
-                            aria-label={t('friends.admin.delete')}
-                          />
-                        </Tooltip>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                    ) : (
+                      <span className="text-slate-600 text-sm">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
+                    <Badge
+                      variant={ch.active ? 'success' : 'default'}
+                      size="sm"
+                      withDot
+                      className="normal-case"
+                    >
+                      {ch.active ? t('friends.admin.statusActive') : t('friends.admin.statusInactive')}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Tooltip content={t('friends.admin.edit')} side="top">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onEdit(ch)}
+                          leftIcon={<Pencil className="w-3.5 h-3.5" />}
+                          className="text-slate-500 hover:text-indigo-400"
+                          aria-label={t('friends.admin.edit')}
+                        />
+                      </Tooltip>
+                      <Tooltip content={t('friends.admin.delete')} side="top">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDelete(ch)}
+                          leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                          className="text-slate-500 hover:text-red-400"
+                          aria-label={t('friends.admin.delete')}
+                        />
+                      </Tooltip>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </div>
@@ -482,13 +356,13 @@ function PartnerAdminSection({
   );
 }
 
-type FormTarget = { mode: 'create' } | { mode: 'edit'; channel: PartnerChannel };
+type FormTarget = { mode: 'create' } | { mode: 'edit'; channel: ChannelItem };
 
 export default function PartnerChannels() {
   const language = useAppStore(s => s.language);
   void language; // force re-render on locale change (t() is not reactive)
 
-  const [channels, setChannels] = useState<PartnerChannel[]>([]);
+  const [channels, setChannels] = useState<ChannelItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formTarget, setFormTarget] = useState<FormTarget | null>(null);
@@ -497,7 +371,7 @@ export default function PartnerChannels() {
     setLoading(true);
     setError(null);
     try {
-      setChannels(await listPartnerChannels());
+      setChannels(await listCommunityChannels());
     } catch (err) {
       setError(
         err instanceof Error && err.message ? err.message : t('friends.admin.loadFailed'),
@@ -512,7 +386,7 @@ export default function PartnerChannels() {
     void refreshChannels();
   }, [refreshChannels]);
 
-  const onDelete = async (channel: PartnerChannel) => {
+  const onDelete = async (channel: ChannelItem) => {
     const confirmed = await askConfirm({
       title: t('friends.admin.deleteTitle'),
       message: t('friends.admin.deleteMessage', { title: channel.title }),
@@ -522,7 +396,7 @@ export default function PartnerChannels() {
     if (!confirmed) return;
 
     try {
-      await deletePartnerChannel(channel.id);
+      await deleteCommunityChannel(channel.id);
       toast.success(t('friends.admin.deleted'));
       await refreshChannels();
     } catch (err) {
@@ -542,7 +416,7 @@ export default function PartnerChannels() {
 
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-[1400px] mx-auto">
-          <PartnerAdminSection
+          <ChannelAdminSection
             channels={channels}
             loading={loading}
             error={error}
@@ -555,7 +429,7 @@ export default function PartnerChannels() {
       </div>
 
       {formTarget && (
-        <PartnerChannelFormModal
+        <ChannelFormModal
           channel={formTarget.mode === 'edit' ? formTarget.channel : null}
           onClose={() => setFormTarget(null)}
           onSaved={refreshChannels}

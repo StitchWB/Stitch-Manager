@@ -3,8 +3,9 @@
 The distribution server owns the partner-channel catalog (single source of
 truth, Feature 1).  This module is the backend's client:
 
-  - :func:`load_friends` — friends directory for the web UI: server catalog
-    (60 s cache) with the bundled ``friends.json`` as offline fallback.
+  - :func:`load_friends` — friends directory for the web UI: local
+    ``community_channels`` rows merged over the server catalog (60 s
+    cache), with the bundled ``friends.json`` as offline fallback.
   - :func:`seed_partner_channels` — startup migration: pushes bundled
     ``friends.json`` entries to the server, idempotent by ``url`` (the file
     is seed-only afterwards; admin CRUD is the new source of truth).
@@ -31,6 +32,7 @@ from stitch_backend.domains.plugin_distribution.config import (
     standalone_mode,
 )
 
+from .channel_service import list_channels
 from .models import FriendItem
 from .partner_models import PartnerMember
 from .service import load_bundled_friends
@@ -87,16 +89,51 @@ def _map_channels(channels: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return items
 
 
-async def load_friends() -> list[dict[str, Any]]:
-    """Friends directory: server partner catalog, bundled file as fallback."""
+def _local_friend_items(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Active local channels in the FriendItem dict shape."""
+    return [
+        {
+            "id": row["id"],
+            "type": row["type"],
+            "title": row["title"],
+            "url": row["url"],
+            "description": row["description"],
+            "badge": row["badge"],
+            "logo_url": row["logo_url"],
+        }
+        for row in rows
+        if row["active"]
+    ]
+
+
+def _merge_by_url(
+    local: list[dict[str, Any]], remote: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Local rows first; remote rows whose url is not taken locally appended."""
+    merged = list(local)
+    seen = {item["url"] for item in local}
+    for item in remote:
+        if item["url"] in seen:
+            continue
+        merged.append(item)
+        seen.add(item["url"])
+    return merged
+
+
+async def load_friends(db: AsyncSession) -> list[dict[str, Any]]:
+    """Friends directory: local catalog merged over the server/bundled source."""
+    local = _local_friend_items(await list_channels(db))
     if not standalone_mode():
         try:
             channels = await fetch_active_channels()
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning("Partner catalog unavailable, using bundled friends: %s", exc)
+            remote = load_bundled_friends()
         else:
-            return _map_channels(channels)
-    return load_bundled_friends()
+            remote = _map_channels(channels)
+    else:
+        remote = load_bundled_friends()
+    return _merge_by_url(local, remote)
 
 
 def _seedable_url(url: str) -> bool:
