@@ -9,6 +9,7 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { DemoAppFrame } from '@/components/landing/DemoAppFrame';
+import { useMarketplaceStore } from '@/stores/marketplace';
 
 jest.mock('@/lib/events', () => ({
   listen: jest.fn(async () => jest.fn()),
@@ -73,6 +74,19 @@ async function openDemoChatRoute(): Promise<void> {
     fireEvent.click(testChatCard);
   });
 }
+
+describe('DemoAppFrame demo seeds', () => {
+  it('renders the seeded dashboard without tripping the demo error boundary', async () => {
+    render(<DemoAppFrame />);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(Array.isArray(useMarketplaceStore.getState().items)).toBe(true);
+    expect(screen.queryByText(/Demo page failed to render/)).toBeNull();
+  });
+});
 
 describe('DemoAppFrame AI Hub routes', () => {
   it('renders Chat at /ai/chat instead of the AiProviders section fallback', async () => {

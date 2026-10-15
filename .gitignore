@@ -63,6 +63,7 @@ python/autoreg/debug_sessions/
 *.png
 !resources/icons/app-icon.png
 !resources/branding/*.png
+!public/*.png
 !src/assets/providers/*.png
 debug_*.png
 error_*.png

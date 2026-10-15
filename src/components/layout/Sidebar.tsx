@@ -7,7 +7,6 @@ import {
   Code,
   Settings,
   FileText,
-  Terminal,
   Mail,
   ChevronLeft,
   ChevronRight,
@@ -150,9 +149,11 @@ export default function Sidebar() {
       {/* Logo */}
       <div className={cn('h-20 flex items-center mb-2', sidebarCollapsed ? 'px-3 justify-center' : 'px-5')}>
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="rounded-xl w-10 h-10 flex items-center justify-center shrink-0 bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-xl shadow-indigo-900/40">
-            <Terminal className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/stitchwb-mark.png"
+            alt="StitchWB"
+            className="w-10 h-10 shrink-0 object-contain"
+          />
           {!sidebarCollapsed &&
             <div className="flex flex-col min-w-0 animate-in fade-in slide-in-from-left-2 duration-500">
               <h1 className="text-white text-base font-black tracking-tighter leading-tight truncate uppercase">{t("common.sidebar.stitch")}
