@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { HeartHandshake, Users as UsersIcon, Crown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { HeartHandshake, Users as UsersIcon, Crown, Plus } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { FriendCard } from '../components/friends/FriendCard';
 import { BadgeChip } from '../components/friends/BadgeChip';
@@ -12,7 +13,7 @@ import { TierBadge } from '@/components/ui/TierBadge';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '../stores/app';
 import { useFriendsStore } from '../stores/friends';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore, effectiveRole } from '../stores/auth';
 import { getMyPartnerChannel, type MyPartnerInfo } from '../lib/backend/modules/partners';
 
 function MyChannelPanel({ info }: { info: MyPartnerInfo }) {
@@ -70,6 +71,8 @@ export default function Friends() {
   const fetchFriends = useFriendsStore(s => s.fetchFriends);
 
   const authUser = useAuthStore(s => s.user);
+  const navigate = useNavigate();
+  const isAdmin = effectiveRole(authUser) === 'admin';
 
   const [myInfo, setMyInfo] = useState<MyPartnerInfo | null>(null);
 
@@ -94,6 +97,18 @@ export default function Friends() {
         title={t('friends.title')}
         subtitle={t('friends.subtitle')}
         icon={<HeartHandshake size={18} />}
+        actions={
+          isAdmin ? (
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={14} />}
+              onClick={() => navigate('/partners')}
+            >
+              {t('friends.admin.add')}
+            </Button>
+          ) : undefined
+        }
       />
 
       <div className="flex-1 overflow-y-auto p-6">
