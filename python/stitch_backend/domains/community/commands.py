@@ -7,12 +7,17 @@
 
 from __future__ import annotations
 
-from stitch_backend.core.command_registry import register_command
+from typing import TYPE_CHECKING, Any
+
+from stitch_backend.core.command_decorator import command
 
 from .partner_service import load_friends
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
-@register_command("get_friends", readonly=True)
-async def cmd_get_friends(params: dict) -> dict:
+
+@command("get_friends", readonly=True)
+async def cmd_get_friends(db: AsyncSession, params: dict) -> dict[str, Any]:
     """Return the community friends/channels directory."""
-    return {"items": await load_friends()}
+    return {"items": await load_friends(db)}

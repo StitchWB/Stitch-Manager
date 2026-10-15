@@ -232,6 +232,7 @@ const COMMAND_PAYLOADS: Record<string, unknown> = {
   proxy_keys_list: { baseUrl: '', keys: [], pool: { personal: 0, legacy: 0, groups: [] } },
   get_marketplace: { items: [], activated: false, feeds: null },
   get_friends: { items: [] },
+  community_channels_list: { items: [] },
   get_radar_stats: { services: 0, offers: 0, active: 0, dead: 0, by_type: {} },
   get_radar_offers: { items: [], total: 0 },
   groups_list: { groups: [], invites: [] },

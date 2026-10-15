@@ -215,6 +215,7 @@ def import_command_modules() -> None:
     import stitch_backend.domains.aws_accounts.commands  # noqa: F401
     import stitch_backend.domains.background_manager.commands  # noqa: F401
     import stitch_backend.domains.browser.commands  # noqa: F401
+    import stitch_backend.domains.community.channel_commands  # noqa: F401
     import stitch_backend.domains.community.commands  # noqa: F401
     import stitch_backend.domains.composed_flows.commands  # noqa: F401
     import stitch_backend.domains.email.commands  # noqa: F401
