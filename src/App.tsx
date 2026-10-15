@@ -298,7 +298,7 @@ function App() {
   const authView = useAuthStore(state => state.authView);
   const authInit = useAuthStore(state => state.init);
   const location = useLocation();
-  const isCatalogRoute = location.pathname === '/catalog';
+  const isCatalogRoute = location.pathname === '/store';
 
   const hasInitialized = useRef(false);
 
@@ -547,7 +547,7 @@ function App() {
     if (isDesktopApp()) {
       return <Login />;
     }
-    // Web default surface; /catalog stays browsable while logged out.
+    // Web default surface; /store stays browsable while logged out.
     return isCatalogRoute ? <CatalogPage /> : <Landing />;
   } else if (authEnabled && !authGuest) {
     // Optional auth, not yet a guest: TelegramLogin is the merged root
@@ -595,7 +595,7 @@ function App() {
             <Route path="/friends" element={<Friends />} />
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Public plugin catalog — same page the logged-out gate serves */}
-            <Route path="/catalog" element={<CatalogPage authenticated={Boolean(authUser)} />} />
+            <Route path="/store" element={<CatalogPage authenticated={Boolean(authUser)} />} />
             {/* Product surface — open to any authenticated user */}
             <Route path="/autoreg" element={<AutoReg />} />
             {/* AI Hub — vertical rail layout shared by all /ai/* pages */}
