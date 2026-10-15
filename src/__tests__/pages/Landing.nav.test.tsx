@@ -1,7 +1,7 @@
 /**
  * Landing nav test.
  *
- * The public landing header links to the public /catalog marketplace
+ * The public landing header links to the public /store marketplace
  * page so logged-out visitors can browse plugins.
  */
 
@@ -42,7 +42,7 @@ jest.mock('../../stores/auth', () => ({
 }));
 
 describe('Landing nav', () => {
-  it('links to the public /catalog marketplace page', () => {
+  it('links to the public /store marketplace page', () => {
     render(
       <MemoryRouter>
         <Landing />
@@ -50,6 +50,6 @@ describe('Landing nav', () => {
     );
 
     const link = screen.getByRole('link', { name: /маркетплейс|marketplace/i });
-    expect(link.getAttribute('href')).toBe('/catalog');
+    expect(link.getAttribute('href')).toBe('/store');
   });
 });

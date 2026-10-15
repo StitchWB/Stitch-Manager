@@ -300,7 +300,7 @@ export default function Landing({ authenticated = false }: LandingProps) {
             </div>
             <nav className="flex items-center gap-1.5">
               <Link
-                to="/catalog"
+                to="/store"
                 className="flex items-center gap-2 h-10 px-4 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors"
               >
                 <Store className="w-4 h-4" />

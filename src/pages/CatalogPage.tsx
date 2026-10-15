@@ -1,5 +1,5 @@
 /**
- * Public plugin catalog — /catalog.
+ * Public plugin catalog — /store.
  *
  * Rendered standalone for logged-out web visitors (the App auth gate
  * mounts it instead of the Landing / TelegramLogin root) and inside the
