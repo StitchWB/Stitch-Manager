@@ -248,7 +248,7 @@ describe('CatalogPage', () => {
           {
             version: '1.1.0',
             date: '2026-10-01',
-            changes: ['Change A', 'Change B', 'Change C', 'Change D', 'Change E'],
+            changes: [{ en: 'Change A', ru: 'Смена А' }, 'Change B', 'Change C', 'Change D', 'Change E'],
           },
           { version: '1.0.0', date: '2026-09-01', changes: ['Initial release'] },
         ],

@@ -37,7 +37,7 @@ export interface CatalogEntry {
   /** Single emoji from the plugin manifest. */
   icon: string | null;
   features: Array<{ title: string | CatalogI18nText; status: string }> | null;
-  changelog: Array<{ version: string; date: string; changes: string[] }> | null;
+  changelog: Array<{ version: string; date: string; changes: Array<string | CatalogI18nText> }> | null;
   homepage: string | null;
   repository: string | null;
   /** Present only on community-approved entries. */
