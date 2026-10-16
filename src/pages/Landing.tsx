@@ -301,33 +301,36 @@ export default function Landing({ authenticated = false }: LandingProps) {
             <nav className="flex items-center gap-1.5">
               <Link
                 to="/store"
-                className="flex items-center gap-2 h-10 px-4 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-white/[0.05] transition-colors"
+                className="flex items-center gap-2 h-10 px-4 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
               >
-                <Store className="w-4 h-4" />
-                Маркетплейс / Marketplace
+                <Store className="w-4 h-4 shrink-0" />
+                <span className="hidden md:inline">Маркетплейс / Marketplace</span>
               </Link>
               <IconButton
                 onClick={() => openExternal(GITHUB_URL)}
                 aria-label="GitHub"
-                className="text-slate-400 w-10 h-10"
+                tooltip="GitHub"
+                className="text-slate-400 hover:text-white hover:bg-white/[0.06] w-10 h-10 rounded-lg"
               >
                 <Github className="w-5 h-5" />
               </IconButton>
               <IconButton
                 onClick={() => openExternal(TELEGRAM_URL)}
                 aria-label="Telegram"
-                className="text-slate-400 w-10 h-10"
+                tooltip="Telegram"
+                className="text-slate-400 hover:text-white hover:bg-white/[0.06] w-10 h-10 rounded-lg"
               >
                 <Send className="w-5 h-5" />
               </IconButton>
               <IconButton
                 onClick={() => openExternal(DOWNLOAD_URL)}
                 aria-label="Скачать / Download"
-                className="text-slate-400 w-10 h-10"
+                tooltip="Скачать / Download"
+                className="text-slate-400 hover:text-white hover:bg-white/[0.06] w-10 h-10 rounded-lg"
               >
                 <Download className="w-5 h-5" />
               </IconButton>
-              <ButtonBase onClick={primaryAction} className={cn(GRADIENT_CTA, 'ml-2 h-10 px-5 text-sm')}>
+              <ButtonBase onClick={primaryAction} className={cn(GRADIENT_CTA, 'ml-1.5 h-10 px-5 text-sm')}>
                 <PrimaryIcon className="w-4 h-4" />
                 {primaryLabel}
               </ButtonBase>
