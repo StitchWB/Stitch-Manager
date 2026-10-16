@@ -23,6 +23,10 @@ export const catalog: CatalogTranslations = {
     emptyTitle: "Плагинов пока нет",
     emptyDesc: "Каталог пуст — загляните позже.",
     noDescription: "Без описания",
+    detailsToggle: "Подробнее",
+    linkHomepage: "Сайт",
+    linkRepository: "Репозиторий",
+    changelogTitle: "Последние изменения",
     status: {
       stable: "Стабильный",
       beta: "Бета",

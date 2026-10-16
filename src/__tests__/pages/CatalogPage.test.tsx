@@ -169,6 +169,124 @@ describe('CatalogPage', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
+  it('renders author, version, category and badge chips on the card', async () => {
+    jest.spyOn(catalogModule, 'getCatalog').mockResolvedValue([
+      mk({
+        id: 'rich',
+        name: 'Rich Plugin',
+        version: '2026.10.10',
+        author: 'WhiteBite',
+        category: 'ai-tools',
+        status: 'stable',
+        badges: ['recommended'],
+      }),
+      mk({ id: 'uncat', name: 'Uncat Plugin', category: 'weird-cat' }),
+    ]);
+
+    render(
+      <MemoryRouter>
+        <CatalogPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Rich Plugin')).toBeTruthy();
+    });
+    expect(screen.getByText('v2026.10.10')).toBeTruthy();
+    expect(screen.getByText('Author: WhiteBite')).toBeTruthy();
+    expect(screen.getByText('AI tools')).toBeTruthy();
+    expect(screen.getByText('Recommended')).toBeTruthy();
+    expect(screen.getByText('weird-cat')).toBeTruthy();
+  });
+
+  it('renders homepage/repository anchors in a new tab only when present', async () => {
+    jest.spyOn(catalogModule, 'getCatalog').mockResolvedValue([
+      mk({
+        id: 'linked',
+        name: 'Linked Plugin',
+        homepage: 'https://example.com/home',
+        repository: 'https://github.com/org/repo',
+      }),
+      mk({ id: 'plain', name: 'Plain Plugin' }),
+    ]);
+
+    render(
+      <MemoryRouter>
+        <CatalogPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Linked Plugin')).toBeTruthy();
+    });
+
+    const homepage = screen.getByRole('link', { name: 'Homepage' });
+    expect(homepage.getAttribute('href')).toBe('https://example.com/home');
+    expect(homepage.getAttribute('target')).toBe('_blank');
+    expect(homepage.getAttribute('rel')).toBe('noreferrer');
+
+    const repository = screen.getByRole('link', { name: 'Repository' });
+    expect(repository.getAttribute('href')).toBe('https://github.com/org/repo');
+    expect(repository.getAttribute('target')).toBe('_blank');
+
+    expect(screen.getAllByRole('link', { name: 'Homepage' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: 'Repository' })).toHaveLength(1);
+  });
+
+  it('details toggle expands features and the latest changelog entry', async () => {
+    const user = userEvent.setup();
+    jest.spyOn(catalogModule, 'getCatalog').mockResolvedValue([
+      mk({
+        id: 'detailed',
+        name: 'Detailed Plugin',
+        version: '1.0.0',
+        features: [
+          { title: { en: 'Feature One', ru: 'Фича один' }, status: 'stable' },
+          { title: 'Plain feature', status: 'planned' },
+        ],
+        changelog: [
+          {
+            version: '1.1.0',
+            date: '2026-10-01',
+            changes: ['Change A', 'Change B', 'Change C', 'Change D', 'Change E'],
+          },
+          { version: '1.0.0', date: '2026-09-01', changes: ['Initial release'] },
+        ],
+      }),
+    ]);
+
+    render(
+      <MemoryRouter>
+        <CatalogPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Detailed Plugin')).toBeTruthy();
+    });
+    expect(screen.getByText('Updated: 2026-10-01')).toBeTruthy();
+    expect(screen.queryByText('Feature One')).toBeNull();
+    expect(screen.queryByText('Change A')).toBeNull();
+
+    const toggle = screen.getByRole('button', { name: /details/i });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await user.click(toggle);
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Feature One')).toBeTruthy();
+    expect(screen.getByText('Plain feature')).toBeTruthy();
+    expect(screen.getByText('Latest changes')).toBeTruthy();
+    expect(screen.getByText('1.1.0')).toBeTruthy();
+    expect(screen.getByText('Change A')).toBeTruthy();
+    expect(screen.getByText('Change D')).toBeTruthy();
+    expect(screen.queryByText('Change E')).toBeNull();
+    expect(screen.queryByText('Initial release')).toBeNull();
+
+    await user.click(toggle);
+    expect(screen.queryByText('Feature One')).toBeNull();
+    expect(screen.queryByText('Change A')).toBeNull();
+  });
+
   it('logged-out card CTA opens the login surface', async () => {
     const user = userEvent.setup();
     jest.spyOn(catalogModule, 'getCatalog').mockResolvedValue([mk()]);
