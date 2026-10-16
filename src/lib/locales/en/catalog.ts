@@ -23,6 +23,10 @@ export const catalog: CatalogTranslations = {
     emptyTitle: "No plugins yet",
     emptyDesc: "The catalog is empty — check back later.",
     noDescription: "No description",
+    detailsToggle: "Details",
+    linkHomepage: "Homepage",
+    linkRepository: "Repository",
+    changelogTitle: "Latest changes",
     status: {
       stable: "Stable",
       beta: "Beta",

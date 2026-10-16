@@ -11,7 +11,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Loader2, LogIn, Package, Search, Store } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  Github,
+  Globe,
+  Loader2,
+  LogIn,
+  Package,
+  Search,
+  Store,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
@@ -20,8 +33,12 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { ToolbarSearchField } from '@/components/ui/ToolbarSearchField';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { PluginBadgeChips } from '@/components/marketplace/PluginBadgeChips';
+import { CATEGORY_LABEL_KEYS } from '@/components/marketplace/categories';
+import type { MarketplaceCategory } from '@/lib/backend/modules/marketplace';
 import { getCatalog } from '@/lib/backend/modules/catalog';
-import type { CatalogEntry } from '@/lib/backend/modules/catalog';
+import type { CatalogEntry, CatalogI18nText } from '@/lib/backend/modules/catalog';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
 
@@ -33,9 +50,27 @@ const NAV_ITEM =
 
 type SourceFilter = 'all' | 'official' | 'community';
 
+const GHOST_FOOTER_BUTTON =
+  'inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10 active:scale-[0.98] transition-all';
+
+function localizedText(
+  value: string | CatalogI18nText | null | undefined,
+  language: string
+): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  const primary = language === 'ru' ? value.ru : value.en;
+  const secondary = language === 'ru' ? value.en : value.ru;
+  return primary || secondary || '';
+}
+
 function localizedDescription(entry: CatalogEntry, language: string): string {
-  const localized = language === 'ru' ? entry.description_i18n?.ru : entry.description_i18n?.en;
-  return localized || entry.description || '';
+  return localizedText(entry.description_i18n, language) || entry.description || '';
+}
+
+function categoryLabel(category: string): string {
+  const key = CATEGORY_LABEL_KEYS[category as MarketplaceCategory];
+  return key === undefined ? category : t(key);
 }
 
 function statusLabel(status: string): string {
@@ -51,6 +86,204 @@ function statusLabel(status: string): string {
     default:
       return status;
   }
+}
+
+interface CardLinkProps {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+/** External homepage/repository link styled like an IconButton. Plain <a>
+ * because the public page must not depend on the desktop shell. */
+function CardLink({ href, label, icon: Icon }: CardLinkProps) {
+  return (
+    <Tooltip content={label} side="top">
+      {/* eslint-disable-next-line react/forbid-elements -- external URL; react-router Link is internal-only */}
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={label}
+        onClick={e => e.stopPropagation()}
+        className="inline-flex items-center justify-center w-8 h-8 p-2 rounded transition-colors duration-200 text-slate-500 hover:text-white hover:bg-white/10 shrink-0"
+      >
+        <Icon className="w-4 h-4" aria-hidden="true" />
+      </a>
+    </Tooltip>
+  );
+}
+
+interface CatalogCardProps {
+  entry: CatalogEntry;
+  language: string;
+  ctaLabel: string;
+  ctaIcon: LucideIcon;
+  onCta: () => void;
+}
+
+function CatalogCard({ entry, language, ctaLabel, ctaIcon, onCta }: CatalogCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const description = localizedDescription(entry, language) || t('catalog.noDescription');
+  const isCommunity = entry.source !== undefined;
+  const latest = entry.changelog?.[0];
+  const features = entry.features ?? [];
+  const hasDetails = features.length > 0 || latest !== undefined;
+  const CtaIcon = ctaIcon;
+
+  return (
+    <GlassCard
+      gradient
+      className="rounded-2xl p-6 flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-500/25 hover:shadow-[0_10px_30px_rgba(99,102,241,0.12)]"
+    >
+      <div className="flex items-start gap-4">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-indigo-500/25 to-violet-500/10 ring-1 ring-inset ring-white/10">
+          {entry.icon ? (
+            <span aria-hidden className="text-xl leading-none">
+              {entry.icon}
+            </span>
+          ) : (
+            <Package className="w-5 h-5 text-indigo-300" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-bold text-white truncate" title={entry.name}>
+                {entry.name}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5" title={t('marketplace.versionLabel')}>
+                {`v${entry.version}`}
+              </div>
+            </div>
+            {(entry.homepage !== null || entry.repository !== null) && (
+              <div className="flex items-center gap-0.5 shrink-0 -my-1">
+                {entry.homepage !== null && (
+                  <CardLink
+                    href={entry.homepage}
+                    label={t('catalog.linkHomepage')}
+                    icon={Globe}
+                  />
+                )}
+                {entry.repository !== null && (
+                  <CardLink
+                    href={entry.repository}
+                    label={t('catalog.linkRepository')}
+                    icon={Github}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            <Badge
+              variant={isCommunity ? 'success' : 'indigo'}
+              size="sm"
+              className="normal-case tracking-normal text-[11px]"
+            >
+              {isCommunity ? t('catalog.sourceCommunity') : t('catalog.sourceOfficial')}
+            </Badge>
+            {entry.status !== null && (
+              <Badge variant="slate" size="sm" className="normal-case tracking-normal text-[11px]">
+                {statusLabel(entry.status)}
+              </Badge>
+            )}
+            {entry.category !== null && (
+              <Badge variant="slate" size="sm" className="normal-case tracking-normal text-[11px]">
+                {categoryLabel(entry.category)}
+              </Badge>
+            )}
+            <PluginBadgeChips badges={entry.badges} />
+          </div>
+        </div>
+      </div>
+      <p
+        className="text-sm text-slate-400 mt-3 leading-relaxed line-clamp-3"
+        title={description}
+      >
+        {description}
+      </p>
+      {(entry.author !== '' || latest?.date) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+          {entry.author !== '' && (
+            <span className="truncate">{`${t('marketplace.authorLabel')}: ${entry.author}`}</span>
+          )}
+          {latest?.date && <span>{`${t('logs.lastUpdated')}: ${latest.date}`}</span>}
+        </div>
+      )}
+      <div className="mt-auto pt-4 flex items-center justify-end gap-2">
+        {hasDetails && (
+          <ButtonBase
+            onClick={() => setExpanded(value => !value)}
+            aria-expanded={expanded}
+            className={cn(GHOST_FOOTER_BUTTON, 'mr-auto')}
+          >
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {t('catalog.detailsToggle')}
+          </ButtonBase>
+        )}
+        <ButtonBase onClick={onCta} className={GHOST_FOOTER_BUTTON}>
+          <CtaIcon className="w-4 h-4" />
+          {ctaLabel}
+        </ButtonBase>
+      </div>
+      {expanded && hasDetails && (
+        <div className="mt-3 pt-3 border-t border-white/[0.06] flex flex-col gap-4">
+          {features.length > 0 && (
+            <section>
+              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                {t('marketplace.featuresTitle')}
+              </h4>
+              <ul className="flex flex-col divide-y divide-white/[0.04]">
+                {features.map(feature => {
+                  const title = localizedText(feature.title, language);
+                  return (
+                    <li
+                      key={`${feature.status}:${title}`}
+                      className="flex items-center gap-3 py-1.5"
+                    >
+                      <span className="flex-1 min-w-0 text-xs text-slate-300">{title}</span>
+                      <Badge
+                        variant={feature.status === 'planned' ? 'outline' : feature.status === 'beta' ? 'warning' : 'success'}
+                        size="sm"
+                        className={cn(
+                          'shrink-0',
+                          feature.status === 'planned' &&
+                            'border-dashed border-slate-500/50 text-slate-400'
+                        )}
+                      >
+                        {statusLabel(feature.status)}
+                      </Badge>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+          {latest !== undefined && (
+            <section>
+              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                {t('catalog.changelogTitle')}
+              </h4>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs font-medium text-slate-200">{latest.version}</span>
+                <span className="text-[11px] text-slate-500">{latest.date}</span>
+              </div>
+              {latest.changes.length > 0 && (
+                <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                  {latest.changes.slice(0, 4).map(change => (
+                    <li key={change} className="text-xs text-slate-400 leading-relaxed">
+                      {change}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+        </div>
+      )}
+    </GlassCard>
+  );
 }
 
 interface CatalogPageProps {
@@ -240,68 +473,16 @@ export default function CatalogPage({ authenticated = false }: CatalogPageProps)
 
           {hasEntries && visible.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
-              {visible.map(entry => {
-                const description =
-                  localizedDescription(entry, language) || t('catalog.noDescription');
-                const isCommunity = entry.source !== undefined;
-                return (
-                  <GlassCard
-                    key={entry.id}
-                    gradient
-                    className="rounded-2xl p-6 flex flex-col transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-500/25 hover:shadow-[0_10px_30px_rgba(99,102,241,0.12)]"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-indigo-500/25 to-violet-500/10 ring-1 ring-inset ring-white/10">
-                        {entry.icon ? (
-                          <span aria-hidden className="text-xl leading-none">
-                            {entry.icon}
-                          </span>
-                        ) : (
-                          <Package className="w-5 h-5 text-indigo-300" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-base font-bold text-white truncate" title={entry.name}>
-                          {entry.name}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <Badge
-                            variant={isCommunity ? 'success' : 'indigo'}
-                            size="sm"
-                            className="normal-case tracking-normal text-[11px]"
-                          >
-                            {isCommunity ? t('catalog.sourceCommunity') : t('catalog.sourceOfficial')}
-                          </Badge>
-                          {entry.status !== null && (
-                            <Badge
-                              variant="slate"
-                              size="sm"
-                              className="normal-case tracking-normal text-[11px]"
-                            >
-                              {statusLabel(entry.status)}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <p
-                      className="text-sm text-slate-400 mt-3 leading-relaxed line-clamp-3"
-                      title={description}
-                    >
-                      {description}
-                    </p>
-                    <div className="mt-auto pt-4 flex justify-end">
-                      <ButtonBase
-                        onClick={handleCta}
-                        className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10 active:scale-[0.98] transition-all"
-                      >
-                        <CtaIcon className="w-4 h-4" />
-                        {ctaLabel}
-                      </ButtonBase>
-                    </div>
-                  </GlassCard>
-                );
-              })}
+              {visible.map(entry => (
+                <CatalogCard
+                  key={entry.id}
+                  entry={entry}
+                  language={language}
+                  ctaLabel={ctaLabel}
+                  ctaIcon={CtaIcon}
+                  onCta={handleCta}
+                />
+              ))}
             </div>
           )}
         </section>

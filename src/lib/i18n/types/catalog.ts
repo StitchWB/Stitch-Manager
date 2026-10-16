@@ -21,6 +21,10 @@ export interface CatalogTranslations {
     emptyTitle: string;
     emptyDesc: string;
     noDescription: string;
+    detailsToggle: string;
+    linkHomepage: string;
+    linkRepository: string;
+    changelogTitle: string;
     status: {
       stable: string;
       beta: string;
