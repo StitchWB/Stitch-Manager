@@ -1,6 +1,7 @@
 export interface CatalogTranslations {
   catalog: {
-    title: string;
+    brand: string;
+  title: string;
     subtitle: string;
     backHome: string;
     navMarketplace: string;

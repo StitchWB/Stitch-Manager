@@ -319,6 +319,7 @@ export default function CatalogPage({ authenticated = false }: CatalogPageProps)
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
@@ -377,7 +378,7 @@ export default function CatalogPage({ authenticated = false }: CatalogPageProps)
                 className="w-9 h-9 object-contain drop-shadow-[0_4px_12px_rgba(99,102,241,0.35)]"
               />
               <span className="text-white font-black tracking-tight uppercase text-base truncate">
-                Stitch Manager
+                {t('catalog.brand')}
               </span>
             </Link>
             <nav className="flex items-center gap-1.5">

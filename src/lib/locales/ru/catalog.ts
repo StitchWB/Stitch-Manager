@@ -2,6 +2,7 @@ import type { CatalogTranslations } from '../../i18n/types/catalog';
 
 export const catalog: CatalogTranslations = {
   catalog: {
+    brand: "Stitch Manager",
     title: "Каталог плагинов",
     subtitle: "Все плагины Stitch Manager — без аккаунта. Войдите, чтобы устанавливать.",
     backHome: "На главную",
