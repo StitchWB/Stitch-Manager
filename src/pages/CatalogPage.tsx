@@ -271,9 +271,9 @@ function CatalogCard({ entry, language, ctaLabel, ctaIcon, onCta }: CatalogCardP
               </div>
               {latest.changes.length > 0 && (
                 <ul className="mt-1 list-disc pl-4 space-y-0.5">
-                  {latest.changes.slice(0, 4).map(change => (
-                    <li key={change} className="text-xs text-slate-400 leading-relaxed">
-                      {change}
+                  {latest.changes.slice(0, 4).map((change, i) => (
+                    <li key={`${latest.version}-${i}`} className="text-xs text-slate-400 leading-relaxed">
+                      {localizedText(change, language)}
                     </li>
                   ))}
                 </ul>
