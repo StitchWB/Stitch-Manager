@@ -74,9 +74,67 @@ describe('CatalogPage', () => {
     expect(screen.getByText('Official description.')).toBeTruthy();
     expect(screen.getByText('Community Plugin')).toBeTruthy();
     expect(screen.getByText('Localized community description.')).toBeTruthy();
-    expect(screen.getByText('Official')).toBeTruthy();
-    expect(screen.getByText('Community')).toBeTruthy();
+    // "Official"/"Community" appear twice: source-filter chip + card badge.
+    expect(screen.getAllByText('Official').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Community').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Beta')).toBeTruthy();
+    expect(screen.getByText('Plugins: 2')).toBeTruthy();
+  });
+
+  it('filters cards by search query and source', async () => {
+    const user = userEvent.setup();
+    jest.spyOn(catalogModule, 'getCatalog').mockResolvedValue([
+      mk({ id: 'official', name: 'Official Plugin', description: 'Official description.' }),
+      mk({
+        id: 'community',
+        name: 'Community Plugin',
+        description: 'Community description.',
+        source: { type: 'release', url: 'https://example.com/pkg.tar.gz', sha256: 'abc' },
+      }),
+    ]);
+
+    render(
+      <MemoryRouter>
+        <CatalogPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Official Plugin')).toBeTruthy();
+    });
+
+    await user.type(screen.getByRole('textbox', { name: /search by name/i }), 'community');
+    expect(screen.queryByText('Official Plugin')).toBeNull();
+    expect(screen.getByText('Community Plugin')).toBeTruthy();
+    expect(screen.getByText('Plugins: 1')).toBeTruthy();
+
+    await user.clear(screen.getByRole('textbox', { name: /search by name/i }));
+    await user.click(screen.getByRole('button', { name: 'Official' }));
+    expect(screen.getByText('Official Plugin')).toBeTruthy();
+    expect(screen.queryByText('Community Plugin')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    expect(screen.getByText('Official Plugin')).toBeTruthy();
+    expect(screen.getByText('Community Plugin')).toBeTruthy();
+  });
+
+  it('shows a no-results state when filters exclude everything', async () => {
+    const user = userEvent.setup();
+    jest.spyOn(catalogModule, 'getCatalog').mockResolvedValue([mk()]);
+
+    render(
+      <MemoryRouter>
+        <CatalogPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Plugin X')).toBeTruthy();
+    });
+
+    await user.type(screen.getByRole('textbox', { name: /search by name/i }), 'zzz');
+    expect(screen.getByText('Nothing found')).toBeTruthy();
+    expect(screen.queryByText('Plugin X')).toBeNull();
   });
 
   it('shows the empty state when the feed has no plugins', async () => {

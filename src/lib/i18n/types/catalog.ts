@@ -3,6 +3,14 @@ export interface CatalogTranslations {
     title: string;
     subtitle: string;
     backHome: string;
+    navMarketplace: string;
+    searchPlaceholder: string;
+    filterAll: string;
+    filterOfficial: string;
+    filterCommunity: string;
+    resultCount: string;
+    noResultsTitle: string;
+    noResultsDesc: string;
     sourceOfficial: string;
     sourceCommunity: string;
     ctaLoggedIn: string;
