@@ -37,6 +37,8 @@ export interface DevboxPageTranslations {
     promptChipRunner: string;
     promptChipStackStart: string;
     promptChipIngressUp: string;
+    promptClientLabel: string;
+    promptClientUniversal: string;
     promptTaskPlaceholder: string;
     promptAcceptanceToggle: string;
     promptAcceptancePlaceholder: string;

@@ -41,6 +41,8 @@ export const devboxPage: DevboxPageTranslations = {
     promptChipRunner: "Runner",
     promptChipStackStart: "Start stack",
     promptChipIngressUp: "Enable ingress",
+    promptClientLabel: "Agent client",
+    promptClientUniversal: "Universal (repo clone)",
     promptTaskPlaceholder:
       "For example: check auth and fix the failing login; write tests for the billing module",
     promptAcceptanceToggle: "Add acceptance criteria",
