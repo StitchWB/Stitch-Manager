@@ -158,6 +158,23 @@ export async function submitPlugin(params: SubmitPluginParams): Promise<SubmitPl
 }
 
 /**
+ * Download a release tarball/zip server-side and compute its sha256, plus a
+ * best-effort manifest id/version prefill (nulls when the archive carries no
+ * parsable plugin.json). https URLs only; 100MB cap, 30s timeout.
+ */
+export interface PreviewReleaseResult {
+  success: boolean;
+  sha256?: string;
+  manifest_id?: string | null;
+  manifest_version?: string | null;
+  error?: string;
+}
+
+export async function previewRelease(url: string): Promise<PreviewReleaseResult> {
+  return safeInvoke<PreviewReleaseResult>('preview_release', { url }, { noCache: true });
+}
+
+/**
  * The submissions queue for the current caller. LIMITATION: the upstream
  * server has no per-user endpoint — the backend gates this to admin callers
  * and returns the full queue; non-admin callers get

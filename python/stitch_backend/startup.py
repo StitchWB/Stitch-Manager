@@ -236,6 +236,7 @@ def import_command_modules() -> None:
     import stitch_backend.domains.plugin_distribution.local_install_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.marketplace_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.release_preview  # noqa: F401
     import stitch_backend.domains.plugin_distribution.source_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.submission_commands  # noqa: F401
     import stitch_backend.domains.plugin_runtime.sandbox_commands  # noqa: F401
