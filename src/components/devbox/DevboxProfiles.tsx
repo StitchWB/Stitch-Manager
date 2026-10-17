@@ -168,6 +168,7 @@ export interface DevboxProfilesProps {
   onAction: (action: Promise<DevboxAccepted>) => void;
   onRetry: () => void;
   onChanged: () => void;
+  addSignal?: number;
 }
 
 export function DevboxProfiles({
@@ -178,6 +179,7 @@ export function DevboxProfiles({
   onAction,
   onRetry,
   onChanged,
+  addSignal = 0,
 }: DevboxProfilesProps) {
   const rows = Array.isArray(profiles) ? profiles : [];
   const activeRow = rows.find(row => row.active) ?? null;
@@ -247,6 +249,12 @@ export function DevboxProfiles({
       lastInvalid: null,
     });
   }, [loadCreateExtras]);
+
+  useEffect(() => {
+    if (addSignal === 0) return;
+    const timer = setTimeout(openCreate, 0);
+    return () => clearTimeout(timer);
+  }, [addSignal, openCreate]);
 
   const openCreateFrom = useCallback(
     (name: string) => {

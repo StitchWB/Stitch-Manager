@@ -50,7 +50,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
 
   return (
     <header
-      className="h-12 bg-black/60 border-b border-white/[0.06] flex items-center shrink-0 sticky top-0 z-[60] backdrop-blur-md"
+      className="min-h-12 bg-black/60 border-b border-white/[0.06] flex items-center shrink-0 sticky top-0 z-[60] backdrop-blur-md"
       role="banner"
     >
       {/* Left: Title, subtitle, icon */}
@@ -72,7 +72,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
       </div>
 
       {/* Right: Status, language, notifications, actions */}
-      <div className="flex items-center gap-2 px-4 shrink-0">
+      <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-1 shrink-0 max-w-[75%]">
         {actions}
 
         {/* Status Indicator */}

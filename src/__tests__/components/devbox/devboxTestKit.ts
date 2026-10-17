@@ -2,6 +2,8 @@ import { jest } from '@jest/globals';
 import type {
   DevboxActionStatus,
   DevboxAgentPrompt,
+  DevboxJobRow,
+  DevboxPermissionRow,
   DevboxProfileRow,
   DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
@@ -57,6 +59,14 @@ export const profilesFixture: DevboxProfileRow[] = [
 ];
 
 export const idleActionStatus: DevboxActionStatus = { busy: false, current: null, recent: [] };
+
+export function runningJobFixture(startedAtEpochSec: number, id = 'j1'): DevboxJobRow {
+  return { id, tool: 'bash', status: 'running', startedAt: startedAtEpochSec, sessionId: 'ses_1' };
+}
+
+export function pendingPermissionFixture(id = 'p1'): DevboxPermissionRow {
+  return { id, tool: 'shell', summary: 'rm -rf build/', startedAt: 1791536987.76 };
+}
 
 const readyAll = { profile: true, bridge: true, ingress: true, runner: true };
 
