@@ -288,7 +288,7 @@ describe('Devbox page header control bar', () => {
     expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
   });
 
-  it('offers add/manage action options after the profile list', async () => {
+  it('offers compact profile labels and add/manage action options', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
@@ -300,8 +300,31 @@ describe('Devbox page header control bar', () => {
       '__add',
       '__manage',
     ]);
-    expect(options[2].textContent).toBe('+ Add project / pick a folder...');
+    expect(options[0].textContent).toBe('midsai · standard');
+    expect(options[1].textContent).toBe('example-simple · readonly');
+    expect(options[2].textContent).toBe('+ New project');
     expect(options[3].textContent).toBe('Project settings');
+    expect(select.closest('.w-56')).toBeTruthy();
+  });
+
+  it('renders the title without the Devbox prefix', async () => {
+    render(<DevboxPage />);
+    expect(await screen.findByText('Agent on your hardware')).toBeTruthy();
+  });
+
+  it('hides the Doctor and Cockpit labels below the 1400px breakpoint, keeping icons', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
+
+    for (const testId of ['devbox-control-doctor', 'devbox-control-cockpit']) {
+      const button = screen.getByTestId(testId);
+      const label = button.querySelector('span.hidden');
+      expect(label?.className).toContain('hidden');
+      expect(label?.className).toContain('min-[1400px]:inline');
+      expect(button.querySelector('svg')).toBeTruthy();
+    }
+    expect(screen.getByTestId('devbox-control-doctor').textContent).toBe('Doctor');
+    expect(screen.getByTestId('devbox-control-cockpit').textContent).toBe('Open cockpit');
   });
 
   it('select __add switches to infra, opens the projects modal in add mode and snaps back', async () => {

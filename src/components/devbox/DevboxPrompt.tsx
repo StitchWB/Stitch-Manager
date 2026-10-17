@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -6,9 +6,10 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Play,
   Plus,
+  Power,
   RefreshCw,
-  RotateCw,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -39,8 +40,6 @@ const STALE_COMMAND_RE = /method not found|-32601/i;
 
 const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', 'stack_start']);
 
-const TASK_MIN_PX = 160;
-const TASK_MAX_VH_RATIO = 0.4;
 const COPY_FLASH_MS = 2000;
 
 const AGENT_CLIENTS: ReadonlyArray<readonly [string, string]> = [
@@ -118,7 +117,6 @@ export function DevboxPrompt({
   const taskRef = useRef('');
   const acceptanceRef = useRef('');
   const clientRef = useRef('universal');
-  const taskAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const flashTimerRef = useRef<number | null>(null);
 
   const load = useCallback((reveal: boolean) => {
@@ -153,18 +151,6 @@ export function DevboxPrompt({
     },
     [],
   );
-
-  const syncTaskHeight = useCallback(() => {
-    const el = taskAreaRef.current;
-    if (el === null) return;
-    el.style.height = 'auto';
-    const cap = Math.round(window.innerHeight * TASK_MAX_VH_RATIO);
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, TASK_MIN_PX), cap)}px`;
-  }, []);
-
-  useLayoutEffect(() => {
-    if (tab === 'editor') syncTaskHeight();
-  }, [tab, acceptanceOpen, syncTaskHeight]);
 
   const ready = useMemo(
     () => data?.ready ?? readyFromCards(overviewCards),
@@ -227,30 +213,6 @@ export function DevboxPrompt({
   const errorText =
     error !== null && STALE_COMMAND_RE.test(error) ? t('devboxPage.handoffErrorStale') : error;
 
-  const actionChip = (
-    id: string,
-    ok: boolean,
-    okLabel: string,
-    actionLabel: string,
-    onClick: () => void,
-  ) =>
-    ok ? (
-      <Badge variant="success" size="sm" withDot data-testid={`devbox-prompt-chip-${id}`}>
-        {okLabel}
-      </Badge>
-    ) : (
-      <Badge
-        variant="danger"
-        size="sm"
-        withDot
-        className="cursor-pointer"
-        data-testid={`devbox-prompt-chip-${id}`}
-        onClick={onClick}
-      >
-        {actionLabel}
-      </Badge>
-    );
-
   const clientOptions = [
     { value: 'universal', label: t('devboxPage.promptClientUniversal') },
     ...AGENT_CLIENTS.map(([value, label]) => ({ value, label })),
@@ -290,6 +252,40 @@ export function DevboxPrompt({
     </span>
   );
 
+  const blockingAlert = (
+    <div
+      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-2xs text-amber-200"
+      data-testid="devbox-prompt-stack-warning"
+    >
+      <span className="flex items-center gap-1">
+        <AlertTriangle size={12} className="shrink-0" aria-hidden />
+        {t('devboxPage.promptStackDownWarning')}
+      </span>
+      {!ready.bridge && (
+        <Button
+          size="xs"
+          variant="outline"
+          leftIcon={<Power size={12} />}
+          data-testid="devbox-prompt-alert-stack-start"
+          onClick={() => onAction(devboxStackStart(activeProfileName, false))}
+        >
+          {t('devboxPage.promptChipStackStart')}
+        </Button>
+      )}
+      {!ready.ingress && (
+        <Button
+          size="xs"
+          variant="outline"
+          leftIcon={<Play size={12} />}
+          data-testid="devbox-prompt-alert-ingress-up"
+          onClick={() => onAction(devboxIngressControl('up'))}
+        >
+          {t('devboxPage.promptChipIngressUp')}
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <DevboxSection
       title={t('devboxPage.sectionPrompt')}
@@ -327,51 +323,6 @@ export function DevboxPrompt({
 
           {tab === 'editor' ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3">
-              <div
-                className="flex flex-wrap items-center gap-2 shrink-0"
-                data-testid="devbox-prompt-chips"
-              >
-                <Tooltip content={t('devboxPage.promptChipProfileTip')}>
-                  <Badge
-                    variant={ready.profile ? 'success' : 'slate'}
-                    size="sm"
-                    withDot
-                    data-testid="devbox-prompt-chip-profile"
-                  >
-                    {t('devboxPage.promptChipProfile')}
-                  </Badge>
-                </Tooltip>
-                {actionChip(
-                  'bridge',
-                  ready.bridge,
-                  t('devboxPage.promptChipStack'),
-                  t('devboxPage.promptChipStackStart'),
-                  () => onAction(devboxStackStart(activeProfileName, false)),
-                )}
-                {actionChip(
-                  'ingress',
-                  ready.ingress,
-                  t('devboxPage.promptChipIngress'),
-                  t('devboxPage.promptChipIngressUp'),
-                  () => onAction(devboxIngressControl('up')),
-                )}
-                {ready.runner ? (
-                  <Badge variant="success" size="sm" withDot data-testid="devbox-prompt-chip-runner">
-                    {t('devboxPage.promptChipRunner')}
-                  </Badge>
-                ) : (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    leftIcon={<RotateCw size={12} />}
-                    data-testid="devbox-prompt-runner-restart"
-                    onClick={() => onAction(devboxStackStart(activeProfileName, false))}
-                  >
-                    {t('devboxPage.restart')}
-                  </Button>
-                )}
-              </div>
-
               <Select
                 label={t('devboxPage.promptClientLabel')}
                 options={clientOptions}
@@ -386,16 +337,15 @@ export function DevboxPrompt({
               />
 
               <Textarea
-                ref={taskAreaRef}
                 value={task}
                 placeholder={t('devboxPage.promptTaskPlaceholder')}
                 data-testid="devbox-prompt-task"
-                containerClassName="shrink-0"
-                className="max-h-[40vh] min-h-[160px] resize-none overflow-y-auto"
+                containerClassName="min-h-0 flex-1"
+                shellClassName="flex min-h-0 flex-1 flex-col"
+                className="min-h-[160px] flex-1 resize-none overflow-y-auto"
                 onChange={e => {
                   taskRef.current = e.target.value;
                   setTask(e.target.value);
-                  syncTaskHeight();
                 }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -406,10 +356,7 @@ export function DevboxPrompt({
               />
 
               {copyDisabled
-                ? alertPlate(
-                    'devbox-prompt-stack-warning',
-                    t('devboxPage.promptStackDownWarning'),
-                  )
+                ? blockingAlert
                 : !ready.runner
                   ? alertPlate(
                       'devbox-prompt-runner-warning',

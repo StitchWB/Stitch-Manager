@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Play, Plus, RefreshCw, ShieldAlert, Terminal } from 'lucide-react';
+import {
+  Gauge,
+  Loader2,
+  Play,
+  Plus,
+  RefreshCw,
+  ShieldAlert,
+  Stethoscope,
+  Terminal,
+} from 'lucide-react';
 import Header from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
@@ -37,7 +46,6 @@ import {
 import { useDevboxPoll } from './useDevboxPoll';
 import { runDevboxAction } from './runAction';
 import { DEVBOX_REFRESH_MS } from './constants';
-import { devboxModeLabel } from './labels';
 import { DevboxPrompt } from './DevboxPrompt';
 import { DevboxProfiles } from './DevboxProfiles';
 import { DevboxProjectStrip } from './DevboxProjectStrip';
@@ -165,7 +173,7 @@ export function DevboxPage() {
 
   const profileOptions = (Array.isArray(profiles) ? profiles : []).map(row => ({
     value: row.name,
-    label: `${row.name} (${devboxModeLabel(row.mode)})`,
+    label: `${row.name} · ${row.mode}`,
   }));
 
   const onProfileSelect = useCallback(
@@ -221,7 +229,7 @@ export function DevboxPage() {
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Select
         aria-label={t('devboxPage.headerProjectLabel')}
-        containerClassName="w-44"
+        containerClassName="w-56"
         options={projectOptions}
         value={selectedProfile ?? activeProfile}
         data-testid="devbox-profile-select"
@@ -289,10 +297,11 @@ export function DevboxPage() {
           size="sm"
           variant="ghost"
           disabled={busy}
+          leftIcon={<Stethoscope size={14} />}
           data-testid="devbox-control-doctor"
           onClick={() => onAction(devboxRunDoctor())}
         >
-          {t('devboxPage.controlDoctor')}
+          <span className="hidden min-[1400px]:inline">{t('devboxPage.controlDoctor')}</span>
         </Button>
       </Tooltip>
       <Tooltip content={t('devboxPage.tipCockpit')}>
@@ -300,10 +309,11 @@ export function DevboxPage() {
           size="sm"
           variant="ghost"
           disabled={busy}
+          leftIcon={<Gauge size={14} />}
           data-testid="devbox-control-cockpit"
           onClick={() => onAction(devboxCockpitOpen())}
         >
-          {t('devboxPage.controlCockpit')}
+          <span className="hidden min-[1400px]:inline">{t('devboxPage.controlCockpit')}</span>
         </Button>
       </Tooltip>
       <div className="relative" ref={dangerRef}>

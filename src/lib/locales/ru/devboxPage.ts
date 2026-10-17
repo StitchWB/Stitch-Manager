@@ -2,12 +2,12 @@ import type { DevboxPageTranslations } from '../../i18n/types/devboxPage';
 
 export const devboxPage: DevboxPageTranslations = {
   devboxPage: {
-    title: "Devbox — агент на твоём железе",
+    title: "Агент на твоём железе",
     refresh: "Обновить",
     tabTask: "Задача",
     tabInfra: "Инфраструктура",
     headerProjectLabel: "Проект",
-    projectAddOption: "+ Добавить проект / выбрать папку...",
+    projectAddOption: "+ Новый проект",
     projectManageOption: "Настройки проектов",
     switchProfileConfirmTitle: "Сменить профиль на {name}?",
     switchProfileConfirmMessage:
@@ -37,10 +37,8 @@ export const devboxPage: DevboxPageTranslations = {
     busyRunning: "Выполняется...",
     sectionPrompt: "Промпт агенту",
     promptChipProfile: "Проект",
-    promptChipProfileTip: "Проект выбирается в селекторе вверху страницы",
     promptChipStack: "Стек",
     promptChipIngress: "Ingress",
-    promptChipRunner: "Runner",
     promptChipStackStart: "Поднять стек",
     promptChipIngressUp: "Включить ingress",
     promptClientLabel: "Клиент агента",

@@ -53,8 +53,8 @@ function renderPrompt(props: Partial<DevboxPromptProps> = {}) {
   );
 }
 
-async function chipsReady() {
-  await screen.findByTestId('devbox-prompt-chips');
+async function promptReady() {
+  await screen.findByTestId('devbox-prompt-copy');
 }
 
 beforeEach(() => {
@@ -81,8 +81,20 @@ async function flushMicrotasks() {
   });
 }
 
-describe('DevboxPrompt prerequisite chips', () => {
-  it('blocks the CTA while a blocking prereq is down and chip CTAs fire the right actions', async () => {
+describe('DevboxPrompt blocking state', () => {
+  it('renders no prereq chip row anymore', async () => {
+    renderPrompt();
+    await promptReady();
+
+    expect(screen.queryByTestId('devbox-prompt-chips')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-chip-profile')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-chip-bridge')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-chip-ingress')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-chip-runner')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-runner-restart')).toBeNull();
+  });
+
+  it('blocks the CTA and embeds stack+ingress fix buttons in the alert that fire the right actions', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
       ready: { profile: true, bridge: false, ingress: false, runner: true },
@@ -91,23 +103,51 @@ describe('DevboxPrompt prerequisite chips', () => {
       promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
     );
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const copy = screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement;
     expect(copy.disabled).toBe(true);
 
-    fireEvent.click(screen.getByTestId('devbox-prompt-chip-bridge'));
+    const warning = screen.getByTestId('devbox-prompt-stack-warning');
+    const stackButton = screen.getByTestId('devbox-prompt-alert-stack-start');
+    const ingressButton = screen.getByTestId('devbox-prompt-alert-ingress-up');
+    expect(stackButton.tagName).toBe('BUTTON');
+    expect(ingressButton.tagName).toBe('BUTTON');
+    expect(warning.contains(stackButton)).toBe(true);
+    expect(warning.contains(ingressButton)).toBe(true);
+    expect(stackButton.textContent).toBe(t('devboxPage.promptChipStackStart'));
+    expect(ingressButton.textContent).toBe(t('devboxPage.promptChipIngressUp'));
+
+    fireEvent.click(stackButton);
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
       { name: 'midsai', preview: false },
     ]);
 
-    fireEvent.click(screen.getByTestId('devbox-prompt-chip-ingress'));
+    fireEvent.click(ingressButton);
     expect(onAction).toHaveBeenCalledTimes(2);
     expect(devboxCallArgs(invokeMock, 'ingress_control')).toEqual([{ action: 'up' }]);
   });
 
-  it('keeps the CTA enabled and offers a runner restart button when only the runner is down', async () => {
+  it('shows only the ingress fix button when ingress is the sole blocker', async () => {
+    const blocked = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: true, ingress: false, runner: true },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
+    );
+    renderPrompt();
+    await promptReady();
+
+    expect(
+      (screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByTestId('devbox-prompt-alert-stack-start')).toBeNull();
+    expect(screen.getByTestId('devbox-prompt-alert-ingress-up')).toBeTruthy();
+  });
+
+  it('keeps the CTA enabled and a text-only runner hint when only the runner is down', async () => {
     const runnerDown = {
       ...maskedAgentPromptFixture,
       ready: { profile: true, bridge: true, ingress: true, runner: false },
@@ -116,75 +156,38 @@ describe('DevboxPrompt prerequisite chips', () => {
       promptRoutes({ agent_prompt: agentPromptRoute(runnerDown, runnerDown) }),
     );
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const copy = screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement;
     expect(copy.disabled).toBe(false);
 
-    expect(screen.queryByTestId('devbox-prompt-chip-runner')).toBeNull();
-    const restart = screen.getByTestId('devbox-prompt-runner-restart');
-    expect(restart.tagName).toBe('BUTTON');
-    expect(restart.textContent).toBe(t('devboxPage.restart'));
-
-    fireEvent.click(restart);
-    expect(onAction).toHaveBeenCalledTimes(1);
-    expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
-      { name: 'midsai', preview: false },
-    ]);
-    expect(copy.disabled).toBe(false);
-  });
-
-  it('renders the runner success badge when the runner is up', async () => {
-    renderPrompt();
-    await chipsReady();
-
-    expect(screen.getByTestId('devbox-prompt-chip-runner').className).toContain(
-      'text-emerald-300',
-    );
+    expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
+    const warning = screen.getByTestId('devbox-prompt-runner-warning');
+    expect(warning.querySelector('button')).toBeNull();
     expect(screen.queryByTestId('devbox-prompt-runner-restart')).toBeNull();
   });
 
-  it('project badge is non-clickable and fires no action', async () => {
-    renderPrompt();
-    await chipsReady();
-
-    const profile = screen.getByTestId('devbox-prompt-chip-profile');
-    expect(profile.tagName).toBe('SPAN');
-    expect(profile.className).not.toContain('cursor-pointer');
-
-    fireEvent.click(profile);
-    expect(onAction).not.toHaveBeenCalled();
-  });
-
-  it('derives chips from overview cards when the payload has no ready field', async () => {
+  it('derives the blocking state from overview cards when the payload has no ready field', async () => {
     invokeMock.mockImplementation(
       promptRoutes({
         agent_prompt: agentPromptRoute(agentPromptNoReadyFixture, agentPromptNoReadyFixture),
       }),
     );
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
-    expect(screen.getByTestId('devbox-prompt-chip-profile').className).toContain(
-      'text-emerald-300',
-    );
-    expect(screen.getByTestId('devbox-prompt-chip-ingress').className).toContain(
-      'text-emerald-300',
-    );
-    const bridgeChip = screen.getByTestId('devbox-prompt-chip-bridge');
-    expect(bridgeChip.className).toContain('text-red-300');
-    expect(bridgeChip.textContent).toBe(t('devboxPage.promptChipStackStart'));
-    expect(screen.getByTestId('devbox-prompt-runner-restart')).toBeTruthy();
     expect(
       (screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement).disabled,
     ).toBe(true);
+    expect(screen.getByTestId('devbox-prompt-alert-stack-start')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-prompt-alert-ingress-up')).toBeNull();
   });
 });
 
 describe('DevboxPrompt copy flow', () => {
   it('copies the backend-composed prompt verbatim on CTA click and on Ctrl+Enter', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const task = 'почини падающий логин';
     fireEvent.change(screen.getByTestId('devbox-prompt-task'), { target: { value: task } });
@@ -211,7 +214,7 @@ describe('DevboxPrompt copy flow', () => {
 
   it('sends acceptance in invoke args only when the field is filled', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     fireEvent.click(screen.getByTestId('devbox-prompt-acceptance-toggle'));
     const acceptance = screen.getByTestId('devbox-prompt-acceptance');
@@ -240,7 +243,7 @@ describe('DevboxPrompt copy flow', () => {
   it('warns about a stale copy after tokens were rotated', async () => {
     const future = Math.floor(Date.now() / 1000) + 60;
     renderPrompt({ actionStatus: rotatedTokensStatus(future) });
-    await chipsReady();
+    await promptReady();
 
     expect(screen.queryByTestId('devbox-prompt-stale')).toBeNull();
 
@@ -264,7 +267,7 @@ describe('DevboxPrompt copy flow', () => {
       configurable: true,
     });
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     fireEvent.click(screen.getByTestId('devbox-prompt-copy'));
 
@@ -286,7 +289,7 @@ describe('DevboxPrompt copy flow', () => {
 describe('DevboxPrompt preview and errors', () => {
   it('keeps the prompt tab hidden by default and switches to it via the tabs only', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     expect(screen.queryByTestId('devbox-prompt-preview')).toBeNull();
     expect(screen.queryByTestId('devbox-prompt-preview-toggle')).toBeNull();
@@ -307,7 +310,7 @@ describe('DevboxPrompt preview and errors', () => {
 
   it('eye toggle refetches with the flipped reveal flag', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
     expect(devboxCallArgs(invokeMock, 'agent_prompt')).toEqual([
       { reveal: false, client: 'universal' },
     ]);
@@ -369,7 +372,7 @@ describe('DevboxPrompt preview and errors', () => {
 describe('DevboxPrompt agent client selector', () => {
   it('renders 13 client options with universal selected by default', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const select = screen.getByTestId('devbox-prompt-client') as HTMLSelectElement;
     const options = Array.from(select.querySelectorAll('option'));
@@ -394,7 +397,7 @@ describe('DevboxPrompt agent client selector', () => {
 
   it('sends client=universal on the default masked load without interaction', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     expect(devboxCallArgs(invokeMock, 'agent_prompt')).toEqual([
       { reveal: false, client: 'universal' },
@@ -403,7 +406,7 @@ describe('DevboxPrompt agent client selector', () => {
 
   it('refetches the masked preview with the chosen client on selection change', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     fireEvent.change(screen.getByTestId('devbox-prompt-client'), {
       target: { value: 'opencode' },
@@ -425,7 +428,7 @@ describe('DevboxPrompt agent client selector', () => {
 
   it('passes the current client in the reveal=true copy fetch', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     fireEvent.change(screen.getByTestId('devbox-prompt-client'), {
       target: { value: 'cursor' },
@@ -449,7 +452,7 @@ describe('DevboxPrompt copy feedback', () => {
     jest.useFakeTimers();
     renderPrompt();
     await flushMicrotasks();
-    expect(screen.getByTestId('devbox-prompt-chips')).toBeTruthy();
+    expect(screen.getByTestId('devbox-prompt-tabs')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('devbox-prompt-copy'));
     await flushMicrotasks();
@@ -485,7 +488,7 @@ describe('DevboxPrompt copy feedback', () => {
 describe('DevboxPrompt action footer', () => {
   it('renders one footer with criteria+tokens toolbar and a single copy CTA on both tabs', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const footer = screen.getByTestId('devbox-prompt-footer');
     expect(screen.getAllByTestId('devbox-prompt-copy')).toHaveLength(1);
@@ -501,7 +504,7 @@ describe('DevboxPrompt action footer', () => {
 
   it('places the dim hint caption directly under the copy CTA', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const hint = screen.getByTestId('devbox-prompt-hint');
     expect(hint.className).toContain('text-2xs');
@@ -515,7 +518,7 @@ describe('DevboxPrompt action footer', () => {
 describe('DevboxPrompt hint and warning lines', () => {
   it('shows the universal hint by default and a client hint after selection', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     expect(screen.getByTestId('devbox-prompt-hint').textContent).toBe(
       t('devboxPage.promptHintUniversal'),
@@ -540,10 +543,10 @@ describe('DevboxPrompt hint and warning lines', () => {
       promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
     );
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const warning = screen.getByTestId('devbox-prompt-stack-warning');
-    expect(warning.textContent).toBe(t('devboxPage.promptStackDownWarning'));
+    expect(warning.textContent).toContain(t('devboxPage.promptStackDownWarning'));
     expect(warning.className).toContain('border-amber-500/40');
     expect(warning.className).toContain('bg-amber-500/10');
     expect(warning.className).toContain('text-amber-200');
@@ -559,7 +562,7 @@ describe('DevboxPrompt hint and warning lines', () => {
       promptRoutes({ agent_prompt: agentPromptRoute(runnerDown, runnerDown) }),
     );
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
     const warning = screen.getByTestId('devbox-prompt-runner-warning');
@@ -579,7 +582,7 @@ describe('DevboxPrompt hint and warning lines', () => {
 describe('DevboxPrompt editor layout', () => {
   it('opens the acceptance accordion as a bordered panel with rows=3 and closes it', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     expect(screen.queryByTestId('devbox-prompt-acceptance-panel')).toBeNull();
 
@@ -592,13 +595,16 @@ describe('DevboxPrompt editor layout', () => {
     expect(screen.queryByTestId('devbox-prompt-acceptance-panel')).toBeNull();
   });
 
-  it('syncs the task textarea height on input instead of stretching the column', async () => {
+  it('stretches the task textarea to the footer with flex-1', async () => {
     renderPrompt();
-    await chipsReady();
+    await promptReady();
 
     const task = screen.getByTestId('devbox-prompt-task') as HTMLTextAreaElement;
-    expect(task.className).toContain('max-h-[40vh]');
+    expect(task.className).toContain('flex-1');
+    expect(task.className).toContain('min-h-[160px]');
+    expect(task.className).not.toContain('max-h-[40vh]');
+
     fireEvent.change(task, { target: { value: 'x'.repeat(400) } });
-    expect(task.style.height).toBe('160px');
+    expect(task.style.height).toBe('');
   });
 });
