@@ -1,16 +1,8 @@
-import { useCallback } from 'react';
 import { ScrollText } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { t } from '@/lib/i18n';
-import {
-  devboxEventsTail,
-  devboxNormalizeEventRows,
-  devboxTime,
-  type DevboxEventRow,
-} from '@/lib/backend/modules/devbox';
+import { devboxTime, type DevboxEventRow } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
-import { useDevboxPoll } from './useDevboxPoll';
-import { DEVBOX_EVENTS_LIMIT, DEVBOX_REFRESH_MS } from './constants';
 
 function eventLine(row: DevboxEventRow): string {
   const parts = [devboxTime(row.ts), row.kind, row.tool, row.status].filter(
@@ -19,16 +11,18 @@ function eventLine(row: DevboxEventRow): string {
   return parts.length > 0 ? parts.join(' · ') : JSON.stringify(row);
 }
 
-export function DevboxEvents() {
-  const fetcher = useCallback(() => devboxEventsTail(DEVBOX_EVENTS_LIMIT), []);
-  const { data, error, reload } = useDevboxPoll(fetcher, DEVBOX_REFRESH_MS);
-  const rows = devboxNormalizeEventRows(data);
+export interface DevboxEventsProps {
+  rows: DevboxEventRow[];
+  error: string | null;
+  onRetry: () => void;
+}
 
+export function DevboxEvents({ rows, error, onRetry }: DevboxEventsProps) {
   return (
     <DevboxSection
       title={t('devboxPage.sectionEvents')}
       error={error}
-      onRetry={reload}
+      onRetry={onRetry}
       testId="devbox-events"
     >
       {rows.length === 0 && !error ? (

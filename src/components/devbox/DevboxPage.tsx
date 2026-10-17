@@ -5,11 +5,14 @@ import { IconButton } from '@/components/ui/IconButton';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '@/stores/app';
 import {
-  devboxActionStatus,
   devboxNormalizeCards,
-  devboxOverview,
+  devboxNormalizeEventRows,
+  devboxObservedRows,
+  devboxPoll,
   devboxProfilesList,
   type DevboxAccepted,
+  type DevboxJobRow,
+  type DevboxPermissionRow,
   type DevboxProfileRow,
 } from '@/lib/backend/modules/devbox';
 import { useDevboxPoll } from './useDevboxPoll';
@@ -29,12 +32,8 @@ export function DevboxPage() {
   const language = useAppStore(s => s.language);
   void language;
 
-  const overviewFetcher = useCallback(() => devboxOverview(), []);
-  const overview = useDevboxPoll(overviewFetcher, DEVBOX_REFRESH_MS);
-  const statusFetcher = useCallback(() => devboxActionStatus(), []);
-  const status = useDevboxPoll(statusFetcher, DEVBOX_REFRESH_MS);
-  const { reload: reloadOverview } = overview;
-  const { reload: reloadStatus } = status;
+  const poll = useDevboxPoll(devboxPoll, DEVBOX_REFRESH_MS);
+  const { reload: reloadPoll } = poll;
 
   const [profiles, setProfiles] = useState<DevboxProfileRow[] | null>(null);
   const [profilesError, setProfilesError] = useState<string | null>(null);
@@ -65,20 +64,28 @@ export function DevboxPage() {
       setPending(true);
       void runDevboxAction(action, () => {
         reloadProfiles();
-        reloadOverview();
-        reloadStatus();
+        reloadPoll();
         setPromptTick(x => x + 1);
       }).finally(() => setPending(false));
     },
-    [reloadProfiles, reloadOverview, reloadStatus],
+    [reloadProfiles, reloadPoll],
   );
 
-  const cards = useMemo(() => devboxNormalizeCards(overview.data), [overview.data]);
-  const busy = status.data?.busy === true || pending;
+  const cards = useMemo(() => devboxNormalizeCards(poll.data?.overview), [poll.data]);
+  const status = poll.data?.action_status ?? null;
+  const jobs = useMemo(
+    () => devboxObservedRows<DevboxJobRow>(poll.data?.jobs),
+    [poll.data],
+  );
+  const permissions = useMemo(
+    () => devboxObservedRows<DevboxPermissionRow>(poll.data?.permissions),
+    [poll.data],
+  );
+  const events = useMemo(() => devboxNormalizeEventRows(poll.data?.events), [poll.data]);
+  const busy = status?.busy === true || pending;
 
   const refreshAll = () => {
-    reloadOverview();
-    reloadStatus();
+    reloadPoll();
     reloadProfiles();
   };
 
@@ -115,23 +122,23 @@ export function DevboxPage() {
           <DevboxPrompt
             profiles={profiles}
             overviewCards={cards}
-            actionStatus={status.data}
+            actionStatus={status}
             onAction={onAction}
             reloadTick={promptTick}
           />
-          <DevboxVitals cards={cards} error={overview.error} onRetry={reloadOverview} />
+          <DevboxVitals cards={cards} error={poll.error} onRetry={reloadPoll} />
           <div className="grid gap-4 lg:grid-cols-2">
-            <DevboxJobs />
-            <DevboxPermissions />
+            <DevboxJobs data={jobs} error={poll.error} onRetry={reloadPoll} />
+            <DevboxPermissions data={permissions} error={poll.error} onRetry={reloadPoll} />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <DevboxEvents />
+            <DevboxEvents rows={events} error={poll.error} onRetry={reloadPoll} />
             <DevboxLogs />
           </div>
-          <DevboxActions recent={status.data?.recent ?? null} />
+          <DevboxActions recent={status?.recent ?? null} />
           <DevboxControls
             overviewCards={cards}
-            actionStatus={status.data}
+            actionStatus={status}
             busy={busy}
             onAction={onAction}
           />

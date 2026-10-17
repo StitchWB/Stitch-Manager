@@ -17,6 +17,8 @@ export function useDevboxPoll<T>(
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
     const load = () => {
       fetcher()
         .then(result => {
@@ -29,16 +31,39 @@ export function useDevboxPoll<T>(
           setError(err instanceof Error ? err.message : String(err));
         });
     };
-    load();
-    if (refreshMs <= 0) {
-      return () => {
-        cancelled = true;
-      };
+    const stop = () => {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    const start = () => {
+      if (refreshMs > 0 && timer === null) timer = setInterval(load, refreshMs);
+    };
+    const wake = () => {
+      if (document.hidden) {
+        stop();
+        return;
+      }
+      stop();
+      load();
+      start();
+    };
+
+    if (refreshMs <= 0 || !document.hidden) {
+      load();
+      start();
     }
-    const timer = setInterval(load, refreshMs);
+    if (refreshMs > 0) {
+      document.addEventListener('visibilitychange', wake);
+      window.addEventListener('focus', wake);
+    }
+
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stop();
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
     };
   }, [fetcher, refreshMs, tick]);
 

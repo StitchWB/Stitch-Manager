@@ -36,6 +36,13 @@ NOISY_PATHS: frozenset[str] = frozenset({
 })
 
 
+def _is_noisy(path: str) -> bool:
+    # plugin heartbeat convention: readonly batch command named `poll` (docs/service-plugins.md)
+    return path in NOISY_PATHS or (
+        path.startswith("/api/plugin.") and path.endswith(".poll")
+    )
+
+
 def install_middleware(app: FastAPI) -> None:
     """Attach all middleware to the FastAPI app.
 
@@ -67,7 +74,7 @@ def install_middleware(app: FastAPI) -> None:
         ):
             # ASCII-only format: non-ASCII arrows crash Windows cp1251
             # console logging inside the middleware and 500 every request.
-            if request.url.path in NOISY_PATHS:
+            if _is_noisy(request.url.path):
                 logger.debug(
                     "%s %s -> %d  (%.1f ms)",
                     request.method,

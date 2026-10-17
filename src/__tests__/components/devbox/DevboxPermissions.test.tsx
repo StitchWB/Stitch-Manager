@@ -1,6 +1,7 @@
 /**
- * Devbox permissions pending table — approve once / reject dispatch
- * permission_reply with the frozen decision params; honesty caption present.
+ * Devbox permissions pending table — props-driven from the batched poll;
+ * approve once / reject dispatch permission_reply with the frozen decision
+ * params; honesty caption present.
  *
  * Mocks: safeInvoke (routed by command name), sonner. i18n runs REAL.
  */
@@ -20,40 +21,45 @@ jest.mock('sonner', () => ({
 }));
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
-import { DevboxPermissions } from '@/components/devbox/DevboxPermissions';
+import type { DevboxObserved, DevboxPermissionRow } from '@/lib/backend/modules/devbox';
+import {
+  DevboxPermissions,
+  type DevboxPermissionsProps,
+} from '@/components/devbox/DevboxPermissions';
 import { devboxRouter, devboxCalls, devboxCallArgs, pageRoutes } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
-const pendingFixture = [
+const pendingFixture: DevboxPermissionRow[] = [
   { id: 'p1', tool: 'bash', summary: 'rm -rf build/', startedAt: 1791536987.76 },
 ];
+
+function renderPermissions(props: Partial<DevboxPermissionsProps> = {}) {
+  const onRetry = jest.fn(() => undefined);
+  const data: DevboxObserved<DevboxPermissionRow> = { rows: pendingFixture, bridge: 'up' };
+  render(<DevboxPermissions data={data} error={null} onRetry={onRetry} {...props} />);
+  return onRetry;
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
   invokeMock.mockImplementation(
-    devboxRouter(
-      pageRoutes({
-        permissions_pending: pendingFixture,
-        permission_reply: { accepted: true, actionId: 'act-p1' },
-      }),
-    ),
+    devboxRouter(pageRoutes({ permission_reply: { accepted: true, actionId: 'act-p1' } })),
   );
 });
 
 describe('Devbox permissions pending', () => {
-  it('renders pending rows with the observation honesty caption', async () => {
-    render(<DevboxPermissions />);
+  it('renders pending rows with the observation honesty caption', () => {
+    renderPermissions();
 
-    expect(await screen.findByText('bash')).toBeTruthy();
+    expect(screen.getByText('bash')).toBeTruthy();
     expect(screen.getByText('rm -rf build/')).toBeTruthy();
     expect(screen.getByTestId('devbox-security-summary')).toBeTruthy();
     expect(screen.getByTestId('devbox-security-link')).toBeTruthy();
   });
 
   it('approve once dispatches permission_reply with decision=once', async () => {
-    render(<DevboxPermissions />);
-    await screen.findByText('bash');
+    renderPermissions();
 
     fireEvent.click(screen.getByTestId('devbox-permission-approve-p1'));
 
@@ -65,8 +71,7 @@ describe('Devbox permissions pending', () => {
   });
 
   it('reject is confirm-gated and dispatches permission_reply with decision=reject', async () => {
-    render(<DevboxPermissions />);
-    await screen.findByText('bash');
+    renderPermissions();
 
     const reject = screen.getByTestId('devbox-permission-reject-p1');
     fireEvent.click(reject);
@@ -80,10 +85,27 @@ describe('Devbox permissions pending', () => {
     });
   });
 
-  it('shows the empty state when nothing is pending', async () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    render(<DevboxPermissions />);
+  it('shows the empty state when nothing is pending', () => {
+    renderPermissions({ data: { rows: [], bridge: 'up' } });
 
-    expect(await screen.findByText('No pending permission requests')).toBeTruthy();
+    expect(screen.getByText('No pending permission requests')).toBeTruthy();
+  });
+
+  it('marks a bridge-down bundle and retries through the shared callback', () => {
+    const onRetry = renderPermissions({ data: { rows: [], bridge: 'down' } });
+
+    const degraded = screen.getByTestId('devbox-permissions-degraded');
+    expect(degraded).toBeTruthy();
+    fireEvent.click(degraded.querySelector('button')!);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the shared poll error in the section header with retry', () => {
+    const onRetry = renderPermissions({ error: 'poll exploded' });
+
+    const error = screen.getByTestId('devbox-permissions-error');
+    expect(error.textContent).toContain('poll exploded');
+    fireEvent.click(error.querySelector('button')!);
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

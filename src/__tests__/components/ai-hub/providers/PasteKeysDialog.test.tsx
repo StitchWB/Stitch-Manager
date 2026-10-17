@@ -256,11 +256,16 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
 
     await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
 
-    const baseUrlInput = await screen.findByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement;
-    const nameInput = screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement;
-    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint') as HTMLTextAreaElement;
-    expect(baseUrlInput.value).toBe('https://api.groq.com/openai/v1');
-    expect(nameInput.value).toBe('Groq');
-    expect(textarea.value).toBe('gsk_444444444444444444444444');
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+      ).toBe('https://api.groq.com/openai/v1');
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+      ).toBe('Groq');
+      expect(
+        (screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint') as HTMLTextAreaElement).value,
+      ).toBe('gsk_444444444444444444444444');
+    });
   });
 });

@@ -14,10 +14,6 @@ export interface DevboxVitalCard {
   updatedAt?: string | number | null;
 }
 
-export interface DevboxOverview {
-  cards: DevboxVitalCard[];
-}
-
 export interface DevboxProfileRow {
   name: string;
   mode: string;
@@ -100,8 +96,16 @@ export interface DevboxEventRow {
 
 const NO_CACHE = { noCache: true } as const;
 
-export function devboxOverview(): Promise<DevboxOverview> {
-  return safeInvoke<DevboxOverview>(`${NS}.overview`, {}, NO_CACHE);
+export interface DevboxPollResult {
+  overview: unknown;
+  action_status: DevboxActionStatus | null;
+  jobs: unknown;
+  permissions: unknown;
+  events: unknown;
+}
+
+export function devboxPoll(): Promise<DevboxPollResult> {
+  return safeInvoke<DevboxPollResult>(`${NS}.poll`, {}, NO_CACHE);
 }
 
 export function devboxProfilesList(): Promise<DevboxProfileRow[]> {
@@ -201,16 +205,12 @@ export function devboxAgentPrompt(params: {
   return safeInvoke<DevboxAgentPrompt>(`${NS}.agent_prompt`, args, NO_CACHE);
 }
 
-export function devboxActionStatus(): Promise<DevboxActionStatus> {
-  return safeInvoke<DevboxActionStatus>(`${NS}.action_status`, {}, NO_CACHE);
-}
-
 export interface DevboxObserved<T> {
   rows: T[];
   bridge: 'up' | 'down';
 }
 
-function observedRows<T>(raw: unknown): DevboxObserved<T> {
+export function devboxObservedRows<T>(raw: unknown): DevboxObserved<T> {
   if (Array.isArray(raw)) return { rows: raw as T[], bridge: 'up' };
   const obj = (raw ?? {}) as Record<string, unknown>;
   const rows = Array.isArray(obj.rows) ? (obj.rows as T[]) : [];
@@ -218,18 +218,8 @@ function observedRows<T>(raw: unknown): DevboxObserved<T> {
   return { rows, bridge };
 }
 
-export function devboxJobsLive(): Promise<DevboxObserved<DevboxJobRow>> {
-  return safeInvoke<unknown>(`${NS}.jobs_live`, {}, NO_CACHE).then(observedRows<DevboxJobRow>);
-}
-
 export function devboxJobCancel(jobId: string): Promise<DevboxAccepted> {
   return safeInvoke<DevboxAccepted>(`${NS}.job_cancel`, { jobId });
-}
-
-export function devboxPermissionsPending(): Promise<DevboxObserved<DevboxPermissionRow>> {
-  return safeInvoke<unknown>(`${NS}.permissions_pending`, {}, NO_CACHE).then(
-    observedRows<DevboxPermissionRow>,
-  );
 }
 
 export function devboxPermissionReply(
@@ -237,10 +227,6 @@ export function devboxPermissionReply(
   decision: DevboxPermissionDecision,
 ): Promise<DevboxAccepted> {
   return safeInvoke<DevboxAccepted>(`${NS}.permission_reply`, { permissionId, decision });
-}
-
-export function devboxEventsTail(limit: number): Promise<unknown> {
-  return safeInvoke<unknown>(`${NS}.events_tail`, { limit }, NO_CACHE);
 }
 
 export function devboxLogs(params: {
