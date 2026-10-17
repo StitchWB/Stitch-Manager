@@ -43,11 +43,23 @@ export const devboxPage: DevboxPageTranslations = {
     promptAcceptancePlaceholder:
       "For example: tests green, login works, nothing else touched",
     promptCopy: "Copy prompt",
+    promptCopied: "Copied to clipboard",
     promptBlockedTip: "Fix first: {fix}",
     promptCriteria: "Criteria",
+    promptCriteriaHeader: "Acceptance criteria",
     promptTokens: "Tokens",
     promptPreview: "Preview",
-    promptPreviewMasked: "Preview is masked - the full text goes to the clipboard",
+    promptPreviewLocked:
+      "Sensitive tokens are hidden in the preview but will be copied",
+    promptTabEditor: "Task editor",
+    promptTabPrompt: "Ready prompt",
+    promptHintUniversal:
+      "Copy the prompt and paste it into your coding agent's chat or terminal.",
+    promptHintClient:
+      "Copy the prompt and hand it to {client}: the connection config is already inside.",
+    promptStackDownWarning: "The stack is not running — the agent won't be able to connect",
+    promptRunnerDownHint:
+      "Runner is down: the agent will still make code edits, host commands are unavailable",
     promptStale: "Tokens or URLs were rotated after copying - copy the prompt again",
     promptManualCopy: "clipboard unavailable - copy the text manually",
     handoffErrorStale:
@@ -61,6 +73,13 @@ export const devboxPage: DevboxPageTranslations = {
     railElapsed: "Elapsed {elapsed}",
     railIdle: "Agent is idle",
     railIdleDesc: "Jobs appear here while the agent runs tools in the project.",
+    railBridgeSummary: "Bridge: {state} · tool calls: {count}",
+    railBridgeUp: "up",
+    railBridgeDown: "down",
+    railOnboard1: "Write the task on the left",
+    railOnboard2: "Copy the prompt",
+    railOnboard3:
+      "Run it in an external agent — actions and permission requests will appear here in real time",
     permissionApprove: "Approve",
     securityBanner: "The agent token is equivalent to a remote shell in the container",
     railRecent: "Recent activity",
