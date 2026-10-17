@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { Briefcase } from 'lucide-react';
 import {
   Table,
@@ -12,21 +11,30 @@ import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { t } from '@/lib/i18n';
-import { devboxJobCancel, devboxJobsLive, devboxTime } from '@/lib/backend/modules/devbox';
+import {
+  devboxJobCancel,
+  devboxTime,
+  type DevboxJobRow,
+  type DevboxObserved,
+} from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
 import { runDevboxAction } from './runAction';
-import { useDevboxPoll } from './useDevboxPoll';
-import { DEVBOX_REFRESH_MS } from './constants';
 
-export function DevboxJobs() {
-  const fetcher = useCallback(() => devboxJobsLive(), []);
-  const { data, error, reload } = useDevboxPoll(fetcher, DEVBOX_REFRESH_MS);
+export interface DevboxJobsProps {
+  data: DevboxObserved<DevboxJobRow> | null;
+  error: string | null;
+  onRetry: () => void;
+}
+
+export function DevboxJobs({ data, error, onRetry }: DevboxJobsProps) {
   const rows = data?.rows ?? [];
-  const degraded = error !== null || data?.bridge === 'down';
+  const degraded = data?.bridge === 'down';
 
   return (
     <DevboxSection
       title={t('devboxPage.sectionJobs')}
+      error={error}
+      onRetry={onRetry}
       testId="devbox-jobs"
     >
       {degraded && (
@@ -35,7 +43,7 @@ export function DevboxJobs() {
           data-testid="devbox-jobs-degraded"
         >
           <span>{t('devboxPage.jobsBridgeDown')}</span>
-          <Button size="xs" variant="ghost" onClick={reload}>
+          <Button size="xs" variant="ghost" onClick={onRetry}>
             {t('common.retry')}
           </Button>
         </div>
@@ -75,7 +83,7 @@ export function DevboxJobs() {
                      variant="danger"
                      data-testid={`devbox-job-cancel-${row.id}`}
                      tooltip={t('devboxPage.tipCancelJob')}
-                     onConfirm={() => void runDevboxAction(devboxJobCancel(row.id), reload)}
+                     onConfirm={() => void runDevboxAction(devboxJobCancel(row.id), onRetry)}
                    >
                     {t('devboxPage.cancelJob')}
                   </ConfirmActionButton>

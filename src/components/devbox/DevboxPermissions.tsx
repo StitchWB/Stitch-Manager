@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { ShieldQuestion, FileLock2 } from 'lucide-react';
 import {
   Table,
@@ -15,24 +14,30 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import {
   devboxPermissionReply,
-  devboxPermissionsPending,
   devboxTime,
+  type DevboxObserved,
+  type DevboxPermissionRow,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
 import { runDevboxAction } from './runAction';
-import { useDevboxPoll } from './useDevboxPoll';
-import { DEVBOX_REFRESH_MS, DEVBOX_SECURITY_URL } from './constants';
+import { DEVBOX_SECURITY_URL } from './constants';
 
-export function DevboxPermissions() {
-  const fetcher = useCallback(() => devboxPermissionsPending(), []);
-  const { data, error, reload } = useDevboxPoll(fetcher, DEVBOX_REFRESH_MS);
+export interface DevboxPermissionsProps {
+  data: DevboxObserved<DevboxPermissionRow> | null;
+  error: string | null;
+  onRetry: () => void;
+}
+
+export function DevboxPermissions({ data, error, onRetry }: DevboxPermissionsProps) {
   const rows = data?.rows ?? [];
-  const degraded = error !== null || data?.bridge === 'down';
+  const degraded = data?.bridge === 'down';
 
   return (
     <DevboxSection
       title={t('devboxPage.sectionPermissions')}
       caption={t('devboxPage.observationCaption')}
+      error={error}
+      onRetry={onRetry}
       testId="devbox-permissions"
     >
       <div className="flex flex-col gap-3">
@@ -42,7 +47,7 @@ export function DevboxPermissions() {
             data-testid="devbox-permissions-degraded"
           >
             <span>{t('devboxPage.permissionsBridgeDown')}</span>
-            <Button size="xs" variant="ghost" onClick={reload}>
+            <Button size="xs" variant="ghost" onClick={onRetry}>
               {t('common.retry')}
             </Button>
           </div>
@@ -80,7 +85,7 @@ export function DevboxPermissions() {
                           onClick={() =>
                             void runDevboxAction(
                               devboxPermissionReply(row.id, 'once'),
-                              reload,
+                              onRetry,
                             )
                           }
                         >
@@ -95,7 +100,7 @@ export function DevboxPermissions() {
                         onConfirm={() =>
                           void runDevboxAction(
                             devboxPermissionReply(row.id, 'reject'),
-                            reload,
+                            onRetry,
                           )
                         }
                       >

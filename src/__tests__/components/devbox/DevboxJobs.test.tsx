@@ -1,5 +1,6 @@
 /**
- * Devbox jobs live table — job_cancel is confirm-gated and dispatches {jobId}.
+ * Devbox jobs live table — props-driven from the batched poll; job_cancel is
+ * confirm-gated and dispatches {jobId}.
  *
  * Mocks: safeInvoke (routed by command name), sonner. i18n runs REAL.
  */
@@ -19,35 +20,40 @@ jest.mock('sonner', () => ({
 }));
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
-import { DevboxJobs } from '@/components/devbox/DevboxJobs';
+import type { DevboxJobRow, DevboxObserved } from '@/lib/backend/modules/devbox';
+import { DevboxJobs, type DevboxJobsProps } from '@/components/devbox/DevboxJobs';
 import { devboxRouter, devboxCalls, devboxCallArgs, pageRoutes } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
-const jobsFixture = [
+const jobsFixture: DevboxJobRow[] = [
   { id: 'j1', tool: 'bash', status: 'running', startedAt: 1791536987.76, sessionId: 'ses_1' },
 ];
+
+function renderJobs(props: Partial<DevboxJobsProps> = {}) {
+  const onRetry = jest.fn(() => undefined);
+  const data: DevboxObserved<DevboxJobRow> = { rows: jobsFixture, bridge: 'up' };
+  render(<DevboxJobs data={data} error={null} onRetry={onRetry} {...props} />);
+  return onRetry;
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
   invokeMock.mockImplementation(
-    devboxRouter(
-      pageRoutes({ jobs_live: jobsFixture, job_cancel: { accepted: true, actionId: 'act-j1' } }),
-    ),
+    devboxRouter(pageRoutes({ job_cancel: { accepted: true, actionId: 'act-j1' } })),
   );
 });
 
 describe('Devbox jobs live', () => {
-  it('renders live rows and polls jobs_live', async () => {
-    render(<DevboxJobs />);
+  it('renders the rows passed from the poll bundle', () => {
+    renderJobs();
 
-    expect(await screen.findByText('ses_1')).toBeTruthy();
-    expect(devboxCalls(invokeMock, 'jobs_live').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('ses_1')).toBeTruthy();
+    expect(screen.getByText('bash')).toBeTruthy();
   });
 
   it('cancel is confirm-gated and dispatches job_cancel with the jobId', async () => {
-    render(<DevboxJobs />);
-    await screen.findByText('ses_1');
+    renderJobs();
 
     const cancel = screen.getByTestId('devbox-job-cancel-j1');
     fireEvent.click(cancel);
@@ -59,10 +65,27 @@ describe('Devbox jobs live', () => {
     });
   });
 
-  it('shows the empty state when no jobs are live', async () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    render(<DevboxJobs />);
+  it('shows the empty state when no jobs are live', () => {
+    renderJobs({ data: { rows: [], bridge: 'up' } });
 
-    expect(await screen.findByText('No active jobs')).toBeTruthy();
+    expect(screen.getByText('No active jobs')).toBeTruthy();
+  });
+
+  it('marks a bridge-down bundle and retries through the shared callback', () => {
+    const onRetry = renderJobs({ data: { rows: [], bridge: 'down' } });
+
+    const degraded = screen.getByTestId('devbox-jobs-degraded');
+    expect(degraded).toBeTruthy();
+    fireEvent.click(degraded.querySelector('button')!);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the shared poll error in the section header with retry', () => {
+    const onRetry = renderJobs({ error: 'poll exploded' });
+
+    const error = screen.getByTestId('devbox-jobs-error');
+    expect(error.textContent).toContain('poll exploded');
+    fireEvent.click(error.querySelector('button')!);
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

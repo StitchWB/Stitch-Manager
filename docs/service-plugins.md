@@ -73,6 +73,10 @@ The `contributions` object declares the plugin's surface area:
 | `i18n` | `object` | Translation bundles keyed by locale (`ru`, `en`). Keys are **nested objects** whose string leaves are translations — the FE resolver (`walkBundle`) walks dot-paths through nested objects. Flat keys (e.g. `"myplugin.title"`) never resolve. Labels are i18n key strings resolved via `t("plugin.{id}.{key}")`. |
 | `storage` | `object` | Storage declaration. `sqlite: true` enables per-plugin SQLite at `data/plugins/{id}/plugin.db`. `migrations` is `"raw_sql"`, `"alembic"`, or `null`. |
 
+A readonly command named `poll` is treated as a UI heartbeat: its
+`plugin.{id}.poll` requests are logged at DEBUG (not INFO), so a page
+refreshing on a timer does not flood the access log.
+
 ### Settings & environment
 
 There is no generic settings-injection mechanism. Plugins receive

@@ -102,14 +102,29 @@ export function rotatedTokensStatus(finishedAtEpochSec: number): DevboxActionSta
   };
 }
 
-export function pageRoutes(overrides: DevboxRoutes = {}): DevboxRoutes {
+export interface DevboxPollBundleOverrides {
+  overview?: unknown;
+  action_status?: unknown;
+  jobs?: unknown;
+  permissions?: unknown;
+  events?: unknown;
+}
+
+export function devboxPollBundle(overrides: DevboxPollBundleOverrides = {}) {
   return {
     overview: overviewFixture,
     action_status: idleActionStatus,
+    jobs: [],
+    permissions: [],
+    events: [],
+    ...overrides,
+  };
+}
+
+export function pageRoutes(overrides: DevboxRoutes = {}): DevboxRoutes {
+  return {
+    poll: devboxPollBundle(),
     profiles_list: profilesFixture,
-    jobs_live: [],
-    permissions_pending: [],
-    events_tail: [],
     logs: { sources: [] },
     agent_prompt: agentPromptRoute(),
     ...overrides,

@@ -36,7 +36,7 @@ import {
   registerPluginBundles,
   unregisterPluginBundles,
 } from '@/lib/i18nPluginBundles';
-import { devboxRouter, devboxCalls, pageRoutes } from './devboxTestKit';
+import { devboxRouter, devboxCalls, devboxPollBundle, pageRoutes } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
@@ -63,36 +63,82 @@ describe('Devbox page vitals', () => {
 
     expect(screen.getAllByText(/Updated /).length).toBeGreaterThan(0);
     expect(screen.getByText('tunnel live')).toBeTruthy();
-    expect(devboxCalls(invokeMock, 'overview').length).toBeGreaterThanOrEqual(1);
+    expect(devboxCalls(invokeMock, 'poll').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('polls overview on a 4000ms interval', async () => {
+  it('polls the batched bundle on a 4000ms interval', async () => {
     jest.useFakeTimers();
     render(<DevboxPage />);
 
     await act(async () => {
       await Promise.resolve();
     });
-    const initial = devboxCalls(invokeMock, 'overview').length;
+    const initial = devboxCalls(invokeMock, 'poll').length;
     expect(initial).toBeGreaterThanOrEqual(1);
 
     await act(async () => {
       jest.advanceTimersByTime(3999);
       await Promise.resolve();
     });
-    expect(devboxCalls(invokeMock, 'overview').length).toBe(initial);
+    expect(devboxCalls(invokeMock, 'poll').length).toBe(initial);
 
     await act(async () => {
       jest.advanceTimersByTime(1);
       await Promise.resolve();
     });
     await waitFor(() => {
-      expect(devboxCalls(invokeMock, 'overview').length).toBeGreaterThan(initial);
+      expect(devboxCalls(invokeMock, 'poll').length).toBeGreaterThan(initial);
+    });
+  });
+
+  it('feeds every observation section from one poll per cycle', async () => {
+    jest.useFakeTimers();
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          poll: devboxPollBundle({
+            jobs: [
+              { id: 'j1', tool: 'bash', status: 'running', startedAt: 1791536987.76, sessionId: 'ses_1' },
+            ],
+            permissions: [
+              { id: 'p1', tool: 'shell', summary: 'rm -rf build/', startedAt: 1791536987.76 },
+            ],
+            events: [{ ts: 1791536987.76, kind: 'tool_call', tool: 'bash', status: 'ok' }],
+          }),
+        }),
+      ),
+    );
+    render(<DevboxPage />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(devboxCalls(invokeMock, 'poll')).toHaveLength(1);
+    expect(screen.getByTestId('devbox-vital-value-ingress').textContent).toBe('up');
+    expect(screen.getByText('ses_1')).toBeTruthy();
+    expect(screen.getByText('rm -rf build/')).toBeTruthy();
+    expect(screen.getByTestId('devbox-events-river').textContent).toContain('tool_call');
+    for (const cmd of ['overview', 'action_status', 'jobs_live', 'permissions_pending', 'events_tail']) {
+      expect(devboxCalls(invokeMock, cmd)).toHaveLength(0);
+    }
+
+    await act(async () => {
+      jest.advanceTimersByTime(4000);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(devboxCalls(invokeMock, 'poll')).toHaveLength(2);
     });
   });
 
   it('shows the vitals empty state when overview returns no cards', async () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes({ overview: { cards: [] } })));
+    invokeMock.mockImplementation(
+      devboxRouter(pageRoutes({ poll: devboxPollBundle({ overview: { cards: [] } }) })),
+    );
     render(<DevboxPage />);
 
     expect(
@@ -102,7 +148,9 @@ describe('Devbox page vitals', () => {
 
   it('renders legacy overview rows defensively as tone-ok cards', async () => {
     invokeMock.mockImplementation(
-      devboxRouter(pageRoutes({ overview: [{ title: 'Bridge', value: 'up' }] })),
+      devboxRouter(
+        pageRoutes({ poll: devboxPollBundle({ overview: [{ title: 'Bridge', value: 'up' }] }) }),
+      ),
     );
     render(<DevboxPage />);
 
@@ -124,23 +172,25 @@ describe('Devbox page vitals', () => {
       invokeMock.mockImplementation(
         devboxRouter(
           pageRoutes({
-            overview: {
-              cards: [
-                {
-                  id: 'ingress',
-                  title: 'stitch-devbox.card.ingress',
-                  value: 'up',
-                  tone: 'ok',
-                  hint: 'stitch-devbox.hint.ingress',
-                },
-                {
-                  id: 'bridge',
-                  title: 'stitch-devbox.card.missing',
-                  value: 'down',
-                  tone: 'down',
-                },
-              ],
-            },
+            poll: devboxPollBundle({
+              overview: {
+                cards: [
+                  {
+                    id: 'ingress',
+                    title: 'stitch-devbox.card.ingress',
+                    value: 'up',
+                    tone: 'ok',
+                    hint: 'stitch-devbox.hint.ingress',
+                  },
+                  {
+                    id: 'bridge',
+                    title: 'stitch-devbox.card.missing',
+                    value: 'down',
+                    tone: 'down',
+                  },
+                ],
+              },
+            }),
           }),
         ),
       );
@@ -154,18 +204,19 @@ describe('Devbox page vitals', () => {
     }
   });
 
-  it('surfaces a per-command error with retry', async () => {
+  it('surfaces a poll error with retry', async () => {
     invokeMock.mockImplementation(
       devboxRouter({
         ...pageRoutes(),
-        overview: () => {
+        poll: () => {
           throw new Error('sidecar exploded');
         },
       }),
     );
     render(<DevboxPage />);
 
-    expect(await screen.findByText('sidecar exploded')).toBeTruthy();
+    const matches = await screen.findAllByText('sidecar exploded');
+    expect(matches.length).toBeGreaterThan(0);
     expect(screen.getAllByText('Retry').length).toBeGreaterThan(0);
   });
 });
