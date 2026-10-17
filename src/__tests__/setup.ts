@@ -67,6 +67,11 @@ if (typeof globalThis.fetch === 'undefined') {
   }));
 }
 
+// jsdom does not implement scrollIntoView (list rows self-scroll on selection).
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 // Suppress console errors in tests (optional)
 const originalError = console.error;
 const originalWarn = console.warn;

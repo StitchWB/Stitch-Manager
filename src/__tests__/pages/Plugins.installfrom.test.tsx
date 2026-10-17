@@ -1,5 +1,5 @@
 /**
- * Plugins page — install-from-source dialog tests.
+ * PluginAccessPanel — install-from-source dialog tests.
  *
  * Verifies:
  *   (a) Dialog renders when the "Install from source" button is clicked:
@@ -22,7 +22,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
-import Plugins from '../../pages/Plugins';
+import PluginAccessPanel from '../../components/marketplace/PluginAccessPanel';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { _resetForTests } from '@/lib/backend/modules/servicePlugins';
 import * as pluginGrantsModule from '../../lib/backend/modules/pluginGrants';
@@ -106,7 +106,7 @@ jest.mock('../../components/ui/Toggle', () => ({
 
 async function openDialog() {
   await waitFor(() => {
-    expect(screen.getByTestId('header')).toBeTruthy();
+    expect(screen.getByText('admin.plugins.servicePlugins')).toBeTruthy();
   });
   await act(async () => {
     fireEvent.click(screen.getByText('admin.plugins.installFromSource.title'));
@@ -126,7 +126,7 @@ async function submit() {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('Plugins page — install from source dialog', () => {
+describe('PluginAccessPanel — install from source dialog', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
@@ -144,7 +144,7 @@ describe('Plugins page — install from source dialog', () => {
   it('(a) renders dialog with title, url input, mode select, submit button', async () => {
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -163,7 +163,7 @@ describe('Plugins page — install from source dialog', () => {
   it('(b) repo mode: submit builds exact payload {url, ref, trust}', async () => {
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -186,7 +186,7 @@ describe('Plugins page — install from source dialog', () => {
   it('(c) release mode: submit builds exact payload {url, release, expected_sha256}', async () => {
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -228,7 +228,7 @@ describe('Plugins page — install from source dialog', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -265,7 +265,7 @@ describe('Plugins page — install from source dialog', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 

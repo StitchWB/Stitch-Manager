@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { AlertTriangle, Upload } from 'lucide-react';
+import { AlertTriangle, Hash, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -8,7 +8,8 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { t } from '@/lib/i18n';
 import { openFileDialog } from '@/lib/fileDialog';
 import { isDesktopApp } from '@/lib/backend/core/url';
-import { submitPlugin, type GateReport } from '@/lib/backend/modules/submissions';
+import { submitPlugin, previewRelease, type GateReport } from '@/lib/backend/modules/submissions';
+import { DomainTagsInput, DOMAIN_RE } from '@/components/marketplace/DomainTagsInput';
 
 type SubmitTab = 'release' | 'upload';
 
@@ -24,12 +25,13 @@ export function SubmitPluginModal({ isOpen, onClose, onSubmitted }: SubmitPlugin
   const [tab, setTab] = useState<SubmitTab>('release');
   const [pluginId, setPluginId] = useState('');
   const [version, setVersion] = useState('');
-  const [domains, setDomains] = useState('');
+  const [domains, setDomains] = useState<string[]>([]);
   const [sourceUrl, setSourceUrl] = useState('');
   const [sha256, setSha256] = useState('');
   const [zipPath, setZipPath] = useState('');
   const [zipError, setZipError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [fetchingSha, setFetchingSha] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [gateReport, setGateReport] = useState<GateReport | null>(null);
 
@@ -39,7 +41,7 @@ export function SubmitPluginModal({ isOpen, onClose, onSubmitted }: SubmitPlugin
     setTab('release');
     setPluginId('');
     setVersion('');
-    setDomains('');
+    setDomains([]);
     setSourceUrl('');
     setSha256('');
     setZipPath('');
@@ -68,6 +70,31 @@ export function SubmitPluginModal({ isOpen, onClose, onSubmitted }: SubmitPlugin
     }
   }, []);
 
+  const handleFetchSha = useCallback(async () => {
+    const url = sourceUrl.trim();
+    if (!url) {
+      setFormError(t('marketplace.submit.requiredRelease'));
+      return;
+    }
+    setFormError(null);
+    setFetchingSha(true);
+    try {
+      const result = await previewRelease(url);
+      if (result.success && result.sha256) {
+        setSha256(result.sha256);
+        const { manifest_id: manifestId, manifest_version: manifestVersion } = result;
+        if (manifestId) setPluginId(prev => (prev.trim() ? prev : manifestId));
+        if (manifestVersion) setVersion(prev => (prev.trim() ? prev : manifestVersion));
+      } else {
+        toast.error(t('marketplace.submit.fetchShaFailed'));
+      }
+    } catch {
+      toast.error(t('marketplace.submit.fetchShaFailed'));
+    } finally {
+      setFetchingSha(false);
+    }
+  }, [sourceUrl]);
+
   const handleSubmit = useCallback(async () => {
     setFormError(null);
     setGateReport(null);
@@ -90,11 +117,10 @@ export function SubmitPluginModal({ isOpen, onClose, onSubmitted }: SubmitPlugin
       setFormError(t('marketplace.submit.requiredZip'));
       return;
     }
-
-    const declaredDomains = domains
-      .split(/[\s,]+/)
-      .map(d => d.trim())
-      .filter(Boolean);
+    if (domains.some(d => !DOMAIN_RE.test(d))) {
+      setFormError(t('marketplace.submit.domainInvalid'));
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -102,7 +128,7 @@ export function SubmitPluginModal({ isOpen, onClose, onSubmitted }: SubmitPlugin
         source_type: tab,
         plugin_id: pid,
         version: ver,
-        declared_domains: declaredDomains,
+        declared_domains: domains,
         ...(tab === 'release'
           ? { source_url: sourceUrl.trim(), sha256: sha256.trim() }
           : { zip_path: zipPath }),
@@ -206,6 +232,20 @@ export function SubmitPluginModal({ isOpen, onClose, onSubmitted }: SubmitPlugin
               placeholder={t('marketplace.submit.sha256Ph')}
               disabled={submitting}
               className="font-mono"
+              rightElement={
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  leftIcon={<Hash size={12} />}
+                  isLoading={fetchingSha}
+                  disabled={submitting}
+                  onClick={() => void handleFetchSha()}
+                >
+                  {fetchingSha
+                    ? t('marketplace.submit.fetchingSha')
+                    : t('marketplace.submit.fetchSha')}
+                </Button>
+              }
             />
           </>
         ) : (
@@ -240,14 +280,24 @@ export function SubmitPluginModal({ isOpen, onClose, onSubmitted }: SubmitPlugin
           </div>
         )}
 
-        <Input
-          label={t('marketplace.submit.domains')}
-          value={domains}
-          onChange={e => setDomains(e.target.value)}
-          placeholder={t('marketplace.submit.domainsPh')}
-          hint={t('marketplace.submit.domainsHint')}
-          disabled={submitting}
-        />
+        <div className="flex flex-col w-full">
+          <label
+            htmlFor="submit-plugin-domains"
+            className="text-xs font-semibold text-slate-300 px-0.5 leading-4 mb-1.5"
+          >
+            {t('marketplace.submit.domains')}
+          </label>
+          <DomainTagsInput
+            id="submit-plugin-domains"
+            value={domains}
+            onChange={setDomains}
+            placeholder={t('marketplace.submit.domainsPlaceholder')}
+            disabled={submitting}
+          />
+          <p className="text-xs text-slate-400 px-0.5 mt-0.5">
+            {t('marketplace.submit.domainsHint')}
+          </p>
+        </div>
 
         {formError && (
           <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">

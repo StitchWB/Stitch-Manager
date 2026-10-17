@@ -4,13 +4,14 @@
  * Verifies:
  *   - Rows render for installed, available, and locked (grayed) plugins.
  *   - Locked rows show a lock icon and a disabled install button.
- *   - Installed rows show an Installed button (disabled, with Check icon).
+ *   - Installed rows show a non-interactive installed status (Check icon).
  *   - Search filters the list client-side.
  *   - Activation-required banner renders when not activated.
  *   - Guest mode (no user): the catalog still renders; official items are
  *     locked with the auth-required tooltip; clicking a locked install
  *     button opens the Telegram login view; community items stay installable.
  *   - TierBadge renders for locked items with required_tier.
+ *   - Access tab: admin-only option, ?tab=access deep link, fallbacks.
  *
  * NOTE: The page uses an IDEA-style master-detail layout. The left pane
  * (data-testid="plugin-list") holds compact rows; the right pane
@@ -29,6 +30,9 @@ import Marketplace from '../../pages/Marketplace';
 import { useAuthStore } from '../../stores/auth';
 import * as marketplaceModule from '../../lib/backend/modules/marketplace';
 import type { MarketplaceItem } from '../../lib/backend/modules/marketplace';
+import * as pluginGrantsModule from '../../lib/backend/modules/pluginGrants';
+import * as authModule from '../../lib/backend/modules/auth';
+import { safeInvoke } from '../../lib/backend/core/invoke';
 
 // Mock Header to keep the test focused on the page body.
 jest.mock('../../components/layout/Header', () => ({
@@ -59,7 +63,7 @@ jest.mock('../../lib/backend/core/invoke', () => ({
 }));
 
 // Mock the auth backend module so importing the auth store doesn't trigger
-// real fetch calls.
+// real fetch calls. listUsers backs the access panel's per-user section.
 jest.mock('../../lib/backend/modules/auth', () => ({
   getAuthStatus: jest.fn(),
   getCurrentUser: jest.fn(),
@@ -68,6 +72,7 @@ jest.mock('../../lib/backend/modules/auth', () => ({
   logoutUser: jest.fn(),
   setupUser: jest.fn(),
   setLoginPolicy: jest.fn(),
+  listUsers: jest.fn(),
 }));
 
 const mk = {
@@ -150,16 +155,10 @@ describe('Marketplace page', () => {
     });
     expect(installButtons).toHaveLength(2);
 
-    // Installed buttons appear in both the list row and the detail pane
-    // (auto-select picks the first item = "Installed Plugin"). All must be
-    // disabled.
-    const installedButtons = screen.getAllByRole('button', {
-      name: 'Installed',
-    });
-    expect(installedButtons.length).toBeGreaterThanOrEqual(1);
     expect(
-      installedButtons.every(btn => btn.hasAttribute('disabled')),
-    ).toBe(true);
+      screen.getAllByTestId('installed-status').length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('button', { name: 'Installed' })).toBeNull();
 
     // Locked row: the install button should be disabled.
     const lockedInstall = installButtons.find(btn =>
@@ -334,5 +333,104 @@ describe('Marketplace page', () => {
     expect(
       screen.getByText(/Requires Vip role or admin grant/i)
     ).toBeTruthy();
+  });
+});
+
+describe('Marketplace page — access tab', () => {
+  const adminUser = { id: 1, username: 'admin', role: 'admin' as const };
+  const regularUser = { id: 2, username: 'bob', role: 'user' as const };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (safeInvoke as jest.Mock).mockImplementation(() => Promise.resolve([]));
+    (authModule.listUsers as jest.Mock).mockResolvedValue([]);
+    jest.spyOn(marketplaceModule, 'getMarketplace').mockResolvedValue({
+      activated: true,
+      items: [],
+    });
+    jest.spyOn(pluginGrantsModule, 'pluginGrantsRoleList').mockResolvedValue({
+      roles: { user: [], vip: [], premium: [], elite: [], admin: ['*'] },
+      plugins: [{ id: 'kiro', name: 'Kiro Plugin', version: '1.0.0' }],
+    });
+  });
+
+  it('renders the access panel for an admin on ?tab=access', async () => {
+    useAuthStore.setState({ enabled: true, user: adminUser });
+
+    render(
+      <MemoryRouter initialEntries={['/marketplace?tab=access']}>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Access by role')).toBeTruthy();
+    expect(await screen.findByText('Kiro Plugin')).toBeTruthy();
+    expect(screen.getByText('All plugins')).toBeTruthy();
+
+    // The access tab option is present and active.
+    expect(screen.getByRole('button', { name: 'Access' })).toBeTruthy();
+
+    // The master-detail split is hidden while the panel owns the content area.
+    const splitPane = screen.getByTestId('plugin-list').parentElement;
+    expect(splitPane?.className).toContain('hidden');
+  });
+
+  it('hides the access tab option for non-admins and falls back to the marketplace tab', async () => {
+    useAuthStore.setState({ enabled: true, user: regularUser });
+    (marketplaceModule.getMarketplace as jest.Mock).mockResolvedValue({
+      activated: true,
+      items: [mk.available()],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/marketplace?tab=access']}>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    // The marketplace list renders instead of the access panel.
+    const listPane = screen.getByTestId('plugin-list');
+    await waitFor(() => {
+      expect(within(listPane).getByText('Available Plugin')).toBeTruthy();
+    });
+    expect(listPane.parentElement?.className).not.toContain('hidden');
+    expect(screen.queryByText('Access by role')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Access' })).toBeNull();
+  });
+
+  it('falls back to the marketplace tab for unknown ?tab= values', async () => {
+    useAuthStore.setState({ enabled: true, user: adminUser });
+    (marketplaceModule.getMarketplace as jest.Mock).mockResolvedValue({
+      activated: true,
+      items: [mk.available()],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/marketplace?tab=bogus']}>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    const listPane = screen.getByTestId('plugin-list');
+    await waitFor(() => {
+      expect(within(listPane).getByText('Available Plugin')).toBeTruthy();
+    });
+    expect(screen.queryByText('Access by role')).toBeNull();
+  });
+
+  it('syncs the ?tab= param when switching to the access tab', async () => {
+    const user = userEvent.setup();
+    useAuthStore.setState({ enabled: true, user: adminUser });
+
+    render(
+      <MemoryRouter initialEntries={['/marketplace']}>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Access' }));
+
+    // tab is derived from the URL param, so the panel rendering proves the click wrote it
+    expect(await screen.findByText('Access by role')).toBeTruthy();
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Plugins page tests.
+ * Plugin access panel tests plus the /plugins redirect.
  *
  * Verifies:
  *   - Role matrix renders plugins × roles with correct checkboxes.
@@ -7,6 +7,7 @@
  *   - Optimistic rollback on error.
  *   - Per-user editor: grant/revoke flows, source badges, bulk revoke confirm.
  *   - User picker selects a user and loads their grants.
+ *   - /plugins renders a redirect to /marketplace?tab=access.
  *
  * Mocks the pluginGrants module (safeInvoke wrappers) and the auth module
  * (listUsers) via jest.spyOn, following the Marketplace.test.tsx pattern.
@@ -14,8 +15,9 @@
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Plugins from '../../pages/Plugins';
+import PluginAccessPanel from '../../components/marketplace/PluginAccessPanel';
 import * as pluginGrantsModule from '../../lib/backend/modules/pluginGrants';
 import * as authModule from '../../lib/backend/modules/auth';
 import type { AuthUser } from '../../lib/backend/modules/auth';
@@ -80,7 +82,7 @@ const mockUserGrants = {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-describe('Plugins page', () => {
+describe('PluginAccessPanel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -94,7 +96,7 @@ describe('Plugins page', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>
     );
 
@@ -127,7 +129,7 @@ describe('Plugins page', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>
     );
 
@@ -172,7 +174,7 @@ describe('Plugins page', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>
     );
 
@@ -209,7 +211,7 @@ describe('Plugins page', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>
     );
 
@@ -232,7 +234,7 @@ describe('Plugins page', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>
     );
 
@@ -253,7 +255,7 @@ describe('Plugins page', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>
     );
 
@@ -270,5 +272,23 @@ describe('Plugins page', () => {
 
     // The user picker is NOT rendered (replaced by the error block).
     expect(screen.queryByText('Select user')).toBeNull();
+  });
+});
+
+describe('Plugins page redirect', () => {
+  it('redirects /plugins to /marketplace?tab=access', () => {
+    render(
+      <MemoryRouter initialEntries={['/plugins']}>
+        <Routes>
+          <Route path="/plugins" element={<Plugins />} />
+          <Route
+            path="/marketplace"
+            element={<div data-testid="marketplace-route" />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('marketplace-route')).toBeTruthy();
   });
 });

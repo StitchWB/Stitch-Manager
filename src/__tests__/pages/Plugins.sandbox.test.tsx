@@ -1,5 +1,5 @@
 /**
- * Plugins page — per-user developer sandbox tests.
+ * PluginAccessPanel — per-user developer sandbox tests.
  *
  * Verifies:
  *   (a) Sandbox section renders for authenticated callers only (guests get
@@ -24,7 +24,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
-import Plugins from '../../pages/Plugins';
+import PluginAccessPanel from '../../components/marketplace/PluginAccessPanel';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { _resetForTests } from '@/lib/backend/modules/servicePlugins';
 import type { SandboxPluginInfo } from '@/lib/backend/modules/sandboxPlugins';
@@ -150,7 +150,7 @@ function defaultInvoke(): void {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-describe('Plugins page — developer sandbox', () => {
+describe('PluginAccessPanel — developer sandbox', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
@@ -173,7 +173,7 @@ describe('Plugins page — developer sandbox', () => {
   it('(a) renders the sandbox section for authenticated users', async () => {
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     expect(await screen.findByText('admin.plugins.sandbox.title')).toBeTruthy();
@@ -183,10 +183,10 @@ describe('Plugins page — developer sandbox', () => {
     setAuthUser(null);
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
-    await screen.findByTestId('header');
+    await screen.findByText('admin.plugins.accessByRole');
     await waitFor(() => {
       expect(screen.queryByText('admin.plugins.sandbox.title')).toBeNull();
     });
@@ -195,7 +195,7 @@ describe('Plugins page — developer sandbox', () => {
   it('(b) refuses install with an empty git url (inline error, no backend call)', async () => {
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('admin.plugins.sandbox.title');
@@ -231,7 +231,7 @@ describe('Plugins page — developer sandbox', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('admin.plugins.sandbox.title');
@@ -285,7 +285,7 @@ describe('Plugins page — developer sandbox', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('admin.plugins.sandbox.title');
@@ -325,7 +325,7 @@ describe('Plugins page — developer sandbox', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('myplug');
@@ -349,7 +349,7 @@ describe('Plugins page — developer sandbox', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('myplug');
@@ -381,7 +381,7 @@ describe('Plugins page — developer sandbox', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('myplug');
@@ -426,7 +426,7 @@ describe('Plugins page — developer sandbox', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('myplug');
@@ -462,7 +462,7 @@ describe('Plugins page — developer sandbox', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
     await screen.findByText('myplug');
