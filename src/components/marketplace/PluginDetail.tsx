@@ -30,7 +30,7 @@ export function PluginDetail({ item, busy, isGuest, onInstall, onUninstall, onLo
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="p-6 max-w-3xl">
+      <div className="p-6 w-full">
         <MarketplaceDetailHeader
           item={item}
           busy={busy}
