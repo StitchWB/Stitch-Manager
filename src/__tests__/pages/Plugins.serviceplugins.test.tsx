@@ -1,5 +1,5 @@
 /**
- * Plugins page — service-plugin section tests.
+ * PluginAccessPanel — service-plugin section tests.
  *
  * Verifies:
  *   (a) Service plugin cards render from list_service_plugins data
@@ -19,7 +19,7 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
-import Plugins from '../../pages/Plugins';
+import PluginAccessPanel from '../../components/marketplace/PluginAccessPanel';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import {
   _resetForTests,
@@ -114,7 +114,7 @@ const communityPlugin: ServicePluginInfo = {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('Plugins page — service plugins section', () => {
+describe('PluginAccessPanel — service plugins section', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
@@ -140,7 +140,7 @@ describe('Plugins page — service plugins section', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -168,7 +168,7 @@ describe('Plugins page — service plugins section', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -191,7 +191,7 @@ describe('Plugins page — service plugins section', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -237,7 +237,7 @@ describe('Plugins page — service plugins section', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -266,7 +266,7 @@ describe('Plugins page — service plugins section', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -289,7 +289,7 @@ describe('Plugins page — service plugins section', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -304,7 +304,7 @@ describe('Plugins page — service plugins section', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 

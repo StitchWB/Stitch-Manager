@@ -1,5 +1,5 @@
 /**
- * Plugins page — global service-plugin metrics tests.
+ * PluginAccessPanel — global service-plugin metrics tests.
  *
  * Verifies that the global service-plugin cards surface metrics:
  *   (a) Inline counters (calls, errors) render from list_service_plugins
@@ -22,7 +22,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import Plugins from '../../pages/Plugins';
+import PluginAccessPanel from '../../components/marketplace/PluginAccessPanel';
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import {
   _resetForTests,
@@ -100,7 +100,7 @@ const metricsResponse: ServicePluginMetrics = {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('Plugins page — service plugin metrics', () => {
+describe('PluginAccessPanel — service plugin metrics', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
@@ -124,7 +124,7 @@ describe('Plugins page — service plugin metrics', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -150,7 +150,7 @@ describe('Plugins page — service plugin metrics', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -189,7 +189,7 @@ describe('Plugins page — service plugin metrics', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 
@@ -218,7 +218,7 @@ describe('Plugins page — service plugin metrics', () => {
 
     render(
       <MemoryRouter>
-        <Plugins />
+        <PluginAccessPanel />
       </MemoryRouter>,
     );
 

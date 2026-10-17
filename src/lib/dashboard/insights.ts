@@ -186,7 +186,7 @@ export function buildActionQueue(args: {
       severity: 'danger',
       message: `${service.name} is not running`,
       actionLabel: 'Open plugins',
-      to: '/plugins',
+      to: '/marketplace?tab=access',
     });
   }
   for (const insight of args.insights) {

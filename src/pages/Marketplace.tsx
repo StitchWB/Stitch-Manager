@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Package, RefreshCw, Store, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '../components/layout/Header';
@@ -9,20 +10,24 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '../stores/app';
-import { useAuthStore } from '../stores/auth';
+import { effectiveRole, useAuthStore } from '../stores/auth';
 import { useMarketplaceStore } from '../stores/marketplace';
 import type { MarketplaceCategory, MarketplaceItem } from '@/lib/backend/modules/marketplace';
 import { MarketplaceFilterBar } from '../components/marketplace/MarketplaceFilterBar';
 import { MarketplaceListBody } from '../components/marketplace/MarketplaceListBody';
 import { MySubmissionsPanel } from '../components/marketplace/MySubmissionsPanel';
+import PluginAccessPanel from '../components/marketplace/PluginAccessPanel';
 import { PluginDetail } from '../components/marketplace/PluginDetail';
 import { SubmitPluginModal } from '../components/marketplace/SubmitPluginModal';
+
+type MarketplaceTab = 'marketplace' | 'installed' | 'submissions' | 'access';
 
 export default function Marketplace() {
   const language = useAppStore(s => s.language);
   void language; // force re-render on locale change (t() is not reactive)
 
   const user = useAuthStore(s => s.user);
+  const authEnabled = useAuthStore(s => s.enabled);
   const setAuthView = useAuthStore(s => s.setAuthView);
 
   const items = useMarketplaceStore(s => s.items);
@@ -37,17 +42,41 @@ export default function Marketplace() {
   const uninstallPlugin = useMarketplaceStore(s => s.uninstallPlugin);
 
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState<'marketplace' | 'installed' | 'submissions'>('marketplace');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [badgeFilter, setBadgeFilter] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<MarketplaceCategory[]>([]);
   const [submitOpen, setSubmitOpen] = useState(false);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const isGuest = !user;
+  const isAdmin = !authEnabled || effectiveRole(user) === 'admin';
+  const showAccessTab = authEnabled && isAdmin;
+
+  const isTabAvailable = (value: string): value is MarketplaceTab => {
+    if (value === 'marketplace' || value === 'installed') return true;
+    if (value === 'submissions') return !isGuest;
+    if (value === 'access') return showAccessTab;
+    return false;
+  };
+
+  const rawTab = searchParams.get('tab');
+  const tab: MarketplaceTab = rawTab !== null && isTabAvailable(rawTab) ? rawTab : 'marketplace';
+
+  const setTab = (next: MarketplaceTab) => {
+    setSearchParams(
+      prev => {
+        const params = new URLSearchParams(prev);
+        params.set('tab', next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
+
   useEffect(() => {
     void fetchMarketplace(true);
   }, [fetchMarketplace, user]);
-
-  const isGuest = !user;
 
   const handleRefresh = () => {
     void fetchMarketplace(true);
@@ -155,6 +184,9 @@ export default function Marketplace() {
     ...(!isGuest
       ? [{ label: t('marketplace.mySubmissions.tab'), value: 'submissions' }]
       : []),
+    ...(showAccessTab
+      ? [{ label: t('marketplace.accessLabel'), value: 'access' }]
+      : []),
   ];
 
   return (
@@ -193,14 +225,14 @@ export default function Marketplace() {
         <SegmentedControl
           options={tabOptions}
           value={tab}
-          onChange={v => setTab(v as 'marketplace' | 'installed')}
+          onChange={v => setTab(v as MarketplaceTab)}
           size="sm"
           stretch={false}
         />
       </div>
 
       {/* Activation required banner (full width, above the split) */}
-      {!activated && !isFirstLoad && tab !== 'submissions' && (
+      {!activated && !isFirstLoad && tab !== 'submissions' && tab !== 'access' && (
         <div className="mx-4 mt-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/80 flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span className="leading-relaxed">
@@ -212,8 +244,16 @@ export default function Marketplace() {
       {/* My submissions (authenticated users) */}
       {tab === 'submissions' && <MySubmissionsPanel />}
 
+      {/* Admin plugin access management */}
+      {tab === 'access' && <PluginAccessPanel />}
+
       {/* Master-detail split */}
-      <div className={cn('flex-1 flex min-h-0', tab === 'submissions' && 'hidden')}>
+      <div
+        className={cn(
+          'flex-1 flex min-h-0',
+          (tab === 'submissions' || tab === 'access') && 'hidden',
+        )}
+      >
         {/* LEFT pane: search + compact list */}
         <div
           className="w-[380px] shrink-0 border-r border-white/[0.06] flex flex-col"
@@ -232,7 +272,7 @@ export default function Marketplace() {
           />
 
           <MarketplaceListBody
-            tab={tab}
+            tab={tab === 'access' ? 'submissions' : tab}
             isFirstLoad={isFirstLoad}
             isError={isError}
             error={error}
