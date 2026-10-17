@@ -284,11 +284,12 @@ describe('DevboxPrompt copy flow', () => {
 });
 
 describe('DevboxPrompt preview and errors', () => {
-  it('keeps the prompt tab hidden by default and switches to it via tabs and the toolbar', async () => {
+  it('keeps the prompt tab hidden by default and switches to it via the tabs only', async () => {
     renderPrompt();
     await chipsReady();
 
     expect(screen.queryByTestId('devbox-prompt-preview')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-preview-toggle')).toBeNull();
 
     fireEvent.click(screen.getByText(t('devboxPage.promptTabPrompt')));
     expect(screen.getByTestId('devbox-prompt-preview').textContent).toBe(
@@ -302,9 +303,6 @@ describe('DevboxPrompt preview and errors', () => {
     fireEvent.click(screen.getByText(t('devboxPage.promptTabEditor')));
     expect(screen.getByTestId('devbox-prompt-task')).toBeTruthy();
     expect(screen.queryByTestId('devbox-prompt-preview')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('devbox-prompt-preview-toggle'));
-    expect(screen.getByTestId('devbox-prompt-preview')).toBeTruthy();
   });
 
   it('eye toggle refetches with the flipped reveal flag', async () => {
@@ -417,7 +415,7 @@ describe('DevboxPrompt agent client selector', () => {
       });
     });
 
-    fireEvent.click(screen.getByTestId('devbox-prompt-preview-toggle'));
+    fireEvent.click(screen.getByText(t('devboxPage.promptTabPrompt')));
     await waitFor(() => {
       expect(screen.getByTestId('devbox-prompt-preview').textContent).toBe(
         promptWithClient(maskedAgentPromptFixture, 'opencode'),
@@ -469,7 +467,7 @@ describe('DevboxPrompt copy feedback', () => {
     );
   });
 
-  it('flashes the big prompt-tab CTA too', async () => {
+  it('flashes the same footer CTA on the prompt tab', async () => {
     jest.useFakeTimers();
     renderPrompt();
     await flushMicrotasks();
@@ -481,6 +479,36 @@ describe('DevboxPrompt copy feedback', () => {
     expect(screen.getByTestId('devbox-prompt-copy').textContent).toBe(
       t('devboxPage.promptCopied'),
     );
+  });
+});
+
+describe('DevboxPrompt action footer', () => {
+  it('renders one footer with criteria+tokens toolbar and a single copy CTA on both tabs', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    const footer = screen.getByTestId('devbox-prompt-footer');
+    expect(screen.getAllByTestId('devbox-prompt-copy')).toHaveLength(1);
+    expect(footer.contains(screen.getByTestId('devbox-prompt-acceptance-toggle'))).toBe(true);
+    expect(footer.contains(screen.getByTestId('devbox-prompt-reveal'))).toBe(true);
+    expect(screen.queryByTestId('devbox-prompt-preview-toggle')).toBeNull();
+
+    fireEvent.click(screen.getByText(t('devboxPage.promptTabPrompt')));
+    expect(screen.getByTestId('devbox-prompt-footer')).toBe(footer);
+    expect(screen.getAllByTestId('devbox-prompt-copy')).toHaveLength(1);
+    expect(screen.getByTestId('devbox-prompt-preview')).toBeTruthy();
+  });
+
+  it('places the dim hint caption directly under the copy CTA', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    const hint = screen.getByTestId('devbox-prompt-hint');
+    expect(hint.className).toContain('text-2xs');
+    expect(hint.className).toContain('text-slate-500');
+    const column = hint.parentElement;
+    expect(column?.contains(screen.getByTestId('devbox-prompt-copy'))).toBe(true);
+    expect(column?.lastElementChild).toBe(hint);
   });
 });
 
@@ -503,7 +531,7 @@ describe('DevboxPrompt hint and warning lines', () => {
     });
   });
 
-  it('renders the amber stack warning while copy is blocked by prereqs', async () => {
+  it('renders the amber stack alert plate while copy is blocked by prereqs', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
       ready: { profile: true, bridge: false, ingress: false, runner: true },
@@ -514,13 +542,15 @@ describe('DevboxPrompt hint and warning lines', () => {
     renderPrompt();
     await chipsReady();
 
-    expect(screen.getByTestId('devbox-prompt-stack-warning').textContent).toBe(
-      t('devboxPage.promptStackDownWarning'),
-    );
+    const warning = screen.getByTestId('devbox-prompt-stack-warning');
+    expect(warning.textContent).toBe(t('devboxPage.promptStackDownWarning'));
+    expect(warning.className).toContain('border-amber-500/40');
+    expect(warning.className).toContain('bg-amber-500/10');
+    expect(warning.className).toContain('text-amber-200');
     expect(screen.queryByTestId('devbox-prompt-runner-warning')).toBeNull();
   });
 
-  it('renders the slate runner line when copy is enabled but the runner is down', async () => {
+  it('renders the runner micro-alert plate when copy is enabled but the runner is down', async () => {
     const runnerDown = {
       ...maskedAgentPromptFixture,
       ready: { profile: true, bridge: true, ingress: true, runner: false },
@@ -532,9 +562,17 @@ describe('DevboxPrompt hint and warning lines', () => {
     await chipsReady();
 
     expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
-    expect(screen.getByTestId('devbox-prompt-runner-warning').textContent).toBe(
-      t('devboxPage.promptRunnerDownHint'),
-    );
+    const warning = screen.getByTestId('devbox-prompt-runner-warning');
+    expect(warning.textContent).toBe(t('devboxPage.promptRunnerDownHint'));
+    expect(warning.className).toContain('border-amber-500/40');
+    expect(warning.className).toContain('bg-amber-500/10');
+    expect(warning.className).toContain('text-amber-200');
+    expect(warning.className).toContain('text-2xs');
+
+    const task = screen.getByTestId('devbox-prompt-task');
+    expect(
+      task.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
 

@@ -5,6 +5,8 @@ export interface DevboxPageTranslations {
     tabTask: string;
     tabInfra: string;
     headerProjectLabel: string;
+    projectAddOption: string;
+    projectManageOption: string;
     switchProfileConfirmTitle: string;
     switchProfileConfirmMessage: string;
     dangerZone: string;
@@ -12,6 +14,7 @@ export interface DevboxPageTranslations {
     stackDegraded: string;
     stackStopped: string;
     stackUnknown: string;
+    stackBusy: string;
     sectionOverview: string;
     sectionProfiles: string;
     controlStart: string;
@@ -26,6 +29,9 @@ export interface DevboxPageTranslations {
     controlCockpit: string;
     queued: string;
     progress: string;
+    busyStarting: string;
+    busyStopping: string;
+    busyRunning: string;
     sectionPrompt: string;
     promptChipProfile: string;
     promptChipProfileTip: string;
@@ -44,7 +50,6 @@ export interface DevboxPageTranslations {
     promptCriteria: string;
     promptCriteriaHeader: string;
     promptTokens: string;
-    promptPreview: string;
     promptPreviewLocked: string;
     promptTabEditor: string;
     promptTabPrompt: string;
@@ -70,6 +75,7 @@ export interface DevboxPageTranslations {
     railOnboard1: string;
     railOnboard2: string;
     railOnboard3: string;
+    railOnboard4: string;
     permissionApprove: string;
     securityBanner: string;
     railRecent: string;
