@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Briefcase, ShieldAlert, X } from 'lucide-react';
+import {
+  Briefcase,
+  CheckCircle2,
+  Circle,
+  Loader2,
+  ShieldAlert,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/IconButton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 import {
   devboxJobCancel,
   devboxPermissionReply,
@@ -17,7 +26,21 @@ import {
   type DevboxPermissionRow,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
-import { devboxEventLine } from './eventLine';
+import { devboxEventLine, devboxEventText, devboxEventTone } from './eventLine';
+
+const TONE_ICONS = {
+  ok: CheckCircle2,
+  failed: XCircle,
+  running: Loader2,
+  other: Circle,
+} as const;
+
+const TONE_CLASSES = {
+  ok: 'text-emerald-400',
+  failed: 'text-red-400',
+  running: 'text-indigo-300 animate-spin',
+  other: 'text-slate-500',
+} as const;
 
 const BANNER_KEY = 'devbox.securityBannerDismissed';
 const RECENT_LIMIT = 5;
@@ -91,30 +114,13 @@ export function DevboxNowRail({
   };
 
   return (
-    <DevboxSection title={t('devboxPage.railTitle')} testId="devbox-rail">
-      <div className="flex flex-col gap-3">
-        {!bannerDismissed && (
-          <div
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5"
-            data-testid="devbox-security-banner"
-          >
-            <ShieldAlert size={13} className="shrink-0 text-amber-300" aria-hidden />
-            <span className="flex-1 text-2xs text-slate-300">
-              {t('devboxPage.securityBanner')}
-            </span>
-            <IconButton
-              size="sm"
-              variant="ghost"
-              aria-label={t('common.close')}
-              tooltip={t('common.close')}
-              data-testid="devbox-security-banner-close"
-              onClick={dismissBanner}
-            >
-              <X size={12} />
-            </IconButton>
-          </div>
-        )}
-
+    <DevboxSection
+      title={t('devboxPage.railTitle')}
+      testId="devbox-rail"
+      className="flex min-h-full flex-col"
+      bodyClassName="flex min-h-0 flex-1 flex-col"
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
         {activeJob ? (
           <div
             className="flex flex-col gap-1.5 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] p-2.5"
@@ -211,33 +217,74 @@ export function DevboxNowRail({
           </div>
         ))}
 
-        <div className="flex flex-col gap-1">
-          <span className="text-2xs uppercase tracking-wider text-slate-400">
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
+          <span className="shrink-0 text-2xs uppercase tracking-wider text-slate-400">
             {t('devboxPage.railRecent')}
           </span>
-          {recentEvents.length === 0 ? (
-            <span className="text-2xs text-slate-500">{t('devboxPage.eventsEmpty')}</span>
-          ) : (
-            recentEvents.map((row, i) => (
-              <div
-                key={i}
-                className="truncate font-mono text-2xs text-slate-400"
-                title={devboxEventLine(row)}
-              >
-                {devboxEventLine(row)}
-              </div>
-            ))
-          )}
+          <div
+            className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto"
+            data-testid="devbox-rail-recent"
+          >
+            {recentEvents.length === 0 ? (
+              <span className="text-2xs text-slate-500">{t('devboxPage.eventsEmpty')}</span>
+            ) : (
+              recentEvents.map((row, i) => {
+                const tone = devboxEventTone(row);
+                const Icon = TONE_ICONS[tone];
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 text-2xs text-slate-400"
+                    title={devboxEventLine(row)}
+                  >
+                    <Icon
+                      size={12}
+                      className={cn('shrink-0', TONE_CLASSES[tone])}
+                      data-testid="devbox-rail-event-icon"
+                      data-tone={tone}
+                      aria-hidden
+                    />
+                    <span className="shrink-0 tabular-nums text-slate-500">
+                      {devboxTime(row.ts)}
+                    </span>
+                    <span className="truncate">{devboxEventText(row)}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
           <Button
             size="xs"
             variant="ghost"
-            className="self-start"
+            className="self-start shrink-0"
             data-testid="devbox-rail-go-infra"
             onClick={onGoInfra}
           >
             {t('devboxPage.railGoInfra')}
           </Button>
         </div>
+
+        {!bannerDismissed && (
+          <div
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5"
+            data-testid="devbox-security-banner"
+          >
+            <ShieldAlert size={13} className="shrink-0 text-amber-300" aria-hidden />
+            <span className="flex-1 truncate text-2xs text-slate-300">
+              {t('devboxPage.securityBanner')}
+            </span>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={t('common.close')}
+              tooltip={t('common.close')}
+              data-testid="devbox-security-banner-close"
+              onClick={dismissBanner}
+            >
+              <X size={12} />
+            </IconButton>
+          </div>
+        )}
       </div>
     </DevboxSection>
   );

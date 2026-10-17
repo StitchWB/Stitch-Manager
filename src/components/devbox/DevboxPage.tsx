@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Plus, RefreshCw, ShieldAlert, Terminal } from 'lucide-react';
 import Header from '@/components/layout/Header';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { IconButton } from '@/components/ui/IconButton';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { TabButton } from '@/components/ui/TabButton';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -37,8 +38,10 @@ import {
 import { useDevboxPoll } from './useDevboxPoll';
 import { runDevboxAction } from './runAction';
 import { DEVBOX_REFRESH_MS } from './constants';
+import { devboxModeLabel } from './labels';
 import { DevboxPrompt } from './DevboxPrompt';
 import { DevboxProfiles } from './DevboxProfiles';
+import { DevboxProjectStrip } from './DevboxProjectStrip';
 import { DevboxNowRail } from './DevboxNowRail';
 import { DevboxServiceCards } from './DevboxServiceCards';
 import { DevboxConsole } from './DevboxConsole';
@@ -46,14 +49,11 @@ import { DevboxConsole } from './DevboxConsole';
 type PageTab = 'task' | 'infra';
 type StackState = 'ok' | 'warn' | 'down' | 'unknown';
 
-const STACK_BADGE: Record<
-  StackState,
-  { variant: 'success' | 'warning' | 'danger' | 'default'; key: string }
-> = {
-  ok: { variant: 'success', key: 'devboxPage.stackOk' },
-  warn: { variant: 'warning', key: 'devboxPage.stackDegraded' },
-  down: { variant: 'danger', key: 'devboxPage.stackStopped' },
-  unknown: { variant: 'default', key: 'devboxPage.stackUnknown' },
+const STACK_CHIP: Record<StackState, { dot: string; key: string }> = {
+  ok: { dot: 'bg-emerald-400', key: 'devboxPage.stackOk' },
+  warn: { dot: 'bg-amber-400', key: 'devboxPage.stackDegraded' },
+  down: { dot: 'bg-red-400', key: 'devboxPage.stackStopped' },
+  unknown: { dot: 'bg-slate-500', key: 'devboxPage.stackUnknown' },
 };
 
 function stackState(cards: DevboxVitalCard[] | null): StackState {
@@ -64,13 +64,6 @@ function stackState(cards: DevboxVitalCard[] | null): StackState {
   if (up === values.length) return 'ok';
   if (up === 0) return 'down';
   return 'warn';
-}
-
-function modeLabel(mode: string): string {
-  if (mode === 'readonly') return t('devboxPage.modeReadonlyTitle');
-  if (mode === 'standard') return t('devboxPage.modeStandardTitle');
-  if (mode === 'full') return t('devboxPage.modeFullTitle');
-  return mode;
 }
 
 export function DevboxPage() {
@@ -137,6 +130,7 @@ export function DevboxPage() {
   const [tab, setTab] = useState<PageTab>('task');
   const [addSignal, setAddSignal] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
+  const [projectsOpen, setProjectsOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const dangerRef = useRef<HTMLDivElement | null>(null);
 
@@ -149,20 +143,47 @@ export function DevboxPage() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [dangerOpen]);
 
-  const activeProfile = useMemo(
-    () => (Array.isArray(profiles) ? profiles.find(row => row.active)?.name ?? '' : ''),
+  const activeProfileRow = useMemo(
+    () => (Array.isArray(profiles) ? profiles.find(row => row.active) ?? null : null),
     [profiles],
   );
+  const activeProfile = activeProfileRow?.name ?? '';
 
   const composite = stackState(cards);
-  const badge = STACK_BADGE[composite];
+  const chip = STACK_CHIP[composite];
   const ingressUp = devboxVitalValue(cards, 'ingress') === 'up';
   const current = status?.current;
 
   const profileOptions = (Array.isArray(profiles) ? profiles : []).map(row => ({
     value: row.name,
-    label: `${row.name} (${modeLabel(row.mode)})`,
+    label: `${row.name} (${devboxModeLabel(row.mode)})`,
   }));
+
+  const onProfileSelect = useCallback(
+    (value: string) => {
+      if (value === activeProfile) {
+        setSelectedProfile(null);
+        return;
+      }
+      setSelectedProfile(value);
+      void askConfirm({
+        title: t('devboxPage.switchProfileConfirmTitle', { name: value }),
+        message: t('devboxPage.switchProfileConfirmMessage'),
+        confirmText: t('common.confirm'),
+        cancelText: t('common.cancel'),
+        variant: 'warning',
+      }).then(confirmed => {
+        setSelectedProfile(null);
+        if (confirmed) onAction(devboxProfileUse(value));
+      });
+    },
+    [activeProfile, onAction],
+  );
+
+  const openProjects = useCallback(() => {
+    setAddSignal(0);
+    setProjectsOpen(true);
+  }, []);
 
   const controlBar = (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -183,21 +204,8 @@ export function DevboxPage() {
         options={profileOptions}
         value={selectedProfile ?? activeProfile}
         data-testid="devbox-profile-select"
-        onValueChange={value => setSelectedProfile(value)}
+        onValueChange={onProfileSelect}
       />
-      <ConfirmActionButton
-        size="sm"
-        variant="secondary"
-        disabled={busy || selectedProfile === null || selectedProfile === activeProfile}
-        data-testid="devbox-profile-switch"
-        tooltip={t('devboxPage.tipSwitchProfile')}
-        onConfirm={() => {
-          if (selectedProfile === null) return;
-          onAction(devboxProfileUse(selectedProfile));
-        }}
-      >
-        {t('devboxPage.switchProfile')}
-      </ConfirmActionButton>
       <IconButton
         size="md"
         variant="ghost"
@@ -206,14 +214,19 @@ export function DevboxPage() {
         data-testid="devbox-new-project"
         onClick={() => {
           setTab('infra');
+          setProjectsOpen(true);
           setAddSignal(x => x + 1);
         }}
       >
         <Plus size={16} />
       </IconButton>
-      <Badge variant={badge.variant} size="sm" withDot data-testid="devbox-stack-badge">
-        {t(badge.key)}
-      </Badge>
+      <span
+        className="flex items-center gap-1.5 whitespace-nowrap text-2xs text-slate-400"
+        data-testid="devbox-stack-badge"
+      >
+        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', chip.dot)} aria-hidden />
+        {t(chip.key)}
+      </span>
       <Tooltip
         content={composite === 'ok' ? t('devboxPage.tipRestart') : t('devboxPage.tipStart')}
       >
@@ -327,12 +340,7 @@ export function DevboxPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-void-base">
-      <Header
-        title={t('devboxPage.title')}
-        subtitle={t('devboxPage.subtitle')}
-        icon={<Terminal size={18} />}
-        actions={controlBar}
-      />
+      <Header title={t('devboxPage.title')} icon={<Terminal size={18} />} actions={controlBar} />
       <div
         className="flex items-center gap-1 border-b border-white/[0.06] px-4 pt-1.5"
         data-testid="devbox-tabs"
@@ -354,12 +362,15 @@ export function DevboxPage() {
           onClick={() => setTab('infra')}
         />
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4">
         <div
-          className={cn('grid gap-4 lg:grid-cols-5', tab !== 'task' && 'hidden')}
+          className={cn(
+            'grid gap-4 lg:h-full lg:grid-cols-5 lg:grid-rows-1',
+            tab !== 'task' && 'hidden',
+          )}
           data-testid="devbox-panel-task"
         >
-          <div className="min-w-0 lg:col-span-3">
+          <div className="flex min-w-0 flex-col lg:col-span-3 lg:min-h-0">
             <DevboxPrompt
               profiles={profiles}
               overviewCards={cards}
@@ -368,7 +379,7 @@ export function DevboxPage() {
               reloadTick={promptTick}
             />
           </div>
-          <div className="min-w-0 lg:col-span-2">
+          <div className="flex min-w-0 flex-col lg:col-span-2 lg:min-h-0">
             <DevboxNowRail
               jobs={jobs}
               permissions={permissions}
@@ -380,7 +391,7 @@ export function DevboxPage() {
           </div>
         </div>
         <div
-          className={cn('flex w-full flex-col gap-4', tab !== 'infra' && 'hidden')}
+          className={cn('flex w-full flex-col gap-4 lg:h-full', tab !== 'infra' && 'hidden')}
           data-testid="devbox-panel-infra"
         >
           <DevboxServiceCards
@@ -389,17 +400,14 @@ export function DevboxPage() {
             busy={busy}
             onAction={onAction}
           />
-          <DevboxProfiles
-            profiles={profiles}
-            overviewCards={cards}
-            error={profilesError}
+          <DevboxProjectStrip
+            activeProfile={activeProfileRow}
             busy={busy}
             onAction={onAction}
-            onRetry={reloadProfiles}
-            onChanged={reloadProfiles}
-            addSignal={addSignal}
+            onOpenProjects={openProjects}
           />
           <DevboxConsole
+            className="min-h-[50vh] lg:flex-1"
             events={events}
             recent={status?.recent ?? null}
             error={poll.error}
@@ -407,6 +415,23 @@ export function DevboxPage() {
           />
         </div>
       </div>
+      <Modal
+        isOpen={projectsOpen}
+        onClose={() => setProjectsOpen(false)}
+        title={t('devboxPage.sectionProfiles')}
+        size="lg"
+      >
+        <DevboxProfiles
+          profiles={profiles}
+          overviewCards={cards}
+          error={profilesError}
+          busy={busy}
+          onAction={onAction}
+          onRetry={reloadProfiles}
+          onChanged={reloadProfiles}
+          addSignal={addSignal}
+        />
+      </Modal>
     </div>
   );
 }

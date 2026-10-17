@@ -168,6 +168,15 @@ describe('DevboxNowRail security banner', () => {
     const banners = screen.queryAllByTestId('devbox-security-banner');
     expect(banners).toHaveLength(0);
   });
+
+  it('renders the security line at the bottom of the rail body', () => {
+    renderRail({ events: [{ ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'ok' }] });
+
+    const banner = screen.getByTestId('devbox-security-banner');
+    const body = banner.parentElement;
+    expect(body?.lastElementChild).toBe(banner);
+    expect(screen.getByTestId('devbox-rail-recent')).toBeTruthy();
+  });
 });
 
 describe('DevboxNowRail recent activity', () => {
@@ -187,5 +196,30 @@ describe('DevboxNowRail recent activity', () => {
 
     fireEvent.click(screen.getByTestId('devbox-rail-go-infra'));
     expect(onGoInfra).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders timeline rows with a status icon and compact time per event', () => {
+    renderRail({
+      events: [
+        { ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'ok' },
+        { ts: 1791536981, kind: 'tool_call', tool: 'git', status: 'failed' },
+        { ts: 1791536982, kind: 'job', tool: 'pytest', status: 'running' },
+        { ts: 1791536983, kind: 'note', status: 'weird' },
+      ],
+    });
+
+    const icons = screen.getAllByTestId('devbox-rail-event-icon');
+    expect(icons.map(icon => icon.getAttribute('data-tone'))).toEqual([
+      'ok',
+      'failed',
+      'running',
+      'other',
+    ]);
+
+    const rows = screen.getByTestId('devbox-rail-recent');
+    expect(rows.textContent).toContain('bash · ok');
+    expect(rows.textContent).toContain('git · failed');
+    expect(rows.textContent).toContain('note · weird');
+    expect(rows.querySelector('.font-mono')).toBeNull();
   });
 });

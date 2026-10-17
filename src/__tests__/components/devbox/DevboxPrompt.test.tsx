@@ -94,7 +94,7 @@ describe('DevboxPrompt prerequisite chips', () => {
     expect(devboxCallArgs(invokeMock, 'ingress_control')).toEqual([{ action: 'up' }]);
   });
 
-  it('keeps the CTA enabled with an amber non-blocking chip when only the runner is down', async () => {
+  it('keeps the CTA enabled and offers a runner restart button when only the runner is down', async () => {
     const runnerDown = {
       ...maskedAgentPromptFixture,
       ready: { profile: true, bridge: true, ingress: true, runner: false },
@@ -108,14 +108,39 @@ describe('DevboxPrompt prerequisite chips', () => {
     const copy = screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement;
     expect(copy.disabled).toBe(false);
 
-    const runnerChip = screen.getByTestId('devbox-prompt-chip-runner');
-    expect(runnerChip.className).toContain('text-amber-300');
-    expect(runnerChip.textContent).toBe(t('devboxPage.restart'));
+    expect(screen.queryByTestId('devbox-prompt-chip-runner')).toBeNull();
+    const restart = screen.getByTestId('devbox-prompt-runner-restart');
+    expect(restart.tagName).toBe('BUTTON');
+    expect(restart.textContent).toBe(t('devboxPage.restart'));
 
-    fireEvent.click(runnerChip);
+    fireEvent.click(restart);
+    expect(onAction).toHaveBeenCalledTimes(1);
     expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
       { name: 'midsai', preview: false },
     ]);
+    expect(copy.disabled).toBe(false);
+  });
+
+  it('renders the runner success badge when the runner is up', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    expect(screen.getByTestId('devbox-prompt-chip-runner').className).toContain(
+      'text-emerald-300',
+    );
+    expect(screen.queryByTestId('devbox-prompt-runner-restart')).toBeNull();
+  });
+
+  it('project badge is non-clickable and fires no action', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    const profile = screen.getByTestId('devbox-prompt-chip-profile');
+    expect(profile.tagName).toBe('SPAN');
+    expect(profile.className).not.toContain('cursor-pointer');
+
+    fireEvent.click(profile);
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it('derives chips from overview cards when the payload has no ready field', async () => {
@@ -136,9 +161,7 @@ describe('DevboxPrompt prerequisite chips', () => {
     const bridgeChip = screen.getByTestId('devbox-prompt-chip-bridge');
     expect(bridgeChip.className).toContain('text-red-300');
     expect(bridgeChip.textContent).toBe(t('devboxPage.promptChipStackStart'));
-    expect(screen.getByTestId('devbox-prompt-chip-runner').className).toContain(
-      'text-amber-300',
-    );
+    expect(screen.getByTestId('devbox-prompt-runner-restart')).toBeTruthy();
     expect(
       (screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement).disabled,
     ).toBe(true);
