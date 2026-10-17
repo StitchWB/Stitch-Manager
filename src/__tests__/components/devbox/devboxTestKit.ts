@@ -77,11 +77,19 @@ export const agentPromptNoReadyFixture = {
   masked: true,
 };
 
+export function promptWithClient(fixture: DevboxAgentPrompt, client = 'universal'): string {
+  return `${fixture.prompt}\nCLIENT=${client}`;
+}
+
 export function agentPromptRoute(
   revealed: DevboxAgentPrompt = revealedAgentPromptFixture,
   masked: DevboxAgentPrompt = maskedAgentPromptFixture,
 ): DevboxRouteHandler {
-  return (p: Record<string, unknown>) => (p.reveal === true ? revealed : masked);
+  return (p: Record<string, unknown>) => {
+    const base = p.reveal === true ? revealed : masked;
+    const client = typeof p.client === 'string' && p.client !== '' ? p.client : 'universal';
+    return { ...base, prompt: promptWithClient(base, client) };
+  };
 }
 
 export function rotatedTokensStatus(finishedAtEpochSec: number): DevboxActionStatus {

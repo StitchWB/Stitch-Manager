@@ -41,6 +41,8 @@ export const devboxPage: DevboxPageTranslations = {
     promptChipRunner: "Runner",
     promptChipStackStart: "Поднять стек",
     promptChipIngressUp: "Включить ingress",
+    promptClientLabel: "Клиент агента",
+    promptClientUniversal: "Универсальный (клон репо)",
     promptTaskPlaceholder:
       "Например: проверь авторизацию и почини падающий логин; напиши тесты на модуль биллинга",
     promptAcceptanceToggle: "Добавить критерии приёмки",

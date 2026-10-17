@@ -28,6 +28,7 @@ import {
   revealedAgentPromptFixture,
   agentPromptNoReadyFixture,
   agentPromptRoute,
+  promptWithClient,
   rotatedTokensStatus,
   type DevboxRoutes,
 } from './devboxTestKit';
@@ -154,11 +155,12 @@ describe('DevboxPrompt copy flow', () => {
     fireEvent.click(screen.getByTestId('devbox-prompt-copy'));
 
     await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(revealedAgentPromptFixture.prompt);
+      expect(writeText).toHaveBeenCalledWith(promptWithClient(revealedAgentPromptFixture));
     });
     expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
       task,
       reveal: true,
+      client: 'universal',
     });
     expect(toast.success).toHaveBeenCalled();
 
@@ -182,7 +184,10 @@ describe('DevboxPrompt copy flow', () => {
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledTimes(1);
     });
-    expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({ reveal: true });
+    expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
+      reveal: true,
+      client: 'universal',
+    });
 
     fireEvent.change(acceptance, { target: { value: 'тесты зелёные' } });
     fireEvent.click(screen.getByTestId('devbox-prompt-copy'));
@@ -192,6 +197,7 @@ describe('DevboxPrompt copy flow', () => {
     expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
       acceptance: 'тесты зелёные',
       reveal: true,
+      client: 'universal',
     });
   });
 
@@ -231,7 +237,7 @@ describe('DevboxPrompt copy flow', () => {
     });
     await waitFor(() => {
       expect(screen.getByTestId('devbox-prompt-preview').textContent).toBe(
-        revealedAgentPromptFixture.prompt,
+        promptWithClient(revealedAgentPromptFixture),
       );
     });
     expect(screen.getByTestId('devbox-prompt-manual-copy').textContent).toBe(
@@ -250,7 +256,7 @@ describe('DevboxPrompt preview and errors', () => {
 
     fireEvent.click(screen.getByTestId('devbox-prompt-preview-toggle'));
     expect(screen.getByTestId('devbox-prompt-preview').textContent).toBe(
-      maskedAgentPromptFixture.prompt,
+      promptWithClient(maskedAgentPromptFixture),
     );
     expect(screen.getByTestId('devbox-prompt-preview-masked').textContent).toBe(
       t('devboxPage.promptPreviewMasked'),
@@ -260,11 +266,16 @@ describe('DevboxPrompt preview and errors', () => {
   it('eye toggle refetches with the flipped reveal flag', async () => {
     renderPrompt();
     await chipsReady();
-    expect(devboxCallArgs(invokeMock, 'agent_prompt')).toEqual([{ reveal: false }]);
+    expect(devboxCallArgs(invokeMock, 'agent_prompt')).toEqual([
+      { reveal: false, client: 'universal' },
+    ]);
 
     fireEvent.click(screen.getByTestId('devbox-prompt-reveal'));
     await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({ reveal: true });
+      expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
+        reveal: true,
+        client: 'universal',
+      });
     });
 
     fireEvent.click(screen.getByTestId('devbox-prompt-reveal'));
@@ -309,6 +320,84 @@ describe('DevboxPrompt preview and errors', () => {
     fireEvent.click(screen.getByText('Retry'));
     await waitFor(() => {
       expect(screen.getByTestId('devbox-prompt-copy')).toBeTruthy();
+    });
+  });
+});
+
+describe('DevboxPrompt agent client selector', () => {
+  it('renders 13 client options with universal selected by default', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    const select = screen.getByTestId('devbox-prompt-client') as HTMLSelectElement;
+    const options = Array.from(select.querySelectorAll('option'));
+    expect(options.map(option => option.value)).toEqual([
+      'universal',
+      'claude-code',
+      'opencode',
+      'codex',
+      'cursor',
+      'vscode',
+      'cline',
+      'roo',
+      'gemini',
+      'zed',
+      'factory',
+      'kiro',
+      'windsurf',
+    ]);
+    expect(options[0].textContent).toBe(t('devboxPage.promptClientUniversal'));
+    expect(select.value).toBe('universal');
+  });
+
+  it('sends client=universal on the default masked load without interaction', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    expect(devboxCallArgs(invokeMock, 'agent_prompt')).toEqual([
+      { reveal: false, client: 'universal' },
+    ]);
+  });
+
+  it('refetches the masked preview with the chosen client on selection change', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    fireEvent.change(screen.getByTestId('devbox-prompt-client'), {
+      target: { value: 'opencode' },
+    });
+    await waitFor(() => {
+      expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
+        reveal: false,
+        client: 'opencode',
+      });
+    });
+
+    fireEvent.click(screen.getByTestId('devbox-prompt-preview-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-prompt-preview').textContent).toBe(
+        promptWithClient(maskedAgentPromptFixture, 'opencode'),
+      );
+    });
+  });
+
+  it('passes the current client in the reveal=true copy fetch', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    fireEvent.change(screen.getByTestId('devbox-prompt-client'), {
+      target: { value: 'cursor' },
+    });
+    fireEvent.click(screen.getByTestId('devbox-prompt-copy'));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        promptWithClient(revealedAgentPromptFixture, 'cursor'),
+      );
+    });
+    expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
+      reveal: true,
+      client: 'cursor',
     });
   });
 });

@@ -3,6 +3,7 @@ import { Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { appToast } from '@/lib/observability/toast';
@@ -25,6 +26,21 @@ import { DevboxSection } from './DevboxSection';
 const STALE_COMMAND_RE = /method not found|-32601/i;
 
 const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', 'stack_start']);
+
+const AGENT_CLIENTS: ReadonlyArray<readonly [string, string]> = [
+  ['claude-code', 'Claude Code'],
+  ['opencode', 'OpenCode'],
+  ['codex', 'Codex'],
+  ['cursor', 'Cursor'],
+  ['vscode', 'VS Code'],
+  ['cline', 'Cline'],
+  ['roo', 'Roo'],
+  ['gemini', 'Gemini'],
+  ['zed', 'Zed'],
+  ['factory', 'Factory'],
+  ['kiro', 'Kiro'],
+  ['windsurf', 'Windsurf'],
+];
 
 function finishedMs(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null;
@@ -77,16 +93,19 @@ export function DevboxPrompt({
   const [acceptanceOpen, setAcceptanceOpen] = useState(false);
   const [task, setTask] = useState('');
   const [acceptance, setAcceptance] = useState('');
+  const [client, setClient] = useState('universal');
   const [copied, setCopied] = useState<{ at: number; fingerprint: string } | null>(null);
   const revealedRef = useRef(false);
   const taskRef = useRef('');
   const acceptanceRef = useRef('');
+  const clientRef = useRef('universal');
 
   const load = useCallback((reveal: boolean) => {
     devboxAgentPrompt({
       task: taskRef.current,
       acceptance: acceptanceRef.current,
       reveal,
+      client: clientRef.current,
     })
       .then(result => {
         setData(result);
@@ -138,7 +157,7 @@ export function DevboxPrompt({
   const copy = async () => {
     let payload: DevboxAgentPromptPayload;
     try {
-      payload = await devboxAgentPrompt({ task, acceptance, reveal: true });
+      payload = await devboxAgentPrompt({ task, acceptance, reveal: true, client });
     } catch {
       appToast.error(t('pluginUi.actionFailed'));
       return;
@@ -190,6 +209,11 @@ export function DevboxPrompt({
         {actionLabel}
       </Badge>
     );
+
+  const clientOptions = [
+    { value: 'universal', label: t('devboxPage.promptClientUniversal') },
+    ...AGENT_CLIENTS.map(([value, label]) => ({ value, label })),
+  ];
 
   const copyButton = (
     <Button
@@ -259,6 +283,18 @@ export function DevboxPrompt({
               () => onAction(devboxStackStart(activeProfileName, false)),
             )}
           </div>
+
+          <Select
+            label={t('devboxPage.promptClientLabel')}
+            options={clientOptions}
+            value={client}
+            data-testid="devbox-prompt-client"
+            onValueChange={value => {
+              clientRef.current = value;
+              setClient(value);
+              load(false);
+            }}
+          />
 
           <Textarea
             rows={3}

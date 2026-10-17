@@ -198,8 +198,9 @@ export function devboxAgentPrompt(params: {
   task: string;
   acceptance: string;
   reveal: boolean;
+  client: string;
 }): Promise<DevboxAgentPrompt> {
-  const args: Record<string, unknown> = { reveal: params.reveal };
+  const args: Record<string, unknown> = { reveal: params.reveal, client: params.client };
   if (params.task !== '') args.task = params.task;
   if (params.acceptance !== '') args.acceptance = params.acceptance;
   return safeInvoke<DevboxAgentPrompt>(`${NS}.agent_prompt`, args, NO_CACHE);
