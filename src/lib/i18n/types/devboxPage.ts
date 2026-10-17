@@ -15,6 +15,9 @@ export interface DevboxPageTranslations {
     stackStopped: string;
     stackUnknown: string;
     stackBusy: string;
+    stackBusyStart: string;
+    stackBusyDoctor: string;
+    stackBusyStop: string;
     sectionOverview: string;
     sectionProfiles: string;
     controlStart: string;
@@ -46,6 +49,7 @@ export interface DevboxPageTranslations {
     promptCopied: string;
     promptBlockedTip: string;
     promptCriteria: string;
+    promptCriteriaClose: string;
     promptCriteriaHeader: string;
     promptTokens: string;
     promptPreviewLocked: string;

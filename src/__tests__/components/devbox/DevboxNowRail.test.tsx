@@ -242,8 +242,19 @@ describe('DevboxNowRail recent activity', () => {
     expect(cards[0].className).not.toContain('rounded-lg');
     expect(cards[0].className).not.toContain('border');
 
+    for (const card of cards) {
+      expect(card.className).toContain('relative');
+      expect(card.className).toContain('after:absolute');
+      expect(card.className).toContain('after:left-[5px]');
+      expect(card.className).toContain('after:top-[10px]');
+      expect(card.className).toContain('after:h-full');
+      expect(card.className).toContain('after:w-px');
+      expect(card.className).toContain('after:bg-white/10');
+    }
+    expect(cards[cards.length - 1].className).toContain('last:after:hidden');
+
     const rows = screen.getByTestId('devbox-rail-recent');
-    expect(rows.className).toContain('before:');
+    expect(rows.className).not.toContain('before:');
     expect(rows.textContent).toContain('bash · ok');
     expect(rows.textContent).toContain('git · failed');
     expect(rows.textContent).toContain('note · weird');

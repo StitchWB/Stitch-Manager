@@ -56,6 +56,13 @@ import { DevboxConsole } from './DevboxConsole';
 type PageTab = 'task' | 'infra';
 type StackState = 'ok' | 'warn' | 'down' | 'unknown';
 
+const BUSY_CHIP: Record<string, string> = {
+  stack_start: 'devboxPage.stackBusyStart',
+  run_doctor: 'devboxPage.stackBusyDoctor',
+  stack_down: 'devboxPage.stackBusyStop',
+  stack_full_down: 'devboxPage.stackBusyStop',
+};
+
 const STACK_CHIP: Record<StackState, { dot: string; key: string }> = {
   ok: { dot: 'bg-emerald-400', key: 'devboxPage.stackOk' },
   warn: { dot: 'bg-amber-400', key: 'devboxPage.stackDegraded' },
@@ -161,7 +168,7 @@ export function DevboxPage() {
   const current = status?.current;
   const busyAction = busy && current ? current : null;
   const chip = busyAction
-    ? { dot: 'bg-slate-500', key: 'devboxPage.stackBusy' }
+    ? { dot: 'bg-slate-500', key: BUSY_CHIP[busyAction.cmd] ?? 'devboxPage.stackBusy' }
     : STACK_CHIP[composite];
   const busyLabel = busyAction
     ? busyAction.cmd === 'stack_start'
@@ -169,6 +176,9 @@ export function DevboxPage() {
       : busyAction.cmd === 'stack_down' || busyAction.cmd === 'stack_full_down'
         ? t('devboxPage.busyStopping')
         : t('devboxPage.busyRunning')
+    : null;
+  const busyProgress = busyAction
+    ? t('devboxPage.progress', { cmd: busyAction.cmd, time: devboxTime(busyAction.startedAt) })
     : null;
 
   const profileOptions = (Array.isArray(profiles) ? profiles : []).map(row => ({
@@ -256,42 +266,33 @@ export function DevboxPage() {
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', chip.dot)} aria-hidden />
         {t(chip.key)}
       </span>
-      <div className="flex flex-col items-stretch">
-        <Tooltip
-          content={composite === 'ok' ? t('devboxPage.tipRestart') : t('devboxPage.tipStart')}
+      <Tooltip
+        content={
+          busyProgress ??
+          (composite === 'ok' ? t('devboxPage.tipRestart') : t('devboxPage.tipStart'))
+        }
+      >
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={busy || activeProfile === ''}
+          title={busyProgress ?? undefined}
+          leftIcon={
+            busyAction ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Play size={14} />
+            )
+          }
+          data-testid="devbox-stack-start"
+          onClick={() => onAction(devboxStackStart(activeProfile, false))}
         >
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={busy || activeProfile === ''}
-            leftIcon={
-              busyAction ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Play size={14} />
-              )
-            }
-            data-testid="devbox-stack-start"
-            onClick={() => onAction(devboxStackStart(activeProfile, false))}
-          >
-            {busyLabel ??
-              (composite === 'ok'
-                ? t('devboxPage.restart')
-                : t('devboxPage.promptChipStackStart'))}
-          </Button>
-        </Tooltip>
-        {busyAction && (
-          <span
-            className="max-w-[16rem] truncate text-2xs text-slate-400"
-            data-testid="devbox-progress"
-          >
-            {t('devboxPage.progress', {
-              cmd: busyAction.cmd,
-              time: devboxTime(busyAction.startedAt),
-            })}
-          </span>
-        )}
-      </div>
+          {busyLabel ??
+            (composite === 'ok'
+              ? t('devboxPage.restart')
+              : t('devboxPage.promptChipStackStart'))}
+        </Button>
+      </Tooltip>
       <Tooltip content={t('devboxPage.tipDoctor')}>
         <Button
           size="sm"

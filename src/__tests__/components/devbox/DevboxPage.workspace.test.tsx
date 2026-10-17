@@ -360,7 +360,7 @@ describe('Devbox page header control bar', () => {
     expect(askConfirmMock).not.toHaveBeenCalled();
   });
 
-  it('busy header: disabled button with a cmd label, neutral chip and caption under the button', async () => {
+  it('busy header: disabled button, no caption, progress in title and tooltip', async () => {
     mockRoutes({
       poll: devboxPollBundle({
         action_status: {
@@ -379,12 +379,37 @@ describe('Devbox page header control bar', () => {
     expect(start.textContent).toBe('Starting...');
     expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: restarting...');
 
-    const caption = screen.getByTestId('devbox-progress');
-    expect(caption.textContent).toContain('stack_start');
-    expect(caption.parentElement?.contains(start)).toBe(true);
+    expect(screen.queryByTestId('devbox-progress')).toBeNull();
+    expect(screen.getByTestId('header-actions').textContent).not.toContain('Running:');
+    expect(start.getAttribute('title')).toContain('Running: stack_start');
+
+    fireEvent.mouseEnter(start.parentElement as HTMLElement);
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Running: stack_start');
+    });
   });
 
-  it('busy header labels stop commands with the stopping label', async () => {
+  it('busy header shows the diagnostics chip for run_doctor', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        action_status: {
+          busy: true,
+          current: { id: 'act-11', cmd: 'run_doctor', startedAt: 1791536987.76 },
+          recent: [],
+        },
+      }),
+    });
+    render(<DevboxPage />);
+
+    const start = await screen.findByTestId('devbox-stack-start');
+    await waitFor(() => {
+      expect(start).toBeDisabled();
+    });
+    expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: diagnostics...');
+    expect(start.getAttribute('title')).toContain('Running: run_doctor');
+  });
+
+  it('busy header labels stop commands with the stopping chip', async () => {
     mockRoutes({
       poll: devboxPollBundle({
         action_status: {
@@ -400,7 +425,7 @@ describe('Devbox page header control bar', () => {
     await waitFor(() => {
       expect(start.textContent).toBe('Stopping...');
     });
-    expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: restarting...');
+    expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: stopping...');
   });
 
   it('new-project button switches to the infra tab and opens the projects modal in add mode', async () => {

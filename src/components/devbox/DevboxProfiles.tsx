@@ -486,10 +486,11 @@ export function DevboxProfiles({
                   )}
                 </TableCell>
                 <TableCell>
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-2">
                     <Button
-                      size="xs"
-                      variant="secondary"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
                       disabled={busy}
                       data-testid={`devbox-profile-start-${row.name}`}
                       title={
@@ -504,8 +505,9 @@ export function DevboxProfiles({
                         : t('devboxPage.controlStart')}
                     </Button>
                     <Button
-                      size="xs"
-                      variant="secondary"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
                       disabled={busy || row.active}
                       data-testid={`devbox-profile-use-${row.name}`}
                       title={t('devboxPage.tipUse')}
@@ -515,6 +517,7 @@ export function DevboxProfiles({
                     </Button>
                     <IconButton
                       size="sm"
+                      className="h-8 w-8"
                       aria-label={t('devboxPage.duplicateProfile')}
                       tooltip={t('devboxPage.duplicateProfile')}
                       data-testid={`devbox-profile-duplicate-${row.name}`}
@@ -524,6 +527,7 @@ export function DevboxProfiles({
                     </IconButton>
                     <IconButton
                       size="sm"
+                      className="h-8 w-8"
                       aria-label={t('common.edit')}
                       tooltip={t('common.edit')}
                       data-testid={`devbox-profile-edit-${row.name}`}
@@ -536,7 +540,7 @@ export function DevboxProfiles({
                       variant="danger"
                       disabled={busy}
                       iconOnly
-                      className="h-6 w-6"
+                      className="h-8 w-8"
                       aria-label={t('devboxPage.deleteProfile')}
                       tooltip={t('devboxPage.tipDelete')}
                       data-testid={`devbox-profile-delete-${row.name}`}
