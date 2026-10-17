@@ -34,10 +34,8 @@ export interface DevboxPageTranslations {
     busyRunning: string;
     sectionPrompt: string;
     promptChipProfile: string;
-    promptChipProfileTip: string;
     promptChipStack: string;
     promptChipIngress: string;
-    promptChipRunner: string;
     promptChipStackStart: string;
     promptChipIngressUp: string;
     promptClientLabel: string;

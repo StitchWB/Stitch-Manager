@@ -106,7 +106,7 @@ export function DevboxNowRail({
   }, [activeJob, now]);
 
   const permissionRows = permissions?.rows ?? [];
-  const recentEvents = useMemo(() => events.slice(-RECENT_LIMIT), [events]);
+  const recentEvents = useMemo(() => events.slice(-RECENT_LIMIT).reverse(), [events]);
 
   const bridgeDown = jobs?.bridge === 'down' || permissions?.bridge === 'down';
   const toolCallCount = useMemo(
@@ -276,11 +276,13 @@ export function DevboxNowRail({
             {t('devboxPage.railRecent')}
           </span>
           <div
-            className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto"
+            className="relative flex min-h-0 flex-1 flex-col overflow-y-auto before:absolute before:bottom-0 before:left-[5px] before:top-0 before:w-px before:bg-white/10"
             data-testid="devbox-rail-recent"
           >
             {recentEvents.length === 0 ? (
-              <span className="text-2xs text-slate-500">{t('devboxPage.eventsEmpty')}</span>
+              <span className="relative z-10 bg-void-base text-2xs text-slate-500">
+                {t('devboxPage.eventsEmpty')}
+              </span>
             ) : (
               recentEvents.map((row, i) => {
                 const tone = devboxEventTone(row);
@@ -289,12 +291,12 @@ export function DevboxNowRail({
                   <div
                     key={i}
                     data-testid="devbox-rail-event-card"
-                    className="flex shrink-0 items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 text-2xs text-slate-400"
+                    className="flex shrink-0 items-center gap-2 py-1 text-2xs text-slate-400"
                     title={devboxEventLine(row)}
                   >
                     <Icon
                       size={12}
-                      className={cn('shrink-0', TONE_CLASSES[tone])}
+                      className={cn('relative z-10 shrink-0 bg-void-base', TONE_CLASSES[tone])}
                       data-testid="devbox-rail-event-icon"
                       data-tone={tone}
                       aria-hidden

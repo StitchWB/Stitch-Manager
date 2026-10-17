@@ -201,18 +201,23 @@ describe('DevboxNowRail recent activity', () => {
     status: 'ok',
   }));
 
-  it('shows only the last 5 events and switches to infra on the link', () => {
+  it('shows only the last 5 events newest-first and switches to infra on the link', () => {
     const { onGoInfra } = renderRail({ events });
 
     expect(screen.queryByText(/tool1/)).toBeNull();
     expect(screen.getByText(/tool2/)).toBeTruthy();
     expect(screen.getByText(/tool6/)).toBeTruthy();
 
+    const cards = screen.getAllByTestId('devbox-rail-event-card');
+    expect(cards).toHaveLength(5);
+    expect(cards[0].textContent).toContain('tool6');
+    expect(cards[4].textContent).toContain('tool2');
+
     fireEvent.click(screen.getByTestId('devbox-rail-go-infra'));
     expect(onGoInfra).toHaveBeenCalledTimes(1);
   });
 
-  it('renders timeline rows as compact cards with a status icon and time per event', () => {
+  it('renders timeline rows as compact py-1 lines with a status icon and time per event', () => {
     renderRail({
       events: [
         { ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'ok' },
@@ -224,18 +229,21 @@ describe('DevboxNowRail recent activity', () => {
 
     const icons = screen.getAllByTestId('devbox-rail-event-icon');
     expect(icons.map(icon => icon.getAttribute('data-tone'))).toEqual([
-      'ok',
-      'failed',
-      'running',
       'other',
+      'running',
+      'failed',
+      'ok',
     ]);
 
     const cards = screen.getAllByTestId('devbox-rail-event-card');
     expect(cards).toHaveLength(4);
-    expect(cards[0].className).toContain('rounded-lg');
-    expect(cards[0].className).toContain('border');
+    expect(cards[0].className).toContain('py-1');
+    expect(cards[0].className).toContain('text-2xs');
+    expect(cards[0].className).not.toContain('rounded-lg');
+    expect(cards[0].className).not.toContain('border');
 
     const rows = screen.getByTestId('devbox-rail-recent');
+    expect(rows.className).toContain('before:');
     expect(rows.textContent).toContain('bash · ok');
     expect(rows.textContent).toContain('git · failed');
     expect(rows.textContent).toContain('note · weird');

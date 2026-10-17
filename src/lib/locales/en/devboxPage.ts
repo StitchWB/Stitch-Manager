@@ -2,12 +2,12 @@ import type { DevboxPageTranslations } from '../../i18n/types/devboxPage';
 
 export const devboxPage: DevboxPageTranslations = {
   devboxPage: {
-    title: "Devbox — agent on your hardware",
+    title: "Agent on your hardware",
     refresh: "Refresh",
     tabTask: "Task",
     tabInfra: "Infrastructure",
     headerProjectLabel: "Project",
-    projectAddOption: "+ Add project / pick a folder...",
+    projectAddOption: "+ New project",
     projectManageOption: "Project settings",
     switchProfileConfirmTitle: "Switch profile to {name}?",
     switchProfileConfirmMessage: "The stack will use this project's folder and agent permissions.",
@@ -36,10 +36,8 @@ export const devboxPage: DevboxPageTranslations = {
     busyRunning: "Running...",
     sectionPrompt: "Agent prompt",
     promptChipProfile: "Project",
-    promptChipProfileTip: "The project is chosen in the selector at the top of the page",
     promptChipStack: "Stack",
     promptChipIngress: "Ingress",
-    promptChipRunner: "Runner",
     promptChipStackStart: "Start stack",
     promptChipIngressUp: "Enable ingress",
     promptClientLabel: "Agent client",
