@@ -58,8 +58,6 @@ export const marketplace: MarketplaceTranslations = {
     linkHomepage: "Сайт",
     linkRepository: "Репозиторий",
     categoryFilterAll: "Все категории",
-    filters: "Фильтры",
-    filtersReset: "Сбросить",
     status: {
       stable: "Стабильный",
       beta: "Бета",
@@ -105,11 +103,6 @@ export const marketplace: MarketplaceTranslations = {
       requiredRelease: "Укажите URL релиза и SHA256",
       requiredZip: "Выберите zip-файл",
       invalidSha: "SHA256 должен содержать 64 шестнадцатеричных символа",
-      fetchSha: "Рассчитать из URL",
-      fetchingSha: "Скачиваем релиз и считаем хеш...",
-      fetchShaFailed: "Не удалось скачать релиз и посчитать хеш",
-      domainsPlaceholder: "example.com + Enter",
-      domainInvalid: "Невалидный хост",
     },
     mySubmissions: {
       tab: "Мои заявки",

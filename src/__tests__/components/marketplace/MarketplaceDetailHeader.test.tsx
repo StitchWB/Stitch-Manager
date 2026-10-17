@@ -176,7 +176,7 @@ describe('MarketplaceDetailHeader update semantics', () => {
 
     expect(screen.queryByRole('button', { name: 'marketplace.update' })).toBeNull();
     expect(screen.queryByText('2.0.0 → 1.5.0')).toBeNull();
-    expect(screen.getByTestId('installed-status')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'marketplace.installed' })).toBeTruthy();
   });
 
   it('older installed version without flags: Update button and arrow via fallback', () => {
@@ -217,58 +217,6 @@ describe('MarketplaceDetailHeader update semantics', () => {
     expect(screen.getByText('marketplace.devCopy')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'marketplace.update' })).toBeNull();
     expect(screen.queryByText('1.0.0 → 1.1.0')).toBeNull();
-    expect(screen.getByTestId('installed-status')).toBeTruthy();
-  });
-});
-
-describe('MarketplaceDetailHeader CTA cluster', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    navigatedPath = '';
-    (useServicePlugins as jest.Mock).mockReturnValue([]);
-  });
-
-  it('installed without update: installed is a non-button status node, rendered once', () => {
-    renderHeader(mkItem());
-
-    const status = screen.getByTestId('installed-status');
-    expect(status.tagName).not.toBe('BUTTON');
-    expect(status.closest('button')).toBeNull();
-    expect(status.textContent).toContain('marketplace.installed');
-    expect(status.className).toContain('text-slate-400');
-    expect(screen.queryByRole('button', { name: 'marketplace.installed' })).toBeNull();
-    expect(screen.getAllByText('marketplace.installed')).toHaveLength(1);
-  });
-
-  it('remove button carries ghost danger classes and is never a filled primary CTA', () => {
-    renderHeader(mkItem());
-
-    const remove = screen.getByRole('button', { name: 'marketplace.remove' });
-    expect(remove.className).toContain('text-rose-400');
-    expect(remove.className).toContain('hover:bg-rose-500/10');
-    expect(remove.className).toContain('border-transparent');
-    expect(remove.className).not.toContain('bg-indigo-500/15');
-    expect(remove.className).not.toContain('bg-red-500/10');
-  });
-
-  it('remove stays ghost-danger next to an update CTA', () => {
-    renderHeader(
-      mkItem({ installed_version: '1.0.0', version: '1.1.0', update_available: true }),
-    );
-
-    expect(screen.getByRole('button', { name: 'marketplace.update' })).toBeTruthy();
-    const remove = screen.getByRole('button', { name: 'marketplace.remove' });
-    expect(remove.className).toContain('text-rose-400');
-    expect(remove.className).not.toContain('bg-indigo-500/15');
-    expect(screen.queryByTestId('installed-status')).toBeNull();
-  });
-
-  it('not installed: install is the primary CTA and no remove button exists', () => {
-    renderHeader(mkItem({ installed: false, installed_version: null }));
-
-    const install = screen.getByRole('button', { name: 'marketplace.install' });
-    expect(install.className).toContain('bg-indigo-500/15');
-    expect(screen.queryByRole('button', { name: 'marketplace.remove' })).toBeNull();
-    expect(screen.queryByTestId('installed-status')).toBeNull();
+    expect(screen.getByRole('button', { name: 'marketplace.installed' })).toBeTruthy();
   });
 });

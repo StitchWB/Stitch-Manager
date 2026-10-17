@@ -71,6 +71,11 @@ export function MarketplaceDetailHeader({
           {!item.entitled && item.required_tier && (
             <TierBadge tier={item.required_tier} size="sm" />
           )}
+          {item.installed && (
+            <Badge variant="success" size="sm">
+              {t('marketplace.installed')}
+            </Badge>
+          )}
           {item.dev_shadow && (
             <Badge variant="slate" size="sm">
               {t('marketplace.devCopy')}
@@ -136,13 +141,14 @@ export function MarketplaceDetailHeader({
             {busy ? t('marketplace.installing') : t('marketplace.update')}
           </Button>
         ) : (
-          <span
-            data-testid="installed-status"
-            className="inline-flex items-center gap-1.5 text-xs text-slate-400"
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled
+            leftIcon={<Check className="w-3.5 h-3.5" />}
           >
-            <Check size={14} aria-hidden="true" />
             {t('marketplace.installed')}
-          </span>
+          </Button>
         )}
 
         {contributesPage && (
@@ -165,8 +171,7 @@ export function MarketplaceDetailHeader({
         {item.installed && (
           <Button
             size="sm"
-            variant="ghost"
-            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent"
+            variant="danger"
             onClick={() => onUninstall(item)}
             isLoading={busy}
             disabled={busy}
