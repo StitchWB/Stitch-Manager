@@ -643,6 +643,7 @@ function App() {
         expand={false}
         closeButton
         gap={10}
+        offset={24}
         visibleToasts={3}
         icons={{
           success: <CheckCircle2 size={15} />,

@@ -38,7 +38,12 @@ jest.mock('@/stores/app', () => ({
     selector ? selector({ language: 'en' }) : { language: 'en' },
 }));
 
+jest.mock('@/components/ui/ConfirmDialogHost', () => ({
+  askConfirm: jest.fn(() => Promise.resolve(true)),
+}));
+
 import { safeInvoke } from '@/lib/backend/core/invoke';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { DevboxPage } from '@/components/devbox/DevboxPage';
 import {
   registerPluginBundles,
@@ -55,6 +60,7 @@ import {
 } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
+const askConfirmMock = askConfirm as jest.Mock;
 const accepted = { accepted: true, actionId: 'act-1' };
 
 function mockRoutes(overrides = {}) {
@@ -230,25 +236,59 @@ describe('Devbox page header control bar', () => {
     });
   });
 
-  it('project switch is confirm-gated and fires profile_use', async () => {
+  it('has no separate switch button — the select itself is confirm-gated', async () => {
     render(<DevboxPage />);
-    await screen.findByTestId('devbox-profile-active-summary');
+    await screen.findByTestId('devbox-stack-badge');
+
+    expect(screen.queryByTestId('devbox-profile-switch')).toBeNull();
+  });
+
+  it('select change asks for confirmation and fires profile_use on accept', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
-    const switchBtn = screen.getByTestId('devbox-profile-switch');
-    expect(switchBtn).toBeDisabled();
 
     fireEvent.change(select, { target: { value: 'example-simple' } });
-    expect(switchBtn).not.toBeDisabled();
 
-    fireEvent.click(switchBtn);
-    expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
-    fireEvent.click(switchBtn);
+    await waitFor(() => {
+      expect(askConfirmMock).toHaveBeenCalledTimes(1);
+    });
+    expect(askConfirmMock.mock.calls[0][0].title).toContain('example-simple');
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'profile_use')).toEqual([{ name: 'example-simple' }]);
     });
   });
 
-  it('new-project button switches to the infra tab and opens the add editor', async () => {
+  it('select change reverts without firing profile_use on cancel', async () => {
+    askConfirmMock.mockResolvedValueOnce(false);
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
+    const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
+
+    fireEvent.change(select, { target: { value: 'example-simple' } });
+
+    await waitFor(() => {
+      expect(askConfirmMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(select.value).toBe('midsai');
+    });
+    expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
+  });
+
+  it('selecting the already active profile does not ask for confirmation', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
+
+    fireEvent.change(screen.getByTestId('devbox-profile-select'), {
+      target: { value: 'midsai' },
+    });
+
+    expect(askConfirmMock).not.toHaveBeenCalled();
+    expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
+  });
+
+  it('new-project button switches to the infra tab and opens the projects modal in add mode', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
 
@@ -257,7 +297,37 @@ describe('Devbox page header control bar', () => {
 
     expect(taskGrid().classList.contains('hidden')).toBe(true);
     expect(screen.getByTestId('devbox-panel-infra').classList.contains('hidden')).toBe(false);
+    expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
     expect(await screen.findByTestId('devbox-profile-new-name')).toBeTruthy();
+  });
+
+  it('projects button opens the modal with the table and without the add editor', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-project-strip');
+
+    fireEvent.click(screen.getByTestId('devbox-project-strip-open'));
+
+    expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
+    expect(screen.getByTestId('devbox-profile-add')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-profile-new-name')).toBeNull();
+  });
+
+  it('infra panel stacks service cards, project strip and console in order', async () => {
+    render(<DevboxPage />);
+    const panel = await screen.findByTestId('devbox-panel-infra');
+    await screen.findByTestId('devbox-project-strip');
+
+    const order = ['devbox-services', 'devbox-project-strip', 'devbox-console-tabs'].map(
+      id => screen.getByTestId(id),
+    );
+    for (let i = 1; i < order.length; i += 1) {
+      expect(
+        order[i - 1].compareDocumentPosition(order[i]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    expect(panel.contains(order[0])).toBe(true);
+    expect(panel.contains(order[2])).toBe(true);
   });
 
   it('danger zone entries are confirm-gated', async () => {

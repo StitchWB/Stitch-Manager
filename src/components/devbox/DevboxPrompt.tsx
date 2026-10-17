@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Copy, Eye, EyeOff, FileText, Plus, RefreshCw, RotateCw } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
@@ -177,21 +177,14 @@ export function DevboxPrompt({
     }
   };
 
-  const scrollToProfiles = () => {
-    document
-      .querySelector('[data-testid="devbox-profiles"]')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const errorText =
     error !== null && STALE_COMMAND_RE.test(error) ? t('devboxPage.handoffErrorStale') : error;
 
-  const chip = (
+  const actionChip = (
     id: string,
     ok: boolean,
     okLabel: string,
     actionLabel: string,
-    variant: 'danger' | 'warning' | 'slate',
     onClick: () => void,
   ) =>
     ok ? (
@@ -200,8 +193,9 @@ export function DevboxPrompt({
       </Badge>
     ) : (
       <Badge
-        variant={variant}
+        variant="danger"
         size="sm"
+        withDot
         className="cursor-pointer"
         data-testid={`devbox-prompt-chip-${id}`}
         onClick={onClick}
@@ -234,6 +228,8 @@ export function DevboxPrompt({
       error={errorText}
       onRetry={() => load(revealedRef.current)}
       testId="devbox-prompt"
+      className="flex min-h-full flex-col"
+      bodyClassName="flex min-h-0 flex-1 flex-col"
       actions={
         <IconButton
           size="sm"
@@ -248,39 +244,49 @@ export function DevboxPrompt({
       }
     >
       {data !== null && error === null && (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2" data-testid="devbox-prompt-chips">
-            {chip(
-              'profile',
-              ready.profile,
-              t('devboxPage.promptChipProfile'),
-              t('devboxPage.promptChipProfile'),
-              'slate',
-              scrollToProfiles,
-            )}
-            {chip(
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div
+            className="flex flex-wrap items-center gap-2 shrink-0"
+            data-testid="devbox-prompt-chips"
+          >
+            <Tooltip content={t('devboxPage.promptChipProfileTip')}>
+              <Badge
+                variant={ready.profile ? 'success' : 'slate'}
+                size="sm"
+                withDot
+                data-testid="devbox-prompt-chip-profile"
+              >
+                {t('devboxPage.promptChipProfile')}
+              </Badge>
+            </Tooltip>
+            {actionChip(
               'bridge',
               ready.bridge,
               t('devboxPage.promptChipStack'),
               t('devboxPage.promptChipStackStart'),
-              'danger',
               () => onAction(devboxStackStart(activeProfileName, false)),
             )}
-            {chip(
+            {actionChip(
               'ingress',
               ready.ingress,
               t('devboxPage.promptChipIngress'),
               t('devboxPage.promptChipIngressUp'),
-              'danger',
               () => onAction(devboxIngressControl('up')),
             )}
-            {chip(
-              'runner',
-              ready.runner,
-              t('devboxPage.promptChipRunner'),
-              t('devboxPage.restart'),
-              'warning',
-              () => onAction(devboxStackStart(activeProfileName, false)),
+            {ready.runner ? (
+              <Badge variant="success" size="sm" withDot data-testid="devbox-prompt-chip-runner">
+                {t('devboxPage.promptChipRunner')}
+              </Badge>
+            ) : (
+              <Button
+                size="xs"
+                variant="outline"
+                leftIcon={<RotateCw size={12} />}
+                data-testid="devbox-prompt-runner-restart"
+                onClick={() => onAction(devboxStackStart(activeProfileName, false))}
+              >
+                {t('devboxPage.restart')}
+              </Button>
             )}
           </div>
 
@@ -288,6 +294,7 @@ export function DevboxPrompt({
             label={t('devboxPage.promptClientLabel')}
             options={clientOptions}
             value={client}
+            containerClassName="shrink-0"
             data-testid="devbox-prompt-client"
             onValueChange={value => {
               clientRef.current = value;
@@ -297,10 +304,12 @@ export function DevboxPrompt({
           />
 
           <Textarea
-            rows={3}
             value={task}
             placeholder={t('devboxPage.promptTaskPlaceholder')}
             data-testid="devbox-prompt-task"
+            containerClassName="flex max-h-[40vh] min-h-[120px] flex-1 flex-col"
+            shellClassName="flex min-h-0 flex-1 flex-col"
+            className="min-h-0 flex-1 resize-none"
             onChange={e => {
               taskRef.current = e.target.value;
               setTask(e.target.value);
@@ -313,14 +322,15 @@ export function DevboxPrompt({
             }}
           />
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Button
               size="xs"
               variant="ghost"
+              leftIcon={<Plus size={12} />}
               data-testid="devbox-prompt-acceptance-toggle"
               onClick={() => setAcceptanceOpen(v => !v)}
             >
-              {t('devboxPage.promptAcceptanceToggle')}
+              {t('devboxPage.promptCriteria')}
             </Button>
             <Button
               size="xs"
@@ -329,24 +339,35 @@ export function DevboxPrompt({
               data-testid="devbox-prompt-reveal"
               onClick={() => load(!revealed)}
             >
-              {revealed ? t('devboxPage.promptHide') : t('devboxPage.promptReveal')}
+              {t('devboxPage.promptTokens')}
             </Button>
             <Button
               size="xs"
               variant="ghost"
+              leftIcon={<FileText size={14} />}
               data-testid="devbox-prompt-preview-toggle"
               onClick={() => setPreviewOpen(v => !v)}
             >
-              {previewOpen
-                ? t('devboxPage.promptPreviewHide')
-                : t('devboxPage.promptPreviewShow')}
+              {t('devboxPage.promptPreview')}
             </Button>
+            <span className="ml-auto flex items-center">
+              {copyDisabled ? (
+                <Tooltip
+                  content={t('devboxPage.promptBlockedTip', { fix: blockingLabels.join(' · ') })}
+                >
+                  {copyButton}
+                </Tooltip>
+              ) : (
+                copyButton
+              )}
+            </span>
           </div>
 
           {acceptanceOpen && (
             <Textarea
               rows={2}
               className="min-h-[48px] text-xs"
+              containerClassName="shrink-0"
               value={acceptance}
               placeholder={t('devboxPage.promptAcceptancePlaceholder')}
               data-testid="devbox-prompt-acceptance"
@@ -358,25 +379,16 @@ export function DevboxPrompt({
           )}
 
           {stale && (
-            <span className="text-2xs text-amber-300" data-testid="devbox-prompt-stale">
+            <span
+              className="text-2xs text-amber-300 shrink-0"
+              data-testid="devbox-prompt-stale"
+            >
               {t('devboxPage.promptStale')}
             </span>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            {copyDisabled ? (
-              <Tooltip
-                content={t('devboxPage.promptBlockedTip', { fix: blockingLabels.join(' · ') })}
-              >
-                {copyButton}
-              </Tooltip>
-            ) : (
-              copyButton
-            )}
-          </div>
-
           {previewOpen && (
-            <div className="flex flex-col gap-2">
+            <div className="flex shrink-0 flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 {data.masked && (
                   <Badge variant="warning" size="sm" data-testid="devbox-prompt-preview-masked">

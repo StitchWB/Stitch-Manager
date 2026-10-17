@@ -155,6 +155,46 @@ describe('DevboxServiceCards inline actions', () => {
     expect(host.querySelector('button')).toBeNull();
   });
 
+  it('host services 0/0 renders neutral gray even with tone ok', () => {
+    const cards: DevboxVitalCard[] = [
+      ...overviewFixture.cards,
+      { id: 'host_services', title: 'Host services', value: '0/0', tone: 'ok', updatedAt: null },
+    ];
+    renderCards({ cards });
+
+    const host = screen.getByTestId('devbox-service-host_services');
+    expect(host.querySelector('.bg-slate-500')).toBeTruthy();
+    expect(screen.getByTestId('devbox-service-value-host_services').className).toContain(
+      'text-slate-400',
+    );
+    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe('0/0');
+  });
+
+  it('host services green only when recorded and alive are above zero', () => {
+    const cards: DevboxVitalCard[] = [
+      ...overviewFixture.cards,
+      { id: 'host_services', title: 'Host services', value: '2/3', tone: 'ok', updatedAt: null },
+    ];
+    renderCards({ cards });
+
+    const host = screen.getByTestId('devbox-service-host_services');
+    expect(host.querySelector('.bg-emerald-400')).toBeTruthy();
+  });
+
+  it('host services amber when recorded but none alive', () => {
+    const cards: DevboxVitalCard[] = [
+      ...overviewFixture.cards,
+      { id: 'host_services', title: 'Host services', value: '0/3', tone: 'warn', updatedAt: null },
+    ];
+    renderCards({ cards });
+
+    const host = screen.getByTestId('devbox-service-host_services');
+    expect(host.querySelector('.bg-amber-400')).toBeTruthy();
+    expect(screen.getByTestId('devbox-service-value-host_services').className).toContain(
+      'text-amber-300',
+    );
+  });
+
   it('disables inline actions while busy', () => {
     renderCards({ busy: true });
 

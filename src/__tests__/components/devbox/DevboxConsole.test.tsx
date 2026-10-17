@@ -209,3 +209,111 @@ describe('DevboxConsole toolbar', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('DevboxConsole error filter', () => {
+  const mixedEvents: DevboxEventRow[] = [
+    { ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'ok' },
+    { ts: 1791536981, kind: 'tool_call', tool: 'git', status: 'failed' },
+    { ts: 1791536982, kind: 'tool_call', tool: 'npm', status: 'error' },
+  ];
+
+  const mixedActions: DevboxRecentAction[] = [
+    {
+      id: 'b1',
+      cmd: 'stack_start',
+      status: 'finished',
+      startedAt: 1791536980,
+      finishedAt: 1791536981,
+      exit: 0,
+      payload: null,
+    },
+    {
+      id: 'b2',
+      cmd: 'profile_put',
+      status: 'failed',
+      startedAt: 1791536980,
+      finishedAt: 1791536981,
+      exit: 1,
+      payload: null,
+    },
+    {
+      id: 'b3',
+      cmd: 'ingress_control',
+      status: 'running',
+      startedAt: 1791536980,
+      finishedAt: null,
+      exit: null,
+      payload: null,
+    },
+  ];
+
+  it('events tab keeps only failed/error rows and restores on All', () => {
+    renderConsole({ events: mixedEvents });
+
+    fireEvent.click(screen.getByText('Errors only'));
+    const river = screen.getByTestId('devbox-events-river');
+    expect(river.children).toHaveLength(2);
+    expect(river.textContent).toContain('git');
+    expect(river.textContent).toContain('npm');
+    expect(river.textContent).not.toContain('bash');
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByTestId('devbox-events-river').children).toHaveLength(3);
+  });
+
+  it('events tab shows the filtered-empty hint when nothing failed', () => {
+    renderConsole();
+
+    fireEvent.click(screen.getByText('Errors only'));
+    expect(screen.queryByTestId('devbox-events-river')).toBeNull();
+    expect(screen.getByTestId('devbox-console-empty').textContent).toBe('Nothing found');
+  });
+
+  it('actions tab keeps only rows with a non-zero exit code', () => {
+    renderConsole({ recent: mixedActions });
+
+    fireEvent.click(screen.getByTestId('devbox-console-tab-actions'));
+    expect(screen.getByText('stack_start')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Errors only'));
+    expect(screen.getByText('profile_put')).toBeTruthy();
+    expect(screen.queryByText('stack_start')).toBeNull();
+    expect(screen.queryByText('ingress_control')).toBeNull();
+  });
+
+  it('logs tab filters lines client-side by the error regex', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          logs: {
+            sources: [
+              {
+                name: 'runner',
+                lines: [
+                  'runner started',
+                  'ERROR connection refused',
+                  'Traceback (most recent call last):',
+                  'warn: slow disk',
+                  'all good here',
+                ],
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    renderConsole();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('devbox-console-tab-logs'));
+    });
+    await screen.findByTestId('devbox-logs-source-runner');
+
+    fireEvent.click(screen.getByText('Errors only'));
+    const pre = screen.getByTestId('devbox-logs-source-runner');
+    expect(pre.textContent).toContain('ERROR connection refused');
+    expect(pre.textContent).toContain('Traceback (most recent call last):');
+    expect(pre.textContent).toContain('warn: slow disk');
+    expect(pre.textContent).not.toContain('runner started');
+    expect(pre.textContent).not.toContain('all good here');
+  });
+});

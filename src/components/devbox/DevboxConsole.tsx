@@ -39,8 +39,19 @@ import { DEVBOX_LOGS_LIMIT } from './constants';
 import { devboxEventLine } from './eventLine';
 
 type ConsoleTab = 'events' | 'logs' | 'actions';
+type ConsoleFilter = 'all' | 'errors';
 
 const EVENTS_TAIL = 200;
+const ERROR_LINE_RE = /error|fail|exception|traceback|warn/i;
+const ERROR_EVENT_STATUSES = new Set(['failed', 'error']);
+
+function isErrorEvent(row: DevboxEventRow): boolean {
+  return ERROR_EVENT_STATUSES.has(String(row.status ?? '').toLowerCase());
+}
+
+function isErrorAction(row: DevboxRecentAction): boolean {
+  return row.exit !== null && row.exit !== undefined && row.exit !== 0;
+}
 
 function payloadString(payload: Record<string, unknown> | null, key: string): string | null {
   const value = payload?.[key];
@@ -52,11 +63,13 @@ export interface DevboxConsoleProps {
   recent: DevboxRecentAction[] | null;
   error: string | null;
   onRetry: () => void;
+  className?: string;
 }
 
-export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleProps) {
+export function DevboxConsole({ events, recent, error, onRetry, className }: DevboxConsoleProps) {
   const [tab, setTab] = useState<ConsoleTab>('events');
   const [search, setSearch] = useState('');
+  const [errorFilter, setErrorFilter] = useState<ConsoleFilter>('all');
   const [autoscroll, setAutoscroll] = useState(true);
   const [eventsBaseline, setEventsBaseline] = useState(0);
   const [actionsBaseline, setActionsBaseline] = useState(0);
@@ -90,20 +103,24 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
   }, [tab, source, logsTick]);
 
   const query = search.trim().toLowerCase();
+  const errorsOnly = errorFilter === 'errors';
 
   const visibleEvents = useMemo(() => {
     const start = Math.min(eventsBaseline, events.length);
-    const rows = events.slice(start);
-    const filtered = query === '' ? rows : rows.filter(row => devboxEventLine(row).toLowerCase().includes(query));
-    return filtered.slice(-EVENTS_TAIL);
-  }, [events, eventsBaseline, query]);
+    let rows = events.slice(start);
+    if (query !== '') rows = rows.filter(row => devboxEventLine(row).toLowerCase().includes(query));
+    if (errorsOnly) rows = rows.filter(isErrorEvent);
+    return rows.slice(-EVENTS_TAIL);
+  }, [events, eventsBaseline, query, errorsOnly]);
 
   const recentRows = useMemo(() => (Array.isArray(recent) ? recent : []), [recent]);
   const visibleActions = useMemo(() => {
     const start = Math.min(actionsBaseline, recentRows.length);
-    const rows = recentRows.slice(start);
-    return query === '' ? rows : rows.filter(row => `${row.cmd} ${row.status}`.toLowerCase().includes(query));
-  }, [recentRows, actionsBaseline, query]);
+    let rows = recentRows.slice(start);
+    if (query !== '') rows = rows.filter(row => `${row.cmd} ${row.status}`.toLowerCase().includes(query));
+    if (errorsOnly) rows = rows.filter(isErrorAction);
+    return rows;
+  }, [recentRows, actionsBaseline, query, errorsOnly]);
 
   const allSources = useMemo(
     () => (Array.isArray(logsData?.sources) ? logsData?.sources ?? [] : []),
@@ -118,11 +135,13 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
   );
   const visibleSources = useMemo(() => {
     const scoped = source ? allSources.filter(s => s.name === source) : allSources;
-    return scoped.map(s => ({
-      name: s.name,
-      lines: query === '' ? s.lines ?? [] : (s.lines ?? []).filter(line => line.toLowerCase().includes(query)),
-    }));
-  }, [allSources, source, query]);
+    return scoped.map(s => {
+      let lines = s.lines ?? [];
+      if (query !== '') lines = lines.filter(line => line.toLowerCase().includes(query));
+      if (errorsOnly) lines = lines.filter(line => ERROR_LINE_RE.test(line));
+      return { name: s.name, lines };
+    });
+  }, [allSources, source, query, errorsOnly]);
   const hasLogLines = visibleSources.some(s => s.lines.length > 0);
 
   const eventsScrollRef = useRef<HTMLDivElement | null>(null);
@@ -152,11 +171,11 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
     }
   };
 
-  const filteredAway = query !== '' || eventsBaseline > 0 || actionsBaseline > 0;
+  const filteredAway = query !== '' || errorsOnly || eventsBaseline > 0 || actionsBaseline > 0;
 
   return (
-    <GlassCard className="p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <GlassCard className={cn('flex min-h-0 flex-col p-4', className)}>
+      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1" data-testid="devbox-console-tabs">
           <TabButton
             size="sm"
@@ -181,6 +200,16 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            size="sm"
+            stretch={false}
+            options={[
+              { label: t('devboxPage.consoleFilterAll'), value: 'all' },
+              { label: t('devboxPage.consoleFilterErrors'), value: 'errors' },
+            ]}
+            value={errorFilter}
+            onChange={value => setErrorFilter(value === 'errors' ? 'errors' : 'all')}
+          />
           <Input
             value={search}
             placeholder={t('devboxPage.consoleSearch')}
@@ -221,7 +250,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
       </div>
 
       {tab !== 'logs' && error && (
-        <div className="mb-3 flex items-center gap-2" data-testid="devbox-console-error">
+        <div className="mb-3 flex shrink-0 items-center gap-2" data-testid="devbox-console-error">
           <p className="min-w-0 truncate text-2xs text-red-300">{error}</p>
           <Button size="xs" variant="secondary" onClick={onRetry}>
             {t('common.retry')}
@@ -247,7 +276,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
           <div
             ref={eventsScrollRef}
             data-testid="devbox-events-river"
-            className="max-h-72 overflow-auto rounded-lg border border-white/5 bg-black/40 p-3 font-mono text-2xs leading-5 text-slate-300"
+            className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/5 bg-black/40 p-3 font-mono text-2xs leading-5 text-slate-300"
           >
             {visibleEvents.map((row, i) => (
               <div key={i} className="truncate" title={devboxEventLine(row)}>
@@ -258,8 +287,8 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
         ))}
 
       {tab === 'logs' && (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <SegmentedControl
               size="sm"
               stretch={false}
@@ -284,7 +313,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
             </div>
           )}
           {!hasLogLines && !logsError ? (
-            query !== '' ? (
+            query !== '' || errorsOnly ? (
               <span className="text-2xs text-slate-500" data-testid="devbox-console-empty">
                 {t('devboxPage.consoleEmptyFiltered')}
               </span>
@@ -300,7 +329,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
             <div
               ref={logsScrollRef}
               data-testid="devbox-console-logs"
-              className="flex max-h-96 flex-col gap-3 overflow-auto"
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto"
             >
               {visibleSources.map(s => (
                 <div key={s.name} className="flex flex-col gap-1">
@@ -319,9 +348,9 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
       )}
 
       {tab === 'actions' && (
-        <div className="flex flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
           {doctorReport && (
-            <div className="flex flex-col gap-2">
+            <div className="flex shrink-0 flex-col gap-2">
               <span className="text-2xs uppercase tracking-wider text-slate-400">
                 {t('devboxPage.doctorReportLabel')}
               </span>
@@ -334,7 +363,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
             </div>
           )}
           {cockpitUrl && (
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <span className="text-2xs uppercase tracking-wider text-slate-400">
                 {t('devboxPage.cockpitUrlLabel')}
               </span>
@@ -350,7 +379,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
             </div>
           )}
           {visibleActions.length === 0 ? (
-            query !== '' || actionsBaseline > 0 ? (
+            query !== '' || errorsOnly || actionsBaseline > 0 ? (
               <span className="text-2xs text-slate-500" data-testid="devbox-console-empty">
                 {t('devboxPage.consoleEmptyFiltered')}
               </span>
@@ -363,6 +392,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
               />
             )
           ) : (
+            <div className="min-h-0 flex-1 overflow-auto">
             <Table containerClassName="rounded-lg border border-white/5">
               <TableHeader>
                 <TableRow>
@@ -421,6 +451,7 @@ export function DevboxConsole({ events, recent, error, onRetry }: DevboxConsoleP
                 })}
               </TableBody>
             </Table>
+            </div>
           )}
         </div>
       )}

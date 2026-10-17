@@ -1,13 +1,12 @@
 export interface DevboxPageTranslations {
   devboxPage: {
     title: string;
-    subtitle: string;
     refresh: string;
     tabTask: string;
     tabInfra: string;
     headerProjectLabel: string;
-    switchProfile: string;
-    tipSwitchProfile: string;
+    switchProfileConfirmTitle: string;
+    switchProfileConfirmMessage: string;
     dangerZone: string;
     stackOk: string;
     stackDegraded: string;
@@ -15,7 +14,6 @@ export interface DevboxPageTranslations {
     stackUnknown: string;
     sectionOverview: string;
     sectionProfiles: string;
-    updatedStamp: string;
     controlStart: string;
     restart: string;
     controlUse: string;
@@ -30,6 +28,7 @@ export interface DevboxPageTranslations {
     progress: string;
     sectionPrompt: string;
     promptChipProfile: string;
+    promptChipProfileTip: string;
     promptChipStack: string;
     promptChipIngress: string;
     promptChipRunner: string;
@@ -38,15 +37,13 @@ export interface DevboxPageTranslations {
     promptClientLabel: string;
     promptClientUniversal: string;
     promptTaskPlaceholder: string;
-    promptAcceptanceToggle: string;
     promptAcceptancePlaceholder: string;
     promptCopy: string;
     promptBlockedTip: string;
-    promptPreviewShow: string;
-    promptPreviewHide: string;
+    promptCriteria: string;
+    promptTokens: string;
+    promptPreview: string;
     promptPreviewMasked: string;
-    promptReveal: string;
-    promptHide: string;
     promptStale: string;
     promptManualCopy: string;
     handoffErrorStale: string;
@@ -69,10 +66,16 @@ export interface DevboxPageTranslations {
     serviceWatchdog: string;
     serviceHost: string;
     serviceEnable: string;
+    stripCurrentProject: string;
+    stripAccess: string;
+    stripNoProject: string;
+    stripProjects: string;
     consoleTabEvents: string;
     consoleTabLogs: string;
     consoleTabActions: string;
     consoleSearch: string;
+    consoleFilterAll: string;
+    consoleFilterErrors: string;
     consoleAutoscroll: string;
     consoleClear: string;
     consoleEmptyFiltered: string;

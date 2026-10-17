@@ -58,6 +58,28 @@ function findCard(cards: DevboxVitalCard[] | null, id: string): DevboxVitalCard 
   return cards.find(c => c.id?.toLowerCase().includes(id) || c.title?.toLowerCase().includes(id)) ?? null;
 }
 
+const HOST_COUNT_RE = /^(\d+)\s*\/\s*(\d+)$/;
+
+type CardState = 'ok' | 'warn' | 'down' | 'unknown';
+
+function cardState(card: DevboxVitalCard | null, up: boolean): CardState {
+  if (card === null) return 'unknown';
+  if (up) return 'ok';
+  if (card.tone === 'warn') return 'warn';
+  if (card.tone === 'down') return 'down';
+  return 'ok';
+}
+
+function hostServicesState(card: DevboxVitalCard | null): CardState | null {
+  if (card === null) return null;
+  const match = HOST_COUNT_RE.exec(String(card.value ?? '').trim());
+  if (!match) return null;
+  const alive = Number(match[1]);
+  const recorded = Number(match[2]);
+  if (recorded === 0) return 'unknown';
+  return alive > 0 ? 'ok' : 'warn';
+}
+
 export interface DevboxServiceCardsProps {
   cards: DevboxVitalCard[] | null;
   activeProfile: string;
@@ -78,7 +100,9 @@ export function DevboxServiceCards({
           const card = findCard(cards, service.id);
           const value = card ? String(card.value ?? '').toLowerCase() : null;
           const up = value !== null && UP_VALUES.has(value);
-          const state = card === null ? 'unknown' : up ? 'ok' : card.tone === 'warn' ? 'warn' : card.tone === 'down' ? 'down' : 'ok';
+          const state =
+            (service.id === 'host_services' ? hostServicesState(card) : null) ??
+            cardState(card, up);
           const name = card ? devboxLabel(card.title) : t(service.nameKey);
           const hint = card?.hint ? devboxLabel(card.hint) : null;
           const tip = hint ? `${t(service.tipKey)} · ${hint}` : t(service.tipKey);
