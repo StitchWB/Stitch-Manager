@@ -10,7 +10,6 @@ import { t } from '@/lib/i18n';
 import { hasPluginUpdate } from '@/lib/backend/modules/marketplace';
 import type { MarketplaceItem, MarketplaceStatus } from '@/lib/backend/modules/marketplace';
 import { CATEGORY_LABEL_KEYS } from './categories';
-import { PluginBadgeChips } from './PluginBadgeChips';
 
 function statusBadgeVariant(status: MarketplaceStatus): 'success' | 'warning' | 'danger' {
   return status === 'beta' ? 'warning' : status === 'deprecated' ? 'danger' : 'success';
@@ -71,18 +70,12 @@ export function MarketplaceDetailHeader({
           {!item.entitled && item.required_tier && (
             <TierBadge tier={item.required_tier} size="sm" />
           )}
-          {item.dev_shadow && (
-            <Badge variant="slate" size="sm">
-              {t('marketplace.devCopy')}
-            </Badge>
-          )}
-          <PluginBadgeChips badges={item.badges} />
         </div>
       </div>
 
       {/* Meta line */}
       <div className="text-xs text-slate-500 mb-4">
-        {[item.author, sourceLabel, item.version ? `v${item.version}` : '']
+        {[item.author, item.version ? `v${item.version}` : '']
           .filter(Boolean)
           .join(' · ')}
       </div>

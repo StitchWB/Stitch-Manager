@@ -165,8 +165,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
             {t('marketplace.updateAvailable')}
           </Badge>
         )}
-        {(item.dev_shadow ||
-          (item.installed && item.installed_version !== null && !hasUpdate)) && (
+        {(item.dev_shadow || (item.installed && !hasUpdate)) && (
           <span className="flex items-center gap-1">
             {item.installed && item.installed_version !== null && !hasUpdate && (
               // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
@@ -178,6 +177,12 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
               <span title={t('marketplace.devCopy')} className="flex items-center">
                 <GitBranch size={11} className="text-slate-500" />
               </span>
+            )}
+            {item.installed && !hasUpdate && (
+              <>
+                <Check size={12} className="text-emerald-400" aria-hidden="true" />
+                <span className="sr-only">{t('marketplace.installed')}</span>
+              </>
             )}
           </span>
         )}
@@ -218,12 +223,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
           >
             {busy ? t('marketplace.installing') : t('marketplace.update')}
           </Button>
-        ) : (
-          <span className="flex items-center gap-1">
-            <Check size={12} className="text-emerald-400" aria-hidden="true" />
-            <span className="sr-only">{t('marketplace.installed')}</span>
-          </span>
-        )}
+        ) : null}
       </div>
     </div>
   );

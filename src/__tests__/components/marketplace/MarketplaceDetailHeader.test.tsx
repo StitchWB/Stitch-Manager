@@ -204,7 +204,7 @@ describe('MarketplaceDetailHeader update semantics', () => {
     expect(screen.getByText('1.0.0 → 1.0.1')).toBeTruthy();
   });
 
-  it('dev_shadow: devCopy chip, no Update button even when update_available', () => {
+  it('dev_shadow: no devCopy chip in header, no Update button even when update_available', () => {
     renderHeader(
       mkItem({
         installed_version: '1.0.0',
@@ -214,7 +214,7 @@ describe('MarketplaceDetailHeader update semantics', () => {
       }),
     );
 
-    expect(screen.getByText('marketplace.devCopy')).toBeTruthy();
+    expect(screen.queryByText('marketplace.devCopy')).toBeNull();
     expect(screen.queryByRole('button', { name: 'marketplace.update' })).toBeNull();
     expect(screen.queryByText('1.0.0 → 1.1.0')).toBeNull();
     expect(screen.getByTestId('installed-status')).toBeTruthy();

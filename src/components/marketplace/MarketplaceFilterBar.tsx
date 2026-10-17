@@ -94,7 +94,7 @@ export function MarketplaceFilterBar({
             data-testid="marketplace-filters-popover"
             role="dialog"
             aria-label={t('marketplace.filters')}
-            className="absolute right-0 top-full mt-2 w-72 z-30 rounded-xl border border-white/10 bg-vsc-sidebar shadow-xl p-3"
+            className="absolute right-0 top-full mt-2 w-72 z-30 rounded-xl border border-white/10 bg-vsc-sidebar-solid shadow-xl shadow-black/50 p-3"
           >
             <div className="flex flex-col gap-0.5">
               <ButtonBase type="button" onClick={onClearBadges} className={ROW_CLASS}>

@@ -45,7 +45,7 @@ export function MarketplaceOverviewTab({ item, language }: MarketplaceOverviewTa
       </div>
 
       {item.features != null && item.features.length > 0 && (
-        <section className="w-full">
+        <section className="w-full max-w-3xl">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
             {t('marketplace.featuresTitle')}
           </h3>
