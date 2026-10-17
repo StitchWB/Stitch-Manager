@@ -137,6 +137,28 @@ export function DevboxNowRail({
           })}
         </span>
 
+        {!bannerDismissed && (
+          <div
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5"
+            data-testid="devbox-security-banner"
+          >
+            <ShieldAlert size={13} className="shrink-0 text-amber-300" aria-hidden />
+            <span className="flex-1 truncate text-2xs text-slate-300">
+              {t('devboxPage.securityBanner')}
+            </span>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label={t('common.close')}
+              tooltip={t('common.close')}
+              data-testid="devbox-security-banner-close"
+              onClick={dismissBanner}
+            >
+              <X size={12} />
+            </IconButton>
+          </div>
+        )}
+
         {activeJob ? (
           <div
             className="flex flex-col gap-1.5 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] p-2.5"
@@ -178,6 +200,7 @@ export function DevboxNowRail({
               t('devboxPage.railOnboard1'),
               t('devboxPage.railOnboard2'),
               t('devboxPage.railOnboard3'),
+              t('devboxPage.railOnboard4'),
             ].map((line, i) => (
               <div key={i} className="flex items-start gap-2.5">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-indigo-400/40 bg-indigo-500/10 text-2xs font-semibold text-indigo-200">
@@ -295,28 +318,6 @@ export function DevboxNowRail({
             {t('devboxPage.railGoInfra')}
           </Button>
         </div>
-
-        {!bannerDismissed && (
-          <div
-            className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5"
-            data-testid="devbox-security-banner"
-          >
-            <ShieldAlert size={13} className="shrink-0 text-amber-300" aria-hidden />
-            <span className="flex-1 truncate text-2xs text-slate-300">
-              {t('devboxPage.securityBanner')}
-            </span>
-            <IconButton
-              size="sm"
-              variant="ghost"
-              aria-label={t('common.close')}
-              tooltip={t('common.close')}
-              data-testid="devbox-security-banner-close"
-              onClick={dismissBanner}
-            >
-              <X size={12} />
-            </IconButton>
-          </div>
-        )}
       </div>
     </DevboxSection>
   );

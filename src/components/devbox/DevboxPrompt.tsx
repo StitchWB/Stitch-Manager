@@ -5,7 +5,6 @@ import {
   Copy,
   Eye,
   EyeOff,
-  FileText,
   Lock,
   Plus,
   RefreshCw,
@@ -264,52 +263,31 @@ export function DevboxPrompt({
           client: clientOptions.find(option => option.value === client)?.label ?? client,
         });
 
-  const copyCta = (size: 'md' | 'lg', fullWidth: boolean) => {
-    const button = (
-      <Button
-        variant="primary"
-        size={size}
-        disabled={copyDisabled}
-        className={cn(
-          fullWidth && 'w-full',
-          copyFlash &&
-            'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:border-emerald-400/60 hover:bg-emerald-500/25 hover:text-white',
-        )}
-        leftIcon={copyFlash ? <Check size={16} /> : <Copy size={16} />}
-        data-testid="devbox-prompt-copy"
-        onClick={() => void copy()}
-      >
-        {copyFlash ? t('devboxPage.promptCopied') : t('devboxPage.promptCopy')}
-      </Button>
-    );
-    return copyDisabled ? (
-      <Tooltip content={t('devboxPage.promptBlockedTip', { fix: blockingLabels.join(' · ') })}>
-        {button}
-      </Tooltip>
-    ) : (
-      button
-    );
-  };
+  const copyButton = (
+    <Button
+      variant="primary"
+      size="md"
+      disabled={copyDisabled}
+      className={cn(
+        copyFlash &&
+          'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:border-emerald-400/60 hover:bg-emerald-500/25 hover:text-white',
+      )}
+      leftIcon={copyFlash ? <Check size={16} /> : <Copy size={16} />}
+      data-testid="devbox-prompt-copy"
+      onClick={() => void copy()}
+    >
+      {copyFlash ? t('devboxPage.promptCopied') : t('devboxPage.promptCopy')}
+    </Button>
+  );
 
-  const ctaExtras = (
-    <div className="flex shrink-0 flex-col gap-1">
-      <span className="text-2xs text-slate-400" data-testid="devbox-prompt-hint">
-        {clientHint}
-      </span>
-      {copyDisabled ? (
-        <span
-          className="flex items-center gap-1 text-2xs text-amber-300"
-          data-testid="devbox-prompt-stack-warning"
-        >
-          <AlertTriangle size={12} className="shrink-0" aria-hidden />
-          {t('devboxPage.promptStackDownWarning')}
-        </span>
-      ) : !ready.runner ? (
-        <span className="text-2xs text-slate-400" data-testid="devbox-prompt-runner-warning">
-          {t('devboxPage.promptRunnerDownHint')}
-        </span>
-      ) : null}
-    </div>
+  const alertPlate = (testId: string, text: string) => (
+    <span
+      className="flex shrink-0 items-center gap-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-2xs text-amber-200"
+      data-testid={testId}
+    >
+      <AlertTriangle size={12} className="shrink-0" aria-hidden />
+      {text}
+    </span>
   );
 
   return (
@@ -427,6 +405,18 @@ export function DevboxPrompt({
                 }}
               />
 
+              {copyDisabled
+                ? alertPlate(
+                    'devbox-prompt-stack-warning',
+                    t('devboxPage.promptStackDownWarning'),
+                  )
+                : !ready.runner
+                  ? alertPlate(
+                      'devbox-prompt-runner-warning',
+                      t('devboxPage.promptRunnerDownHint'),
+                    )
+                  : null}
+
               {acceptanceOpen && (
                 <div
                   className="shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]"
@@ -450,38 +440,6 @@ export function DevboxPrompt({
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  leftIcon={<Plus size={12} />}
-                  data-testid="devbox-prompt-acceptance-toggle"
-                  onClick={() => setAcceptanceOpen(v => !v)}
-                >
-                  {t('devboxPage.promptCriteria')}
-                </Button>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  leftIcon={revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-                  data-testid="devbox-prompt-reveal"
-                  onClick={() => load(!revealed)}
-                >
-                  {t('devboxPage.promptTokens')}
-                </Button>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  leftIcon={<FileText size={14} />}
-                  data-testid="devbox-prompt-preview-toggle"
-                  onClick={() => setTab('prompt')}
-                >
-                  {t('devboxPage.promptPreview')}
-                </Button>
-                <span className="ml-auto flex items-center">{copyCta('md', false)}</span>
-              </div>
-
-              {ctaExtras}
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -503,8 +461,6 @@ export function DevboxPrompt({
                   </span>
                 )}
               </div>
-              <div className="shrink-0">{copyCta('lg', true)}</div>
-              {ctaExtras}
               <pre
                 data-testid="devbox-prompt-preview"
                 className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-slate-300 whitespace-pre-wrap break-words"
@@ -522,6 +478,48 @@ export function DevboxPrompt({
               {t('devboxPage.promptStale')}
             </span>
           )}
+
+          <div
+            className="flex shrink-0 items-start justify-between gap-3"
+            data-testid="devbox-prompt-footer"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="xs"
+                variant="ghost"
+                leftIcon={<Plus size={12} />}
+                data-testid="devbox-prompt-acceptance-toggle"
+                onClick={() => setAcceptanceOpen(v => !v)}
+              >
+                {t('devboxPage.promptCriteria')}
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                leftIcon={revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                data-testid="devbox-prompt-reveal"
+                onClick={() => load(!revealed)}
+              >
+                {t('devboxPage.promptTokens')}
+              </Button>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              {copyDisabled ? (
+                <Tooltip
+                  content={t('devboxPage.promptBlockedTip', {
+                    fix: blockingLabels.join(' · '),
+                  })}
+                >
+                  {copyButton}
+                </Tooltip>
+              ) : (
+                copyButton
+              )}
+              <span className="text-2xs text-slate-500" data-testid="devbox-prompt-hint">
+                {clientHint}
+              </span>
+            </div>
+          </div>
         </div>
       )}
     </DevboxSection>

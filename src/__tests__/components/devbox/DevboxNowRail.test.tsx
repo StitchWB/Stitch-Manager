@@ -98,7 +98,7 @@ describe('DevboxNowRail active job', () => {
     expect(screen.getByTestId('devbox-rail-elapsed').textContent).toBe('Elapsed 00:13');
   });
 
-  it('shows the onboarding guide when there is no job, no permissions and no events', () => {
+  it('shows the 4-step quick guide when there is no job, no permissions and no events', () => {
     renderRail();
 
     expect(screen.queryByTestId('devbox-rail-active-job')).toBeNull();
@@ -106,6 +106,8 @@ describe('DevboxNowRail active job', () => {
     expect(onboarding.textContent).toContain(t('devboxPage.railOnboard1'));
     expect(onboarding.textContent).toContain(t('devboxPage.railOnboard2'));
     expect(onboarding.textContent).toContain(t('devboxPage.railOnboard3'));
+    expect(onboarding.textContent).toContain(t('devboxPage.railOnboard4'));
+    expect(onboarding.children).toHaveLength(4);
     expect(screen.queryByText('Agent is idle')).toBeNull();
   });
 
@@ -181,12 +183,12 @@ describe('DevboxNowRail security banner', () => {
     expect(banners).toHaveLength(0);
   });
 
-  it('renders the security line at the bottom of the rail body', () => {
+  it('renders the disclaimer at the top, directly under the bridge summary', () => {
     renderRail({ events: [{ ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'ok' }] });
 
     const banner = screen.getByTestId('devbox-security-banner');
-    const body = banner.parentElement;
-    expect(body?.lastElementChild).toBe(banner);
+    const summary = screen.getByTestId('devbox-rail-bridge-summary');
+    expect(banner.previousElementSibling).toBe(summary);
     expect(screen.getByTestId('devbox-rail-recent')).toBeTruthy();
   });
 });

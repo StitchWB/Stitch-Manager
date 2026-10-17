@@ -288,6 +288,98 @@ describe('Devbox page header control bar', () => {
     expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
   });
 
+  it('offers add/manage action options after the profile list', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
+    const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
+
+    const options = Array.from(select.querySelectorAll('option'));
+    expect(options.map(option => option.value)).toEqual([
+      'midsai',
+      'example-simple',
+      '__add',
+      '__manage',
+    ]);
+    expect(options[2].textContent).toBe('+ Add project / pick a folder...');
+    expect(options[3].textContent).toBe('Project settings');
+  });
+
+  it('select __add switches to infra, opens the projects modal in add mode and snaps back', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
+    const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
+
+    fireEvent.change(select, { target: { value: '__add' } });
+
+    expect(taskGrid().classList.contains('hidden')).toBe(true);
+    expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
+    expect(await screen.findByTestId('devbox-profile-new-name')).toBeTruthy();
+    await waitFor(() => {
+      expect(select.value).toBe('midsai');
+    });
+    expect(askConfirmMock).not.toHaveBeenCalled();
+    expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
+  });
+
+  it('select __manage opens the projects modal without the add editor and snaps back', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
+    const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
+
+    fireEvent.change(select, { target: { value: '__manage' } });
+
+    expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-profile-new-name')).toBeNull();
+    expect(taskGrid().classList.contains('hidden')).toBe(false);
+    await waitFor(() => {
+      expect(select.value).toBe('midsai');
+    });
+    expect(askConfirmMock).not.toHaveBeenCalled();
+  });
+
+  it('busy header: disabled button with a cmd label, neutral chip and caption under the button', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        action_status: {
+          busy: true,
+          current: { id: 'act-9', cmd: 'stack_start', startedAt: 1791536987.76 },
+          recent: [],
+        },
+      }),
+    });
+    render(<DevboxPage />);
+
+    const start = await screen.findByTestId('devbox-stack-start');
+    await waitFor(() => {
+      expect(start).toBeDisabled();
+    });
+    expect(start.textContent).toBe('Starting...');
+    expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: restarting...');
+
+    const caption = screen.getByTestId('devbox-progress');
+    expect(caption.textContent).toContain('stack_start');
+    expect(caption.parentElement?.contains(start)).toBe(true);
+  });
+
+  it('busy header labels stop commands with the stopping label', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        action_status: {
+          busy: true,
+          current: { id: 'act-10', cmd: 'stack_full_down', startedAt: 1791536987.76 },
+          recent: [],
+        },
+      }),
+    });
+    render(<DevboxPage />);
+
+    const start = await screen.findByTestId('devbox-stack-start');
+    await waitFor(() => {
+      expect(start.textContent).toBe('Stopping...');
+    });
+    expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: restarting...');
+  });
+
   it('new-project button switches to the infra tab and opens the projects modal in add mode', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');

@@ -56,6 +56,8 @@ export interface MarketplaceTranslations {
     linkHomepage: string;
     linkRepository: string;
     categoryFilterAll: string;
+    filters: string;
+    filtersReset: string;
     status: {
       stable: string;
       beta: string;
@@ -101,6 +103,11 @@ export interface MarketplaceTranslations {
       requiredRelease: string;
       requiredZip: string;
       invalidSha: string;
+      fetchSha: string;
+      fetchingSha: string;
+      fetchShaFailed: string;
+      domainsPlaceholder: string;
+      domainInvalid: string;
     };
     mySubmissions: {
       tab: string;

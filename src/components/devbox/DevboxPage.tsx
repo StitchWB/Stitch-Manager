@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Plus, RefreshCw, ShieldAlert, Terminal } from 'lucide-react';
+import { Loader2, Play, Plus, RefreshCw, ShieldAlert, Terminal } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import { Button } from '@/components/ui/Button';
 import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { IconButton } from '@/components/ui/IconButton';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { TabButton } from '@/components/ui/TabButton';
@@ -150,9 +149,19 @@ export function DevboxPage() {
   const activeProfile = activeProfileRow?.name ?? '';
 
   const composite = stackState(cards);
-  const chip = STACK_CHIP[composite];
   const ingressUp = devboxVitalValue(cards, 'ingress') === 'up';
   const current = status?.current;
+  const busyAction = busy && current ? current : null;
+  const chip = busyAction
+    ? { dot: 'bg-slate-500', key: 'devboxPage.stackBusy' }
+    : STACK_CHIP[composite];
+  const busyLabel = busyAction
+    ? busyAction.cmd === 'stack_start'
+      ? t('devboxPage.busyStarting')
+      : busyAction.cmd === 'stack_down' || busyAction.cmd === 'stack_full_down'
+        ? t('devboxPage.busyStopping')
+        : t('devboxPage.busyRunning')
+    : null;
 
   const profileOptions = (Array.isArray(profiles) ? profiles : []).map(row => ({
     value: row.name,
@@ -185,26 +194,38 @@ export function DevboxPage() {
     setProjectsOpen(true);
   }, []);
 
+  const projectOptions = [
+    ...profileOptions,
+    { value: '__add', label: t('devboxPage.projectAddOption') },
+    { value: '__manage', label: t('devboxPage.projectManageOption') },
+  ];
+
+  const onProjectSelect = useCallback(
+    (value: string) => {
+      if (value === '__add') {
+        setTab('infra');
+        setProjectsOpen(true);
+        setAddSignal(x => x + 1);
+        return;
+      }
+      if (value === '__manage') {
+        openProjects();
+        return;
+      }
+      onProfileSelect(value);
+    },
+    [onProfileSelect, openProjects],
+  );
+
   const controlBar = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {busy && current && (
-        <span
-          className="flex items-center gap-1.5 text-2xs text-slate-400"
-          data-testid="devbox-progress"
-        >
-          <LoadingSpinner size="xs" />
-          <span className="max-w-[16rem] truncate">
-            {t('devboxPage.progress', { cmd: current.cmd, time: devboxTime(current.startedAt) })}
-          </span>
-        </span>
-      )}
       <Select
         aria-label={t('devboxPage.headerProjectLabel')}
         containerClassName="w-44"
-        options={profileOptions}
+        options={projectOptions}
         value={selectedProfile ?? activeProfile}
         data-testid="devbox-profile-select"
-        onValueChange={onProfileSelect}
+        onValueChange={onProjectSelect}
       />
       <IconButton
         size="md"
@@ -227,20 +248,42 @@ export function DevboxPage() {
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', chip.dot)} aria-hidden />
         {t(chip.key)}
       </span>
-      <Tooltip
-        content={composite === 'ok' ? t('devboxPage.tipRestart') : t('devboxPage.tipStart')}
-      >
-        <Button
-          size="sm"
-          variant="primary"
-          disabled={busy || activeProfile === ''}
-          leftIcon={<Play size={14} />}
-          data-testid="devbox-stack-start"
-          onClick={() => onAction(devboxStackStart(activeProfile, false))}
+      <div className="flex flex-col items-stretch">
+        <Tooltip
+          content={composite === 'ok' ? t('devboxPage.tipRestart') : t('devboxPage.tipStart')}
         >
-          {composite === 'ok' ? t('devboxPage.restart') : t('devboxPage.promptChipStackStart')}
-        </Button>
-      </Tooltip>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={busy || activeProfile === ''}
+            leftIcon={
+              busyAction ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Play size={14} />
+              )
+            }
+            data-testid="devbox-stack-start"
+            onClick={() => onAction(devboxStackStart(activeProfile, false))}
+          >
+            {busyLabel ??
+              (composite === 'ok'
+                ? t('devboxPage.restart')
+                : t('devboxPage.promptChipStackStart'))}
+          </Button>
+        </Tooltip>
+        {busyAction && (
+          <span
+            className="max-w-[16rem] truncate text-2xs text-slate-400"
+            data-testid="devbox-progress"
+          >
+            {t('devboxPage.progress', {
+              cmd: busyAction.cmd,
+              time: devboxTime(busyAction.startedAt),
+            })}
+          </span>
+        )}
+      </div>
       <Tooltip content={t('devboxPage.tipDoctor')}>
         <Button
           size="sm"

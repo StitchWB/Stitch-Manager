@@ -23,7 +23,6 @@ import {
   ShieldOff,
   Ticket,
   Activity,
-  Puzzle,
   Globe,
   Crown,
   Home,
@@ -89,6 +88,20 @@ function NavItem({ to, icon, label, collapsed }: NavItemProps) {
     </NavLink>);
 }
 
+interface SidebarItemConfig {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  visible: boolean;
+}
+
+interface SidebarSectionConfig {
+  key: string;
+  label?: string;
+  separator?: boolean;
+  items: SidebarItemConfig[];
+}
+
 export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, language } = useAppStore();
   const {
@@ -128,6 +141,64 @@ export default function Sidebar() {
   // (desktop mode). Uses the EFFECTIVE role so an admin previewing a
   // non-admin role loses admin-only nav until they exit the preview.
   const isAdmin = !authEnabled || effectiveRole(authUser) === 'admin';
+
+  const desktop = isDesktopApp();
+  const adminZone = isAdmin && authEnabled;
+
+  const sections: SidebarSectionConfig[] = [
+    {
+      key: 'top',
+      items: [
+        { to: desktop ? '/' : '/app', icon: <LayoutDashboard size={20} />, label: t('sidebar.dashboard'), visible: true },
+      ],
+    },
+    {
+      key: 'operations',
+      label: t('sidebar.sectionOperations'),
+      items: [
+        { to: '/accounts', icon: <Users size={20} />, label: t('sidebar.accounts'), visible: true },
+        { to: '/groups', icon: <Users size={20} />, label: t('sidebar.groups'), visible: Boolean(authUser) },
+        { to: '/autoreg', icon: <RefreshCw size={20} />, label: t('sidebar.autoReg'), visible: hasPermission('section.autoreg') },
+        { to: '/automation', icon: <Repeat size={20} />, label: t('sidebar.automation'), visible: hasPermission('section.automation') },
+        { to: '/mail', icon: <Mail size={20} />, label: t('sidebar.mail'), visible: hasPermission('section.mail') },
+      ],
+    },
+    {
+      key: 'toolsAi',
+      label: t('sidebar.sectionToolsAi'),
+      items: [
+        { to: '/patcher', icon: <Code size={20} />, label: t('sidebar.idePatch'), visible: desktop },
+        { to: '/ai', icon: <ShieldCheck size={20} />, label: t('sidebar.aiHub'), visible: hasPermission('section.ai_hub') },
+        { to: '/radar', icon: <Radar size={20} />, label: t('sidebar.radar'), visible: true },
+        { to: '/tools', icon: <Wrench size={20} />, label: t('sidebar.tools'), visible: hasPermission('section.tools') },
+        { to: '/totp', icon: <KeyRound size={20} />, label: '2FA', visible: hasPermission('section.totp') },
+      ],
+    },
+    {
+      key: 'ecosystem',
+      label: t('sidebar.sectionEcosystem'),
+      items: [
+        { to: '/marketplace', icon: <Store size={20} />, label: t('sidebar.marketplace'), visible: true },
+        { to: '/friends', icon: <HeartHandshake size={20} />, label: t('sidebar.friends'), visible: true },
+      ],
+    },
+    {
+      key: 'system',
+      label: t('sidebar.system'),
+      separator: true,
+      items: [
+        { to: '/', icon: <Globe size={20} />, label: t('sidebar.website'), visible: !desktop },
+        { to: '/settings', icon: <Settings size={20} />, label: t('sidebar.settings'), visible: hasPermission('section.settings') },
+        { to: '/logs', icon: <FileText size={20} />, label: t('sidebar.logs'), visible: hasPermission('section.logs') },
+        { to: '/admin', icon: <Home size={20} />, label: t('sidebar.adminOverview'), visible: adminZone },
+        { to: '/users', icon: <UserCircle size={20} />, label: t('auth.users.title'), visible: adminZone },
+        { to: '/codes', icon: <Ticket size={20} />, label: t('codes.title'), visible: adminZone },
+        { to: '/partners', icon: <Crown size={20} />, label: t('sidebar.partners'), visible: adminZone },
+        { to: '/monitoring', icon: <Activity size={20} />, label: t('monitoring.title'), visible: adminZone },
+        { to: '/privileges', icon: <ShieldCheck size={20} />, label: t('sidebar.privileges'), visible: adminZone },
+      ],
+    },
+  ];
 
   return (
     <aside
@@ -169,190 +240,38 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 space-y-1 no-scrollbar">
-        <NavItem
-          to={isDesktopApp() ? '/' : '/app'}
-          icon={<LayoutDashboard size={20} />}
-          label={t('sidebar.dashboard')}
-          collapsed={sidebarCollapsed} />
-
-        <NavItem
-          to="/accounts"
-          icon={<Users size={20} />}
-          label={t('sidebar.accounts')}
-          collapsed={sidebarCollapsed} />
-
-        {/* Groups — first-class section on desktop + web. Visible only
-            when a session user exists (authEnabled && authUser != null);
-            with no session user groups are unavailable and the link hides. */}
-        {authUser && (
-          <NavItem
-            to="/groups"
-            icon={<Users size={20} />}
-            label={t('sidebar.groups')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {hasPermission('section.autoreg') && (
-          <NavItem
-            to="/autoreg"
-            icon={<RefreshCw size={20} />}
-            label={t('sidebar.autoReg')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {isDesktopApp() && (
-          <NavItem
-            to="/patcher"
-            icon={<Code size={20} />}
-            label={t('sidebar.idePatch')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {hasPermission('section.ai_hub') && (
-          <NavItem
-            to="/ai"
-            icon={<ShieldCheck size={20} />}
-            label={t('sidebar.aiHub')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        <NavItem
-          to="/radar"
-          icon={<Radar size={20} />}
-          label={t('sidebar.radar')}
-          collapsed={sidebarCollapsed} />
-
-        {hasPermission('section.automation') && (
-          <NavItem
-            to="/automation"
-            icon={<Repeat size={20} />}
-            label={t('sidebar.automation')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {hasPermission('section.mail') && (
-          <NavItem
-            to="/mail"
-            icon={<Mail size={20} />}
-            label={t('sidebar.mail')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {hasPermission('section.tools') && (
-          <NavItem
-            to="/tools"
-            icon={<Wrench size={20} />}
-            label={t('sidebar.tools')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {hasPermission('section.totp') && (
-          <NavItem
-            to="/totp"
-            icon={<KeyRound size={20} />}
-            label="2FA"
-            collapsed={sidebarCollapsed} />
-        )}
-
-        <NavItem
-          to="/friends"
-          icon={<HeartHandshake size={20} />}
-          label={t('sidebar.friends')}
-          collapsed={sidebarCollapsed} />
-
-        <NavItem
-          to="/marketplace"
-          icon={<Store size={20} />}
-          label={t('sidebar.marketplace')}
-          collapsed={sidebarCollapsed} />
-
-        <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
-          {!sidebarCollapsed &&
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-              {t('sidebar.system')}
-            </p>
-          }
-        </div>
-
-        {/* Web-only: back to the public landing (desktop has no landing). */}
-        {!isDesktopApp() && (
-          <NavItem
-            to="/"
-            icon={<Globe size={20} />}
-            label={t('sidebar.website')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {hasPermission('section.settings') && (
-          <NavItem
-            to="/settings"
-            icon={<Settings size={20} />}
-            label={t('sidebar.settings')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {hasPermission('section.logs') && (
-          <NavItem
-            to="/logs"
-            icon={<FileText size={20} />}
-            label={t('sidebar.logs')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {isAdmin && authEnabled && (
-          <NavItem
-            to="/admin"
-            icon={<Home size={20} />}
-            label={t('sidebar.adminOverview')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {isAdmin && authEnabled && (
-          <NavItem
-            to="/users"
-            icon={<UserCircle size={20} />}
-            label={t('auth.users.title')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {isAdmin && authEnabled && (
-          <NavItem
-            to="/codes"
-            icon={<Ticket size={20} />}
-            label={t('codes.title')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {isAdmin && authEnabled && (
-          <NavItem
-            to="/partners"
-            icon={<Crown size={20} />}
-            label={t('sidebar.partners')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {isAdmin && authEnabled && (
-          <NavItem
-            to="/monitoring"
-            icon={<Activity size={20} />}
-            label={t('monitoring.title')}
-            collapsed={sidebarCollapsed} />
-        )}
-
-        {isAdmin && authEnabled && (
-          <NavItem
-            to="/privileges"
-            icon={<ShieldCheck size={20} />}
-            label={t('sidebar.privileges')}
-            collapsed={sidebarCollapsed} />
-        )}
-        {isAdmin && authEnabled && (
-          <NavItem
-            to="/plugins"
-            icon={<Puzzle size={20} />}
-            label={t('sidebar.plugins')}
-            collapsed={sidebarCollapsed} />
-        )}
+        {sections.map(section => {
+          const items = section.items.filter(item => item.visible);
+          if (items.length === 0) return null;
+          return (
+            <div key={section.key} className="space-y-1">
+              {section.separator && (
+                <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
+                  {!sidebarCollapsed &&
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                      {section.label}
+                    </p>
+                  }
+                </div>
+              )}
+              {!section.separator && section.label && !sidebarCollapsed && (
+                <div className="mx-5 mt-5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                    {section.label}
+                  </p>
+                </div>
+              )}
+              {items.map(item => (
+                <NavItem
+                  key={item.to}
+                  to={item.to}
+                  icon={item.icon}
+                  label={item.label}
+                  collapsed={sidebarCollapsed} />
+              ))}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Footer */}
