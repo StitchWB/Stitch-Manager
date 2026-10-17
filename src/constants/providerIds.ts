@@ -19,6 +19,8 @@ export const ProviderId = {
   FIREWORKS: 'fireworks',
   QODER: 'qoder',
   V0_APP: 'v0_app',
+  DAHL: 'dahl',
+  GITCLEAN: 'gitclean',
 } as const;
 
 export type ProviderId = (typeof ProviderId)[keyof typeof ProviderId];
@@ -178,6 +180,22 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     id: ProviderId.V0_APP,
     displayName: 'v0.dev',
     category: 'ai',
+    hasAutoreg: true,
+    isAiProxy: false,
+    minEngineApi: 1,
+  },
+  [ProviderId.DAHL]: {
+    id: ProviderId.DAHL,
+    displayName: 'Dahl Inference',
+    category: 'ai',
+    hasAutoreg: true,
+    isAiProxy: true,
+    minEngineApi: 1,
+  },
+  [ProviderId.GITCLEAN]: {
+    id: ProviderId.GITCLEAN,
+    displayName: 'GitClean',
+    category: 'git',
     hasAutoreg: true,
     isAiProxy: false,
     minEngineApi: 1,

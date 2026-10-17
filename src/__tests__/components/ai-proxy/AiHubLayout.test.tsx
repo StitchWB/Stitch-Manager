@@ -66,13 +66,11 @@ jest.mock('@/stores/auth', () => ({
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 let navigatedPath = '/ai';
-let navigatedSearch = '';
 
 function LocationSpy() {
   const loc = useLocation();
   useEffect(() => {
-    navigatedPath = loc.pathname;
-    navigatedSearch = loc.search;
+  navigatedPath = loc.pathname;
   }, [loc.pathname, loc.search]);
   return null;
 }
@@ -122,8 +120,7 @@ describe('AiHubLayout rail navigation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    navigatedPath = '/ai';
-    navigatedSearch = '';
+  navigatedPath = '/ai';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
@@ -280,8 +277,7 @@ describe('AiHubLayout plugin rail kind filter (F11)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    navigatedPath = '/ai';
-    navigatedSearch = '';
+  navigatedPath = '/ai';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
@@ -387,8 +383,7 @@ describe('AiHubLayout rail cleanup (P2.4)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    navigatedPath = '/ai';
-    navigatedSearch = '';
+  navigatedPath = '/ai';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
@@ -449,8 +444,7 @@ describe('AiHubLayout rail labels and plugin icons (P2.7)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    navigatedPath = '/ai';
-    navigatedSearch = '';
+  navigatedPath = '/ai';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
@@ -499,8 +493,7 @@ describe('AiHubLayout breadcrumb bar (P2.9)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    navigatedPath = '/ai';
-    navigatedSearch = '';
+  navigatedPath = '/ai';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
@@ -535,8 +528,7 @@ describe('AiHubLayout opencode rail item (P3)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    navigatedPath = '/ai';
-    navigatedSearch = '';
+  navigatedPath = '/ai';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
@@ -569,8 +561,7 @@ describe('AiHubLayout rail highlight for canonical host routes (W1.3)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
-    navigatedPath = '/ai';
-    navigatedSearch = '';
+  navigatedPath = '/ai';
     (safeInvoke as jest.Mock).mockResolvedValue([]);
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });

@@ -25,7 +25,8 @@
     "test:dev-scripts": "powershell -ExecutionPolicy Bypass -File scripts/test-dev-shutdown.ps1",
     "lint:ui-kit": "eslint \"src/**/*.tsx\"",
     "audit:py": "python -m vulture python/autoreg",
-    "audit:contracts": "python scripts/audit_contracts.py"
+    "audit:contracts": "python scripts/audit_contracts.py",
+    "prepare": "husky"
   },
   "overrides": {
     "@emnapi/core": "^1.11.2",
