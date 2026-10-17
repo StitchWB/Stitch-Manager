@@ -1,4 +1,5 @@
-import { Check, Download, Lock } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Check, Download, GitBranch, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -62,6 +63,13 @@ interface ListRowProps {
 
 export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, onInstall, onLockedClick }: ListRowProps) {
   const language = useAppStore(s => s.language);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selected) {
+      rowRef.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selected]);
 
   const locked = !item.can_download && !item.installed;
   const unavailableMsg = t('marketplace.unavailableForRole');
@@ -90,6 +98,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
 
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       aria-pressed={selected}
@@ -103,7 +112,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
       className={cn(
         'flex items-center gap-3 px-3 py-2 border-b border-white/[0.04] transition-colors cursor-pointer',
         selected
-          ? 'bg-indigo-500/[0.12] ring-1 ring-inset ring-indigo-500/30'
+          ? 'bg-indigo-500/[0.12] ring-1 ring-inset ring-indigo-500/30 border-l-2 border-indigo-400'
           : 'hover:bg-white/[0.03]',
         locked && 'opacity-50 saturate-50',
         !locked && (item.badges ?? []).includes('not_works') && 'opacity-60 saturate-[0.6]',
@@ -156,15 +165,20 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
             {t('marketplace.updateAvailable')}
           </Badge>
         )}
-        {!hasUpdate && item.dev_shadow && (
-          <Badge variant="slate" size="sm">
-            {t('marketplace.devCopy')}
-          </Badge>
-        )}
-        {item.installed && item.installed_version !== null && !hasUpdate && (
-          // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
-          <span className="text-[10px] text-slate-500 tabular-nums">
-            v{item.installed_version}
+        {(item.dev_shadow ||
+          (item.installed && item.installed_version !== null && !hasUpdate)) && (
+          <span className="flex items-center gap-1">
+            {item.installed && item.installed_version !== null && !hasUpdate && (
+              // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
+              <span className="text-[10px] text-slate-500 tabular-nums">
+                v{item.installed_version}
+              </span>
+            )}
+            {item.dev_shadow && (
+              <span title={t('marketplace.devCopy')} className="flex items-center">
+                <GitBranch size={11} className="text-slate-500" />
+              </span>
+            )}
           </span>
         )}
         {locked ? (
@@ -205,14 +219,10 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
             {busy ? t('marketplace.installing') : t('marketplace.update')}
           </Button>
         ) : (
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled
-            leftIcon={<Check className="w-3.5 h-3.5" />}
-          >
-            {t('marketplace.installed')}
-          </Button>
+          <span className="flex items-center gap-1">
+            <Check size={12} className="text-emerald-400" aria-hidden="true" />
+            <span className="sr-only">{t('marketplace.installed')}</span>
+          </span>
         )}
       </div>
     </div>
