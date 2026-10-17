@@ -1,5 +1,5 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 
 jest.mock('@/lib/backend/core/invoke', () => ({
   safeInvoke: jest.fn(),
@@ -67,6 +67,19 @@ beforeEach(() => {
     configurable: true,
   });
 });
+
+afterEach(() => {
+  jest.useRealTimers();
+});
+
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
 
 describe('DevboxPrompt prerequisite chips', () => {
   it('blocks the CTA while a blocking prereq is down and chip CTAs fire the right actions', async () => {
@@ -266,24 +279,32 @@ describe('DevboxPrompt copy flow', () => {
     expect(screen.getByTestId('devbox-prompt-manual-copy').textContent).toBe(
       t('devboxPage.promptManualCopy'),
     );
-    expect(screen.queryByTestId('devbox-prompt-preview-masked')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-preview-locked')).toBeNull();
   });
 });
 
 describe('DevboxPrompt preview and errors', () => {
-  it('keeps the preview collapsed by default and expands to the masked prompt with a badge', async () => {
+  it('keeps the prompt tab hidden by default and switches to it via tabs and the toolbar', async () => {
     renderPrompt();
     await chipsReady();
 
     expect(screen.queryByTestId('devbox-prompt-preview')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('devbox-prompt-preview-toggle'));
+    fireEvent.click(screen.getByText(t('devboxPage.promptTabPrompt')));
     expect(screen.getByTestId('devbox-prompt-preview').textContent).toBe(
       promptWithClient(maskedAgentPromptFixture),
     );
-    expect(screen.getByTestId('devbox-prompt-preview-masked').textContent).toBe(
-      t('devboxPage.promptPreviewMasked'),
+    expect(screen.getByTestId('devbox-prompt-preview-locked').textContent).toBe(
+      t('devboxPage.promptPreviewLocked'),
     );
+    expect(screen.queryByTestId('devbox-prompt-task')).toBeNull();
+
+    fireEvent.click(screen.getByText(t('devboxPage.promptTabEditor')));
+    expect(screen.getByTestId('devbox-prompt-task')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-prompt-preview')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('devbox-prompt-preview-toggle'));
+    expect(screen.getByTestId('devbox-prompt-preview')).toBeTruthy();
   });
 
   it('eye toggle refetches with the flipped reveal flag', async () => {
@@ -422,5 +443,124 @@ describe('DevboxPrompt agent client selector', () => {
       reveal: true,
       client: 'cursor',
     });
+  });
+});
+
+describe('DevboxPrompt copy feedback', () => {
+  it('flashes the copied label on the CTA for 2s then reverts', async () => {
+    jest.useFakeTimers();
+    renderPrompt();
+    await flushMicrotasks();
+    expect(screen.getByTestId('devbox-prompt-chips')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('devbox-prompt-copy'));
+    await flushMicrotasks();
+
+    expect(writeText).toHaveBeenCalled();
+    expect(screen.getByTestId('devbox-prompt-copy').textContent).toBe(
+      t('devboxPage.promptCopied'),
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(screen.getByTestId('devbox-prompt-copy').textContent).toBe(
+      t('devboxPage.promptCopy'),
+    );
+  });
+
+  it('flashes the big prompt-tab CTA too', async () => {
+    jest.useFakeTimers();
+    renderPrompt();
+    await flushMicrotasks();
+
+    fireEvent.click(screen.getByText(t('devboxPage.promptTabPrompt')));
+    fireEvent.click(screen.getByTestId('devbox-prompt-copy'));
+    await flushMicrotasks();
+
+    expect(screen.getByTestId('devbox-prompt-copy').textContent).toBe(
+      t('devboxPage.promptCopied'),
+    );
+  });
+});
+
+describe('DevboxPrompt hint and warning lines', () => {
+  it('shows the universal hint by default and a client hint after selection', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    expect(screen.getByTestId('devbox-prompt-hint').textContent).toBe(
+      t('devboxPage.promptHintUniversal'),
+    );
+
+    fireEvent.change(screen.getByTestId('devbox-prompt-client'), {
+      target: { value: 'opencode' },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-prompt-hint').textContent).toBe(
+        t('devboxPage.promptHintClient', { client: 'OpenCode' }),
+      );
+    });
+  });
+
+  it('renders the amber stack warning while copy is blocked by prereqs', async () => {
+    const blocked = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: false, ingress: false, runner: true },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
+    );
+    renderPrompt();
+    await chipsReady();
+
+    expect(screen.getByTestId('devbox-prompt-stack-warning').textContent).toBe(
+      t('devboxPage.promptStackDownWarning'),
+    );
+    expect(screen.queryByTestId('devbox-prompt-runner-warning')).toBeNull();
+  });
+
+  it('renders the slate runner line when copy is enabled but the runner is down', async () => {
+    const runnerDown = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: true, ingress: true, runner: false },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(runnerDown, runnerDown) }),
+    );
+    renderPrompt();
+    await chipsReady();
+
+    expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
+    expect(screen.getByTestId('devbox-prompt-runner-warning').textContent).toBe(
+      t('devboxPage.promptRunnerDownHint'),
+    );
+  });
+});
+
+describe('DevboxPrompt editor layout', () => {
+  it('opens the acceptance accordion as a bordered panel with rows=3 and closes it', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    expect(screen.queryByTestId('devbox-prompt-acceptance-panel')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('devbox-prompt-acceptance-toggle'));
+    expect(screen.getByTestId('devbox-prompt-acceptance-panel')).toBeTruthy();
+    const acceptance = screen.getByTestId('devbox-prompt-acceptance') as HTMLTextAreaElement;
+    expect(acceptance.rows).toBe(3);
+
+    fireEvent.click(screen.getByTestId('devbox-prompt-acceptance-toggle'));
+    expect(screen.queryByTestId('devbox-prompt-acceptance-panel')).toBeNull();
+  });
+
+  it('syncs the task textarea height on input instead of stretching the column', async () => {
+    renderPrompt();
+    await chipsReady();
+
+    const task = screen.getByTestId('devbox-prompt-task') as HTMLTextAreaElement;
+    expect(task.className).toContain('max-h-[40vh]');
+    fireEvent.change(task, { target: { value: 'x'.repeat(400) } });
+    expect(task.style.height).toBe('160px');
   });
 });

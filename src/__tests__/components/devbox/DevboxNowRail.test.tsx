@@ -21,6 +21,7 @@ jest.mock('sonner', () => ({
 }));
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
+import { t } from '@/lib/i18n';
 import type {
   DevboxAccepted,
   DevboxEventRow,
@@ -97,10 +98,21 @@ describe('DevboxNowRail active job', () => {
     expect(screen.getByTestId('devbox-rail-elapsed').textContent).toBe('Elapsed 00:13');
   });
 
-  it('shows the idle state when nothing is running', () => {
+  it('shows the onboarding guide when there is no job, no permissions and no events', () => {
     renderRail();
 
     expect(screen.queryByTestId('devbox-rail-active-job')).toBeNull();
+    const onboarding = screen.getByTestId('devbox-rail-onboarding');
+    expect(onboarding.textContent).toContain(t('devboxPage.railOnboard1'));
+    expect(onboarding.textContent).toContain(t('devboxPage.railOnboard2'));
+    expect(onboarding.textContent).toContain(t('devboxPage.railOnboard3'));
+    expect(screen.queryByText('Agent is idle')).toBeNull();
+  });
+
+  it('falls back to the idle card when events exist but no job is running', () => {
+    renderRail({ events: [{ ts: 1791536980, kind: 'note', status: 'weird' }] });
+
+    expect(screen.queryByTestId('devbox-rail-onboarding')).toBeNull();
     expect(screen.getByText('Agent is idle')).toBeTruthy();
   });
 
@@ -198,7 +210,7 @@ describe('DevboxNowRail recent activity', () => {
     expect(onGoInfra).toHaveBeenCalledTimes(1);
   });
 
-  it('renders timeline rows with a status icon and compact time per event', () => {
+  it('renders timeline rows as compact cards with a status icon and time per event', () => {
     renderRail({
       events: [
         { ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'ok' },
@@ -216,10 +228,43 @@ describe('DevboxNowRail recent activity', () => {
       'other',
     ]);
 
+    const cards = screen.getAllByTestId('devbox-rail-event-card');
+    expect(cards).toHaveLength(4);
+    expect(cards[0].className).toContain('rounded-lg');
+    expect(cards[0].className).toContain('border');
+
     const rows = screen.getByTestId('devbox-rail-recent');
     expect(rows.textContent).toContain('bash · ok');
     expect(rows.textContent).toContain('git · failed');
     expect(rows.textContent).toContain('note · weird');
     expect(rows.querySelector('.font-mono')).toBeNull();
+  });
+});
+
+describe('DevboxNowRail bridge summary', () => {
+  it('counts only event rows carrying a tool name', () => {
+    renderRail({
+      events: [
+        { ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'ok' },
+        { ts: 1791536981, kind: 'tool_call', tool: 'git', status: 'failed' },
+        { ts: 1791536982, kind: 'note', status: 'weird' },
+        { ts: 1791536983, kind: 'tool_call', tool: '', status: 'ok' },
+      ],
+    });
+
+    expect(screen.getByTestId('devbox-rail-bridge-summary').textContent).toBe(
+      t('devboxPage.railBridgeSummary', {
+        state: t('devboxPage.railBridgeUp'),
+        count: 2,
+      }),
+    );
+  });
+
+  it('reports the bridge as down when an observed bundle is degraded', () => {
+    renderRail({ jobs: observed([], 'down') });
+
+    expect(screen.getByTestId('devbox-rail-bridge-summary').textContent).toContain(
+      t('devboxPage.railBridgeDown'),
+    );
   });
 });

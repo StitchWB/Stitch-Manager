@@ -44,11 +44,23 @@ export const devboxPage: DevboxPageTranslations = {
     promptAcceptancePlaceholder:
       "Например: тесты зелёные, логин работает, лишнего не тронуто",
     promptCopy: "Скопировать промпт",
+    promptCopied: "Скопировано в буфер",
     promptBlockedTip: "Сначала исправь: {fix}",
     promptCriteria: "Критерии",
+    promptCriteriaHeader: "Критерии приёмки",
     promptTokens: "Токены",
     promptPreview: "Превью",
-    promptPreviewMasked: "Превью маскировано - в буфер уйдёт полный текст",
+    promptPreviewLocked:
+      "Чувствительные токены скрыты в превью, но будут скопированы",
+    promptTabEditor: "Редактор задачи",
+    promptTabPrompt: "Готовый промпт",
+    promptHintUniversal:
+      "Скопируй промпт и вставь в чат или терминал твоего кодинг-агента.",
+    promptHintClient:
+      "Скопируй промпт и передай в {client}: конфиг подключения уже внутри.",
+    promptStackDownWarning: "Стек не запущен — агент не сможет подключиться",
+    promptRunnerDownHint:
+      "Раннер лежит: код-правки агент сделает, host-команды недоступны",
     promptStale:
       "Токены или URL обновлены после копирования - скопируй промпт заново",
     promptManualCopy: "буфер недоступен - скопируй текст вручную",
@@ -63,6 +75,13 @@ export const devboxPage: DevboxPageTranslations = {
     railElapsed: "Прошло {elapsed}",
     railIdle: "Агент простаивает",
     railIdleDesc: "Джобы появятся здесь, пока агент работает с инструментами в проекте.",
+    railBridgeSummary: "Мост: {state} · вызовов инструментов: {count}",
+    railBridgeUp: "поднят",
+    railBridgeDown: "лежит",
+    railOnboard1: "Сформулируй задачу слева",
+    railOnboard2: "Скопируй промпт",
+    railOnboard3:
+      "Запусти его во внешнем агенте — действия и запросы доступов появятся здесь в реальном времени",
     permissionApprove: "Одобрить",
     securityBanner: "Токен агента эквивалентен удалённому shell в контейнере",
     railRecent: "Последняя активность",

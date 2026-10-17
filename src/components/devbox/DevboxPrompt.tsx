@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, Eye, EyeOff, FileText, Plus, RefreshCw, RotateCw } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Eye,
+  EyeOff,
+  FileText,
+  Lock,
+  Plus,
+  RefreshCw,
+  RotateCw,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { appToast } from '@/lib/observability/toast';
 import { t } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 import {
   devboxActionSucceeded,
   devboxAgentPrompt,
@@ -26,6 +39,10 @@ import { DevboxSection } from './DevboxSection';
 const STALE_COMMAND_RE = /method not found|-32601/i;
 
 const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', 'stack_start']);
+
+const TASK_MIN_PX = 160;
+const TASK_MAX_VH_RATIO = 0.4;
+const COPY_FLASH_MS = 2000;
 
 const AGENT_CLIENTS: ReadonlyArray<readonly [string, string]> = [
   ['claude-code', 'Claude Code'],
@@ -78,6 +95,8 @@ export interface DevboxPromptProps {
   reloadTick?: number;
 }
 
+type PromptTab = 'editor' | 'prompt';
+
 export function DevboxPrompt({
   profiles,
   overviewCards,
@@ -88,17 +107,20 @@ export function DevboxPrompt({
   const [data, setData] = useState<DevboxAgentPromptPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [tab, setTab] = useState<PromptTab>('editor');
   const [manualCopy, setManualCopy] = useState(false);
   const [acceptanceOpen, setAcceptanceOpen] = useState(false);
   const [task, setTask] = useState('');
   const [acceptance, setAcceptance] = useState('');
   const [client, setClient] = useState('universal');
   const [copied, setCopied] = useState<{ at: number; fingerprint: string } | null>(null);
+  const [copyFlash, setCopyFlash] = useState(false);
   const revealedRef = useRef(false);
   const taskRef = useRef('');
   const acceptanceRef = useRef('');
   const clientRef = useRef('universal');
+  const taskAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
 
   const load = useCallback((reveal: boolean) => {
     devboxAgentPrompt({
@@ -125,6 +147,25 @@ export function DevboxPrompt({
   useEffect(() => {
     if (reloadTick > 0) load(revealedRef.current);
   }, [reloadTick, load]);
+
+  useEffect(
+    () => () => {
+      if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+    },
+    [],
+  );
+
+  const syncTaskHeight = useCallback(() => {
+    const el = taskAreaRef.current;
+    if (el === null) return;
+    el.style.height = 'auto';
+    const cap = Math.round(window.innerHeight * TASK_MAX_VH_RATIO);
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, TASK_MIN_PX), cap)}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (tab === 'editor') syncTaskHeight();
+  }, [tab, acceptanceOpen, syncTaskHeight]);
 
   const ready = useMemo(
     () => data?.ready ?? readyFromCards(overviewCards),
@@ -154,6 +195,12 @@ export function DevboxPrompt({
     );
   }, [recent, copied]);
 
+  const flashCopied = () => {
+    setCopyFlash(true);
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = window.setTimeout(() => setCopyFlash(false), COPY_FLASH_MS);
+  };
+
   const copy = async () => {
     let payload: DevboxAgentPromptPayload;
     try {
@@ -166,13 +213,14 @@ export function DevboxPrompt({
       await navigator.clipboard.writeText(payload.prompt);
       setCopied({ at: Date.now(), fingerprint: payload.prompt });
       setManualCopy(false);
+      flashCopied();
       appToast.success(t('pluginUi.copied'));
     } catch {
       appToast.error(t('pluginUi.actionFailed'));
       setData(payload);
       setRevealed(true);
       revealedRef.current = true;
-      setPreviewOpen(true);
+      setTab('prompt');
       setManualCopy(true);
     }
   };
@@ -209,17 +257,59 @@ export function DevboxPrompt({
     ...AGENT_CLIENTS.map(([value, label]) => ({ value, label })),
   ];
 
-  const copyButton = (
-    <Button
-      variant="primary"
-      size="md"
-      disabled={copyDisabled}
-      leftIcon={<Copy size={16} />}
-      data-testid="devbox-prompt-copy"
-      onClick={() => void copy()}
-    >
-      {t('devboxPage.promptCopy')}
-    </Button>
+  const clientHint =
+    client === 'universal'
+      ? t('devboxPage.promptHintUniversal')
+      : t('devboxPage.promptHintClient', {
+          client: clientOptions.find(option => option.value === client)?.label ?? client,
+        });
+
+  const copyCta = (size: 'md' | 'lg', fullWidth: boolean) => {
+    const button = (
+      <Button
+        variant="primary"
+        size={size}
+        disabled={copyDisabled}
+        className={cn(
+          fullWidth && 'w-full',
+          copyFlash &&
+            'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:border-emerald-400/60 hover:bg-emerald-500/25 hover:text-white',
+        )}
+        leftIcon={copyFlash ? <Check size={16} /> : <Copy size={16} />}
+        data-testid="devbox-prompt-copy"
+        onClick={() => void copy()}
+      >
+        {copyFlash ? t('devboxPage.promptCopied') : t('devboxPage.promptCopy')}
+      </Button>
+    );
+    return copyDisabled ? (
+      <Tooltip content={t('devboxPage.promptBlockedTip', { fix: blockingLabels.join(' · ') })}>
+        {button}
+      </Tooltip>
+    ) : (
+      button
+    );
+  };
+
+  const ctaExtras = (
+    <div className="flex shrink-0 flex-col gap-1">
+      <span className="text-2xs text-slate-400" data-testid="devbox-prompt-hint">
+        {clientHint}
+      </span>
+      {copyDisabled ? (
+        <span
+          className="flex items-center gap-1 text-2xs text-amber-300"
+          data-testid="devbox-prompt-stack-warning"
+        >
+          <AlertTriangle size={12} className="shrink-0" aria-hidden />
+          {t('devboxPage.promptStackDownWarning')}
+        </span>
+      ) : !ready.runner ? (
+        <span className="text-2xs text-slate-400" data-testid="devbox-prompt-runner-warning">
+          {t('devboxPage.promptRunnerDownHint')}
+        </span>
+      ) : null}
+    </div>
   );
 
   return (
@@ -245,137 +335,183 @@ export function DevboxPrompt({
     >
       {data !== null && error === null && (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div
-            className="flex flex-wrap items-center gap-2 shrink-0"
-            data-testid="devbox-prompt-chips"
-          >
-            <Tooltip content={t('devboxPage.promptChipProfileTip')}>
-              <Badge
-                variant={ready.profile ? 'success' : 'slate'}
-                size="sm"
-                withDot
-                data-testid="devbox-prompt-chip-profile"
-              >
-                {t('devboxPage.promptChipProfile')}
-              </Badge>
-            </Tooltip>
-            {actionChip(
-              'bridge',
-              ready.bridge,
-              t('devboxPage.promptChipStack'),
-              t('devboxPage.promptChipStackStart'),
-              () => onAction(devboxStackStart(activeProfileName, false)),
-            )}
-            {actionChip(
-              'ingress',
-              ready.ingress,
-              t('devboxPage.promptChipIngress'),
-              t('devboxPage.promptChipIngressUp'),
-              () => onAction(devboxIngressControl('up')),
-            )}
-            {ready.runner ? (
-              <Badge variant="success" size="sm" withDot data-testid="devbox-prompt-chip-runner">
-                {t('devboxPage.promptChipRunner')}
-              </Badge>
-            ) : (
-              <Button
-                size="xs"
-                variant="outline"
-                leftIcon={<RotateCw size={12} />}
-                data-testid="devbox-prompt-runner-restart"
-                onClick={() => onAction(devboxStackStart(activeProfileName, false))}
-              >
-                {t('devboxPage.restart')}
-              </Button>
-            )}
-          </div>
-
-          <Select
-            label={t('devboxPage.promptClientLabel')}
-            options={clientOptions}
-            value={client}
-            containerClassName="shrink-0"
-            data-testid="devbox-prompt-client"
-            onValueChange={value => {
-              clientRef.current = value;
-              setClient(value);
-              load(false);
-            }}
-          />
-
-          <Textarea
-            value={task}
-            placeholder={t('devboxPage.promptTaskPlaceholder')}
-            data-testid="devbox-prompt-task"
-            containerClassName="flex max-h-[40vh] min-h-[120px] flex-1 flex-col"
-            shellClassName="flex min-h-0 flex-1 flex-col"
-            className="min-h-0 flex-1 resize-none"
-            onChange={e => {
-              taskRef.current = e.target.value;
-              setTask(e.target.value);
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                if (!copyDisabled) void copy();
-              }
-            }}
-          />
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <Button
-              size="xs"
-              variant="ghost"
-              leftIcon={<Plus size={12} />}
-              data-testid="devbox-prompt-acceptance-toggle"
-              onClick={() => setAcceptanceOpen(v => !v)}
-            >
-              {t('devboxPage.promptCriteria')}
-            </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              leftIcon={revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-              data-testid="devbox-prompt-reveal"
-              onClick={() => load(!revealed)}
-            >
-              {t('devboxPage.promptTokens')}
-            </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              leftIcon={<FileText size={14} />}
-              data-testid="devbox-prompt-preview-toggle"
-              onClick={() => setPreviewOpen(v => !v)}
-            >
-              {t('devboxPage.promptPreview')}
-            </Button>
-            <span className="ml-auto flex items-center">
-              {copyDisabled ? (
-                <Tooltip
-                  content={t('devboxPage.promptBlockedTip', { fix: blockingLabels.join(' · ') })}
-                >
-                  {copyButton}
-                </Tooltip>
-              ) : (
-                copyButton
-              )}
-            </span>
-          </div>
-
-          {acceptanceOpen && (
-            <Textarea
-              rows={2}
-              className="min-h-[48px] text-xs"
-              containerClassName="shrink-0"
-              value={acceptance}
-              placeholder={t('devboxPage.promptAcceptancePlaceholder')}
-              data-testid="devbox-prompt-acceptance"
-              onChange={e => {
-                acceptanceRef.current = e.target.value;
-                setAcceptance(e.target.value);
-              }}
+          <div className="shrink-0" data-testid="devbox-prompt-tabs">
+            <SegmentedControl
+              size="sm"
+              value={tab}
+              onChange={value => setTab(value === 'prompt' ? 'prompt' : 'editor')}
+              options={[
+                { value: 'editor', label: t('devboxPage.promptTabEditor') },
+                { value: 'prompt', label: t('devboxPage.promptTabPrompt') },
+              ]}
             />
+          </div>
+
+          {tab === 'editor' ? (
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
+              <div
+                className="flex flex-wrap items-center gap-2 shrink-0"
+                data-testid="devbox-prompt-chips"
+              >
+                <Tooltip content={t('devboxPage.promptChipProfileTip')}>
+                  <Badge
+                    variant={ready.profile ? 'success' : 'slate'}
+                    size="sm"
+                    withDot
+                    data-testid="devbox-prompt-chip-profile"
+                  >
+                    {t('devboxPage.promptChipProfile')}
+                  </Badge>
+                </Tooltip>
+                {actionChip(
+                  'bridge',
+                  ready.bridge,
+                  t('devboxPage.promptChipStack'),
+                  t('devboxPage.promptChipStackStart'),
+                  () => onAction(devboxStackStart(activeProfileName, false)),
+                )}
+                {actionChip(
+                  'ingress',
+                  ready.ingress,
+                  t('devboxPage.promptChipIngress'),
+                  t('devboxPage.promptChipIngressUp'),
+                  () => onAction(devboxIngressControl('up')),
+                )}
+                {ready.runner ? (
+                  <Badge variant="success" size="sm" withDot data-testid="devbox-prompt-chip-runner">
+                    {t('devboxPage.promptChipRunner')}
+                  </Badge>
+                ) : (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    leftIcon={<RotateCw size={12} />}
+                    data-testid="devbox-prompt-runner-restart"
+                    onClick={() => onAction(devboxStackStart(activeProfileName, false))}
+                  >
+                    {t('devboxPage.restart')}
+                  </Button>
+                )}
+              </div>
+
+              <Select
+                label={t('devboxPage.promptClientLabel')}
+                options={clientOptions}
+                value={client}
+                containerClassName="shrink-0"
+                data-testid="devbox-prompt-client"
+                onValueChange={value => {
+                  clientRef.current = value;
+                  setClient(value);
+                  load(false);
+                }}
+              />
+
+              <Textarea
+                ref={taskAreaRef}
+                value={task}
+                placeholder={t('devboxPage.promptTaskPlaceholder')}
+                data-testid="devbox-prompt-task"
+                containerClassName="shrink-0"
+                className="max-h-[40vh] min-h-[160px] resize-none overflow-y-auto"
+                onChange={e => {
+                  taskRef.current = e.target.value;
+                  setTask(e.target.value);
+                  syncTaskHeight();
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    if (!copyDisabled) void copy();
+                  }
+                }}
+              />
+
+              {acceptanceOpen && (
+                <div
+                  className="shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]"
+                  data-testid="devbox-prompt-acceptance-panel"
+                >
+                  <div className="border-b border-white/[0.06] px-2.5 py-1.5 text-2xs font-medium text-slate-300">
+                    {t('devboxPage.promptCriteriaHeader')}
+                  </div>
+                  <Textarea
+                    rows={3}
+                    className="min-h-0 text-xs"
+                    shellClassName="rounded-none border-0 bg-transparent"
+                    value={acceptance}
+                    placeholder={t('devboxPage.promptAcceptancePlaceholder')}
+                    data-testid="devbox-prompt-acceptance"
+                    onChange={e => {
+                      acceptanceRef.current = e.target.value;
+                      setAcceptance(e.target.value);
+                    }}
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  leftIcon={<Plus size={12} />}
+                  data-testid="devbox-prompt-acceptance-toggle"
+                  onClick={() => setAcceptanceOpen(v => !v)}
+                >
+                  {t('devboxPage.promptCriteria')}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  leftIcon={revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                  data-testid="devbox-prompt-reveal"
+                  onClick={() => load(!revealed)}
+                >
+                  {t('devboxPage.promptTokens')}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  leftIcon={<FileText size={14} />}
+                  data-testid="devbox-prompt-preview-toggle"
+                  onClick={() => setTab('prompt')}
+                >
+                  {t('devboxPage.promptPreview')}
+                </Button>
+                <span className="ml-auto flex items-center">{copyCta('md', false)}</span>
+              </div>
+
+              {ctaExtras}
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                {data.masked && (
+                  <Badge
+                    variant="info"
+                    size="sm"
+                    className="normal-case tracking-normal"
+                    data-testid="devbox-prompt-preview-locked"
+                  >
+                    <Lock size={12} aria-hidden />
+                    {t('devboxPage.promptPreviewLocked')}
+                  </Badge>
+                )}
+                {manualCopy && (
+                  <span className="text-2xs text-red-300" data-testid="devbox-prompt-manual-copy">
+                    {t('devboxPage.promptManualCopy')}
+                  </span>
+                )}
+              </div>
+              <div className="shrink-0">{copyCta('lg', true)}</div>
+              {ctaExtras}
+              <pre
+                data-testid="devbox-prompt-preview"
+                className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-slate-300 whitespace-pre-wrap break-words"
+              >
+                {data.prompt}
+              </pre>
+            </div>
           )}
 
           {stale && (
@@ -385,29 +521,6 @@ export function DevboxPrompt({
             >
               {t('devboxPage.promptStale')}
             </span>
-          )}
-
-          {previewOpen && (
-            <div className="flex shrink-0 flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {data.masked && (
-                  <Badge variant="warning" size="sm" data-testid="devbox-prompt-preview-masked">
-                    {t('devboxPage.promptPreviewMasked')}
-                  </Badge>
-                )}
-                {manualCopy && (
-                  <span className="text-2xs text-red-300" data-testid="devbox-prompt-manual-copy">
-                    {t('devboxPage.promptManualCopy')}
-                  </span>
-                )}
-              </div>
-              <pre
-                data-testid="devbox-prompt-preview"
-                className="max-h-64 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-slate-300 whitespace-pre-wrap break-words"
-              >
-                {data.prompt}
-              </pre>
-            </div>
           )}
         </div>
       )}

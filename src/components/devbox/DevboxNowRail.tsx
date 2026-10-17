@@ -108,6 +108,15 @@ export function DevboxNowRail({
   const permissionRows = permissions?.rows ?? [];
   const recentEvents = useMemo(() => events.slice(-RECENT_LIMIT), [events]);
 
+  const bridgeDown = jobs?.bridge === 'down' || permissions?.bridge === 'down';
+  const toolCallCount = useMemo(
+    () =>
+      events.filter(row => typeof row.tool === 'string' && row.tool !== '' && row.tool !== '—')
+        .length,
+    [events],
+  );
+  const onboarding = !activeJob && permissionRows.length === 0 && events.length === 0;
+
   const dismissBanner = () => {
     localStorage.setItem(BANNER_KEY, '1');
     setBannerDismissed(true);
@@ -121,6 +130,13 @@ export function DevboxNowRail({
       bodyClassName="flex min-h-0 flex-1 flex-col"
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <span className="shrink-0 text-2xs text-slate-400" data-testid="devbox-rail-bridge-summary">
+          {t('devboxPage.railBridgeSummary', {
+            state: bridgeDown ? t('devboxPage.railBridgeDown') : t('devboxPage.railBridgeUp'),
+            count: toolCallCount,
+          })}
+        </span>
+
         {activeJob ? (
           <div
             className="flex flex-col gap-1.5 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] p-2.5"
@@ -155,6 +171,21 @@ export function DevboxNowRail({
                 data-testid="devbox-rail-progress"
               />
             </div>
+          </div>
+        ) : onboarding ? (
+          <div className="flex flex-col gap-2.5" data-testid="devbox-rail-onboarding">
+            {[
+              t('devboxPage.railOnboard1'),
+              t('devboxPage.railOnboard2'),
+              t('devboxPage.railOnboard3'),
+            ].map((line, i) => (
+              <div key={i} className="flex items-start gap-2.5">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-indigo-400/40 bg-indigo-500/10 text-2xs font-semibold text-indigo-200">
+                  {i + 1}
+                </span>
+                <span className="text-2xs leading-5 text-slate-300">{line}</span>
+              </div>
+            ))}
           </div>
         ) : (
           <EmptyState
@@ -234,7 +265,8 @@ export function DevboxNowRail({
                 return (
                   <div
                     key={i}
-                    className="flex items-center gap-2 text-2xs text-slate-400"
+                    data-testid="devbox-rail-event-card"
+                    className="flex shrink-0 items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 text-2xs text-slate-400"
                     title={devboxEventLine(row)}
                   >
                     <Icon
