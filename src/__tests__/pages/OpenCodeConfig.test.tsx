@@ -90,14 +90,12 @@ jest.mock('sonner', () => ({
   },
 }));
 
-let navigatedPath = '';
 let navigatedSearch = '';
 
 function LocationSpy() {
   const loc = useLocation();
   useEffect(() => {
-    navigatedPath = loc.pathname;
-    navigatedSearch = loc.search;
+  navigatedSearch = loc.search;
   }, [loc.pathname, loc.search]);
   return null;
 }
@@ -117,8 +115,7 @@ describe('OpenCodeConfig URL tab state', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     window.localStorage.clear();
-    navigatedPath = '';
-    navigatedSearch = '';
+  navigatedSearch = '';
   });
 
   it('(a) renders the agents section from ?tab=agents and preserves the search', async () => {

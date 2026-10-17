@@ -150,6 +150,7 @@ export const settings: SettingsTranslations = {
     extension: {
       bridgeHint: "Bridge должен быть подключён, когда расширение загружено и Chrome запущен. Используй Ping extension для проверки связи.",
       checklistCopied: "Чеклист установки скопирован",
+      chromeOpenedHint: "Chrome открыт, chrome://extensions скопирован в буфер обмена",
       copyChecklist: "Скопировать чеклист установки",
       copyPath: "Копировать путь",
       description: "Установка и диагностика Stitch Toolkit для режима Extension.",

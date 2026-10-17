@@ -57,6 +57,7 @@ export function CommunityCatalogCard({
           <span className="text-slate-400">{plugin.author}</span>
         </span>
         {plugin.upstream?.url && (
+          // eslint-disable-next-line react/forbid-elements -- external URL; react-router Link is internal-only
           <a
             href={plugin.upstream.url}
             target="_blank"

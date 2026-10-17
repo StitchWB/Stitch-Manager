@@ -148,6 +148,7 @@ export interface SettingsTranslations {
     extension: {
       bridgeHint: string;
       checklistCopied: string;
+      chromeOpenedHint: string;
       copyChecklist: string;
       copyPath: string;
       description: string;
