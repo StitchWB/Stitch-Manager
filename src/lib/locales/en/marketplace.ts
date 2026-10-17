@@ -58,8 +58,6 @@ export const marketplace: MarketplaceTranslations = {
     linkHomepage: "Homepage",
     linkRepository: "Repository",
     categoryFilterAll: "All categories",
-    filters: "Filters",
-    filtersReset: "Reset",
     status: {
       stable: "Stable",
       beta: "Beta",
@@ -105,11 +103,6 @@ export const marketplace: MarketplaceTranslations = {
       requiredRelease: "Release URL and SHA256 are required",
       requiredZip: "Choose a zip file",
       invalidSha: "SHA256 must be 64 hex characters",
-      fetchSha: "Compute from URL",
-      fetchingSha: "Downloading release and hashing...",
-      fetchShaFailed: "Couldn't download the release to compute the hash",
-      domainsPlaceholder: "example.com + Enter",
-      domainInvalid: "Invalid host",
     },
     mySubmissions: {
       tab: "My submissions",

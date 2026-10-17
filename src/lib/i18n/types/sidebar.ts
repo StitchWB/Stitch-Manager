@@ -20,9 +20,6 @@ export interface SidebarTranslations {
     privileges: string;
     radar: string;
     scheduler: string;
-    sectionEcosystem: string;
-    sectionOperations: string;
-    sectionToolsAi: string;
     settings: string;
     system: string;
     telegramChannel: string;

@@ -3,7 +3,7 @@
  *
  * The update badge and the Update button follow hasPluginUpdate (server
  * flag with semver fallback, "newer" not "different") and are suppressed
- * for plugins-local dev copies, which render a titled GitBranch marker.
+ * for plugins-local dev copies, which render a devCopy chip instead.
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
@@ -53,11 +53,11 @@ const onSelect = jest.fn();
 const onInstall = jest.fn();
 const onLockedClick = jest.fn();
 
-function renderRow(item: MarketplaceItem, selected = false) {
+function renderRow(item: MarketplaceItem) {
   return render(
     <MarketplaceListRow
       item={item}
-      selected={selected}
+      selected={false}
       busy={false}
       isGuest={false}
       onSelect={onSelect}
@@ -70,14 +70,6 @@ function renderRow(item: MarketplaceItem, selected = false) {
 describe('MarketplaceListRow update semantics', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-
-    if (!('scrollIntoView' in HTMLElement.prototype)) {
-      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-        configurable: true,
-        writable: true,
-        value: jest.fn(),
-      });
-    }
   });
 
   it('newer installed version without flags: no update badge or button', () => {
@@ -85,7 +77,7 @@ describe('MarketplaceListRow update semantics', () => {
 
     expect(screen.queryByText('marketplace.updateAvailable')).toBeNull();
     expect(screen.queryByRole('button', { name: 'marketplace.update' })).toBeNull();
-    expect(screen.getByText('marketplace.installed')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'marketplace.installed' })).toBeTruthy();
   });
 
   it('older installed version without flags: badge and Update button via fallback', () => {
@@ -113,7 +105,7 @@ describe('MarketplaceListRow update semantics', () => {
     expect(screen.getByRole('button', { name: 'marketplace.update' })).toBeTruthy();
   });
 
-  it('dev_shadow: titled GitBranch marker, no update badge or Update button', () => {
+  it('dev_shadow: devCopy chip, no update badge or Update button', () => {
     renderRow(
       mkItem({
         installed_version: '1.0.0',
@@ -123,80 +115,9 @@ describe('MarketplaceListRow update semantics', () => {
       }),
     );
 
-    expect(screen.getByTitle('marketplace.devCopy')).toBeTruthy();
+    expect(screen.getByText('marketplace.devCopy')).toBeTruthy();
     expect(screen.queryByText('marketplace.updateAvailable')).toBeNull();
     expect(screen.queryByRole('button', { name: 'marketplace.update' })).toBeNull();
-    expect(screen.getByText('marketplace.installed')).toBeTruthy();
-  });
-});
-
-describe('MarketplaceListRow card cleanup', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-
-    if (!('scrollIntoView' in HTMLElement.prototype)) {
-      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-        configurable: true,
-        writable: true,
-        value: jest.fn(),
-      });
-    }
-  });
-
-  it('installed-no-update status is not a button element', () => {
-    renderRow(mkItem());
-
-    const status = screen.getByText('marketplace.installed');
-    expect(status.tagName).toBe('SPAN');
-    expect(status.closest('button')).toBeNull();
-    expect(status.className).toContain('sr-only');
-    expect(
-      screen.queryByRole('button', { name: 'marketplace.installed' }),
-    ).toBeNull();
-  });
-
-  it('dev marker renders with title from t()', () => {
-    renderRow(mkItem({ dev_shadow: true }));
-
-    const marker = screen.getByTitle('marketplace.devCopy');
-    expect(marker.tagName).toBe('SPAN');
-    expect(marker.querySelector('svg')).toBeTruthy();
-  });
-
-  it('selected row has accent border and scrolls into view', () => {
-    const scrollSpy = jest
-      .spyOn(HTMLElement.prototype, 'scrollIntoView')
-      .mockImplementation(() => undefined);
-
-    const { rerender } = render(
-      <MarketplaceListRow
-        item={mkItem()}
-        selected={false}
-        busy={false}
-        isGuest={false}
-        onSelect={onSelect}
-        onInstall={onInstall}
-        onLockedClick={onLockedClick}
-      />,
-    );
-    expect(scrollSpy).not.toHaveBeenCalled();
-
-    rerender(
-      <MarketplaceListRow
-        item={mkItem()}
-        selected
-        busy={false}
-        isGuest={false}
-        onSelect={onSelect}
-        onInstall={onInstall}
-        onLockedClick={onLockedClick}
-      />,
-    );
-
-    const row = screen.getByRole('button', { pressed: true });
-    expect(row.className).toContain('border-l-2');
-    expect(row.className).toContain('border-indigo-400');
-    expect(row.className).toContain('bg-indigo-500/[0.12]');
-    expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+    expect(screen.getByRole('button', { name: 'marketplace.installed' })).toBeTruthy();
   });
 });
