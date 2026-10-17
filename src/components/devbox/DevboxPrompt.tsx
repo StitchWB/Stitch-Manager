@@ -10,6 +10,7 @@ import {
   Plus,
   Power,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -244,7 +245,7 @@ export function DevboxPrompt({
 
   const alertPlate = (testId: string, text: string) => (
     <span
-      className="flex shrink-0 items-center gap-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-2xs text-amber-200"
+      className="flex shrink-0 items-center gap-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
       data-testid={testId}
     >
       <AlertTriangle size={12} className="shrink-0" aria-hidden />
@@ -254,14 +255,14 @@ export function DevboxPrompt({
 
   const blockingAlert = (
     <div
-      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-2xs text-amber-200"
+      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
       data-testid="devbox-prompt-stack-warning"
     >
       <span className="flex items-center gap-1">
         <AlertTriangle size={12} className="shrink-0" aria-hidden />
         {t('devboxPage.promptStackDownWarning')}
       </span>
-      {!ready.bridge && (
+      {(!ready.bridge || !ready.runner) && (
         <Button
           size="xs"
           variant="outline"
@@ -272,7 +273,7 @@ export function DevboxPrompt({
           {t('devboxPage.promptChipStackStart')}
         </Button>
       )}
-      {!ready.ingress && (
+      {ready.bridge && ready.runner && !ready.ingress && (
         <Button
           size="xs"
           variant="outline"
@@ -342,7 +343,7 @@ export function DevboxPrompt({
                 data-testid="devbox-prompt-task"
                 containerClassName="min-h-0 flex-1"
                 shellClassName="flex min-h-0 flex-1 flex-col"
-                className="min-h-[160px] flex-1 resize-none overflow-y-auto"
+                className="min-h-[160px] flex-1 resize-none overflow-y-auto placeholder:text-slate-400"
                 onChange={e => {
                   taskRef.current = e.target.value;
                   setTask(e.target.value);
@@ -355,26 +356,17 @@ export function DevboxPrompt({
                 }}
               />
 
-              {copyDisabled
-                ? blockingAlert
-                : !ready.runner
-                  ? alertPlate(
-                      'devbox-prompt-runner-warning',
-                      t('devboxPage.promptRunnerDownHint'),
-                    )
-                  : null}
-
               {acceptanceOpen && (
                 <div
                   className="shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]"
                   data-testid="devbox-prompt-acceptance-panel"
                 >
-                  <div className="border-b border-white/[0.06] px-2.5 py-1.5 text-2xs font-medium text-slate-300">
+                  <div className="border-b border-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-slate-300">
                     {t('devboxPage.promptCriteriaHeader')}
                   </div>
                   <Textarea
                     rows={3}
-                    className="min-h-0 text-xs"
+                    className="min-h-0 text-xs placeholder:text-slate-400"
                     shellClassName="rounded-none border-0 bg-transparent"
                     value={acceptance}
                     placeholder={t('devboxPage.promptAcceptancePlaceholder')}
@@ -387,6 +379,14 @@ export function DevboxPrompt({
                 </div>
               )}
 
+              {copyDisabled
+                ? blockingAlert
+                : !ready.runner
+                  ? alertPlate(
+                      'devbox-prompt-runner-warning',
+                      t('devboxPage.promptRunnerDownHint'),
+                    )
+                  : null}
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -403,7 +403,7 @@ export function DevboxPrompt({
                   </Badge>
                 )}
                 {manualCopy && (
-                  <span className="text-2xs text-red-300" data-testid="devbox-prompt-manual-copy">
+                  <span className="text-xs text-red-300" data-testid="devbox-prompt-manual-copy">
                     {t('devboxPage.promptManualCopy')}
                   </span>
                 )}
@@ -419,7 +419,7 @@ export function DevboxPrompt({
 
           {stale && (
             <span
-              className="text-2xs text-amber-300 shrink-0"
+              className="text-xs text-amber-300 shrink-0"
               data-testid="devbox-prompt-stale"
             >
               {t('devboxPage.promptStale')}
@@ -433,12 +433,14 @@ export function DevboxPrompt({
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="xs"
-                variant="ghost"
-                leftIcon={<Plus size={12} />}
+                variant={acceptanceOpen ? 'secondary' : 'ghost'}
+                leftIcon={acceptanceOpen ? <X size={12} /> : <Plus size={12} />}
                 data-testid="devbox-prompt-acceptance-toggle"
                 onClick={() => setAcceptanceOpen(v => !v)}
               >
-                {t('devboxPage.promptCriteria')}
+                {acceptanceOpen
+                  ? t('devboxPage.promptCriteriaClose')
+                  : t('devboxPage.promptCriteria')}
               </Button>
               <Button
                 size="xs"
@@ -462,7 +464,7 @@ export function DevboxPrompt({
               ) : (
                 copyButton
               )}
-              <span className="text-2xs text-slate-500" data-testid="devbox-prompt-hint">
+              <span className="text-xs text-slate-400" data-testid="devbox-prompt-hint">
                 {clientHint}
               </span>
             </div>

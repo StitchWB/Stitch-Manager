@@ -255,6 +255,29 @@ describe('Devbox profile editor', () => {
     });
   });
 
+  it('row actions share the outline family with h-8 sizing and a gap-2 cell', () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    renderProfiles();
+
+    const start = screen.getByTestId('devbox-profile-start-midsai');
+    const use = screen.getByTestId('devbox-profile-use-midsai');
+    for (const button of [start, use]) {
+      expect(button.className).toContain('h-8');
+      expect(button.className).toContain('border-white/20');
+      expect(button.className).not.toContain('bg-white/5');
+    }
+    for (const testId of [
+      'devbox-profile-duplicate-midsai',
+      'devbox-profile-edit-midsai',
+      'devbox-profile-delete-midsai',
+    ]) {
+      const button = screen.getByTestId(testId);
+      expect(button.className).toContain('h-8');
+      expect(button.className).toContain('w-8');
+    }
+    expect(start.parentElement?.className).toContain('gap-2');
+  });
+
   it('keeps advanced fields collapsed in create mode until toggled', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
     renderProfiles();

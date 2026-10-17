@@ -94,7 +94,7 @@ describe('DevboxPrompt blocking state', () => {
     expect(screen.queryByTestId('devbox-prompt-runner-restart')).toBeNull();
   });
 
-  it('blocks the CTA and embeds stack+ingress fix buttons in the alert that fire the right actions', async () => {
+  it('blocks the CTA and embeds a single stack fix button when more than one service is down', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
       ready: { profile: true, bridge: false, ingress: false, runner: true },
@@ -110,23 +110,34 @@ describe('DevboxPrompt blocking state', () => {
 
     const warning = screen.getByTestId('devbox-prompt-stack-warning');
     const stackButton = screen.getByTestId('devbox-prompt-alert-stack-start');
-    const ingressButton = screen.getByTestId('devbox-prompt-alert-ingress-up');
     expect(stackButton.tagName).toBe('BUTTON');
-    expect(ingressButton.tagName).toBe('BUTTON');
     expect(warning.contains(stackButton)).toBe(true);
-    expect(warning.contains(ingressButton)).toBe(true);
     expect(stackButton.textContent).toBe(t('devboxPage.promptChipStackStart'));
-    expect(ingressButton.textContent).toBe(t('devboxPage.promptChipIngressUp'));
+    expect(screen.queryByTestId('devbox-prompt-alert-ingress-up')).toBeNull();
+    expect(warning.querySelectorAll('button')).toHaveLength(1);
 
     fireEvent.click(stackButton);
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
       { name: 'midsai', preview: false },
     ]);
+  });
 
-    fireEvent.click(ingressButton);
-    expect(onAction).toHaveBeenCalledTimes(2);
-    expect(devboxCallArgs(invokeMock, 'ingress_control')).toEqual([{ action: 'up' }]);
+  it('shows only the stack fix button when runner and ingress are down', async () => {
+    const blocked = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: true, ingress: false, runner: false },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
+    );
+    renderPrompt();
+    await promptReady();
+
+    const warning = screen.getByTestId('devbox-prompt-stack-warning');
+    expect(screen.getByTestId('devbox-prompt-alert-stack-start')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-prompt-alert-ingress-up')).toBeNull();
+    expect(warning.querySelectorAll('button')).toHaveLength(1);
   });
 
   it('shows only the ingress fix button when ingress is the sole blocker', async () => {
@@ -143,8 +154,15 @@ describe('DevboxPrompt blocking state', () => {
     expect(
       (screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement).disabled,
     ).toBe(true);
+    const warning = screen.getByTestId('devbox-prompt-stack-warning');
     expect(screen.queryByTestId('devbox-prompt-alert-stack-start')).toBeNull();
-    expect(screen.getByTestId('devbox-prompt-alert-ingress-up')).toBeTruthy();
+    const ingressButton = screen.getByTestId('devbox-prompt-alert-ingress-up');
+    expect(ingressButton.textContent).toBe(t('devboxPage.promptChipIngressUp'));
+    expect(warning.querySelectorAll('button')).toHaveLength(1);
+
+    fireEvent.click(ingressButton);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(devboxCallArgs(invokeMock, 'ingress_control')).toEqual([{ action: 'up' }]);
   });
 
   it('keeps the CTA enabled and a text-only runner hint when only the runner is down', async () => {
@@ -507,8 +525,8 @@ describe('DevboxPrompt action footer', () => {
     await promptReady();
 
     const hint = screen.getByTestId('devbox-prompt-hint');
-    expect(hint.className).toContain('text-2xs');
-    expect(hint.className).toContain('text-slate-500');
+    expect(hint.className).toContain('text-xs');
+    expect(hint.className).toContain('text-slate-400');
     const column = hint.parentElement;
     expect(column?.contains(screen.getByTestId('devbox-prompt-copy'))).toBe(true);
     expect(column?.lastElementChild).toBe(hint);
@@ -570,7 +588,7 @@ describe('DevboxPrompt hint and warning lines', () => {
     expect(warning.className).toContain('border-amber-500/40');
     expect(warning.className).toContain('bg-amber-500/10');
     expect(warning.className).toContain('text-amber-200');
-    expect(warning.className).toContain('text-2xs');
+    expect(warning.className).toContain('text-xs');
 
     const task = screen.getByTestId('devbox-prompt-task');
     expect(
@@ -593,6 +611,82 @@ describe('DevboxPrompt editor layout', () => {
 
     fireEvent.click(screen.getByTestId('devbox-prompt-acceptance-toggle'));
     expect(screen.queryByTestId('devbox-prompt-acceptance-panel')).toBeNull();
+  });
+
+  it('orders the editor column: task textarea, acceptance, alert plate, footer', async () => {
+    const blocked = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: false, ingress: false, runner: true },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
+    );
+    renderPrompt();
+    await promptReady();
+
+    fireEvent.click(screen.getByTestId('devbox-prompt-acceptance-toggle'));
+
+    const task = screen.getByTestId('devbox-prompt-task');
+    const acceptance = screen.getByTestId('devbox-prompt-acceptance-panel');
+    const alert = screen.getByTestId('devbox-prompt-stack-warning');
+    const footer = screen.getByTestId('devbox-prompt-footer');
+
+    expect(
+      task.compareDocumentPosition(acceptance) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      acceptance.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      alert.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('keeps the prompt section at text-xs floor with readable placeholders and labels', async () => {
+    renderPrompt();
+    await promptReady();
+
+    fireEvent.click(screen.getByTestId('devbox-prompt-acceptance-toggle'));
+
+    const section = screen.getByTestId('devbox-prompt');
+    expect(section.innerHTML).not.toContain('text-2xs');
+
+    expect(screen.getByTestId('devbox-prompt-task').className).toContain(
+      'placeholder:text-slate-400',
+    );
+    expect(screen.getByTestId('devbox-prompt-acceptance').className).toContain(
+      'placeholder:text-slate-400',
+    );
+
+    const header = screen.getByText(t('devboxPage.promptCriteriaHeader'));
+    expect(header.className).toContain('text-xs');
+    expect(header.className).toContain('font-medium');
+    expect(header.className).toContain('text-slate-300');
+
+    const clientLabel = screen.getByText(t('devboxPage.promptClientLabel'));
+    expect(clientLabel.className).toContain('text-xs');
+    expect(clientLabel.className).toContain('text-slate-300');
+  });
+
+  it('acceptance toggle shows the close label, X icon and secondary variant while open', async () => {
+    renderPrompt();
+    await promptReady();
+
+    const toggle = screen.getByTestId('devbox-prompt-acceptance-toggle');
+    expect(toggle.textContent).toBe(t('devboxPage.promptCriteria'));
+    expect(toggle.className).toContain('text-slate-400');
+    expect(toggle.querySelector('svg.lucide-plus')).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe(t('devboxPage.promptCriteriaClose'));
+    expect(toggle.className).toContain('bg-white/5');
+    expect(toggle.className).toContain('border-white/10');
+    expect(toggle.querySelector('svg.lucide-x')).toBeTruthy();
+    expect(toggle.querySelector('svg.lucide-plus')).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe(t('devboxPage.promptCriteria'));
+    expect(toggle.querySelector('svg.lucide-plus')).toBeTruthy();
   });
 
   it('stretches the task textarea to the footer with flex-1', async () => {

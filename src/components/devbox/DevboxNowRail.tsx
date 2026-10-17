@@ -276,7 +276,7 @@ export function DevboxNowRail({
             {t('devboxPage.railRecent')}
           </span>
           <div
-            className="relative flex min-h-0 flex-1 flex-col overflow-y-auto before:absolute before:bottom-0 before:left-[5px] before:top-0 before:w-px before:bg-white/10"
+            className="relative flex min-h-0 flex-1 flex-col overflow-y-auto"
             data-testid="devbox-rail-recent"
           >
             {recentEvents.length === 0 ? (
@@ -291,7 +291,7 @@ export function DevboxNowRail({
                   <div
                     key={i}
                     data-testid="devbox-rail-event-card"
-                    className="flex shrink-0 items-center gap-2 py-1 text-2xs text-slate-400"
+                    className="relative flex shrink-0 items-center gap-2 py-1 text-2xs text-slate-400 after:absolute after:left-[5px] after:top-[10px] after:h-full after:w-px after:bg-white/10 last:after:hidden"
                     title={devboxEventLine(row)}
                   >
                     <Icon
