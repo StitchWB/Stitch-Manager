@@ -65,6 +65,7 @@ from stitch_backend.domains.plugin_runtime.lkg import (
     record_event,
     reset_crashes,
 )
+from stitch_backend.domains.plugin_runtime.runtime_state import is_plugin_disabled
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -262,6 +263,13 @@ async def _start_one(
     # Crash-loop hook: telemetry report + LKG rollback (todo 23).
     host.crash_hook = _on_crash_loop
     register_manifest(manifest.id, manifest)
+    if is_plugin_disabled(manifest.id):
+        register_host(host)  # stays listed so the enable command can start it
+        logger.info(
+            "Service plugin %s disabled by user — registered, not started",
+            manifest.id,
+        )
+        return False
     result = await host.start()
     if result.get("status") != "running":
         logger.warning(

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
 import { t } from '@/lib/i18n';
 import { resolveI18n } from '@/lib/i18nText';
 import { cn } from '@/lib/utils';
@@ -31,23 +32,22 @@ function getIconColor(id: string): string {
   return `hsl(${hue} 60% 45%)`;
 }
 
-/** Small colored status dot for compact list rows; full label in a tooltip. */
-function StatusDot({ status }: { status: MarketplaceStatus }) {
+/** Readable text chip for the manifest status (no bare color dots). */
+function StatusChip({ status }: { status: MarketplaceStatus }) {
   const label = t(`marketplace.status.${status}`);
   return (
-    <Tooltip content={label} side="top" wrapperClassName="shrink-0">
-      <span
-        className={cn(
-          'w-1.5 h-1.5 rounded-full inline-block',
-          status === 'beta'
-            ? 'bg-amber-400'
-            : status === 'deprecated'
-              ? 'bg-red-400'
-              : 'bg-emerald-400',
-        )}
-        aria-label={label}
-      />
-    </Tooltip>
+    <span
+      className={cn(
+        'shrink-0 rounded-full px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide leading-tight',
+        status === 'beta'
+          ? 'bg-amber-500/10 text-amber-300'
+          : status === 'deprecated'
+            ? 'bg-red-500/10 text-red-300'
+            : 'bg-emerald-500/10 text-emerald-300',
+      )}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -64,6 +64,10 @@ interface ListRowProps {
 export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, onInstall, onLockedClick }: ListRowProps) {
   const language = useAppStore(s => s.language);
   const rowRef = useRef<HTMLDivElement>(null);
+  const servicePlugins = useServicePlugins();
+  const runtimeDisabled = servicePlugins.some(
+    p => p.id === item.id && p.enabled === false,
+  );
 
   useEffect(() => {
     if (selected) {
@@ -110,11 +114,12 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
         }
       }}
       className={cn(
-        'flex items-center gap-3 px-3 py-2 border-b border-white/[0.04] transition-colors cursor-pointer',
+        'flex items-center gap-3 px-3 py-2 border-b border-white/[0.04] border-l-[3px] border-l-transparent transition-colors cursor-pointer',
         selected
-          ? 'bg-indigo-500/[0.12] ring-1 ring-inset ring-indigo-500/30 border-l-2 border-indigo-400'
+          ? 'bg-white/[0.05] border-l-vsc-blue'
           : 'hover:bg-white/[0.03]',
         locked && 'opacity-50 saturate-50',
+        runtimeDisabled && 'opacity-50 saturate-50',
         !locked && (item.badges ?? []).includes('not_works') && 'opacity-60 saturate-[0.6]',
       )}
     >
@@ -142,13 +147,18 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
               aria-label={lockLabel}
             />
           )}
+          {runtimeDisabled && (
+            <Badge variant="slate" size="sm" className="shrink-0">
+              {t('marketplace.disabledBadge')}
+            </Badge>
+          )}
           {!item.entitled && item.required_tier && (
             <TierBadge tier={item.required_tier} size="sm" className="shrink-0" />
           )}
           <PluginBadgeChips badges={item.badges} iconOnly className="shrink-0" />
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-          {item.status != null && <StatusDot status={item.status} />}
+          {item.status != null && <StatusChip status={item.status} />}
           <span className="text-[11px] text-slate-500 truncate">
             {secondaryLine}
           </span>
@@ -166,23 +176,35 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
           </Badge>
         )}
         {(item.dev_shadow || (item.installed && !hasUpdate)) && (
-          <span className="flex items-center gap-1">
-            {item.installed && item.installed_version !== null && !hasUpdate && (
-              // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
-              <span className="text-[10px] text-slate-500 tabular-nums">
-                v{item.installed_version}
-              </span>
-            )}
+          <span className="flex items-center gap-1.5">
             {item.dev_shadow && (
-              <span title={t('marketplace.devCopy')} className="flex items-center">
-                <GitBranch size={11} className="text-slate-500" />
-              </span>
+              <Tooltip content={t('marketplace.devCopyTooltip')} side="top">
+                <span className="flex items-center text-slate-500">
+                  <GitBranch size={11} className="shrink-0" aria-hidden="true" />
+                  <span className="sr-only">{t('marketplace.devCopy')}</span>
+                </span>
+              </Tooltip>
             )}
             {item.installed && !hasUpdate && (
-              <>
-                <Check size={12} className="text-emerald-400" aria-hidden="true" />
-                <span className="sr-only">{t('marketplace.installed')}</span>
-              </>
+              <Tooltip
+                content={
+                  item.installed_version !== null
+                    ? t('marketplace.versionChipTooltip', {
+                        version: item.installed_version,
+                      })
+                    : t('marketplace.installed')
+                }
+                side="top"
+              >
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.05] px-1.5 py-px text-[10px] font-mono tabular-nums text-slate-400">
+                  <Check size={10} className="text-emerald-400" aria-hidden="true" />
+                  {item.installed_version !== null && (
+                    // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
+                    <span>v{item.installed_version}</span>
+                  )}
+                  <span className="sr-only">{t('marketplace.installed')}</span>
+                </span>
+              </Tooltip>
             )}
           </span>
         )}

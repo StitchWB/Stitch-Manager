@@ -9,7 +9,9 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
 import { MarketplaceListRow } from '@/components/marketplace/MarketplaceListRow';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
 import type { MarketplaceItem } from '@/lib/backend/modules/marketplace';
+import type { ServicePluginInfo } from '@/lib/backend/modules/servicePlugins';
 
 jest.mock('@/lib/backend/core/invoke', () => ({
   setAuthExpiredHandler: jest.fn(),
@@ -18,7 +20,12 @@ jest.mock('@/lib/backend/core/invoke', () => ({
 }));
 
 jest.mock('@/lib/i18n', () => ({
-  t: (key: string) => key,
+  t: (key: string, params?: Record<string, string>) =>
+    params ? `${key}:${JSON.stringify(params)}` : key,
+}));
+
+jest.mock('@/hooks/useServicePlugins', () => ({
+  useServicePlugins: jest.fn(),
 }));
 
 jest.mock('@/stores/app', () => ({
@@ -70,6 +77,7 @@ function renderRow(item: MarketplaceItem, selected = false) {
 describe('MarketplaceListRow update semantics', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (useServicePlugins as jest.Mock).mockReturnValue([]);
 
     if (!('scrollIntoView' in HTMLElement.prototype)) {
       Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -123,7 +131,7 @@ describe('MarketplaceListRow update semantics', () => {
       }),
     );
 
-    expect(screen.getByTitle('marketplace.devCopy')).toBeTruthy();
+    expect(screen.getByText('marketplace.devCopy')).toBeTruthy();
     expect(screen.queryByText('marketplace.updateAvailable')).toBeNull();
     expect(screen.queryByRole('button', { name: 'marketplace.update' })).toBeNull();
     expect(screen.getByText('marketplace.installed')).toBeTruthy();
@@ -133,6 +141,7 @@ describe('MarketplaceListRow update semantics', () => {
 describe('MarketplaceListRow card cleanup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (useServicePlugins as jest.Mock).mockReturnValue([]);
 
     if (!('scrollIntoView' in HTMLElement.prototype)) {
       Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -155,12 +164,13 @@ describe('MarketplaceListRow card cleanup', () => {
     ).toBeNull();
   });
 
-  it('dev marker renders with title from t()', () => {
+  it('dev marker renders with an sr-only label and the branch glyph', () => {
     renderRow(mkItem({ dev_shadow: true }));
 
-    const marker = screen.getByTitle('marketplace.devCopy');
+    const marker = screen.getByText('marketplace.devCopy');
     expect(marker.tagName).toBe('SPAN');
-    expect(marker.querySelector('svg')).toBeTruthy();
+    expect(marker.className).toContain('sr-only');
+    expect(marker.parentElement!.querySelector('svg')).toBeTruthy();
   });
 
   it('selected row has accent border and scrolls into view', () => {
@@ -194,9 +204,76 @@ describe('MarketplaceListRow card cleanup', () => {
     );
 
     const row = screen.getByRole('button', { pressed: true });
-    expect(row.className).toContain('border-l-2');
-    expect(row.className).toContain('border-indigo-400');
-    expect(row.className).toContain('bg-indigo-500/[0.12]');
+    expect(row.className).toContain('border-l-[3px]');
+    expect(row.className).toContain('border-l-vsc-blue');
+    expect(row.className).toContain('bg-white/[0.05]');
     expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it('unselected row keeps a transparent 3px left border so selection never shifts layout', () => {
+    renderRow(mkItem());
+
+    const row = screen.getByRole('button', { pressed: false });
+    expect(row.className).toContain('border-l-[3px]');
+    expect(row.className).toContain('border-l-transparent');
+    expect(row.className).not.toContain('bg-white/[0.05]');
+  });
+
+  it('runtime-disabled plugin: dimmed row with a Disabled badge', () => {
+    const disabledPlugin: ServicePluginInfo = {
+      id: 'stitch-totp',
+      version: '1.0.0',
+      enabled: false,
+      status: {
+        status: 'stopped',
+        port: null,
+        pid: null,
+        uptimeSeconds: null,
+        error: null,
+        plugin_id: 'stitch-totp',
+        restarts: 0,
+        stopping: false,
+      },
+    };
+    (useServicePlugins as jest.Mock).mockReturnValue([disabledPlugin]);
+
+    renderRow(mkItem());
+
+    const row = screen.getByRole('button', { pressed: false });
+    expect(row.className).toContain('opacity-50');
+    expect(row.className).toContain('saturate-50');
+    expect(screen.getByText('marketplace.disabledBadge')).toBeTruthy();
+  });
+
+  it('enabled plugin: no dimming and no Disabled badge', () => {
+    const enabledPlugin: ServicePluginInfo = {
+      id: 'stitch-totp',
+      version: '1.0.0',
+      enabled: true,
+      status: {
+        status: 'running',
+        port: null,
+        pid: 1,
+        uptimeSeconds: 1,
+        error: null,
+        plugin_id: 'stitch-totp',
+        restarts: 0,
+        stopping: false,
+      },
+    };
+    (useServicePlugins as jest.Mock).mockReturnValue([enabledPlugin]);
+
+    renderRow(mkItem());
+
+    const row = screen.getByRole('button', { pressed: false });
+    expect(row.className).not.toContain('opacity-50');
+    expect(screen.queryByText('marketplace.disabledBadge')).toBeNull();
+  });
+
+  it('installed up-to-date row shows a version chip, not a bare checkmark', () => {
+    renderRow(mkItem({ version: '0.1.1', installed_version: '0.1.1' }));
+
+    expect(screen.getByText('v0.1.1')).toBeTruthy();
+    expect(screen.getByText('marketplace.installed')).toBeTruthy();
   });
 });

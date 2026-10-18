@@ -51,6 +51,8 @@ export interface ServicePluginStatus {
 export interface ServicePluginInfo {
   id: string;
   version: string;
+  /** User enablement flag; false = runtime stopped, package/data kept. Optional for older backends. */
+  enabled?: boolean;
   status: ServicePluginStatus;
   ui?: {
     kind: 'declarative' | 'core_page';
@@ -152,6 +154,22 @@ export function invalidate(): void {
 
 export async function restartServicePlugin(pluginId: string): Promise<void> {
   await safeInvoke('restart_service_plugin', { plugin_id: pluginId });
+  invalidate();
+}
+
+/**
+ * Enable/disable a plugin runtime without uninstalling it (admin-only
+ * backend command). Disable stops the host and persists the flag so the
+ * plugin stays off across server restarts; enable starts it again.
+ */
+export async function setServicePluginEnabled(
+  pluginId: string,
+  enabled: boolean,
+): Promise<void> {
+  await safeInvoke('set_service_plugin_enabled', {
+    plugin_id: pluginId,
+    enabled,
+  });
   invalidate();
 }
 

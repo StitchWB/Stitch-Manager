@@ -109,6 +109,7 @@ class CommonProvider(BaseProvider):
             'thirtythreemail': EmailStrategy.THIRTY_THREE_MAIL,
             'icloud_pool': EmailStrategy.ICLOUD_POOL,
             'icloud': EmailStrategy.ICLOUD_POOL,  # convenient alias
+            'domain_pool': EmailStrategy.DOMAIN_POOL,
         }
 
         strategy_enum = strategy_map.get(self.email_strategy.lower())
@@ -170,6 +171,12 @@ class CommonProvider(BaseProvider):
                 imap_config=imap_cfg,
                 label_prefix=getattr(self.icloud_config, 'label_prefix', 'Auto-registration'),
             )
+
+        elif strategy_enum == EmailStrategy.DOMAIN_POOL:
+            from ..plugin.email_gen import DomainPoolEmailGenerator
+            from ..stitch_backend_bridge import get_domain_pool_fetch_fn
+            generator = DomainPoolEmailGenerator(get_domain_pool_fetch_fn())
+            self.email_strategy_instance = BaseStrategy(generator, verifier)
 
         else:
             raise ValueError(f"Unsupported email strategy: {strategy_enum}")

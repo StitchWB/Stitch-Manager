@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useAppStore } from '../stores/app';
 import { effectiveRole, useAuthStore } from '../stores/auth';
 import { useMarketplaceStore } from '../stores/marketplace';
+import { setServicePluginEnabled } from '../lib/backend/modules/servicePlugins';
 import type { MarketplaceCategory, MarketplaceItem } from '@/lib/backend/modules/marketplace';
 import { MarketplaceFilterBar } from '../components/marketplace/MarketplaceFilterBar';
 import { MarketplaceListBody } from '../components/marketplace/MarketplaceListBody';
@@ -102,6 +103,22 @@ export default function Marketplace() {
     });
   };
 
+  const handleToggleEnabled = (item: MarketplaceItem, enabled: boolean) => {
+    setServicePluginEnabled(item.id, enabled)
+      .then(() => {
+        toast.success(
+          enabled
+            ? t('marketplace.enabledToast')
+            : t('marketplace.disabledToast'),
+        );
+      })
+      .catch(err => {
+        toast.error(
+          err instanceof Error ? err.message : t('marketplace.errorToast'),
+        );
+      });
+  };
+
   // Client-side search filter (name + description, case-insensitive) plus badge and category chip filters (OR semantics); the installed tab narrows the scope first.
   const filtered = useMemo(() => {
     let list = items;
@@ -159,10 +176,6 @@ export default function Marketplace() {
   const selectedItem = filtered.find(i => i.id === selectedId) ?? null;
 
   const installedCount = items.filter(i => i.installed).length;
-
-  // Split into INSTALLED (first) and AVAILABLE sections for the Marketplace tab.
-  const installedItems = filtered.filter(i => i.installed);
-  const availableItems = filtered.filter(i => !i.installed);
 
   const isBusy = loading || refreshing;
   const isFirstLoad = loading && items.length === 0;
@@ -281,8 +294,6 @@ export default function Marketplace() {
             hasActiveSearch={hasActiveSearch}
             refreshing={refreshing}
             filtered={filtered}
-            installedItems={installedItems}
-            availableItems={availableItems}
             selectedId={selectedId}
             actionInProgress={actionInProgress}
             isGuest={isGuest}
@@ -305,6 +316,7 @@ export default function Marketplace() {
               isGuest={isGuest}
               onInstall={handleInstall}
               onUninstall={handleUninstall}
+              onToggleEnabled={handleToggleEnabled}
               onLockedClick={handleLockedClick}
             />
           ) : (

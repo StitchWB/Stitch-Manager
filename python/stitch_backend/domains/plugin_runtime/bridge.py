@@ -31,6 +31,10 @@ from stitch_backend.domains.plugin_runtime import (
     get_manifest,
 )
 from stitch_backend.domains.plugin_runtime.host import SUPPORTED_CAPABILITIES
+from stitch_backend.domains.plugin_runtime.runtime_state import (
+    is_plugin_disabled,
+    set_plugin_disabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +182,7 @@ async def _list_service_plugins(params: dict[str, Any]) -> list[dict[str, Any]]:
         result.append({
             "id": host.plugin_id,
             "version": manifest.version if manifest else "0.0.0",
+            "enabled": not is_plugin_disabled(host.plugin_id),
             "status": host.status(),
             "ui": contributions.get("ui", {}),
             "i18n": contributions.get("i18n", {}),
@@ -210,6 +215,61 @@ async def _restart_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
             status_code=404, detail=f"Unknown plugin: {plugin_id}"
         )
     return await host.restart()
+
+
+@register_command("set_service_plugin_enabled", admin_only=True)
+async def _set_service_plugin_enabled(params: dict[str, Any]) -> dict[str, Any]:
+    """Enable/disable a service-plugin host without uninstalling (admin-only).
+
+    Disable stops the host and persists the plugin id in the disabled set
+    (discovery skips autostart on subsequent boots); enable clears the flag
+    and starts the host again.  Package, data dir and credentials survive
+    both directions.  Returns ``{id, enabled, status}``.
+    """
+    plugin_id = params.get("plugin_id")
+    if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
+        raise HTTPException(
+            status_code=400, detail="plugin_id is required and must be valid"
+        )
+    enabled = params.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(
+            status_code=400, detail="enabled must be a boolean"
+        )
+    host = get_host(plugin_id)
+    if host is None:
+        raise HTTPException(
+            status_code=404, detail=f"Unknown plugin: {plugin_id}"
+        )
+
+    set_plugin_disabled(plugin_id, not enabled)
+    if enabled:
+        host._stopping = False  # start() no-ops while the stop flag is set
+        result = await host.start()
+        if result.get("status") == "running":
+            manifest = get_manifest(plugin_id)
+            if manifest is not None:
+                try:
+                    from stitch_backend.domains.plugin_runtime.spi_bridge import (
+                        register_plugin_spi,
+                    )
+                    register_plugin_spi(host, manifest)
+                except Exception as exc:  # noqa: BLE001 — never fail enable on SPI
+                    logger.warning(
+                        "Plugin %s: SPI registration failed: %s", plugin_id, exc
+                    )
+    else:
+        await host.stop()
+        try:
+            from stitch_backend.domains.plugin_runtime.spi_bridge import (
+                unregister_plugin_spi,
+            )
+            unregister_plugin_spi(host)
+        except Exception as exc:  # noqa: BLE001 — best-effort cleanup
+            logger.warning(
+                "Plugin %s: SPI unregister failed: %s", plugin_id, exc
+            )
+    return {"id": plugin_id, "enabled": enabled, "status": host.status()}
 
 
 @register_command("get_service_plugin_logs", readonly=True, admin_only=True)

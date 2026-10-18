@@ -156,7 +156,20 @@ def pack_engine(
                 "service_host_env": "TURNSTILE_API_HOST",
                 "headless": True,
                 "fallback": "opencv_dom",
-            }
+            },
+            # {{ENV_VAR}} placeholders resolve at runtime; empty = backend off (click-fallback).
+            "hcaptcha": {
+                "vlm": {
+                    "base_url": "{{HCAPTCHA_VLM_BASE_URL}}",
+                    "model": "{{HCAPTCHA_VLM_MODEL}}",
+                    "keys_file": "{{HCAPTCHA_VLM_KEYS_FILE}}",
+                },
+                "nonecap": {
+                    "api_base": "{{NONECAP_API_BASE}}",
+                    "keys_file": "{{NONECAP_KEYS_FILE}}",
+                    "proxy": "{{NONECAP_PROXY}}",
+                },
+            },
         },
     }
     canonical = _canonical_manifest("engine-pack")

@@ -384,6 +384,8 @@ def dev_install(package_dir: Path, *, link: bool = False) -> Path:
 # Canonical ids resolve via pack_provider's <slug>-autoreg rule.
 _PUBLISH_ALL_PROVIDERS = (
     "kiro", "kiro_v2", "windsurf", "trae", "fireworks", "qoder", "v0_app",
+    "vani", "abliteration", "codebuff", "notion", "kauz", "intern", "apodex",
+    "moda",
 )
 
 
@@ -395,13 +397,13 @@ async def publish_all(
     only: list[str] | None = None,
     dry_run: bool = False,
 ) -> list[dict]:
-    """Publish every official package in one run (17 packages).
+    """Publish every official package in one run (29 packages).
 
     Registry:
       1. every ``plugins-src/<id>/`` whose manifest has ``kind == "service"``
          (packed fresh into a temp dir),
       2. the engine-pack (packed fresh into a temp dir),
-      3. the seven autoreg providers (packed fresh into temp dirs).
+      3. the autoreg providers (packed fresh into temp dirs).
 
     Entries are processed sorted by manifest id.  With ``only`` given,
     non-matching entries are reported as ``skipped``.  ``dry_run=True``

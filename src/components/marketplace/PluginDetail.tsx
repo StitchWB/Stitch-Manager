@@ -14,10 +14,11 @@ interface DetailProps {
   isGuest: boolean;
   onInstall: (item: MarketplaceItem) => void;
   onUninstall: (item: MarketplaceItem) => void;
+  onToggleEnabled: (item: MarketplaceItem, enabled: boolean) => void;
   onLockedClick: () => void;
 }
 
-export function PluginDetail({ item, busy, isGuest, onInstall, onUninstall, onLockedClick }: DetailProps) {
+export function PluginDetail({ item, busy, isGuest, onInstall, onUninstall, onToggleEnabled, onLockedClick }: DetailProps) {
   const [detailTab, setDetailTab] = useState<'overview' | 'info'>('overview');
   const language = useAppStore(s => s.language);
 
@@ -38,6 +39,7 @@ export function PluginDetail({ item, busy, isGuest, onInstall, onUninstall, onLo
           sourceLabel={sourceLabel}
           onInstall={onInstall}
           onUninstall={onUninstall}
+          onToggleEnabled={onToggleEnabled}
           onLockedClick={onLockedClick}
         />
 

@@ -34,12 +34,14 @@ jest.mock('@/hooks/useServicePlugins', () => ({
 }));
 
 let navigatedPath = '';
+let navigatedSearch = '';
 
 function LocationSpy() {
   const loc = useLocation();
   useEffect(() => {
     navigatedPath = loc.pathname;
-  }, [loc.pathname]);
+    navigatedSearch = loc.search;
+  }, [loc.pathname, loc.search]);
   return null;
 }
 
@@ -82,6 +84,7 @@ function mkPlugin(id: string, kind: 'declarative' | 'core_page'): ServicePluginI
 
 const onInstall = jest.fn();
 const onUninstall = jest.fn();
+const onToggleEnabled = jest.fn();
 const onLockedClick = jest.fn();
 
 function renderHeader(item: MarketplaceItem) {
@@ -99,11 +102,14 @@ function renderHeader(item: MarketplaceItem) {
               sourceLabel="official"
               onInstall={onInstall}
               onUninstall={onUninstall}
+              onToggleEnabled={onToggleEnabled}
               onLockedClick={onLockedClick}
             />
           }
         />
         <Route path="/tools" element={<div data-testid="terminal" />} />
+        <Route path="/totp" element={<div data-testid="terminal" />} />
+        <Route path="/logs" element={<div data-testid="terminal" />} />
         <Route path="/ai/antigravity" element={<div data-testid="terminal" />} />
         <Route path="/ai/plugin/:id" element={<div data-testid="terminal" />} />
       </Routes>
@@ -115,6 +121,7 @@ describe('MarketplaceDetailHeader Open action', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     navigatedPath = '';
+    navigatedSearch = '';
   });
 
   it('opens a core_page plugin at its host route', async () => {
@@ -168,6 +175,7 @@ describe('MarketplaceDetailHeader update semantics', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     navigatedPath = '';
+    navigatedSearch = '';
     (useServicePlugins as jest.Mock).mockReturnValue([]);
   });
 
@@ -225,6 +233,7 @@ describe('MarketplaceDetailHeader CTA cluster', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     navigatedPath = '';
+    navigatedSearch = '';
     (useServicePlugins as jest.Mock).mockReturnValue([]);
   });
 
@@ -270,5 +279,128 @@ describe('MarketplaceDetailHeader CTA cluster', () => {
     expect(install.className).toContain('bg-indigo-500/15');
     expect(screen.queryByRole('button', { name: 'marketplace.remove' })).toBeNull();
     expect(screen.queryByTestId('installed-status')).toBeNull();
+  });
+});
+
+describe('MarketplaceDetailHeader enable/disable toggle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    navigatedPath = '';
+    navigatedSearch = '';
+  });
+
+  function mkRuntimePlugin(
+    id: string,
+    enabled: boolean,
+    kind: 'declarative' | 'core_page' = 'core_page',
+  ): ServicePluginInfo {
+    return { ...mkPlugin(id, kind), enabled };
+  }
+
+  it('running plugin: Disable button asks to turn the runtime off', async () => {
+    (useServicePlugins as jest.Mock).mockReturnValue([
+      mkRuntimePlugin('stitch-cards', true),
+    ]);
+
+    renderHeader(mkItem());
+
+    const toggle = screen.getByTestId('toggle-enabled');
+    expect(toggle.textContent).toContain('marketplace.disable');
+
+    await act(async () => {
+      fireEvent.click(toggle);
+    });
+    expect(onToggleEnabled).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'stitch-cards' }),
+      false,
+    );
+  });
+
+  it('disabled plugin: Enable button, dimming badge in the title row', async () => {
+    (useServicePlugins as jest.Mock).mockReturnValue([
+      mkRuntimePlugin('stitch-cards', false),
+    ]);
+
+    renderHeader(mkItem());
+
+    expect(screen.getByTestId('disabled-badge')).toBeTruthy();
+    const toggle = screen.getByTestId('toggle-enabled');
+    expect(toggle.textContent).toContain('marketplace.enable');
+
+    await act(async () => {
+      fireEvent.click(toggle);
+    });
+    expect(onToggleEnabled).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'stitch-cards' }),
+      true,
+    );
+  });
+
+  it('no runtime host (catalog-only item): no toggle button', () => {
+    (useServicePlugins as jest.Mock).mockReturnValue([]);
+
+    renderHeader(mkItem());
+
+    expect(screen.queryByTestId('toggle-enabled')).toBeNull();
+  });
+});
+
+describe('MarketplaceDetailHeader quick actions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    navigatedPath = '';
+    navigatedSearch = '';
+    (useServicePlugins as jest.Mock).mockReturnValue([]);
+  });
+
+  it('settings gear routes a core_page plugin to its host page', async () => {
+    renderHeader(mkItem());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'marketplace.settings' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/tools');
+    });
+  });
+
+  it('settings gear resolves stitch-totp through the legacy /ai/plugin redirect map', async () => {
+    renderHeader(mkItem({ id: 'stitch-totp', name: 'Stitch TOTP' }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'marketplace.settings' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/totp');
+    });
+  });
+
+  it('settings gear is disabled with a tooltip when the plugin has no settings surface', () => {
+    renderHeader(mkItem({ id: 'engine-pack', name: 'Engine Pack' }));
+
+    const gear = screen.getByRole('button', { name: 'marketplace.settings' });
+    expect(gear.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('logs button navigates to /logs pre-filtered by the plugin source', async () => {
+    renderHeader(mkItem({ id: 'stitch-totp', name: 'Stitch TOTP' }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'marketplace.logs' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/logs');
+      expect(navigatedSearch).toBe('?source=plugin:stitch-totp');
+    });
+  });
+
+  it('not installed: no settings gear and no logs button', () => {
+    renderHeader(mkItem({ installed: false, installed_version: null }));
+
+    expect(screen.queryByRole('button', { name: 'marketplace.settings' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'marketplace.logs' })).toBeNull();
   });
 });

@@ -1,25 +1,27 @@
+import { Badge } from '@/components/ui/Badge';
 import { t } from '@/lib/i18n';
 import { resolveI18n } from '@/lib/i18nText';
-import { cn } from '@/lib/utils';
 import type { MarketplaceFeature, MarketplaceItem } from '@/lib/backend/modules/marketplace';
 
-const FEATURE_DOT_CLASSES: Record<string, string> = {
-  stable: 'bg-emerald-400',
-  beta: 'bg-amber-400',
-  deprecated: 'bg-slate-500',
-  planned: 'bg-transparent border border-slate-500',
+const FEATURE_BADGE_VARIANTS: Record<
+  string,
+  'success' | 'warning' | 'danger' | 'slate'
+> = {
+  stable: 'success',
+  beta: 'warning',
+  deprecated: 'danger',
+  planned: 'slate',
 };
 
-function FeatureStatusDot({ status }: { status: MarketplaceFeature['status'] }) {
-  const label = t(`marketplace.status.${status}`);
+function FeatureStatusBadge({ status }: { status: MarketplaceFeature['status'] }) {
   return (
-    <span className="inline-flex items-center shrink-0" title={label}>
-      <span className="sr-only">{label}</span>
-      <span
-        aria-hidden="true"
-        className={cn('h-2 w-2 rounded-full', FEATURE_DOT_CLASSES[status] ?? 'bg-slate-500')}
-      />
-    </span>
+    <Badge
+      variant={FEATURE_BADGE_VARIANTS[status] ?? 'slate'}
+      size="sm"
+      className="shrink-0"
+    >
+      {t(`marketplace.featureStatus.${status}`)}
+    </Badge>
   );
 }
 
@@ -55,12 +57,12 @@ export function MarketplaceOverviewTab({ item, language }: MarketplaceOverviewTa
               return (
                 <li
                   key={`${feature.status}:${title}`}
-                  className="w-full flex items-center justify-between gap-3"
+                  className="w-full flex items-center gap-2.5"
                 >
-                  <span className="flex-1 min-w-0 text-sm text-slate-200 py-2.5">
+                  <span className="min-w-0 text-sm text-slate-200 py-2.5">
                     {title}
                   </span>
-                  <FeatureStatusDot status={feature.status} />
+                  <FeatureStatusBadge status={feature.status} />
                 </li>
               );
             })}

@@ -1,6 +1,7 @@
-import { Check, Download, ExternalLink, Lock, Trash2 } from 'lucide-react';
+import { Check, Download, ExternalLink, Lock, Power, ScrollText, Settings, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { CANONICAL_PLUGIN_ROUTES, CORE_PAGE_ROUTES } from '@/components/ai-proxy/corePageRoutes';
+import { LEGACY_REDIRECTS } from '@/components/ai-proxy/LegacyRedirects';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { TierBadge } from '@/components/ui/TierBadge';
@@ -22,6 +23,7 @@ interface MarketplaceDetailHeaderProps {
   sourceLabel: string;
   onInstall: (item: MarketplaceItem) => void;
   onUninstall: (item: MarketplaceItem) => void;
+  onToggleEnabled: (item: MarketplaceItem, enabled: boolean) => void;
   onLockedClick: () => void;
 }
 
@@ -32,6 +34,7 @@ export function MarketplaceDetailHeader({
   sourceLabel,
   onInstall,
   onUninstall,
+  onToggleEnabled,
   onLockedClick,
 }: MarketplaceDetailHeaderProps) {
   const locked = !item.can_download && !item.installed;
@@ -39,11 +42,23 @@ export function MarketplaceDetailHeader({
 
   const navigate = useNavigate();
   const servicePlugins = useServicePlugins();
-  const contributesPage = servicePlugins.some(
-    p =>
-      p.id === item.id &&
-      (p.ui?.kind === 'declarative' || (p.ui?.tabs?.length ?? 0) > 0),
+  const servicePlugin = servicePlugins.find(p => p.id === item.id);
+  const contributesPage =
+    servicePlugin != null &&
+    (servicePlugin.ui?.kind === 'declarative' ||
+      (servicePlugin.ui?.tabs?.length ?? 0) > 0);
+  const runtimeDisabled = servicePlugin?.enabled === false;
+
+  const legacyEntry = LEGACY_REDIRECTS.find(
+    e => e.from === `/ai/plugin/${item.id}`,
   );
+  const settingsRoute =
+    CANONICAL_PLUGIN_ROUTES[item.id] ??
+    CORE_PAGE_ROUTES[item.id] ??
+    (typeof legacyEntry?.to === 'string' ? legacyEntry.to : undefined) ??
+    (servicePlugin?.ui?.kind === 'declarative'
+      ? `/ai/plugin/${item.id}`
+      : undefined);
 
   return (
     <>
@@ -67,6 +82,11 @@ export function MarketplaceDetailHeader({
               {t(`marketplace.status.${item.status}`)}
             </Badge>
           )}
+          {runtimeDisabled && (
+            <Badge variant="slate" size="sm" data-testid="disabled-badge">
+              {t('marketplace.disabledBadge')}
+            </Badge>
+          )}
           {!item.entitled && item.required_tier && (
             <TierBadge tier={item.required_tier} size="sm" />
           )}
@@ -81,7 +101,7 @@ export function MarketplaceDetailHeader({
       </div>
 
       {/* Action row */}
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
         {locked ? (
           isGuest ? (
             <Tooltip content={t('marketplace.authRequiredTooltip')}>
@@ -153,6 +173,67 @@ export function MarketplaceDetailHeader({
           >
             {t('marketplace.open')}
           </Button>
+        )}
+
+        {item.installed &&
+          (settingsRoute != null ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => navigate(settingsRoute)}
+              leftIcon={<Settings className="w-3.5 h-3.5" />}
+            >
+              {t('marketplace.settings')}
+            </Button>
+          ) : (
+            <Tooltip content={t('marketplace.settingsUnavailable')}>
+              <span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled
+                  leftIcon={<Settings className="w-3.5 h-3.5" />}
+                >
+                  {t('marketplace.settings')}
+                </Button>
+              </span>
+            </Tooltip>
+          ))}
+
+        {item.installed && (
+          <Tooltip content={t('marketplace.logsTooltip')}>
+            <span>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  navigate(`/logs?source=plugin:${item.id}`)
+                }
+                leftIcon={<ScrollText className="w-3.5 h-3.5" />}
+              >
+                {t('marketplace.logs')}
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+
+        {item.installed && servicePlugin != null && (
+          <Tooltip content={t('marketplace.disableHint')}>
+            <span>
+              <Button
+                size="sm"
+                variant="secondary"
+                data-testid="toggle-enabled"
+                onClick={() => onToggleEnabled(item, runtimeDisabled)}
+                disabled={busy}
+                leftIcon={<Power className="w-3.5 h-3.5" />}
+              >
+                {runtimeDisabled
+                  ? t('marketplace.enable')
+                  : t('marketplace.disable')}
+              </Button>
+            </span>
+          </Tooltip>
         )}
 
         {item.installed && (

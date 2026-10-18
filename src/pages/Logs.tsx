@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ArrowDownToLine, FileText } from 'lucide-react';
 import Header from '../components/layout/Header';
 
@@ -27,12 +28,28 @@ export default function Logs() {
     unsubscribeFromLogs,
     collapsedGroups,
     toggleGroup,
+    setFilter,
   } = useLogsStore();
 
   const {
     logsPage: { selectedTab, selectedLogId },
     setLogsSelectedLogId,
+    setLogsSourceFilter,
   } = useUIPreferencesStore();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep link from the plugin header: /logs?source=plugin:<id> pre-filters
+  // the stream, then the param is dropped so it never re-applies on reload.
+  useEffect(() => {
+    const source = searchParams.get('source');
+    if (source === null) return;
+    setLogsSourceFilter([source]);
+    setFilter({ sources: [source] });
+    const params = new URLSearchParams(searchParams);
+    params.delete('source');
+    setSearchParams(params, { replace: true });
+  }, [searchParams, setSearchParams, setFilter, setLogsSourceFilter]);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const { copy } = useCopyToClipboard();

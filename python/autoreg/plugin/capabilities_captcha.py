@@ -36,6 +36,13 @@ def _resolve_aliyun_solver() -> type:
     return AliyunSliderSolver
 
 
+def _resolve_hcaptcha_solver() -> type | None:
+    """Resolve HCaptchaSolver from the engine-pack; None → click-fallback."""
+    from .engine_pack import get_solver_class
+
+    return get_solver_class("hcaptcha", "HCaptchaSolver")
+
+
 def _solve_turnstile(
     browser: Any,
     step: ScenarioStep,
@@ -55,6 +62,27 @@ def _solve_aliyun(browser: Any, step: ScenarioStep) -> bool:
     max_attempts = int((step.meta or {}).get("max_attempts", 5))
     return bool(
         solver_cls(browser, log_callback=logger.info).solve(max_attempts=max_attempts)
+    )
+
+
+def _solve_hcaptcha(
+    browser: Any,
+    step: ScenarioStep,
+    *,
+    resolve_solver: Callable[[], type | None] | None = None,
+) -> bool:
+    """Solve hCaptcha via the engine-pack vision solver.
+
+    No engine-pack or no backend config → False (click-fallback: the
+    browser mixin's HCaptchaMixin click path runs instead), never raises.
+    """
+    timeout = int((step.meta or {}).get("timeout", 60))
+    solver_cls = (resolve_solver or _resolve_hcaptcha_solver)()
+    if solver_cls is None:
+        logger.info("captcha.solve: hcaptcha solver unavailable — click-fallback")
+        return False
+    return bool(
+        solver_cls(browser, log_callback=logger.info).solve(method="auto", timeout=timeout)
     )
 
 
@@ -78,6 +106,7 @@ _CAPTCHA_SOLVERS: dict[str, Callable[[Any, ScenarioStep], bool]] = {
     "turnstile": _solve_turnstile,
     "aliyun": _solve_aliyun,
     "im_human": _solve_im_human,
+    "hcaptcha": _solve_hcaptcha,
 }
 
 

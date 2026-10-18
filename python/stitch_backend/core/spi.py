@@ -142,6 +142,21 @@ class MailInboxSPI(Protocol):
 
 
 @runtime_checkable
+class DomainProviderSPI(Protocol):
+    """Active catch-all domain pool for registration email generation.
+
+    Served by the ``stitch-domains`` service plugin (domains whose mail
+    wiring is complete).  Consumed via
+    ``autoreg.stitch_backend_bridge.get_domain_pool_fetch_fn`` by the
+    ``domain_pool`` email strategy.
+    """
+
+    async def list_active_domains(self) -> list[str]:
+        """List domain names whose catch-all mail is wired and usable."""
+        ...
+
+
+@runtime_checkable
 class OAuthProvider(Protocol):
     """OAuth 2.0 flow orchestration — PKCE + Device Authorization Grant.
 
@@ -193,6 +208,7 @@ SPI_EMAIL_VERIFICATION = "email_verification"
 SPI_TOTP = "totp"
 SPI_MAIL_INBOX = "mail_inbox"
 SPI_OAUTH = "oauth"
+SPI_DOMAIN_PROVIDER = "domain_provider"
 
 
 # ── Registry ─────────────────────────────────────────────────────────────────

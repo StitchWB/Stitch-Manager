@@ -24,12 +24,14 @@ iCloud pool access is injection-based:
 from __future__ import annotations
 
 import logging
+import random
 from collections.abc import Callable
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _pool_fetch_fn: Callable[[], dict[str, Any] | None] | None = None
+_domain_pool_fetch_fn: Callable[[], str | None] | None = None
 
 
 def set_icloud_pool_fetch_fn(fn: Callable[[], dict[str, Any] | None]) -> None:
@@ -61,12 +63,55 @@ def get_icloud_pool_fetch_fn() -> Callable[[], dict[str, Any] | None]:
 
     # Fallback: always empty — triggers direct API generation
     def _empty_pool() -> dict[str, Any] | None:
-        logger.debug(
-            "iCloud pool fetch not initialised (standalone mode) — pool is empty."
-        )
+        logger.debug("iCloud pool fetch not initialised (standalone mode) — pool is empty.")
         return None
 
     return _empty_pool
+
+
+def set_domain_pool_fetch_fn(fn: Callable[[], str | None] | None) -> None:
+    """
+    Register (or clear with ``None``) an override for the domain pool resolver.
+
+    Used by tests and future host wiring; when unset, the default lazy
+    resolver below resolves the ``DomainProviderSPI`` at call time.
+    """
+    global _domain_pool_fetch_fn  # noqa: PLW0603
+    _domain_pool_fetch_fn = fn
+
+
+def _resolve_domain_via_spi() -> str | None:
+    """
+    Resolve one active catch-all domain via the DomainProviderSPI.
+
+    Returns ``None`` when stitch_backend is unavailable (standalone mode),
+    no impl is registered, or the plugin returns an empty list — callers
+    degrade instead of failing.
+    """
+    try:
+        import asyncio
+
+        from stitch_backend.core.spi import SPI_DOMAIN_PROVIDER, resolve
+
+        impl = resolve(SPI_DOMAIN_PROVIDER)
+        domains = asyncio.run(impl.list_active_domains())
+        if isinstance(domains, list) and domains:
+            return random.choice([str(d) for d in domains])
+        return None
+    except Exception:  # noqa: BLE001 — standalone / unregistered / dead plugin
+        logger.debug("domain pool unavailable — standalone mode or no plugin impl")
+        return None
+
+
+def get_domain_pool_fetch_fn() -> Callable[[], str | None]:
+    """
+    Return the domain pool resolver: the injected override when set,
+    otherwise the lazy DomainProviderSPI resolver with an empty-domain
+    fallback (never raises).
+    """
+    if _domain_pool_fetch_fn is not None:
+        return _domain_pool_fetch_fn
+    return _resolve_domain_via_spi
 
 
 def get_outbound_proxy() -> str | None:
@@ -120,3 +165,34 @@ def resolve_email_verification() -> Any:
     from stitch_backend.core.spi import SPI_EMAIL_VERIFICATION, resolve
 
     return resolve(SPI_EMAIL_VERIFICATION)
+
+
+def push_bridge_account(credential: str, meta: dict[str, Any] | None = None) -> bool:
+    """
+    Push an account into the stitch-bridges plugin pool via its RPC.
+
+    Calls ``plugin.stitch-bridges.accounts_add`` through the hub
+    plugin-runtime command bridge with an admin caller role (hard
+    entitlement rule).  ``meta`` keys map straight to the RPC params
+    (``space_id``, ``id``, ``weight``, ``proxy``); ``None`` values are
+    dropped.
+
+    Returns ``True`` only when the plugin confirms the add.  Standalone
+    mode, a missing plugin host, or an RPC failure degrades to ``False``
+    — never raises, so registration callers keep the account locally.
+    """
+    try:
+        import asyncio
+
+        from stitch_backend.domains.plugin_runtime.bridge import call_plugin_command
+
+        params: dict[str, Any] = {"credential": credential}
+        for key, value in (meta or {}).items():
+            if value is not None:
+                params[key] = value
+        params["_caller_role"] = "admin"
+        result = asyncio.run(call_plugin_command("plugin.stitch-bridges.accounts_add", params))
+        return bool(isinstance(result, dict) and result.get("added"))
+    except Exception:  # noqa: BLE001 — standalone / plugin not running / RPC failure
+        logger.debug("bridge account push unavailable — standalone mode or RPC failure")
+        return False
