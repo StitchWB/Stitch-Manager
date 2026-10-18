@@ -11,6 +11,7 @@ import { resolveI18n } from '@/lib/i18nText';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app';
 import { hasPluginUpdate } from '@/lib/backend/modules/marketplace';
+import { isBundledProviderPlugin } from '@/constants/providerIds';
 import type { MarketplaceItem, MarketplaceStatus } from '@/lib/backend/modules/marketplace';
 import { PluginBadgeChips } from './PluginBadgeChips';
 import { CATEGORY_LABEL_KEYS } from './categories';
@@ -71,6 +72,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
   };
 
   const hasUpdate = hasPluginUpdate(item) && !item.dev_shadow;
+  const bundledLocal = item.bundled === true || isBundledProviderPlugin(item.id);
 
   const localizedDesc = resolveI18n(item.description_i18n, language);
   const secondaryLine =
@@ -211,6 +213,14 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
             </span>
           </Tooltip>
         ) : !item.installed ? (
+          bundledLocal ? (
+            <span
+              className="text-[10px] text-slate-500"
+              title={t('marketplace.bundledNote')}
+            >
+              {t('marketplace.bundled')}
+            </span>
+          ) : (
           <Tooltip content={busy ? t('marketplace.installing') : t('marketplace.install')} side="left">
             <span>
               <Button
@@ -225,6 +235,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
               />
             </span>
           </Tooltip>
+          )
         ) : hasUpdate ? (
           <Tooltip content={busy ? t('marketplace.installing') : t('marketplace.update')} side="left">
             <span>

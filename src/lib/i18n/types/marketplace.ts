@@ -33,8 +33,6 @@ export interface MarketplaceTranslations {
     tabInstalled: string;
     selectPluginTitle: string;
     selectPluginText: string;
-    overviewTab: string;
-    infoTab: string;
     idLabel: string;
     sourceLabel: string;
     authorLabel: string;
@@ -49,6 +47,8 @@ export interface MarketplaceTranslations {
     badgeFilterAll: string;
     updateAvailable: string;
     devCopy: string;
+    bundled: string;
+    bundledNote: string;
     devCopyTooltip: string;
     versionChipTooltip: string;
     open: string;

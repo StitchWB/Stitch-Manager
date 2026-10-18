@@ -277,3 +277,19 @@ describe('MarketplaceListRow card cleanup', () => {
     expect(screen.getByText('marketplace.installed')).toBeTruthy();
   });
 });
+
+describe('MarketplaceListRow bundled plugins', () => {
+  it('bundled provider plugin without marketplace install shows the in-build marker, not an install button', () => {
+    renderRow(mkItem({ id: 'kiro-autoreg', installed: false, installed_version: null }));
+
+    expect(screen.getByText('marketplace.bundled')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'marketplace.install' })).toBeNull();
+  });
+
+  it('non-bundled available plugin keeps the install icon button', () => {
+    renderRow(mkItem({ id: 'stitch-mail', installed: false, installed_version: null }));
+
+    expect(screen.queryByText('marketplace.bundled')).toBeNull();
+    expect(screen.getByRole('button', { name: 'marketplace.install' })).toBeTruthy();
+  });
+});

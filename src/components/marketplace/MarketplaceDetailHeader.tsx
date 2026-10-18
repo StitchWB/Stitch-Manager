@@ -9,6 +9,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { useServicePlugins } from '@/hooks/useServicePlugins';
 import { t } from '@/lib/i18n';
 import { hasPluginUpdate } from '@/lib/backend/modules/marketplace';
+import { isBundledProviderPlugin } from '@/constants/providerIds';
 import type { MarketplaceItem, MarketplaceStatus } from '@/lib/backend/modules/marketplace';
 import { CATEGORY_LABEL_KEYS } from './categories';
 
@@ -39,6 +40,7 @@ export function MarketplaceDetailHeader({
 }: MarketplaceDetailHeaderProps) {
   const locked = !item.can_download && !item.installed;
   const hasUpdate = hasPluginUpdate(item) && !item.dev_shadow;
+  const bundledLocal = item.bundled === true || isBundledProviderPlugin(item.id);
 
   const navigate = useNavigate();
   const servicePlugins = useServicePlugins();
@@ -127,6 +129,15 @@ export function MarketplaceDetailHeader({
             </Button>
           )
         ) : !item.installed ? (
+          bundledLocal ? (
+            <span
+              data-testid="bundled-status"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-400"
+            >
+              <Check size={14} aria-hidden="true" />
+              {t('marketplace.bundledNote')}
+            </span>
+          ) : (
           <Button
             size="sm"
             variant="primary"
@@ -137,6 +148,7 @@ export function MarketplaceDetailHeader({
           >
             {busy ? t('marketplace.installing') : t('marketplace.install')}
           </Button>
+          )
         ) : hasUpdate ? (
           <Button
             size="sm"

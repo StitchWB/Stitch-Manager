@@ -290,3 +290,11 @@ export const PROVIDERS_BY_CATEGORY: Record<ProviderCategory, ProviderId[]> = {
 export function isValidProviderId(id: string): id is ProviderId {
   return (ALL_PROVIDER_IDS as readonly string[]).includes(id);
 }
+
+const AUTOREG_PLUGIN_IDS = new Set(
+  AUTOREG_PROVIDERS.map(id => `${id.replace(/_/g, '-')}-autoreg`),
+);
+
+export function isBundledProviderPlugin(pluginId: string): boolean {
+  return AUTOREG_PLUGIN_IDS.has(pluginId);
+}
