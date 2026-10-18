@@ -99,6 +99,7 @@ export const devboxPage: DevboxPageTranslations = {
     serviceWatchdog: "Watchdog",
     serviceHost: "Host-сервисы",
     serviceEnable: "Включить",
+    serviceGateway: "Gateway",
     stripCurrentProject: "Текущий проект",
     stripAccess: "Доступ",
     stripNoProject: "Проект не выбран",
@@ -179,6 +180,7 @@ export const devboxPage: DevboxPageTranslations = {
     tipVitalRunner: "Раннер проекта: исполняет команды агента, слушает RunnerPort профиля.",
     tipVitalWatchdog: "Watchdog: автоматически перезапускает сервисы стека, если они падают.",
     tipVitalHostServices: "Сервисы на хост-машине, которые нужны профилю (БД, dev-серверы и т.п.).",
+    tipVitalGateway: "Шлюз MCP хозяина: спавнит твои MCP-серверы для агента по политике профиля",
     tipStopServices: "Останавливает сервисы профиля, но оставляет контейнеры стека поднятыми. Срабатывает после второго клика (подтверждение).",
     tipStopAll: "Останавливает всё, включая сами контейнеры стека. Срабатывает после второго клика (подтверждение).",
     tipRotateTokens: "Штатная операция: выпускает свежие токены стека и показывает внизу блок для передачи агенту — вставь его в чат агента. Срабатывает после второго клика.",
@@ -204,5 +206,12 @@ export const devboxPage: DevboxPageTranslations = {
     eventsEmptyDesc: "Подключи агента по ARENA.md — его вызовы инструментов появятся здесь.",
     logsEmptyDesc: "Подними стек для проекта — логи его сервисов появятся здесь.",
     actionsEmptyDesc: "Каждое действие с этой страницы попадает сюда со статусом и выводом.",
+    mcpSectionTitle: "Мои MCP для агента",
+    mcpModeReadonly: "только чтение",
+    mcpModeFull: "полный",
+    mcpEmptyTitle: "Ни один MCP не открыт агенту",
+    mcpEmptyDesc: "Шлюз может отдать агенту твои MCP-серверы в ограниченном режиме: только разрешённые тулы, аудит каждого вызова.",
+    mcpEmptyCta: "Настроить MCP",
+    gatewayWarnChip: "Шлюз MCP не поднят — агент не увидит серверы из политики",
   }
 };

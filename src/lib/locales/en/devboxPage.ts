@@ -97,6 +97,7 @@ export const devboxPage: DevboxPageTranslations = {
     serviceWatchdog: "Watchdog",
     serviceHost: "Host services",
     serviceEnable: "Enable",
+    serviceGateway: "Gateway",
     stripCurrentProject: "Current project",
     stripAccess: "Access",
     stripNoProject: "No project selected",
@@ -177,6 +178,7 @@ export const devboxPage: DevboxPageTranslations = {
     tipVitalRunner: "Project runner: executes the agent's commands, listens on the profile's RunnerPort.",
     tipVitalWatchdog: "Watchdog: automatically restarts stack services when they fall.",
     tipVitalHostServices: "Services on the host machine that the profile needs (databases, dev servers, etc.).",
+    tipVitalGateway: "Host MCP gateway: spawns your MCP servers for the agent per the profile policy",
     tipStopServices: "Stops the profile's services but keeps the stack containers up. Fires on the second click (confirmation).",
     tipStopAll: "Tears down everything including the stack containers themselves. Fires on the second click (confirmation).",
     tipRotateTokens: "Routine operation: issues fresh stack tokens and reveals the agent hand-off block below — paste it into the agent chat. Fires on the second click.",
@@ -202,5 +204,12 @@ export const devboxPage: DevboxPageTranslations = {
     eventsEmptyDesc: "Connect the agent per ARENA.md — its tool calls will stream here.",
     logsEmptyDesc: "Start the stack for a project — its service logs will show up here.",
     actionsEmptyDesc: "Every button on this page lands here with its status and output.",
+    mcpSectionTitle: "My MCP servers for the agent",
+    mcpModeReadonly: "read-only",
+    mcpModeFull: "full",
+    mcpEmptyTitle: "No MCP servers exposed to the agent",
+    mcpEmptyDesc: "The gateway can hand your MCP servers to the agent in a limited mode: only allowed tools, an audit of every call.",
+    mcpEmptyCta: "Configure MCP",
+    gatewayWarnChip: "MCP gateway is down — the agent will not see the policy servers",
   }
 };

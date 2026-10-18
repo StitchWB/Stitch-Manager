@@ -9,6 +9,7 @@ import {
   devboxTime,
   devboxWatchdogControl,
   type DevboxAccepted,
+  type DevboxOverviewGateway,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
@@ -27,6 +28,11 @@ const SERVICES = [
     id: 'host_services',
     nameKey: 'devboxPage.serviceHost',
     tipKey: 'devboxPage.tipVitalHostServices',
+  },
+  {
+    id: 'gateway',
+    nameKey: 'devboxPage.serviceGateway',
+    tipKey: 'devboxPage.tipVitalGateway',
   },
 ] as const;
 
@@ -70,6 +76,20 @@ function cardState(card: DevboxVitalCard | null, up: boolean): CardState {
   return 'ok';
 }
 
+function gatewayVital(
+  gateway: DevboxOverviewGateway | null,
+  name: string,
+): DevboxVitalCard | null {
+  if (gateway === null || !gateway.enabled) return null;
+  return {
+    id: 'gateway',
+    title: name,
+    value: gateway.up ? 'up' : 'down',
+    tone: gateway.up ? 'ok' : 'warn',
+    updatedAt: null,
+  };
+}
+
 function hostServicesState(card: DevboxVitalCard | null): CardState | null {
   if (card === null) return null;
   const match = HOST_COUNT_RE.exec(String(card.value ?? '').trim());
@@ -82,6 +102,7 @@ function hostServicesState(card: DevboxVitalCard | null): CardState | null {
 
 export interface DevboxServiceCardsProps {
   cards: DevboxVitalCard[] | null;
+  gateway: DevboxOverviewGateway | null;
   activeProfile: string;
   busy: boolean;
   onAction: (action: Promise<DevboxAccepted>) => void;
@@ -89,6 +110,7 @@ export interface DevboxServiceCardsProps {
 
 export function DevboxServiceCards({
   cards,
+  gateway,
   activeProfile,
   busy,
   onAction,
@@ -97,7 +119,11 @@ export function DevboxServiceCards({
     <DevboxSection title={t('devboxPage.sectionOverview')} testId="devbox-services">
       <div className="flex flex-wrap items-stretch gap-2">
         {SERVICES.map(service => {
-          const card = findCard(cards, service.id);
+          const card =
+            service.id === 'gateway'
+              ? gatewayVital(gateway, t(service.nameKey))
+              : findCard(cards, service.id);
+          if (service.id === 'gateway' && card === null) return null;
           const value = card ? String(card.value ?? '').toLowerCase() : null;
           const up = value !== null && UP_VALUES.has(value);
           const state =

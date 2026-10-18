@@ -54,6 +54,7 @@ import {
   devboxCalls,
   devboxCallArgs,
   devboxPollBundle,
+  overviewFixture,
   pageRoutes,
   pendingPermissionFixture,
   runningJobFixture,
@@ -193,6 +194,26 @@ describe('Devbox page header control bar', () => {
       expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: OK');
     });
     expect(screen.getByTestId('devbox-stack-start').textContent).toBe('Restart');
+  });
+
+  it('keeps the composite at Stack: OK when only the gateway is down', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        overview: {
+          cards: [
+            { id: 'ingress', title: 'Ingress', value: 'up', tone: 'ok' },
+            { id: 'bridge', title: 'Bridge', value: 'up', tone: 'ok' },
+            { id: 'runner', title: 'Runner', value: 'up', tone: 'ok' },
+          ],
+          gateway: { enabled: true, up: false, port: null, exposed_mcps: [] },
+        },
+      }),
+    });
+    render(<DevboxPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: OK');
+    });
   });
 
   it('shows Stack: stopped when every stack service is down', async () => {
@@ -452,14 +473,17 @@ describe('Devbox page header control bar', () => {
     expect(screen.queryByTestId('devbox-profile-new-name')).toBeNull();
   });
 
-  it('infra panel stacks service cards, project strip and console in order', async () => {
+  it('infra panel stacks service cards, MCP section, project strip and console in order', async () => {
     render(<DevboxPage />);
     const panel = await screen.findByTestId('devbox-panel-infra');
     await screen.findByTestId('devbox-project-strip');
 
-    const order = ['devbox-services', 'devbox-project-strip', 'devbox-console-tabs'].map(
-      id => screen.getByTestId(id),
-    );
+    const order = [
+      'devbox-services',
+      'devbox-mcp-section',
+      'devbox-project-strip',
+      'devbox-console-tabs',
+    ].map(id => screen.getByTestId(id));
     for (let i = 1; i < order.length; i += 1) {
       expect(
         order[i - 1].compareDocumentPosition(order[i]) &
@@ -467,7 +491,63 @@ describe('Devbox page header control bar', () => {
       ).toBeTruthy();
     }
     expect(panel.contains(order[0])).toBe(true);
-    expect(panel.contains(order[2])).toBe(true);
+    expect(panel.contains(order[1])).toBe(true);
+    expect(panel.contains(order[3])).toBe(true);
+  });
+
+  it('feeds the gateway to the prompt — the warning plate appears when the gateway is down', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        overview: {
+          cards: [
+            { id: 'profile', title: 'Profile', value: 'midsai', tone: 'ok' },
+            { id: 'ingress', title: 'Ingress', value: 'up', tone: 'ok' },
+            { id: 'bridge', title: 'Bridge', value: 'up', tone: 'ok' },
+            { id: 'runner', title: 'Runner', value: 'up', tone: 'ok' },
+          ],
+          gateway: {
+            enabled: true,
+            up: false,
+            port: 8765,
+            exposed_mcps: [{ name: 'context7', mode: 'readonly', tools: ['resolve-library-id'] }],
+          },
+        },
+      }),
+    });
+    render(<DevboxPage />);
+
+    expect(await screen.findByTestId('devbox-prompt-gateway-warning')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
+  });
+
+  it('MCP empty CTA opens the projects modal with the seeded editor for the active profile', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        overview: {
+          ...overviewFixture,
+          gateway: { enabled: true, up: true, port: null, exposed_mcps: [] },
+        },
+      }),
+      profile_get: {
+        json: '{"project_dir": "d:/work/midsai", "mode": "standard"}',
+        valid: true,
+        errors: [],
+      },
+    });
+    render(<DevboxPage />);
+
+    fireEvent.click(await screen.findByTestId('devbox-mcp-configure'));
+
+    expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
+    const editor = (await screen.findByTestId('devbox-profile-editor')) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(JSON.parse(editor.value)).toEqual({
+        project_dir: 'd:/work/midsai',
+        mode: 'standard',
+        exposed_mcps: [{ name: 'context7', mode: 'readonly', tool_allow: [] }],
+      });
+    });
+    expect(devboxCallArgs(invokeMock, 'profile_get')).toEqual([{ name: 'midsai' }]);
   });
 
   it('danger zone entries are confirm-gated', async () => {

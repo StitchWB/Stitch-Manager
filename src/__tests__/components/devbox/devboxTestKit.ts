@@ -3,6 +3,7 @@ import type {
   DevboxActionStatus,
   DevboxAgentPrompt,
   DevboxJobRow,
+  DevboxOverviewGateway,
   DevboxPermissionRow,
   DevboxProfileRow,
   DevboxVitalCard,
@@ -37,7 +38,30 @@ export function devboxCallArgs(invoke: jest.Mock, cmd: string): Record<string, u
   return devboxCalls(invoke, cmd).map(([, args]) => (args ?? {}) as Record<string, unknown>);
 }
 
-export const overviewFixture: { cards: DevboxVitalCard[] } = {
+export function gatewayVitalCard(tone: 'ok' | 'down' = 'ok'): DevboxVitalCard {
+  return {
+    id: 'gateway',
+    title: 'Gateway',
+    value: tone === 'ok' ? 'up' : 'down',
+    tone,
+    updatedAt: 1791536987.76,
+  };
+}
+
+export const gatewayFixture: DevboxOverviewGateway = {
+  enabled: true,
+  up: true,
+  port: 8765,
+  exposed_mcps: [
+    { name: 'stitch-totp', mode: 'readonly', tools: ['totp_get', 'totp_list'] },
+    { name: 'stitch-mail', mode: 'full', tools: ['wait_for_email', 'send_email'] },
+  ],
+};
+
+export const overviewFixture: {
+  cards: DevboxVitalCard[];
+  gateway: DevboxOverviewGateway;
+} = {
   cards: [
     { id: 'profile', title: 'Profile', value: 'midsai', tone: 'ok', updatedAt: 1791536987.76 },
     {
@@ -50,7 +74,9 @@ export const overviewFixture: { cards: DevboxVitalCard[] } = {
     },
     { id: 'watchdog', title: 'Watchdog', value: 'on', tone: 'ok', updatedAt: 1791536987.76 },
     { id: 'runner', title: 'Runner', value: 'down', tone: 'down', updatedAt: 1791536987.76 },
+    gatewayVitalCard('ok'),
   ],
+  gateway: gatewayFixture,
 };
 
 export const profilesFixture: DevboxProfileRow[] = [

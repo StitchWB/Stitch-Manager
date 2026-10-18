@@ -32,6 +32,7 @@ import {
   type DevboxActionStatus,
   type DevboxAgentPrompt as DevboxAgentPromptPayload,
   type DevboxAgentPromptReady,
+  type DevboxOverviewGateway,
   type DevboxProfileRow,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
@@ -89,6 +90,7 @@ function readyFromCards(cards: DevboxVitalCard[] | null): DevboxAgentPromptReady
 export interface DevboxPromptProps {
   profiles: DevboxProfileRow[] | null;
   overviewCards: DevboxVitalCard[] | null;
+  gateway?: DevboxOverviewGateway | null;
   actionStatus: DevboxActionStatus | null;
   onAction: (action: Promise<DevboxAccepted>) => void;
   reloadTick?: number;
@@ -99,6 +101,7 @@ type PromptTab = 'editor' | 'prompt';
 export function DevboxPrompt({
   profiles,
   overviewCards,
+  gateway = null,
   actionStatus,
   onAction,
   reloadTick = 0,
@@ -169,6 +172,12 @@ export function DevboxPrompt({
     ready.ingress ? null : t('devboxPage.promptChipIngress'),
   ].filter((label): label is string => label !== null);
   const copyDisabled = blockingLabels.length > 0;
+
+  const gatewayDown =
+    gateway !== null &&
+    gateway.enabled &&
+    gateway.exposed_mcps.length > 0 &&
+    gateway.up === false;
 
   const recent = actionStatus?.recent;
   const stale = useMemo(() => {
@@ -387,6 +396,13 @@ export function DevboxPrompt({
                       t('devboxPage.promptRunnerDownHint'),
                     )
                   : null}
+
+              {gatewayDown
+                ? alertPlate(
+                    'devbox-prompt-gateway-warning',
+                    t('devboxPage.gatewayWarnChip'),
+                  )
+                : null}
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col gap-2">
