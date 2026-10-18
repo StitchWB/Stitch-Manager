@@ -73,9 +73,9 @@ export function PluginDetail({ item, busy, isGuest, onInstall, onUninstall, onTo
 
         {/* Tab content */}
         {detailTab === 'overview' ? (
-          <MarketplaceOverviewTab item={item} language={language} />
+          <MarketplaceOverviewTab item={item} language={language} sourceLabel={sourceLabel} />
         ) : (
-          <MarketplaceInfoTab item={item} language={language} sourceLabel={sourceLabel} />
+          <MarketplaceInfoTab item={item} language={language} />
         )}
       </div>
     </div>

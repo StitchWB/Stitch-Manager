@@ -24,47 +24,43 @@ function mkItem(overrides: Partial<MarketplaceItem> = {}): MarketplaceItem {
 }
 
 function renderTab(item: MarketplaceItem) {
-  return render(<MarketplaceOverviewTab item={item} language="en" />);
+  return render(
+    <MarketplaceOverviewTab item={item} language="en" sourceLabel="Official" />,
+  );
 }
 
-describe('MarketplaceOverviewTab feature status badges', () => {
-  it('stable feature renders a readable success badge next to the title', () => {
+function statusOf(label: string) {
+  const text = screen.getByText(label);
+  const dot = text.previousElementSibling as HTMLElement;
+  return { text, dot };
+}
+
+describe('MarketplaceOverviewTab feature status', () => {
+  it('stable feature: muted text plus emerald dot, no pill background', () => {
     renderTab(mkItem({ features: [{ title: 'Relay checks', status: 'stable' }] }));
 
-    const badge = screen.getByText('marketplace.featureStatus.stable');
-    expect(badge.className).toContain('bg-emerald-500/10');
-    expect(badge.className).toContain('text-emerald-300');
-
-    const row = screen.getByText('Relay checks').closest('li')!;
-    expect(row.className).toContain('gap-2.5');
-    expect(row.className).not.toContain('justify-between');
+    const { text, dot } = statusOf('marketplace.featureStatus.stable');
+    expect(text.className).toContain('text-slate-500');
+    expect(dot.className).toContain('bg-emerald-400');
+    expect(text.className).not.toContain('bg-emerald-500/10');
   });
 
-  it('beta feature renders a warning badge', () => {
+  it('beta feature: amber text plus amber dot', () => {
     renderTab(mkItem({ features: [{ title: 'TOTP', status: 'beta' }] }));
 
-    const badge = screen.getByText('marketplace.featureStatus.beta');
-    expect(badge.className).toContain('bg-amber-500/10');
-    expect(badge.className).toContain('text-amber-300');
+    const { text, dot } = statusOf('marketplace.featureStatus.beta');
+    expect(text.className).toContain('text-amber-300');
+    expect(dot.className).toContain('bg-amber-400');
   });
 
-  it('deprecated feature renders a danger badge', () => {
-    renderTab(mkItem({ features: [{ title: 'Legacy relay', status: 'deprecated' }] }));
-
-    const badge = screen.getByText('marketplace.featureStatus.deprecated');
-    expect(badge.className).toContain('bg-red-500/10');
-    expect(badge.className).toContain('text-red-300');
-  });
-
-  it('planned feature renders a slate badge', () => {
+  it('planned feature: hollow dot', () => {
     renderTab(mkItem({ features: [{ title: 'Cloud sync', status: 'planned' }] }));
 
-    const badge = screen.getByText('marketplace.featureStatus.planned');
-    expect(badge.className).toContain('bg-slate-500/10');
-    expect(badge.className).toContain('text-slate-300');
+    const { dot } = statusOf('marketplace.featureStatus.planned');
+    expect(dot.className).toContain('border-slate-500');
   });
 
-  it('no bare status dots: every status is visible text', () => {
+  it('status stays visible text next to the feature title', () => {
     renderTab(
       mkItem({
         features: [
@@ -76,10 +72,11 @@ describe('MarketplaceOverviewTab feature status badges', () => {
 
     expect(screen.getByText('marketplace.featureStatus.stable')).toBeTruthy();
     expect(screen.getByText('marketplace.featureStatus.beta')).toBeTruthy();
-    expect(screen.queryAllByTitle('marketplace.status.stable')).toHaveLength(0);
+    const row = screen.getByText('Relay checks').closest('li')!;
+    expect(row.className).toContain('justify-between');
   });
 
-  it('feature list spans full width with row dividers', () => {
+  it('feature list spans the reading column with row dividers', () => {
     const { container } = renderTab(
       mkItem({ features: [{ title: 'Relay checks', status: 'stable' }] }),
     );
@@ -89,5 +86,11 @@ describe('MarketplaceOverviewTab feature status badges', () => {
     expect(list.className).toContain('divide-y');
     expect(list.className).toContain('divide-white/5');
     expect(list.querySelector('li')!.className).toContain('w-full');
+  });
+
+  it('metadata grid renders beside the overview on the same tab', () => {
+    renderTab(mkItem());
+
+    expect(screen.getByTestId('plugin-meta-grid')).toBeTruthy();
   });
 });

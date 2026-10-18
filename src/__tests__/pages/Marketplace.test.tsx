@@ -335,7 +335,7 @@ describe('Marketplace page', () => {
     ).toBeTruthy();
   });
 
-  it('catalog tab lists every plugin under the "All available plugins" header', async () => {
+  it('catalog tab groups installed and available plugins under separate headers', async () => {
     jest
       .spyOn(marketplaceModule, 'getMarketplace')
       .mockResolvedValue({
@@ -353,11 +353,12 @@ describe('Marketplace page', () => {
 
     await waitFor(() => {
       expect(
-        within(listPane).getByRole('heading', {
-          name: /All available plugins · 2/i,
-        }),
+        within(listPane).getByRole('heading', { name: /Installed · 1/i }),
       ).toBeTruthy();
     });
+    expect(
+      within(listPane).getByRole('heading', { name: /Available · 1/i }),
+    ).toBeTruthy();
     expect(within(listPane).getByText('Installed Plugin')).toBeTruthy();
     expect(within(listPane).getByText('Available Plugin')).toBeTruthy();
   });

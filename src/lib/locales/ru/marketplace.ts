@@ -4,7 +4,7 @@ export const marketplace: MarketplaceTranslations = {
   marketplace: {
     title: "Плагины",
     subtitle: "Просмотр и установка плагинов для Stitch Manager",
-    searchPlaceholder: "Поиск плагинов по названию или описанию...",
+    searchPlaceholder: "Поиск плагинов…",
     installedSection: "Установленные",
     availableSection: "Доступные",
     install: "Установить",

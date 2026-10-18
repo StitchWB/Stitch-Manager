@@ -13,6 +13,7 @@ import { useAppStore } from '@/stores/app';
 import { hasPluginUpdate } from '@/lib/backend/modules/marketplace';
 import type { MarketplaceItem, MarketplaceStatus } from '@/lib/backend/modules/marketplace';
 import { PluginBadgeChips } from './PluginBadgeChips';
+import { CATEGORY_LABEL_KEYS } from './categories';
 
 /** Two-letter initials from a plugin name, for the icon block. */
 function getInitials(name: string): string {
@@ -22,34 +23,11 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-/** Stable color from a string hash, for the icon block background. */
-function getIconColor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
-  }
-  const hue = Math.abs(hash) % 360;
-  return `hsl(${hue} 60% 45%)`;
-}
-
-/** Readable text chip for the manifest status (no bare color dots). */
-function StatusChip({ status }: { status: MarketplaceStatus }) {
-  const label = t(`marketplace.status.${status}`);
-  return (
-    <span
-      className={cn(
-        'shrink-0 rounded-full px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide leading-tight',
-        status === 'beta'
-          ? 'bg-amber-500/10 text-amber-300'
-          : status === 'deprecated'
-            ? 'bg-red-500/10 text-red-300'
-            : 'bg-emerald-500/10 text-emerald-300',
-      )}
-    >
-      {label}
-    </span>
-  );
-}
+const STATUS_DOT_CLASSES: Record<MarketplaceStatus, string> = {
+  stable: 'bg-emerald-400',
+  beta: 'bg-amber-400',
+  deprecated: 'bg-red-400',
+};
 
 interface ListRowProps {
   item: MarketplaceItem;
@@ -94,11 +72,13 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
 
   const hasUpdate = hasPluginUpdate(item) && !item.dev_shadow;
 
-  // Line 2: localized description, else "version · author", else id.
-  const versionAuthor =
-    [item.version, item.author].filter(Boolean).join(' · ') || item.id;
   const localizedDesc = resolveI18n(item.description_i18n, language);
-  const secondaryLine = localizedDesc !== '' ? localizedDesc : versionAuthor;
+  const secondaryLine =
+    localizedDesc !== ''
+      ? localizedDesc
+      : item.category != null
+        ? t(CATEGORY_LABEL_KEYS[item.category])
+        : item.id;
 
   return (
     <div
@@ -124,8 +104,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
       )}
     >
       <div
-        className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 text-xs font-bold text-white/90"
-        style={{ backgroundColor: getIconColor(item.id) }}
+        className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 text-xs font-bold text-slate-300 bg-white/[0.06] border border-white/10"
         aria-hidden="true"
       >
         {item.icon ? (
@@ -138,6 +117,15 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
       {/* Name + meta */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
+          {item.status != null && (
+            <span
+              title={t(`marketplace.status.${item.status}`)}
+              className={cn(
+                'w-1.5 h-1.5 rounded-full shrink-0',
+                STATUS_DOT_CLASSES[item.status],
+              )}
+            />
+          )}
           <span className="text-[13px] font-medium text-slate-100 truncate" title={item.name}>
             {item.name}
           </span>
@@ -158,7 +146,6 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
           <PluginBadgeChips badges={item.badges} iconOnly className="shrink-0" />
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-          {item.status != null && <StatusChip status={item.status} />}
           <span className="text-[11px] text-slate-500 truncate">
             {secondaryLine}
           </span>
@@ -196,7 +183,7 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
                 }
                 side="top"
               >
-                <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.05] px-1.5 py-px text-[10px] font-mono tabular-nums text-slate-400">
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono tabular-nums text-slate-500">
                   <Check size={10} className="text-emerald-400" aria-hidden="true" />
                   {item.installed_version !== null && (
                     // eslint-disable-next-line i18next/no-literal-string -- "v" version prefix is non-translatable
@@ -224,27 +211,35 @@ export function MarketplaceListRow({ item, selected, busy, isGuest, onSelect, on
             </span>
           </Tooltip>
         ) : !item.installed ? (
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => onInstall(item)}
-            isLoading={busy}
-            disabled={busy}
-            leftIcon={!busy ? <Download className="w-3.5 h-3.5" /> : undefined}
-          >
-            {busy ? t('marketplace.installing') : t('marketplace.install')}
-          </Button>
+          <Tooltip content={busy ? t('marketplace.installing') : t('marketplace.install')} side="left">
+            <span>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="px-2"
+                onClick={() => onInstall(item)}
+                isLoading={busy}
+                disabled={busy}
+                aria-label={t('marketplace.install')}
+                leftIcon={!busy ? <Download className="w-3.5 h-3.5" /> : undefined}
+              />
+            </span>
+          </Tooltip>
         ) : hasUpdate ? (
-          <Button
-            size="sm"
-            variant="purple"
-            onClick={() => onInstall(item)}
-            isLoading={busy}
-            disabled={busy}
-            leftIcon={!busy ? <Download className="w-3.5 h-3.5" /> : undefined}
-          >
-            {busy ? t('marketplace.installing') : t('marketplace.update')}
-          </Button>
+          <Tooltip content={busy ? t('marketplace.installing') : t('marketplace.update')} side="left">
+            <span>
+              <Button
+                size="sm"
+                variant="purple"
+                className="px-2"
+                onClick={() => onInstall(item)}
+                isLoading={busy}
+                disabled={busy}
+                aria-label={t('marketplace.update')}
+                leftIcon={!busy ? <Download className="w-3.5 h-3.5" /> : undefined}
+              />
+            </span>
+          </Tooltip>
         ) : null}
       </div>
     </div>

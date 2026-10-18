@@ -162,13 +162,14 @@ export function MarketplaceDetailHeader({
           <Button
             size="sm"
             variant="secondary"
-            onClick={() =>
+            onClick={e => {
+              e.currentTarget.blur();
               navigate(
                 CANONICAL_PLUGIN_ROUTES[item.id] ??
                   CORE_PAGE_ROUTES[item.id] ??
                   `/ai/plugin/${item.id}`,
-              )
-            }
+              );
+            }}
             leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
           >
             {t('marketplace.open')}
@@ -177,25 +178,32 @@ export function MarketplaceDetailHeader({
 
         {item.installed &&
           (settingsRoute != null ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => navigate(settingsRoute)}
-              leftIcon={<Settings className="w-3.5 h-3.5" />}
-            >
-              {t('marketplace.settings')}
-            </Button>
+            <Tooltip content={t('marketplace.settings')}>
+              <span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="px-2"
+                  onClick={e => {
+                    e.currentTarget.blur();
+                    navigate(settingsRoute);
+                  }}
+                  aria-label={t('marketplace.settings')}
+                  leftIcon={<Settings className="w-3.5 h-3.5" />}
+                />
+              </span>
+            </Tooltip>
           ) : (
             <Tooltip content={t('marketplace.settingsUnavailable')}>
               <span>
                 <Button
                   size="sm"
                   variant="secondary"
+                  className="px-2"
                   disabled
+                  aria-label={t('marketplace.settings')}
                   leftIcon={<Settings className="w-3.5 h-3.5" />}
-                >
-                  {t('marketplace.settings')}
-                </Button>
+                />
               </span>
             </Tooltip>
           ))}
@@ -206,34 +214,33 @@ export function MarketplaceDetailHeader({
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() =>
-                  navigate(`/logs?source=plugin:${item.id}`)
-                }
+                className="px-2"
+                onClick={e => {
+                  e.currentTarget.blur();
+                  navigate(`/logs?source=plugin:${item.id}`);
+                }}
+                aria-label={t('marketplace.logs')}
                 leftIcon={<ScrollText className="w-3.5 h-3.5" />}
-              >
-                {t('marketplace.logs')}
-              </Button>
+              />
             </span>
           </Tooltip>
         )}
 
+        <span className="flex-1" />
+
         {item.installed && servicePlugin != null && (
-          <Tooltip content={t('marketplace.disableHint')}>
-            <span>
-              <Button
-                size="sm"
-                variant="secondary"
-                data-testid="toggle-enabled"
-                onClick={() => onToggleEnabled(item, runtimeDisabled)}
-                disabled={busy}
-                leftIcon={<Power className="w-3.5 h-3.5" />}
-              >
-                {runtimeDisabled
-                  ? t('marketplace.enable')
-                  : t('marketplace.disable')}
-              </Button>
-            </span>
-          </Tooltip>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid="toggle-enabled"
+            onClick={() => onToggleEnabled(item, runtimeDisabled)}
+            disabled={busy}
+            leftIcon={<Power className="w-3.5 h-3.5" />}
+          >
+            {runtimeDisabled
+              ? t('marketplace.enable')
+              : t('marketplace.disable')}
+          </Button>
         )}
 
         {item.installed && (

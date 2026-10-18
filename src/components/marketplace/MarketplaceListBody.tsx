@@ -116,26 +116,72 @@ export function MarketplaceListBody({
             refreshing && 'opacity-60 pointer-events-none',
           )}
         >
-          <section>
-            <h2 className="px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              {tab === 'installed'
-                ? t('marketplace.installedSection')
-                : t('marketplace.allPluginsSection')}{' '}
-              · {filtered.length}
-            </h2>
-            {filtered.map(item => (
-              <MarketplaceListRow
-                key={item.id}
-                item={item}
-                selected={item.id === selectedId}
-                busy={actionInProgress === item.id}
-                isGuest={isGuest}
-                onSelect={onSelect}
-                onInstall={onInstall}
-                onLockedClick={onLockedClick}
-              />
-            ))}
-          </section>
+          {tab === 'marketplace' ? (
+            <>
+              {filtered.some(i => i.installed) && (
+                <section>
+                  <h2 className="px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                    {t('marketplace.installedSection')} ·{' '}
+                    {filtered.filter(i => i.installed).length}
+                  </h2>
+                  {filtered
+                    .filter(i => i.installed)
+                    .map(item => (
+                      <MarketplaceListRow
+                        key={item.id}
+                        item={item}
+                        selected={item.id === selectedId}
+                        busy={actionInProgress === item.id}
+                        isGuest={isGuest}
+                        onSelect={onSelect}
+                        onInstall={onInstall}
+                        onLockedClick={onLockedClick}
+                      />
+                    ))}
+                </section>
+              )}
+              {filtered.some(i => !i.installed) && (
+                <section>
+                  <h2 className="px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                    {t('marketplace.availableSection')} ·{' '}
+                    {filtered.filter(i => !i.installed).length}
+                  </h2>
+                  {filtered
+                    .filter(i => !i.installed)
+                    .map(item => (
+                      <MarketplaceListRow
+                        key={item.id}
+                        item={item}
+                        selected={item.id === selectedId}
+                        busy={actionInProgress === item.id}
+                        isGuest={isGuest}
+                        onSelect={onSelect}
+                        onInstall={onInstall}
+                        onLockedClick={onLockedClick}
+                      />
+                    ))}
+                </section>
+              )}
+            </>
+          ) : (
+            <section>
+              <h2 className="px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                {t('marketplace.installedSection')} · {filtered.length}
+              </h2>
+              {filtered.map(item => (
+                <MarketplaceListRow
+                  key={item.id}
+                  item={item}
+                  selected={item.id === selectedId}
+                  busy={actionInProgress === item.id}
+                  isGuest={isGuest}
+                  onSelect={onSelect}
+                  onInstall={onInstall}
+                  onLockedClick={onLockedClick}
+                />
+              ))}
+            </section>
+          )}
         </div>
       )}
     </div>
