@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 
 from autoreg.plugin.crypto import load_embedded_pubkey
+from autoreg.plugin.engine_pack import ENGINE_PACK_ID, locate_engine_pack
 from autoreg.plugin.install import list_installed_versions
 from autoreg.plugin.layout import plugins_cache_dir, plugins_local_dir, resolve_link
 from autoreg.plugin.manifest import parse_semver, resolve_i18n, validate_manifest
@@ -218,6 +219,7 @@ def _community_item(
         "installed_version": version if is_installed else None,
         "update_available": False,
         "dev_shadow": False,
+        "bundled": False,
         "can_download": True,
         "required_tier": None,
         "badges": _badges_of(entry),
@@ -313,6 +315,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
     installed_community = {
         (p["id"], p["version"]): p for p in list_installed_community()
     }
+    engine_pack_present = locate_engine_pack() is not None
 
     # Dual-path entitlement resolution.
     use_grants = _caller_uses_grants(params)
@@ -381,6 +384,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "installed_version": installed_version,
                         "update_available": _update_available(version, installed_version),
                         "dev_shadow": False,
+                        "bundled": plugin_id == ENGINE_PACK_ID and engine_pack_present,
                         "can_download": entitled,
                         "required_tier": required_tiers.get(plugin_id),
                         "badges": _badges_of(entry),
@@ -432,6 +436,7 @@ async def cmd_get_marketplace(params: dict) -> dict:
                         "installed_version": installed_version,
                         "update_available": _update_available(version, installed_version),
                         "dev_shadow": False,
+                        "bundled": plugin_id == ENGINE_PACK_ID and engine_pack_present,
                         "can_download": False,
                         "required_tier": public_tiers.get(plugin_id),
                         "badges": _badges_of(entry),

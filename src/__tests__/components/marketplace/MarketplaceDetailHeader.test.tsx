@@ -404,3 +404,12 @@ describe('MarketplaceDetailHeader quick actions', () => {
     expect(screen.queryByRole('button', { name: 'marketplace.logs' })).toBeNull();
   });
 });
+
+describe('MarketplaceDetailHeader bundled plugins', () => {
+  it('bundled item without marketplace install shows the in-build note instead of Install', () => {
+    renderHeader(mkItem({ id: 'engine-pack', bundled: true, installed: false, installed_version: null }));
+
+    expect(screen.getByTestId('bundled-status')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'marketplace.install' })).toBeNull();
+  });
+});

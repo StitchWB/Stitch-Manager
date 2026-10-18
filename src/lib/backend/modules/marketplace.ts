@@ -69,6 +69,7 @@ export interface MarketplaceItem {
    * backends.
    */
   dev_shadow?: boolean;
+  bundled?: boolean;
   /**
    * Badge chips: 'recommended' | 'verified' | 'works' | 'not_works'.
    * 'verified' is computed server-side from the offline attestation.

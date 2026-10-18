@@ -120,7 +120,7 @@ export function MarketplaceListBody({
             <>
               {filtered.some(i => i.installed) && (
                 <section>
-                  <h2 className="px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                  <h2 className="sticky top-0 z-10 px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest bg-vsc-bg">
                     {t('marketplace.installedSection')} ·{' '}
                     {filtered.filter(i => i.installed).length}
                   </h2>
@@ -142,7 +142,7 @@ export function MarketplaceListBody({
               )}
               {filtered.some(i => !i.installed) && (
                 <section>
-                  <h2 className="px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                  <h2 className="sticky top-0 z-10 px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest bg-vsc-bg">
                     {t('marketplace.availableSection')} ·{' '}
                     {filtered.filter(i => !i.installed).length}
                   </h2>
@@ -165,7 +165,7 @@ export function MarketplaceListBody({
             </>
           ) : (
             <section>
-              <h2 className="px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+              <h2 className="sticky top-0 z-10 px-3 pt-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-widest bg-vsc-bg">
                 {t('marketplace.installedSection')} · {filtered.length}
               </h2>
               {filtered.map(item => (
