@@ -21,6 +21,7 @@ class EmailStrategy(StrEnum):
     THIRTY_THREE_MAIL = "33mail"  # Use 33mail.com wildcard
     MAILTM = "mailtm"  # Use Mail.tm temporary emails
     ICLOUD_POOL = "icloud_pool"  # iCloud Hide My Email pool
+    DOMAIN_POOL = "domain_pool"  # Catch-all domains from stitch-domains
 
 
 class ImapConfig(BaseModel):

@@ -3,12 +3,52 @@
 from __future__ import annotations
 
 import logging
+import random
+import string
 from typing import TYPE_CHECKING
+
+from ..email_providers.base import EmailContext, IEmailGenerator
 
 if TYPE_CHECKING:
     from .provider_adapter import PluginScenarioProvider
 
 logger = logging.getLogger("autoreg.plugin.provider_adapter")
+
+
+class DomainPoolEmailGenerator(IEmailGenerator):
+    """Generate emails on the active catch-all domains (domain_pool strategy).
+
+    The domain comes from ``stitch_backend_bridge.get_domain_pool_fetch_fn``
+    (DomainProviderSPI — the stitch-domains plugin); the local part is
+    random, so every address on the catch-all domain is deliverable to the
+    user's forwarded inbox.
+    """
+
+    def __init__(self, domain_fetch_fn) -> None:
+        self._domain_fetch_fn = domain_fetch_fn
+
+    def generate(self, description: str | None = None) -> EmailContext:
+        domain = self._domain_fetch_fn()
+        if not domain:
+            raise ValueError(
+                "domain pool empty — no active domains resolved "
+                "(stitch-domains plugin not installed or no wired domains)"
+            )
+        local = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+        email = f"{local}@{domain}"
+        logger.info("Generated domain-pool email: %s", email)
+        return EmailContext(
+            email=email,
+            alias_id=None,
+            should_cleanup=False,
+            metadata={"type": "domain_pool", "description": description},
+        )
+
+    def cleanup(self, context: EmailContext) -> None:
+        logger.debug("No cleanup needed for domain-pool email: %s", context.email)
+
+    def close(self) -> None:
+        pass
 
 
 def generate_email(self: PluginScenarioProvider) -> str | None:
@@ -61,6 +101,10 @@ def generate_email(self: PluginScenarioProvider) -> str | None:
             )
 
             gen = MailTmEmailGenerator()
+        elif strategy == "domain_pool":
+            from ..stitch_backend_bridge import get_domain_pool_fetch_fn
+
+            gen = DomainPoolEmailGenerator(get_domain_pool_fetch_fn())
         else:
             logger.warning(
                 "plugin adapter: unsupported email strategy %r", strategy

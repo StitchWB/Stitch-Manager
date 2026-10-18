@@ -51,6 +51,7 @@ _SPI_NAME_MAP: dict[str, str] = {
     "EmailVerificationProvider": "email_verification",
     "TotpProvider": "totp",
     "OAuthProvider": "oauth",
+    "DomainProviderSPI": "domain_provider",
 }
 
 #: TTL for a positive (healthy) health-check cache entry, in seconds.
@@ -195,6 +196,13 @@ SPI_METHOD_MAP: dict[str, dict[str, dict[str, Any]]] = {
                 ("proxy", "None"),
             ],
             "returns": "dict",
+        },
+    },
+    "domain_provider": {
+        "list_active_domains": {
+            "cmd": "list_active_domains",
+            "params": [],
+            "returns": "list",
         },
     },
 }

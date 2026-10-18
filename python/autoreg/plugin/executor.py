@@ -30,6 +30,7 @@ from .capabilities import (
     resolve_all_selectors,
     resolve_selector,
     resolve_template,
+    sms_otp_capability,
     stripe_fill_checkout_capability,
     totp_register_capability,
 )
@@ -583,6 +584,9 @@ class ScenarioExecutor:
             step, self._imap_config, self._imap_factory, self._store
         )
 
+    def _sms_otp(self, step: ScenarioStep) -> StepResult:
+        return sms_otp_capability(step, self._store)
+
     def _captcha_solve(self, step: ScenarioStep) -> StepResult:
         return captcha_solve_capability(step, self._browser)
 
@@ -612,6 +616,7 @@ _KIND_TO_METHOD: dict[str, str] = {
     "extract": "_extract",
     "branch": "_branch",
     "imap.otp": "_imap_otp",
+    "sms.otp": "_sms_otp",
     "captcha.solve": "_captcha_solve",
     "stripe.fill_checkout": "_stripe_fill_checkout",
     "totp.register": "_totp_register",

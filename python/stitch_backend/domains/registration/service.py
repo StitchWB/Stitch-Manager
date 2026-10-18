@@ -51,6 +51,24 @@ from stitch_backend.domains.registration.v0_app import _prepare_v0_app
 
 logger = logging.getLogger(__name__)
 
+# kwarg names providers parse in register(); other bag keys are dropped (injection guard)
+_REGISTER_KWARG_ALLOWLIST = frozenset({
+    "donor",
+    "donors",
+    "donor_login",
+    "totp",
+    "gh_login",
+    "gh_password",
+    "gh_totp",
+    "verification_code",
+    "model",
+})
+
+# service-owned register() params; bag entries with these names never win
+_CANONICAL_REGISTER_KWARGS = frozenset({
+    "email", "password", "name", "transport", "proxy",
+})
+
 
 # ── Log callback factory ─────────────────────────────────────────────────
 
@@ -301,6 +319,24 @@ class RegistrationService:
             except Exception:
                 pass
 
+            extra_kwargs: dict[str, Any] = {}
+            raw_extras = config.get("register_kwargs")
+            if isinstance(raw_extras, dict):
+                forwarded = [
+                    key for key in raw_extras
+                    if key in _REGISTER_KWARG_ALLOWLIST
+                    and key not in _CANONICAL_REGISTER_KWARGS
+                ]
+                dropped = sorted(set(raw_extras) - set(forwarded))
+                if dropped:
+                    log_callback(f"[kwargs] register_kwargs not forwarded: {dropped}")
+                extra_kwargs = {key: raw_extras[key] for key in forwarded}
+            elif raw_extras is not None:
+                log_callback(
+                    f"[kwargs] register_kwargs must be a dict, got "
+                    f"{type(raw_extras).__name__}; ignored"
+                )
+
             result = await asyncio.to_thread(
                 provider.register,
                 email=config.get("email"),
@@ -308,6 +344,7 @@ class RegistrationService:
                 name=config.get("name"),
                 transport=event_transport,
                 proxy=outbound_proxy,
+                **extra_kwargs,
             )
 
             # Update job state

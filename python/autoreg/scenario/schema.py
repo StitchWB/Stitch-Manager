@@ -16,6 +16,7 @@ StepKind = Literal[
     "extract",
     "branch",
     "imap.otp",
+    "sms.otp",
     "captcha.solve",
     "stripe.fill_checkout",
     "totp.register",

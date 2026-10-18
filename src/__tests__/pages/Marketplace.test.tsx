@@ -334,6 +334,59 @@ describe('Marketplace page', () => {
       screen.getByText(/Requires Vip role or admin grant/i)
     ).toBeTruthy();
   });
+
+  it('catalog tab groups installed and available plugins under separate headers', async () => {
+    jest
+      .spyOn(marketplaceModule, 'getMarketplace')
+      .mockResolvedValue({
+        activated: true,
+        items: [mk.installed(), mk.available()],
+      });
+
+    render(
+      <MemoryRouter>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    const listPane = screen.getByTestId('plugin-list');
+
+    await waitFor(() => {
+      expect(
+        within(listPane).getByRole('heading', { name: /Installed · 1/i }),
+      ).toBeTruthy();
+    });
+    expect(
+      within(listPane).getByRole('heading', { name: /Available · 1/i }),
+    ).toBeTruthy();
+    expect(within(listPane).getByText('Installed Plugin')).toBeTruthy();
+    expect(within(listPane).getByText('Available Plugin')).toBeTruthy();
+  });
+
+  it('installed tab shows only the local stack under the "Installed" header', async () => {
+    jest
+      .spyOn(marketplaceModule, 'getMarketplace')
+      .mockResolvedValue({
+        activated: true,
+        items: [mk.installed(), mk.available()],
+      });
+
+    render(
+      <MemoryRouter initialEntries={['/marketplace?tab=installed']}>
+        <Marketplace />
+      </MemoryRouter>
+    );
+
+    const listPane = screen.getByTestId('plugin-list');
+
+    await waitFor(() => {
+      expect(
+        within(listPane).getByRole('heading', { name: /Installed · 1/i }),
+      ).toBeTruthy();
+    });
+    expect(within(listPane).getByText('Installed Plugin')).toBeTruthy();
+    expect(within(listPane).queryByText('Available Plugin')).toBeNull();
+  });
 });
 
 describe('Marketplace page — access tab', () => {

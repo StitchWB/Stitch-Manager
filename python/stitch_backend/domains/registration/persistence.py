@@ -69,6 +69,135 @@ async def _save_registration_account(
             f"[db] Account saved: id={account_id} email={reg_email}"
         )
 
+        # non-fatal by design: gateway wiring must never lose the account row
+        _token_data = result.get("token_data")
+        _gw_base_url = (
+            str(_token_data.get("base_url") or "")
+            if isinstance(_token_data, dict) else ""
+        )
+        _gw_secret = (
+            result.get("api_key") or result.get("apiKey") or result.get("token")
+        )
+        if account_id and _gw_base_url and _gw_secret:
+            try:
+                from autoreg.providers.registry import get_provider_meta
+
+                _meta = None
+                try:
+                    _meta = get_provider_meta(provider_name)
+                except KeyError:
+                    _meta = None
+                if _meta is not None and _meta.is_ai_proxy:
+                    _owner_uid = (
+                        config.get("owner_id")
+                        or config.get("_caller_user_id")
+                    )
+                    _gw_label = f"autoreg {provider_name}: {reg_email}"
+
+                    async def _gw_wire(session):
+                        from stitch_backend.domains.ai_gateway.service import (
+                            CredentialService,
+                        )
+                        from stitch_backend.domains.ai_proxy.legacy_convert import (
+                            _get_or_create_endpoint,
+                        )
+
+                        endpoint = await _get_or_create_endpoint(
+                            session,
+                            provider=provider_name,
+                            base_url=_gw_base_url,
+                            owner_id=_owner_uid,
+                        )
+                        cred = await CredentialService(session).create_credential(
+                            endpoint.id,
+                            _gw_label,
+                            "api_key",
+                            str(_gw_secret),
+                            owner_id=_owner_uid,
+                        )
+                        return endpoint.id, cred.id
+
+                    _gw_endpoint_id, _gw_cred_id = await run_in_session(_gw_wire)
+
+                    _gw_models: list[str] = []
+                    try:
+                        from stitch_backend.domains.ai_gateway.adapters.base import (
+                            get_adapter,
+                        )
+
+                        _gw_models = await get_adapter(
+                            "openai_compatible",
+                        ).list_models(
+                            base_url=_gw_base_url, secret=str(_gw_secret),
+                        )
+                    except Exception as _disc_exc:
+                        log_callback(
+                            f"[db] AI gateway model discovery failed (non-fatal, "
+                            f"DiscoveryWorker will fill models later): {_disc_exc}"
+                        )
+
+                    if _gw_models:
+                        async def _gw_routes(session):
+                            from sqlalchemy import select
+
+                            from stitch_backend.domains.ai_gateway.models import (
+                                RouteTarget,
+                            )
+                            from stitch_backend.domains.ai_gateway.service import (
+                                CredentialModelAccessService,
+                                PublicModelService,
+                                RouteTargetService,
+                                UpstreamModelService,
+                            )
+
+                            access_svc = CredentialModelAccessService(session)
+                            pub_svc = PublicModelService(session)
+                            target_svc = RouteTargetService(session)
+                            for _model_id in _gw_models:
+                                upstream = await UpstreamModelService(
+                                    session,
+                                ).upsert_model(
+                                    _gw_endpoint_id, _model_id,
+                                    display_name=_model_id,
+                                    discovery_source="autoreg_hook",
+                                )
+                                await access_svc.upsert_access(
+                                    _gw_cred_id, upstream.id,
+                                    status="available",
+                                )
+                                pub = await pub_svc.get_by_pk(_model_id)
+                                if pub is None:
+                                    pub = await pub_svc.create_public_model(
+                                        _model_id,
+                                        display_name=_model_id,
+                                        enabled=True,
+                                        owner_id=None,
+                                    )
+                                _existing_target = (
+                                    await session.execute(
+                                        select(RouteTarget).where(
+                                            RouteTarget.public_model_id == pub.id,
+                                            RouteTarget.upstream_model_id
+                                            == upstream.id,
+                                        )
+                                    )
+                                ).scalar_one_or_none()
+                                if _existing_target is None:
+                                    await target_svc.create_target(
+                                        pub.id, upstream.id, priority=10,
+                                    )
+
+                        await run_in_session(_gw_routes)
+
+                    log_callback(
+                        f"[db] AI gateway wired: endpoint={_gw_endpoint_id} "
+                        f"credential={_gw_cred_id} models={len(_gw_models)}"
+                    )
+            except Exception as _gw_exc:
+                log_callback(
+                    f"[db] AI gateway wiring failed (non-fatal): {_gw_exc}"
+                )
+
         # Auto-share to group when groupId was provided and the caller is a member; silent no-op otherwise.
         _group_id = config.get("group_id") or config.get("groupId")
         if _group_id and account_id:

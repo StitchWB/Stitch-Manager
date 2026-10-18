@@ -27,6 +27,7 @@ from . import capabilities_captcha as _captcha_impl
 from . import capabilities_extract as _extract_impl
 from . import capabilities_firebase as _firebase_impl
 from . import capabilities_mail as _mail_impl
+from . import capabilities_sms as _sms_impl
 from . import capabilities_stripe as _stripe_impl
 from . import capabilities_totp as _totp_impl
 from .capabilities_account import _capture_session
@@ -99,6 +100,7 @@ __all__ = [
     "resolve_email_verification",
     "resolve_selector",
     "resolve_template",
+    "sms_otp_capability",
     "stripe_fill_checkout_capability",
     "totp_register_capability",
 ]
@@ -123,6 +125,10 @@ def imap_otp_capability(
     store: dict[str, Any],
 ) -> StepResult:
     return _mail_impl.imap_otp_capability(step, imap_config, imap_factory, store)
+
+
+def sms_otp_capability(step: ScenarioStep, store: dict[str, Any]) -> StepResult:
+    return _sms_impl.sms_otp_capability(step, store)
 
 
 def captcha_solve_capability(step: ScenarioStep, browser: Any) -> StepResult:

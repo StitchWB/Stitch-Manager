@@ -49,7 +49,22 @@ export interface MarketplaceTranslations {
     badgeFilterAll: string;
     updateAvailable: string;
     devCopy: string;
+    devCopyTooltip: string;
+    versionChipTooltip: string;
     open: string;
+    disable: string;
+    enable: string;
+    disabling: string;
+    enabling: string;
+    disabledBadge: string;
+    disableHint: string;
+    enabledToast: string;
+    disabledToast: string;
+    settings: string;
+    settingsUnavailable: string;
+    logs: string;
+    logsTooltip: string;
+    allPluginsSection: string;
     featuresTitle: string;
     changelogTitle: string;
     linksTitle: string;
@@ -59,6 +74,12 @@ export interface MarketplaceTranslations {
     filters: string;
     filtersReset: string;
     status: {
+      stable: string;
+      beta: string;
+      deprecated: string;
+      planned: string;
+    };
+    featureStatus: {
       stable: string;
       beta: string;
       deprecated: string;
