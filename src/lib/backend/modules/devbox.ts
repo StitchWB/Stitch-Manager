@@ -73,6 +73,7 @@ export interface DevboxPermissionRow {
   tool: string;
   summary: string;
   startedAt: string | number;
+  source?: string;
 }
 
 export type DevboxPermissionDecision = 'once' | 'reject';
@@ -323,6 +324,47 @@ export function devboxNormalizeCards(payload: unknown): DevboxVitalCard[] {
     });
   }
   return result;
+}
+
+export interface DevboxExposedMcp {
+  name: string;
+  mode: 'readonly' | 'full';
+  tools: string[];
+}
+
+export interface DevboxOverviewGateway {
+  enabled: boolean;
+  up: boolean;
+  port: number | null;
+  exposed_mcps: DevboxExposedMcp[];
+}
+
+export function devboxNormalizeGateway(payload: unknown): DevboxOverviewGateway | null {
+  if (payload === null || typeof payload !== 'object') return null;
+  const block = (payload as Record<string, unknown>).gateway;
+  if (block === null || typeof block !== 'object') return null;
+  const row = block as Record<string, unknown>;
+  if (typeof row.enabled !== 'boolean' || typeof row.up !== 'boolean') return null;
+  if (!Array.isArray(row.exposed_mcps)) return null;
+  const exposed: DevboxExposedMcp[] = [];
+  for (const item of row.exposed_mcps) {
+    if (item === null || typeof item !== 'object') continue;
+    const mcp = item as Record<string, unknown>;
+    if (typeof mcp.name !== 'string' || mcp.name === '') continue;
+    exposed.push({
+      name: mcp.name,
+      mode: mcp.mode === 'full' ? 'full' : 'readonly',
+      tools: Array.isArray(mcp.tools)
+        ? mcp.tools.filter((tool): tool is string => typeof tool === 'string')
+        : [],
+    });
+  }
+  return {
+    enabled: row.enabled,
+    up: row.up,
+    port: typeof row.port === 'number' && Number.isFinite(row.port) ? row.port : null,
+    exposed_mcps: exposed,
+  };
 }
 
 export function devboxVitalValue(

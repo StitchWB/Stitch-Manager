@@ -26,7 +26,13 @@ import {
   DevboxServiceCards,
   type DevboxServiceCardsProps,
 } from '@/components/devbox/DevboxServiceCards';
-import { devboxRouter, devboxCallArgs, overviewFixture, pageRoutes } from './devboxTestKit';
+import {
+  devboxRouter,
+  devboxCallArgs,
+  gatewayFixture,
+  overviewFixture,
+  pageRoutes,
+} from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
@@ -35,6 +41,7 @@ function renderCards(props: Partial<DevboxServiceCardsProps> = {}) {
   render(
     <DevboxServiceCards
       cards={overviewFixture.cards}
+      gateway={overviewFixture.gateway}
       activeProfile="midsai"
       busy={false}
       onAction={onAction as unknown as (action: Promise<DevboxAccepted>) => void}
@@ -80,6 +87,46 @@ describe('DevboxServiceCards badge states', () => {
     expect(screen.getByTestId('devbox-service-value-runner').className).toContain(
       'text-amber-300',
     );
+  });
+});
+
+describe('DevboxServiceCards gateway card', () => {
+  it('renders up from the overview gateway block when enabled', () => {
+    renderCards();
+
+    expect(cardValue('gateway')).toBe('up');
+    expect(screen.getByTestId('devbox-service-gateway').querySelector('.bg-emerald-400')).toBeTruthy();
+  });
+
+  it('renders down with the warning tone when the gateway is not up', () => {
+    renderCards({ gateway: { ...gatewayFixture, up: false } });
+
+    expect(cardValue('gateway')).toBe('down');
+    const card = screen.getByTestId('devbox-service-gateway');
+    expect(card.className).toContain('border-amber-500/30');
+    expect(card.querySelector('.bg-amber-400')).toBeTruthy();
+    expect(screen.getByTestId('devbox-service-value-gateway').className).toContain(
+      'text-amber-300',
+    );
+  });
+
+  it('hides the card when the gateway block is absent', () => {
+    renderCards({ gateway: null });
+
+    expect(screen.queryByTestId('devbox-service-gateway')).toBeNull();
+  });
+
+  it('hides the card when the gateway is disabled in the profile', () => {
+    renderCards({ gateway: { ...gatewayFixture, enabled: false, up: false } });
+
+    expect(screen.queryByTestId('devbox-service-gateway')).toBeNull();
+  });
+
+  it('has no inline action even when down', () => {
+    renderCards({ gateway: { ...gatewayFixture, up: false } });
+
+    const card = screen.getByTestId('devbox-service-gateway');
+    expect(card.querySelector('button')).toBeNull();
   });
 });
 

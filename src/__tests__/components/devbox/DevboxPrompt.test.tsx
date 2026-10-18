@@ -23,6 +23,7 @@ import {
   pageRoutes,
   profilesFixture,
   overviewFixture,
+  gatewayFixture,
   idleActionStatus,
   maskedAgentPromptFixture,
   revealedAgentPromptFixture,
@@ -594,6 +595,73 @@ describe('DevboxPrompt hint and warning lines', () => {
     expect(
       task.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+});
+
+describe('DevboxPrompt gateway warning', () => {
+  it('renders the amber gateway plate when the gateway is enabled with exposed servers but down', async () => {
+    renderPrompt({ gateway: { ...gatewayFixture, up: false } });
+    await promptReady();
+
+    const warning = screen.getByTestId('devbox-prompt-gateway-warning');
+    expect(warning.textContent).toBe(t('devboxPage.gatewayWarnChip'));
+    expect(warning.className).toContain('border-amber-500/40');
+    expect(warning.className).toContain('bg-amber-500/10');
+    expect(warning.className).toContain('text-amber-200');
+    expect(warning.querySelector('button')).toBeNull();
+  });
+
+  it('omits the gateway plate when the gateway is up', async () => {
+    renderPrompt({ gateway: gatewayFixture });
+    await promptReady();
+
+    expect(screen.queryByTestId('devbox-prompt-gateway-warning')).toBeNull();
+  });
+
+  it('omits the gateway plate when no MCP servers are exposed', async () => {
+    renderPrompt({ gateway: { ...gatewayFixture, up: false, exposed_mcps: [] } });
+    await promptReady();
+
+    expect(screen.queryByTestId('devbox-prompt-gateway-warning')).toBeNull();
+  });
+
+  it('omits the gateway plate when the gateway is disabled even if down with servers', async () => {
+    renderPrompt({ gateway: { ...gatewayFixture, enabled: false, up: false } });
+    await promptReady();
+
+    expect(screen.queryByTestId('devbox-prompt-gateway-warning')).toBeNull();
+  });
+
+  it('keeps the copy CTA enabled in the gateway warning state', async () => {
+    renderPrompt({ gateway: { ...gatewayFixture, up: false } });
+    await promptReady();
+
+    expect(screen.getByTestId('devbox-prompt-gateway-warning')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
+    expect(
+      (screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it('stacks the gateway plate below the runner hint when both are down', async () => {
+    const runnerDown = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: true, ingress: true, runner: false },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(runnerDown, runnerDown) }),
+    );
+    renderPrompt({ gateway: { ...gatewayFixture, up: false } });
+    await promptReady();
+
+    const runner = screen.getByTestId('devbox-prompt-runner-warning');
+    const gatewayWarning = screen.getByTestId('devbox-prompt-gateway-warning');
+    expect(
+      runner.compareDocumentPosition(gatewayWarning) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      (screen.getByTestId('devbox-prompt-copy') as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 });
 

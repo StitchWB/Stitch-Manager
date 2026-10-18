@@ -88,6 +88,7 @@ export interface DevboxPageTranslations {
     serviceWatchdog: string;
     serviceHost: string;
     serviceEnable: string;
+    serviceGateway: string;
     stripCurrentProject: string;
     stripAccess: string;
     stripNoProject: string;
@@ -165,6 +166,7 @@ export interface DevboxPageTranslations {
     tipVitalRunner: string;
     tipVitalWatchdog: string;
     tipVitalHostServices: string;
+    tipVitalGateway: string;
     tipStopServices: string;
     tipStopAll: string;
     tipRotateTokens: string;
@@ -190,5 +192,12 @@ export interface DevboxPageTranslations {
     eventsEmptyDesc: string;
     logsEmptyDesc: string;
     actionsEmptyDesc: string;
+    mcpSectionTitle: string;
+    mcpModeReadonly: string;
+    mcpModeFull: string;
+    mcpEmptyTitle: string;
+    mcpEmptyDesc: string;
+    mcpEmptyCta: string;
+    gatewayWarnChip: string;
   };
 }

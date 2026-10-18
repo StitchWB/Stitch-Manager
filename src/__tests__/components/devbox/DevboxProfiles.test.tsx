@@ -16,7 +16,7 @@ jest.mock('sonner', () => ({
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { DevboxProfiles } from '@/components/devbox/DevboxProfiles';
-import type { DevboxVitalCard } from '@/lib/backend/modules/devbox';
+import type { DevboxProfileRow, DevboxVitalCard } from '@/lib/backend/modules/devbox';
 import {
   devboxRouter,
   devboxCalls,
@@ -505,6 +505,52 @@ describe('Devbox profile editor', () => {
     });
   });
 
+  it('seedSignal opens the active profile editor with the skeleton exposed_mcps merged', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_get: {
+            json: '{"project_dir": "d:/work/midsai", "mode": "standard"}',
+            valid: true,
+            errors: [],
+          },
+        }),
+      ),
+    );
+    const { rerender } = render(seededProfiles(0));
+    expect(screen.queryByTestId('devbox-profile-editor')).toBeNull();
+
+    rerender(seededProfiles(1));
+
+    const editor = (await screen.findByTestId('devbox-profile-editor')) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(JSON.parse(editor.value)).toEqual({
+        project_dir: 'd:/work/midsai',
+        mode: 'standard',
+        exposed_mcps: [{ name: 'context7', mode: 'readonly', tool_allow: [] }],
+      });
+    });
+    expect(devboxCallArgs(invokeMock, 'profile_get')).toEqual([{ name: 'midsai' }]);
+  });
+
+  it('seedSignal opens the create template with the skeleton when no profile is active', async () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    const { rerender } = render(seededProfiles(0, []));
+
+    rerender(seededProfiles(1, []));
+
+    expect(await screen.findByTestId('devbox-profile-new-name')).toBeTruthy();
+    const editor = (await screen.findByTestId('devbox-profile-editor')) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(JSON.parse(editor.value)).toEqual({
+        project_dir: '',
+        mode: 'standard',
+        exposed_mcps: [{ name: 'context7', mode: 'readonly', tool_allow: [] }],
+      });
+    });
+    expect(devboxCalls(invokeMock, 'profile_get')).toHaveLength(0);
+  });
+
   it('shows the empty state when no projects exist', () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
     render(
@@ -521,6 +567,21 @@ describe('Devbox profile editor', () => {
     expect(screen.getByText('No projects yet')).toBeTruthy();
   });
 });
+
+function seededProfiles(seedSignal: number, profiles: DevboxProfileRow[] | null = profilesFixture) {
+  return (
+    <DevboxProfiles
+      profiles={profiles}
+      overviewCards={overviewFixture.cards}
+      error={null}
+      busy={false}
+      onAction={jest.fn()}
+      onRetry={jest.fn(() => undefined)}
+      onChanged={jest.fn(() => undefined)}
+      seedSignal={seedSignal}
+    />
+  );
+}
 
 function renderProfilesOnPut(putResult: { valid: boolean; errors: string[] }) {
   invokeMock.mockImplementation(

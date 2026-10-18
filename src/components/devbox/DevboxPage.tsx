@@ -27,6 +27,7 @@ import {
   devboxIssueTokens,
   devboxNormalizeCards,
   devboxNormalizeEventRows,
+  devboxNormalizeGateway,
   devboxObservedRows,
   devboxPoll,
   devboxProfilesList,
@@ -50,6 +51,7 @@ import { DevboxPrompt } from './DevboxPrompt';
 import { DevboxProfiles } from './DevboxProfiles';
 import { DevboxProjectStrip } from './DevboxProjectStrip';
 import { DevboxNowRail } from './DevboxNowRail';
+import { DevboxMcpSection } from './DevboxMcpSection';
 import { DevboxServiceCards } from './DevboxServiceCards';
 import { DevboxConsole } from './DevboxConsole';
 
@@ -124,6 +126,7 @@ export function DevboxPage() {
   );
 
   const cards = useMemo(() => devboxNormalizeCards(poll.data?.overview), [poll.data]);
+  const gateway = useMemo(() => devboxNormalizeGateway(poll.data?.overview), [poll.data]);
   const status = poll.data?.action_status ?? null;
   const jobs = useMemo(
     () => devboxObservedRows<DevboxJobRow>(poll.data?.jobs),
@@ -143,6 +146,7 @@ export function DevboxPage() {
 
   const [tab, setTab] = useState<PageTab>('task');
   const [addSignal, setAddSignal] = useState(0);
+  const [seedSignal, setSeedSignal] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
@@ -209,8 +213,14 @@ export function DevboxPage() {
 
   const openProjects = useCallback(() => {
     setAddSignal(0);
+    setSeedSignal(0);
     setProjectsOpen(true);
   }, []);
+
+  const onMcpConfigure = useCallback(() => {
+    openProjects();
+    setSeedSignal(x => x + 1);
+  }, [openProjects]);
 
   const projectOptions = [
     ...profileOptions,
@@ -428,6 +438,7 @@ export function DevboxPage() {
             <DevboxPrompt
               profiles={profiles}
               overviewCards={cards}
+              gateway={gateway}
               actionStatus={status}
               onAction={onAction}
               reloadTick={promptTick}
@@ -450,10 +461,12 @@ export function DevboxPage() {
         >
           <DevboxServiceCards
             cards={cards}
+            gateway={gateway}
             activeProfile={activeProfile}
             busy={busy}
             onAction={onAction}
           />
+          <DevboxMcpSection gateway={gateway} onConfigure={onMcpConfigure} />
           <DevboxProjectStrip
             activeProfile={activeProfileRow}
             busy={busy}
@@ -471,7 +484,10 @@ export function DevboxPage() {
       </div>
       <Modal
         isOpen={projectsOpen}
-        onClose={() => setProjectsOpen(false)}
+        onClose={() => {
+          setProjectsOpen(false);
+          setSeedSignal(0);
+        }}
         title={t('devboxPage.sectionProfiles')}
         size="lg"
       >
@@ -484,6 +500,7 @@ export function DevboxPage() {
           onRetry={reloadProfiles}
           onChanged={reloadProfiles}
           addSignal={addSignal}
+          seedSignal={seedSignal}
         />
       </Modal>
     </div>

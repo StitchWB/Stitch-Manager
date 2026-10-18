@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Copy, FolderCog, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   Table,
@@ -48,6 +48,10 @@ interface EditorState {
 }
 
 const CREATE_TEMPLATE = JSON.stringify({ project_dir: '', mode: 'standard' }, null, 2);
+
+const MCP_SEED: Record<string, unknown> = {
+  exposed_mcps: [{ name: 'context7', mode: 'readonly', tool_allow: [] }],
+};
 
 const MODES = [
   {
@@ -169,6 +173,7 @@ export interface DevboxProfilesProps {
   onRetry: () => void;
   onChanged: () => void;
   addSignal?: number;
+  seedSignal?: number;
 }
 
 export function DevboxProfiles({
@@ -180,6 +185,7 @@ export function DevboxProfiles({
   onRetry,
   onChanged,
   addSignal = 0,
+  seedSignal = 0,
 }: DevboxProfilesProps) {
   const rows = Array.isArray(profiles) ? profiles : [];
   const activeRow = rows.find(row => row.active) ?? null;
@@ -212,28 +218,40 @@ export function DevboxProfiles({
       });
   }, []);
 
-  const openEditor = useCallback((name: string) => {
-    setAdvancedOpen(true);
-    setNameTouched(true);
-    setEditor({ name, json: '', loading: true, saving: false, create: false, lastInvalid: null });
-    devboxProfileGet(name)
-      .then(result => {
-        setEditor(prev =>
-          prev && prev.name === name
-            ? {
-                ...prev,
-                json: result.json,
-                loading: false,
-                lastInvalid: result.valid ? null : { json: result.json, errors: result.errors },
-              }
-            : prev,
-        );
-      })
-      .catch((err: unknown) => {
-        appToast.error(err instanceof Error ? err.message : t('pluginUi.actionFailed'));
-        setEditor(prev => (prev && prev.name === name ? { ...prev, loading: false } : prev));
-      });
+  const updateModel = useCallback((patch: Record<string, unknown>) => {
+    setEditor(prev => {
+      if (!prev) return prev;
+      const current = parseModel(prev.json) ?? {};
+      return { ...prev, json: JSON.stringify({ ...current, ...patch }, null, 2) };
+    });
   }, []);
+
+  const openEditor = useCallback(
+    (name: string, seed?: Record<string, unknown>) => {
+      setAdvancedOpen(true);
+      setNameTouched(true);
+      setEditor({ name, json: '', loading: true, saving: false, create: false, lastInvalid: null });
+      devboxProfileGet(name)
+        .then(result => {
+          setEditor(prev =>
+            prev && prev.name === name
+              ? {
+                  ...prev,
+                  json: result.json,
+                  loading: false,
+                  lastInvalid: result.valid ? null : { json: result.json, errors: result.errors },
+                }
+              : prev,
+          );
+          if (seed) updateModel(seed);
+        })
+        .catch((err: unknown) => {
+          appToast.error(err instanceof Error ? err.message : t('pluginUi.actionFailed'));
+          setEditor(prev => (prev && prev.name === name ? { ...prev, loading: false } : prev));
+        });
+    },
+    [updateModel],
+  );
 
   const openCreate = useCallback(() => {
     setAdvancedOpen(false);
@@ -255,6 +273,26 @@ export function DevboxProfiles({
     const timer = setTimeout(openCreate, 0);
     return () => clearTimeout(timer);
   }, [addSignal, openCreate]);
+
+  const seededRef = useRef(0);
+  useEffect(() => {
+    if (seedSignal === 0) {
+      seededRef.current = 0;
+      return;
+    }
+    if (seedSignal === seededRef.current) return;
+    const timer = setTimeout(() => {
+      seededRef.current = seedSignal;
+      if (activeRow) {
+        openEditor(activeRow.name, MCP_SEED);
+        return;
+      }
+      openCreate();
+      setAdvancedOpen(true);
+      updateModel(MCP_SEED);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [seedSignal, activeRow, openEditor, openCreate, updateModel]);
 
   const openCreateFrom = useCallback(
     (name: string) => {
@@ -330,14 +368,6 @@ export function DevboxProfiles({
     () => editorErrors.filter(line => !folderErrors.includes(line)),
     [editorErrors, folderErrors],
   );
-
-  const updateModel = useCallback((patch: Record<string, unknown>) => {
-    setEditor(prev => {
-      if (!prev) return prev;
-      const current = parseModel(prev.json) ?? {};
-      return { ...prev, json: JSON.stringify({ ...current, ...patch }, null, 2) };
-    });
-  }, []);
 
   const onFolderChange = useCallback(
     (value: string) => {

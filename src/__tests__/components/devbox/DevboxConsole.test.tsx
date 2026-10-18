@@ -133,6 +133,41 @@ describe('DevboxConsole tabs', () => {
     });
   });
 
+  it('renders the gateway source chip from the RPC payload and its lines when selected', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          logs: {
+            sources: [
+              { name: 'host', lines: ['host boot'] },
+              { name: 'gateway', lines: ['gateway listening on 8765', 'route ok'] },
+            ],
+          },
+        }),
+      ),
+    );
+    renderConsole();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('devbox-console-tab-logs'));
+    });
+    await screen.findByTestId('devbox-logs-source-gateway');
+    expect(screen.getAllByText('gateway')[0]).toBeTruthy();
+    expect(screen.getByTestId('devbox-logs-source-gateway').textContent).toContain(
+      'gateway listening on 8765',
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByText('gateway')[0]);
+    });
+
+    await waitFor(() => {
+      const args = devboxCallArgs(invokeMock, 'logs');
+      expect(args[args.length - 1]).toEqual({ source: 'gateway', filter: undefined, limit: 200 });
+    });
+    expect(screen.queryByTestId('devbox-logs-source-host')).toBeNull();
+    expect(screen.getByTestId('devbox-logs-source-gateway').textContent).toContain('route ok');
+  });
+
   it('refresh refetches logs on the logs tab and reloads the poll elsewhere', async () => {
     const onRetry = renderConsole();
 
