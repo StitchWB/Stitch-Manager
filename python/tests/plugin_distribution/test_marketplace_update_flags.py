@@ -349,3 +349,19 @@ def test_list_installed_versions_signed_only(
         "2.1.0",
         "2.2.0",
     ]
+
+
+def test_dedup_by_id_keeps_first_feed_occurrence() -> None:
+    from stitch_backend.domains.plugin_distribution.marketplace_commands import (
+        _dedup_by_id,
+    )
+
+    items = [
+        {"id": "stitch-devbox", "version": "0.2.6", "source": "official"},
+        {"id": "stitch-devbox", "version": "0.2.6", "source": "community"},
+        {"id": "stitch-devbox", "version": "0.2.6", "source": "community"},
+        {"id": "stitch-mail", "version": "2.0.0", "source": "official"},
+    ]
+    out = _dedup_by_id(items)
+    assert [i["id"] for i in out] == ["stitch-devbox", "stitch-mail"]
+    assert out[0]["source"] == "official"

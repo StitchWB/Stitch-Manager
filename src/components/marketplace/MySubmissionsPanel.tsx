@@ -41,11 +41,13 @@ function SubmissionStatusChip({ status, reason }: { status: string; reason?: str
 export function MySubmissionsPanel() {
   const [submissions, setSubmissions] = useState<PluginSubmissionSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setErrorCode(null);
     try {
       const result = await mySubmissions();
       if (result.success) {
@@ -53,10 +55,12 @@ export function MySubmissionsPanel() {
       } else {
         setSubmissions(null);
         setError(result.error ?? t('marketplace.mySubmissions.loadError'));
+        setErrorCode(result.error_code ?? null);
       }
     } catch (err) {
       setSubmissions(null);
       setError(err instanceof Error ? err.message : t('marketplace.mySubmissions.loadError'));
+      setErrorCode(null);
     } finally {
       setLoading(false);
     }
@@ -89,15 +93,23 @@ export function MySubmissionsPanel() {
             <span className="ml-2 text-sm text-slate-500">{t('common.loading')}</span>
           </div>
         ) : error !== null ? (
-          <GlassCard className="p-6 flex flex-col items-center gap-3">
-            <p className="text-sm text-slate-300">
-              {t('marketplace.mySubmissions.loadError')}
-            </p>
-            <p className="text-xs text-slate-500 max-w-md text-center break-words">{error}</p>
-            <Button variant="secondary" size="sm" onClick={() => void load()}>
-              {t('marketplace.mySubmissions.refresh')}
-            </Button>
-          </GlassCard>
+          <div className="flex items-center justify-center py-16">
+            <GlassCard className="p-6 flex flex-col items-center gap-3">
+              <p className="text-sm text-slate-300">
+                {errorCode === 'SUBMISSIONS_UNAVAILABLE'
+                  ? t('marketplace.mySubmissions.unavailable')
+                  : t('marketplace.mySubmissions.loadError')}
+              </p>
+              <p className="text-xs text-slate-500 max-w-md text-center break-words">
+                {errorCode === 'SUBMISSIONS_UNAVAILABLE'
+                  ? t('marketplace.mySubmissions.unavailableDesc')
+                  : error}
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => void load()}>
+                {t('marketplace.mySubmissions.refresh')}
+              </Button>
+            </GlassCard>
+          </div>
         ) : submissions !== null && submissions.length === 0 ? (
           <EmptyState
             icon={Inbox}

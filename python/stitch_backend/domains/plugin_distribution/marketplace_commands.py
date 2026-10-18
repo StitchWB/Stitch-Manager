@@ -81,6 +81,20 @@ def _safe_semver(version: str) -> tuple[int, int, int]:
         return (0, 0, 0)
 
 
+def _dedup_by_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """First feed wins: official manifest, server catalog, community catalog
+    can each carry the same plugin id."""
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for item in items:
+        plugin_id = str(item.get("id", ""))
+        if plugin_id in seen:
+            continue
+        seen.add(plugin_id)
+        out.append(item)
+    return out
+
+
 def _update_available(version: str, installed_version: str | None) -> bool:
     """True when the catalog ``version`` is strictly newer than the installed one."""
     return (
@@ -494,6 +508,8 @@ async def cmd_get_marketplace(params: dict) -> dict:
     except Exception as exc:  # noqa: BLE001 — marketplace must not crash
         logger.warning("Marketplace: community catalog fetch failed: %s", exc)
         community_feed = "error"
+
+    items = _dedup_by_id(items)
 
     # Dev installs (plugins-local) — merged last so they stay visible even
     # when every upstream feed is down.  Dev mode only: production never has

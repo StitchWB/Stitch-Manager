@@ -139,6 +139,8 @@ export const marketplace: MarketplaceTranslations = {
       empty: "Заявок пока нет",
       emptyDesc: "Нажмите «Отправить плагин», чтобы послать первый плагин на проверку",
       loadError: "Не удалось загрузить заявки",
+      unavailable: "Заявки недоступны в этой конфигурации",
+      unavailableDesc: "Сервер дистрибуции не настроен: отправка плагинов на проверку отключена в этой сборке.",
       statusPending: "На проверке",
       statusApproved: "Одобрен",
       statusRejected: "Отклонён",
