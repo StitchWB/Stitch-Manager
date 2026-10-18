@@ -116,6 +116,7 @@ export interface SubmissionListResult {
   success: boolean;
   submissions?: PluginSubmissionSummary[];
   error?: string;
+  error_code?: string;
 }
 
 export interface SubmissionDetailResult {

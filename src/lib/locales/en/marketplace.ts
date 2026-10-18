@@ -139,6 +139,8 @@ export const marketplace: MarketplaceTranslations = {
       empty: "No submissions yet",
       emptyDesc: "Use the \"Submit plugin\" button to send your first plugin for review",
       loadError: "Failed to load submissions",
+      unavailable: "Submissions are unavailable in this configuration",
+      unavailableDesc: "The distribution server is not configured: plugin review submissions are disabled in this build.",
       statusPending: "Pending",
       statusApproved: "Approved",
       statusRejected: "Rejected",

@@ -103,7 +103,11 @@ async def _proxy_request(
 
 def _standalone_error() -> dict[str, Any] | None:
     if standalone_mode():
-        return {"success": False, "error": "distribution server disabled"}
+        return {
+            "success": False,
+            "error": "distribution server disabled",
+            "error_code": "SUBMISSIONS_UNAVAILABLE",
+        }
     return None
 
 
@@ -119,7 +123,11 @@ async def _admin_proxy(
     if pre is not None:
         return pre
     if not _admin_key():
-        return {"success": False, "error": "distribution admin key not configured"}
+        return {
+            "success": False,
+            "error": "distribution admin key not configured",
+            "error_code": "SUBMISSIONS_UNAVAILABLE",
+        }
     return await _proxy_request(
         method, path, headers=_upstream_headers(), json_body=json_body, params=params
     )

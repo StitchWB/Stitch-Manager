@@ -137,6 +137,8 @@ export interface MarketplaceTranslations {
       empty: string;
       emptyDesc: string;
       loadError: string;
+      unavailable: string;
+      unavailableDesc: string;
       statusPending: string;
       statusApproved: string;
       statusRejected: string;

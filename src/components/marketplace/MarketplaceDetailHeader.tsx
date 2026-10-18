@@ -238,35 +238,35 @@ export function MarketplaceDetailHeader({
           </Tooltip>
         )}
 
-        <span className="flex-1" />
-
-        {item.installed && servicePlugin != null && (
-          <Button
-            size="sm"
-            variant="ghost"
-            data-testid="toggle-enabled"
-            onClick={() => onToggleEnabled(item, runtimeDisabled)}
-            disabled={busy}
-            leftIcon={<Power className="w-3.5 h-3.5" />}
-          >
-            {runtimeDisabled
-              ? t('marketplace.enable')
-              : t('marketplace.disable')}
-          </Button>
-        )}
-
         {item.installed && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent"
-            onClick={() => onUninstall(item)}
-            isLoading={busy}
-            disabled={busy}
-            leftIcon={!busy ? <Trash2 className="w-3.5 h-3.5" /> : undefined}
-          >
-            {busy ? t('marketplace.removing') : t('marketplace.remove')}
-          </Button>
+          <span className="ml-auto flex items-center gap-2">
+            <span className="h-5 w-px bg-white/10 mr-1" aria-hidden="true" />
+            {servicePlugin != null && (
+              <Button
+                size="sm"
+                variant="ghost"
+                data-testid="toggle-enabled"
+                onClick={() => onToggleEnabled(item, runtimeDisabled)}
+                disabled={busy}
+                leftIcon={<Power className="w-3.5 h-3.5" />}
+              >
+                {runtimeDisabled
+                  ? t('marketplace.enable')
+                  : t('marketplace.disable')}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent"
+              onClick={() => onUninstall(item)}
+              isLoading={busy}
+              disabled={busy}
+              leftIcon={!busy ? <Trash2 className="w-3.5 h-3.5" /> : undefined}
+            >
+              {busy ? t('marketplace.removing') : t('marketplace.remove')}
+            </Button>
+          </span>
         )}
 
         {hasUpdate && (
