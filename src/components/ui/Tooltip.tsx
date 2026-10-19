@@ -4,14 +4,72 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
+export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
+
 export interface TooltipProps {
   content: string | React.ReactNode;
   children: React.ReactNode;
-  side?: 'top' | 'bottom' | 'left' | 'right';
+  side?: TooltipSide;
   className?: string;
   wrapperClassName?: string;
   delay?: number;
   sideOffset?: number;
+}
+
+const VIEWPORT_MARGIN = 8;
+const ARROW_INSET = 8;
+
+export interface TooltipPlacement {
+  left: number;
+  top: number;
+  arrowShift: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Coordinates are in the style-prop system: on the centered axis
+ * (translateX/Y(-50%)) the value is the tooltip center, on the other axis it is
+ * the leading edge. arrowShift offsets the arrow along the tooltip edge so it
+ * keeps pointing at the anchor after the box is clamped to the viewport.
+ */
+export function placeTooltip(
+  side: TooltipSide,
+  anchorX: number,
+  anchorY: number,
+  width: number,
+  height: number,
+  viewportWidth: number,
+  viewportHeight: number,
+): TooltipPlacement {
+  if (side === 'top' || side === 'bottom') {
+    const desiredLeft = anchorX - width / 2;
+    const left = clamp(desiredLeft, VIEWPORT_MARGIN, viewportWidth - width - VIEWPORT_MARGIN);
+    const top = clamp(
+      side === 'top' ? anchorY - height : anchorY,
+      VIEWPORT_MARGIN,
+      viewportHeight - height - VIEWPORT_MARGIN,
+    );
+    return {
+      left: left + width / 2,
+      top,
+      arrowShift: clamp(desiredLeft - left, ARROW_INSET - width / 2, width / 2 - ARROW_INSET),
+    };
+  }
+  const desiredTop = anchorY - height / 2;
+  const top = clamp(desiredTop, VIEWPORT_MARGIN, viewportHeight - height - VIEWPORT_MARGIN);
+  const left = clamp(
+    side === 'left' ? anchorX - width : anchorX,
+    VIEWPORT_MARGIN,
+    viewportWidth - width - VIEWPORT_MARGIN,
+  );
+  return {
+    left,
+    top: top + height / 2,
+    arrowShift: clamp(desiredTop - top, ARROW_INSET - height / 2, height / 2 - ARROW_INSET),
+  };
 }
 
 export function Tooltip({
@@ -63,13 +121,22 @@ export function Tooltip({
   useEffect(() => {
     const node = tooltipNodeRef.current;
     if (isVisible && node) {
-      const tooltipRect = node.getBoundingClientRect();
-      let newX = position.x;
-      let newY = position.y;
-      if (side === 'top') newY = position.y - tooltipRect.height;
-      else if (side === 'left') newX = position.x - tooltipRect.width;
-      node.style.left = `${newX}px`;
-      node.style.top = `${newY}px`;
+      const arrow = node.lastElementChild as HTMLElement | null;
+      const { left, top, arrowShift } = placeTooltip(
+        side,
+        position.x,
+        position.y,
+        node.offsetWidth,
+        node.offsetHeight,
+        document.documentElement.clientWidth,
+        document.documentElement.clientHeight,
+      );
+      node.style.left = `${left}px`;
+      node.style.top = `${top}px`;
+      if (arrow) {
+        if (side === 'top' || side === 'bottom') arrow.style.marginLeft = `${arrowShift}px`;
+        else arrow.style.marginTop = `${arrowShift}px`;
+      }
     }
   }, [isVisible, tooltipEl, side, position.x, position.y]);
 
