@@ -120,7 +120,11 @@ export interface DevboxPageTranslations {
     editorInvalidJson: string;
     editorErrors: string;
     editorSaved: string;
-    editorAdvanced: string;
+    editorJsonToggle: string;
+    editorJsonCaption: string;
+    tipModeGroup: string;
+    tipFieldGit: string;
+    tipFieldProjectDir: string;
     addProfile: string;
     editorCreateTitle: string;
     editorCreateHint: string;

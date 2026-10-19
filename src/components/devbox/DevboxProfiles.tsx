@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Copy, FolderCog, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Copy, FolderCog, FolderOpen, Info, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -196,6 +196,7 @@ export function DevboxProfiles({
     devboxVitalValue(overviewCards, 'runner') === 'up';
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [jsonOpen, setJsonOpen] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [folderStatus, setFolderStatus] = useState<{ exists: boolean; isGit: boolean } | null>(
     null,
@@ -228,7 +229,8 @@ export function DevboxProfiles({
 
   const openEditor = useCallback(
     (name: string, seed?: Record<string, unknown>) => {
-      setAdvancedOpen(true);
+      setAdvancedOpen(false);
+      setJsonOpen(seed !== undefined);
       setNameTouched(true);
       setEditor({ name, json: '', loading: true, saving: false, create: false, lastInvalid: null });
       devboxProfileGet(name)
@@ -255,6 +257,7 @@ export function DevboxProfiles({
 
   const openCreate = useCallback(() => {
     setAdvancedOpen(false);
+    setJsonOpen(false);
     setNameTouched(false);
     setFolderStatus(null);
     loadCreateExtras();
@@ -288,7 +291,7 @@ export function DevboxProfiles({
         return;
       }
       openCreate();
-      setAdvancedOpen(true);
+      setJsonOpen(true);
       updateModel(MCP_SEED);
     }, 0);
     return () => clearTimeout(timer);
@@ -297,6 +300,7 @@ export function DevboxProfiles({
   const openCreateFrom = useCallback(
     (name: string) => {
       setAdvancedOpen(false);
+      setJsonOpen(false);
       setNameTouched(false);
       setFolderStatus(null);
       loadCreateExtras();
@@ -679,7 +683,12 @@ export function DevboxProfiles({
                   <div className="flex flex-col gap-1" data-testid="devbox-profile-form">
                     <div className="flex items-end gap-2">
                       <label className="flex min-w-0 flex-1 flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
-                        {t('devboxPage.formProjectDir')}
+                        <span className="flex items-center gap-1">
+                          {t('devboxPage.formProjectDir')}
+                          <Tooltip content={t('devboxPage.tipFieldProjectDir')}>
+                            <Info size={11} className="text-slate-500" aria-hidden />
+                          </Tooltip>
+                        </span>
                         <Input
                           value={folder}
                           autoFocus={editor.create}
@@ -743,8 +752,11 @@ export function DevboxProfiles({
                         {line}
                       </span>
                     ))}
-                    <span className="mt-2 text-2xs uppercase tracking-wider text-slate-400">
+                    <span className="mt-2 flex items-center gap-1 text-2xs uppercase tracking-wider text-slate-400">
                       {t('devboxPage.formMode')}
+                      <Tooltip content={t('devboxPage.tipModeGroup')}>
+                        <Info size={11} className="text-slate-500" aria-hidden />
+                      </Tooltip>
                     </span>
                     <div
                       className="grid grid-cols-3 gap-2"
@@ -760,11 +772,16 @@ export function DevboxProfiles({
                           onSelect={() => updateModel({ mode: mode.value })}
                           title={t(mode.titleKey)}
                           description={t(mode.descKey)}
+                          className={
+                            mode.value === 'full' && model.mode === 'full'
+                              ? 'border-red-500/40 bg-red-500/[0.06]'
+                              : undefined
+                          }
                         />
                       ))}
                     </div>
                   </div>
-                  {editor.create && !advancedOpen && (
+                  {!advancedOpen && (
                     <div
                       className="flex items-center justify-between gap-2 rounded-md border border-white/5 px-3 py-2"
                       data-testid="devbox-profile-defaults-summary"
@@ -798,7 +815,10 @@ export function DevboxProfiles({
                       <div className="grid grid-cols-2 gap-2" data-testid="devbox-profile-advanced">
                         <Tooltip content={t('devboxPage.tipFieldToolchain')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
-                          {t('devboxPage.formToolchain')}
+                          <span className="flex items-center gap-1">
+                            {t('devboxPage.formToolchain')}
+                            <Info size={11} className="text-slate-500" aria-hidden />
+                          </span>
                           <Input
                             value={typeof model.toolchain === 'string' ? model.toolchain : ''}
                             spellCheck={false}
@@ -810,7 +830,10 @@ export function DevboxProfiles({
                         </Tooltip>
                         <Tooltip content={t('devboxPage.tipFieldUiPort')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
-                          {t('devboxPage.formUiPort')}
+                          <span className="flex items-center gap-1">
+                            {t('devboxPage.formUiPort')}
+                            <Info size={11} className="text-slate-500" aria-hidden />
+                          </span>
                           <Input
                             value={typeof model.ui_port === 'number' ? String(model.ui_port) : ''}
                             inputMode="numeric"
@@ -824,8 +847,12 @@ export function DevboxProfiles({
                           />
                         </label>
                         </Tooltip>
+                        <Tooltip content={t('devboxPage.tipFieldGit')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
-                          {t('devboxPage.formGitName')}
+                          <span className="flex items-center gap-1">
+                            {t('devboxPage.formGitName')}
+                            <Info size={11} className="text-slate-500" aria-hidden />
+                          </span>
                           <Input
                             value={typeof model.git_name === 'string' ? model.git_name : ''}
                             className="text-xs normal-case tracking-normal"
@@ -833,8 +860,13 @@ export function DevboxProfiles({
                             onChange={e => updateModel({ git_name: e.target.value })}
                           />
                         </label>
+                        </Tooltip>
+                        <Tooltip content={t('devboxPage.tipFieldGit')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
-                          {t('devboxPage.formGitEmail')}
+                          <span className="flex items-center gap-1">
+                            {t('devboxPage.formGitEmail')}
+                            <Info size={11} className="text-slate-500" aria-hidden />
+                          </span>
                           <Input
                             value={typeof model.git_email === 'string' ? model.git_email : ''}
                             className="text-xs normal-case tracking-normal"
@@ -842,9 +874,13 @@ export function DevboxProfiles({
                             onChange={e => updateModel({ git_email: e.target.value })}
                           />
                         </label>
+                        </Tooltip>
                         <Tooltip content={t('devboxPage.tipFieldPreviewOrigin')} wrapperClassName="min-w-0">
                         <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
-                          {t('devboxPage.formPreviewOrigin')}
+                          <span className="flex items-center gap-1">
+                            {t('devboxPage.formPreviewOrigin')}
+                            <Info size={11} className="text-slate-500" aria-hidden />
+                          </span>
                           <Input
                             value={
                               typeof model.preview_origin === 'string' ? model.preview_origin : ''
@@ -873,21 +909,36 @@ export function DevboxProfiles({
                           onCommit={ports => updateModel({ port_deny: ports })}
                         />
                       </div>
-                      <span className="text-2xs uppercase tracking-wider text-slate-400">
-                        {t('devboxPage.editorAdvanced')}
-                      </span>
-                      <Textarea
-                        value={editor.json}
-                        rows={10}
-                        spellCheck={false}
-                        className="font-mono text-xs"
-                        data-testid="devbox-profile-editor"
-                        onChange={e =>
-                          setEditor(prev => (prev ? { ...prev, json: e.target.value } : prev))
-                        }
-                      />
                     </div>
                   )}
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="self-start"
+                      data-testid="devbox-profile-json-toggle"
+                      onClick={() => setJsonOpen(v => !v)}
+                    >
+                      {t('devboxPage.editorJsonToggle')}
+                    </Button>
+                    {jsonOpen && (
+                      <>
+                        <span className="text-2xs text-slate-500">
+                          {t('devboxPage.editorJsonCaption')}
+                        </span>
+                        <Textarea
+                          value={editor.json}
+                          rows={10}
+                          spellCheck={false}
+                          className="font-mono text-xs"
+                          data-testid="devbox-profile-editor"
+                          onChange={e =>
+                            setEditor(prev => (prev ? { ...prev, json: e.target.value } : prev))
+                          }
+                        />
+                      </>
+                    )}
+                  </div>
                 </>
               )}
               {generalErrors.length > 0 && (
