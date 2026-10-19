@@ -96,6 +96,7 @@ describe('DevboxServiceCards gateway card', () => {
 
     expect(cardValue('gateway')).toBe('up');
     expect(screen.getByTestId('devbox-service-gateway').querySelector('.bg-emerald-400')).toBeTruthy();
+    expect(screen.getByTestId('devbox-service-sub-gateway').textContent).toContain('12');
   });
 
   it('renders down with the warning tone when the gateway is not up', () => {

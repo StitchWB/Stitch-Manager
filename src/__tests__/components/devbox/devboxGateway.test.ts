@@ -48,6 +48,8 @@ describe('devboxNormalizeGateway', () => {
       enabled: false,
       up: false,
       port: null,
+      calls: 0,
+      errors: 0,
       exposed_mcps: [{ name: 'stitch-cards', mode: 'readonly', tools: ['list_cards'] }],
     });
   });
