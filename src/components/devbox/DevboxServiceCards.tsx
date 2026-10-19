@@ -117,7 +117,7 @@ export function DevboxServiceCards({
 }: DevboxServiceCardsProps) {
   return (
     <DevboxSection title={t('devboxPage.sectionOverview')} testId="devbox-services">
-      <div className="flex flex-wrap items-stretch gap-2">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
         {SERVICES.map(service => {
           const card =
             service.id === 'gateway'

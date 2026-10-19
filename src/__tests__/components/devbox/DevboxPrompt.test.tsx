@@ -526,8 +526,8 @@ describe('DevboxPrompt action footer', () => {
     await promptReady();
 
     const hint = screen.getByTestId('devbox-prompt-hint');
-    expect(hint.className).toContain('text-xs');
-    expect(hint.className).toContain('text-slate-400');
+    expect(hint.className).toContain('text-2xs');
+    expect(hint.className).toContain('text-slate-500');
     const column = hint.parentElement;
     expect(column?.contains(screen.getByTestId('devbox-prompt-copy'))).toBe(true);
     expect(column?.lastElementChild).toBe(hint);
