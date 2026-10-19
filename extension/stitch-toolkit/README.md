@@ -7,8 +7,8 @@ Unified Stitch browser extension. Merged from the former `stitch-scenario-runner
 1. **Interactive Chrome** — scenario recording/replay for the Stitch app
    ("Extension runner" mode) via a localhost WebSocket bridge.
 2. **CloakBrowser profiles** — floating tool panel used during auto-registration
-   (Stripe form filler, recorder, settings). Loaded automatically by
-   `python/autoreg/**` via `--load-extension`.
+   (recorder, settings). Loaded automatically by `python/autoreg/**` via
+   `--load-extension`.
 
 ## Install (manual)
 
@@ -22,7 +22,7 @@ The Stitch app shows the same checklist in **Settings → Extension**.
 
 | Area | What it does |
 | --- | --- |
-| Panel (float button) | Stripe card filler (multi-frame, billing address), scenario recorder, settings, themes (auto/dark/light), RU/EN |
+| Panel (float button) | Scenario recorder, settings, themes (auto/dark/light), RU/EN |
 | Recorder | Steps captured by the content stack with rich selectors + sensitive-field redaction; live step list; pause/resume; manual steps |
 | Replay engine | DOM steps (click/input/change/submit/nav/keydown/scroll), manual steps, iframe targeting, shadow-DOM piercing, locator fallbacks |
 | Overlay HUD | In-page Record/Replay status panel with Pause/Resume/Stop/Manual controls (localized) |
@@ -66,7 +66,7 @@ manifest.json            MV3, two content_scripts entries
 shared.js                ports, storage keys, version (ESM, background only)
 session-manager.js       atomic session state (record/replay) for the SW
 background.js            service worker: WS bridge, replay engine, tk:* handlers,
-                         Stripe fill/detect injection, alarms re-arm
+                         alarms re-arm
 overlay_runtime.js       overlay shell + styles (all frames, document_start)
 content_state.js         per-frame recorder state + cleanup controller
 content_redaction.js     sensitive-field value masking
@@ -77,7 +77,7 @@ content_runner.js        overlay bootstrap + chrome.runtime message wiring
 i18n.js                  EN/RU dictionary (loaded in both content entries)
 content.js               panel UI (float button, tabs, drag, themes) + RecorderBridge
 panel/panel.css          panel design system (Deep Space, tokens, reduced-motion)
-panel/tools/*.js         stripe-filler / recorder-tool / settings-tool
+panel/tools/*.js         recorder-tool / settings-tool
 ```
 
 Content entries:

@@ -192,10 +192,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
         return JSONResponse(content=_serialise(_radar_result))
 
     # ── Dual-format routing for card commands ──────────────────────────────
-    # Same pattern as radar above: when a healthy ``stitch-cards`` plugin
-    # host is registered, generate_cards / check_card_rust
-    # commands are routed to the plugin (identity mapping — no prefix to
-    # strip) BEFORE falling through to the built-in handler.
+    # card commands route to a healthy ``stitch-cards`` plugin host (identity mapping) before the built-in fallback
     try:
         import stitch_backend.domains.plugin_runtime.cards_dual as cards_dual
     except ImportError:  # open-core: cards dual routing is a closed module

@@ -1,5 +1,5 @@
 // Stitch Toolkit — Settings Tool (IIFE)
-// Provides settings UI: language, theme, toggles, billing profiles, data export/clear.
+// Provides settings UI: language, theme, toggles, data export/clear.
 
 (function () {
   'use strict';
@@ -9,16 +9,7 @@
   function render() {
     var i18n = window.StitchI18n.t;
     var s = window.StateManager.getAll();
-    var profiles = s.billingProfiles || [];
     var themeLabels = { auto: i18n('settings.themeAuto'), dark: i18n('settings.themeDark'), light: i18n('settings.themeLight') };
-
-    var profileItems = profiles.map(function (p, i) {
-      return '<div class="tk-profile-item" data-idx="' + i + '">' +
-        '<span style="font-size:14px">👤</span>' +
-        '<div style="flex:1"><div class="tk-profile-name">' + (p.name || 'Profile ' + (i + 1)) + '</div>' +
-        '<div class="tk-profile-detail">' + (p.country || '') + ' · ' + (p.address || '') + ' · ' + (p.postal || '') + '</div></div>' +
-        '<button class="tk-step-del" data-del="' + i + '" style="opacity:1">✕</button></div>';
-    }).join('');
 
     var toggleOn = function (key) { return s[key] ? ' tk-on' : ''; };
 
@@ -32,9 +23,6 @@
       '<div class="tk-settings-group">' +
         '<div class="tk-settings-row"><div><div class="tk-settings-name">' + i18n('settings.language') + '</div><div class="tk-settings-desc">' + i18n('settings.languageDesc') + '</div></div>' +
           '<select id="tk-set-locale" class="tk-select" style="width:120px;margin-bottom:0">' + localeOptions + '</select></div>' +
-        '<div class="tk-settings-row"><div><div class="tk-settings-name">' + i18n('settings.autoDetectStripe') + '</div><div class="tk-settings-desc">' + i18n('settings.autoDetectStripeDesc') + '</div></div><button class="tk-toggle' + toggleOn('autoDetect') + '" id="tk-set-autodetect"></button></div>' +
-        '<div class="tk-settings-row"><div><div class="tk-settings-name">' + i18n('settings.autoExpand') + '</div><div class="tk-settings-desc">' + i18n('settings.autoExpandDesc') + '</div></div><button class="tk-toggle' + toggleOn('autoExpand') + '" id="tk-set-autoexpand"></button></div>' +
-        '<div class="tk-settings-row"><div><div class="tk-settings-name">' + i18n('settings.clipboardWatch') + '</div><div class="tk-settings-desc">' + i18n('settings.clipboardWatchDesc') + '</div></div><button class="tk-toggle' + toggleOn('clipboardWatch') + '" id="tk-set-clipboard"></button></div>' +
         '<div class="tk-settings-row"><div><div class="tk-settings-name">' + i18n('settings.soundEffects') + '</div><div class="tk-settings-desc">' + i18n('settings.soundEffectsDesc') + '</div></div><button class="tk-toggle' + toggleOn('soundEffects') + '" id="tk-set-sound"></button></div>' +
       '</div>' +
       '<div class="tk-section-title">' + i18n('settings.appearance') + '</div>' +
@@ -53,8 +41,6 @@
         '<div class="tk-bridge-row" data-bridge="health"><span class="tk-bridge-dot"></span><span class="tk-bridge-name">' + i18n('settings.bridgeHealth') + '</span><span class="tk-bridge-state">…</span></div>' +
       '</div>' +
       '<div class="tk-hint" style="text-align:left;margin-top:6px">' + i18n('settings.bridgeHint') + '</div>' +
-      '<div class="tk-section-title">' + i18n('settings.billingProfiles') + '</div>' +
-      '<div class="tk-billing-profiles" id="tk-billing-profiles">' + profileItems + '<button class="tk-btn" id="tk-add-profile" style="margin-top:4px">' + i18n('settings.addProfile') + '</button></div>' +
       '<div class="tk-section-title">' + i18n('settings.data') + '</div>' +
       '<div class="tk-row">' +
         '<button class="tk-btn" id="tk-export-all" style="flex:1">' + i18n('settings.exportAll') + '</button>' +
@@ -87,9 +73,6 @@
 
     refreshBridgeStatus(container);
 
-    container.querySelector('#tk-set-autodetect') && container.querySelector('#tk-set-autodetect').addEventListener('click', function () { toggleSetting('autoDetect', this); });
-    container.querySelector('#tk-set-autoexpand') && container.querySelector('#tk-set-autoexpand').addEventListener('click', function () { toggleSetting('autoExpand', this); });
-    container.querySelector('#tk-set-clipboard') && container.querySelector('#tk-set-clipboard').addEventListener('click', function () { toggleSetting('clipboardWatch', this); });
     container.querySelector('#tk-set-sound') && container.querySelector('#tk-set-sound').addEventListener('click', function () { toggleSetting('soundEffects', this); });
 
     container.querySelector('#tk-set-locale') && container.querySelector('#tk-set-locale').addEventListener('change', function () {
@@ -105,20 +88,8 @@
       else if (this.value === 'dark') document.documentElement.classList.add('tk-dark');
     });
 
-    container.querySelector('#tk-add-profile') && container.querySelector('#tk-add-profile').addEventListener('click', function () { addBillingProfile(container); });
     container.querySelector('#tk-export-all') && container.querySelector('#tk-export-all').addEventListener('click', function () { exportAll(container); });
     container.querySelector('#tk-clear-all') && container.querySelector('#tk-clear-all').addEventListener('click', function () { clearAll(container); });
-
-    container.querySelectorAll('.tk-step-del').forEach(function (btn) {
-      btn.onclick = function (e) {
-        e.stopPropagation();
-        var idx = parseInt(btn.dataset.del, 10);
-        var profiles = window.StateManager.get('billingProfiles');
-        profiles.splice(idx, 1);
-        window.StateManager.set('billingProfiles', profiles);
-        mount(container);
-      };
-    });
   }
 
   function toggleSetting(key, btn) {
@@ -127,32 +98,12 @@
     btn.classList.toggle('tk-on', val);
   }
 
-  function addBillingProfile(container) {
-    var i18n = window.StitchI18n.t;
-    var name = prompt(i18n('settings.profileName'));
-    if (!name) return;
-    var country = prompt(i18n('settings.countryCode')) || '';
-    var address = prompt(i18n('settings.address')) || '';
-    var postal = prompt(i18n('settings.postalCode')) || '';
-
-    var profiles = window.StateManager.get('billingProfiles') || [];
-    profiles.unshift({ name: name, country: country, address: address, postal: postal });
-    window.StateManager.set('billingProfiles', profiles);
-    mount(container);
-    window.NotificationService.success(i18n('settings.profileSaved'));
-  }
-
   function exportAll(container) {
     var data = {
       version: '0.7.0',
       exported: new Date().toISOString(),
-      cardHistory: window.StateManager.get('cardHistory'),
-      billingProfiles: window.StateManager.get('billingProfiles'),
       settings: {
         theme: window.StateManager.get('theme'),
-        autoDetect: window.StateManager.get('autoDetect'),
-        autoExpand: window.StateManager.get('autoExpand'),
-        clipboardWatch: window.StateManager.get('clipboardWatch'),
         soundEffects: window.StateManager.get('soundEffects'),
       },
     };

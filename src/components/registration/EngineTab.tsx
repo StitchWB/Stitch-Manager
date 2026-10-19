@@ -5,20 +5,16 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
-  CreditCard,
-  Sparkles,
-  Loader2
 } from
   'lucide-react';
 import { safeInvoke } from '../../lib/backend/core';
-import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { useRuntimeStore } from '@/stores/registration/runtime.store';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { ProviderName } from '../../types/ui';
 import type { LogVerbosity } from '../../constants/logging';
 import { LOG_VERBOSITY_OPTIONS } from '../../constants/logging';
-import { Button, GlassCard, Input, Select, Toggle, Textarea, Badge } from '@/components/ui';
+import { GlassCard, Select, Toggle, Textarea, Badge } from '@/components/ui';
 import { NumberInput } from '../ui/NumberInput';
 import type { BrowserEngineId } from '@/lib/browser/engines';
 import { ButtonBase } from '@/components/ui/ButtonBase';
@@ -343,8 +339,6 @@ interface LaunchSectionProps {
   onPasswordLengthChange: (value: number) => void;
   cardsText?: string;
   onCardsTextChange?: (text: string) => void;
-  cardBin?: string;
-  onCardBinChange?: (text: string) => void;
   kiroPlan?: string;
   onKiroPlanChange?: (plan: string) => void;
   disabled?: boolean;
@@ -381,62 +375,10 @@ export function LaunchSection({
   onPasswordLengthChange,
   cardsText,
   onCardsTextChange,
-  cardBin,
-  onCardBinChange,
   kiroPlan,
   onKiroPlanChange,
   disabled
 }: LaunchSectionProps) {
-  const [cardMode, setCardMode] = useState<'manual' | 'auto'>('auto');
-  const [generatingCard, setGeneratingCard] = useState(false);
-  const [lastGeneratedCard, setLastGeneratedCard] = useState<string | null>(null);
-
-  // Sync cardMode when cardsText changes - preserve user's manual choice if they have cards
-  // but default to auto when cardsText is empty
-  useEffect(() => {
-    queueMicrotask(() => {
-    if (!cardsText && cardMode === 'manual') {
-      setCardMode('auto');
-    }
-    });
-  }, [cardsText, cardMode]);
-
-  const handleGenerateCard = async () => {
-    if (!cardBin || generatingCard) return;
-    setGeneratingCard(true);
-    setLastGeneratedCard(null);
-
-    try {
-      const generated = await safeInvoke<Array<{ number: string; month: string; year: string; cvv: string }>>('generate_cards', {
-        req: {
-          bin: cardBin,
-          quantity: 1,
-          month: null,
-          year: null
-        }
-      });
-      const card = Array.isArray(generated) ? generated[0] : null;
-      if (!card) {
-        toast.error('Не удалось сгенерировать карту');
-        return;
-      }
-      const cardStr = `${card.number}|${card.month}|${card.year}|${card.cvv}`;
-      let binChecked = false;
-      try {
-        const check = await safeInvoke<{ success?: boolean }>('check_card_rust', { cardData: cardStr });
-        binChecked = Boolean(check?.success);
-      } catch {
-        binChecked = false;
-      }
-      setLastGeneratedCard(cardStr);
-      onCardsTextChange?.(cardStr);
-      toast.success(binChecked ? 'Карта сгенерирована и проверена по BIN' : 'Карта сгенерирована, BIN-проверка недоступна');
-    } catch (err) {
-      toast.error('Ошибка: ' + String(err));
-    } finally {
-      setGeneratingCard(false);
-    }
-  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -571,97 +513,19 @@ export function LaunchSection({
           </div>
         </CompactGroup>
 
-        {provider === 'fireworks' && (onCardsTextChange || onCardBinChange) &&
+        {provider === 'fireworks' && onCardsTextChange &&
           <CompactGroup title="Карты">
-            {/* Mode toggle */}
-            <div className="flex gap-1 mb-2">
-              <Button
-                size="xs"
-                variant={cardMode === 'manual' ? 'primary' : 'ghost'}
-                onClick={() => setCardMode('manual')}
-                className={cn(
-                  'px-2 py-0.5 text-[11px] rounded transition-colors',
-                  cardMode === 'manual' ? '' : 'text-slate-500 hover:text-slate-300'
-                )}>{t("autoReg.engineTab.manual")}
+            <Textarea
+              value={cardsText || ''}
+              onChange={(e) => onCardsTextChange?.(e.target.value)}
+              placeholder={`4242424242424242|12|2026|123\n5555555555554444|01|2027|456`}
+              rows={2}
+              disabled={disabled}
+              className="font-mono text-xs min-h-[60px]" />
 
-
-              </Button>
-              <Button
-                size="xs"
-                variant={cardMode === 'auto' ? 'primary' : 'ghost'}
-                onClick={() => setCardMode('auto')}
-                className={cn(
-                  'px-2 py-0.5 text-[11px] rounded transition-colors',
-                  cardMode === 'auto' ? '' : 'text-slate-500 hover:text-slate-300'
-                )}>{t("autoReg.engineTab.auto")}
-
-
-              </Button>
-            </div>
-
-            {cardMode === 'manual' ?
-              <>
-                <Textarea
-                  value={cardsText || ''}
-                  onChange={(e) => onCardsTextChange?.(e.target.value)}
-                  placeholder={`4242424242424242|12|2026|123\n5555555555554444|01|2027|456`}
-                  rows={2}
-                  disabled={disabled}
-                  className="font-mono text-xs min-h-[60px]" />
-
-                {cardsText &&
-                  <div className="mt-1 text-[11px] text-slate-500">
-                    {cardsText.split('\n').filter((l) => l.trim()).length} {t('autoReg.engineTab.cardsLoaded')}
-                  </div>
-                }
-              </> :
-
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    value={cardBin || ''}
-                    onChange={(e) => onCardBinChange?.(e.target.value)}
-                    placeholder="515462002112xxxx"
-                    disabled={disabled || generatingCard || !cardBin}
-                    className="flex-1 text-xs font-mono"
-                    shellClassName="h-7"
-                  />
-
-                  <Button
-                    size="xs"
-                    variant="primary"
-                    onClick={handleGenerateCard}
-                    disabled={disabled || generatingCard || !cardBin}
-                    className={cn(
-                      'flex items-center gap-1',
-                      generatingCard || !cardBin ?
-                        'bg-white/[0.03] text-slate-600 cursor-not-allowed' :
-                        'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20'
-                    )}>
-
-                    {generatingCard ?
-                      <Loader2 size={12} className="animate-spin" /> :
-
-                      <>
-                        <Sparkles size={12} />
-                        {t('autoReg.engineTab.generateCard')}
-                      </>
-                    }
-                  </Button>
-                </div>
-
-                {lastGeneratedCard &&
-                  <div className="text-[11px] text-emerald-400 flex items-center gap-1">
-                    <CreditCard size={12} />{t("autoReg.engineTab.generated")}
-                    {lastGeneratedCard}
-                  </div>
-                }
-
-                {cardsText && !lastGeneratedCard &&
-                  <div className="text-[11px] text-slate-500">
-                    {t('autoReg.engineTab.savedCards', { count: cardsText.split('\n').filter((l) => l.trim()).length })}
-                  </div>
-                }
+            {cardsText &&
+              <div className="mt-1 text-[11px] text-slate-500">
+                {cardsText.split('\n').filter((l) => l.trim()).length} {t('autoReg.engineTab.cardsLoaded')}
               </div>
             }
           </CompactGroup>

@@ -23,9 +23,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .billing import _should_skip_billing, _strip_billing_steps
 from .browser_lifecycle import (
-    apply_spoofing,
     cleanup_profile_dir,
     close_browser,
     create_browser,
@@ -282,11 +280,6 @@ class PluginScenarioProvider:
             ]
             plan.append((self._manifest, self._scenario))
 
-            # Billing skip: honor KIRO_SKIP_BILLING=1 (parity with built-in KIRO_V2_SKIP_BILLING).
-            if _should_skip_billing(kwargs):
-                plan = [(m, _strip_billing_steps(s)) for m, s in plan]
-                self.log("billing disabled — stripe.fill_checkout skipped")
-
             result: ExecutorResult | None = None
             for manifest, scenario in plan:
                 executor = _EventEmittingExecutor(
@@ -339,9 +332,6 @@ class PluginScenarioProvider:
 
     def _create_browser(self, proxy: str | None = None, email: str | None = None) -> Any:
         return create_browser(self, proxy, email=email)
-
-    def _apply_spoofing(self, page: Any, email: str | None) -> None:
-        apply_spoofing(self, page, email)
 
     def _close_browser(self, browser: Any) -> None:
         close_browser(browser)

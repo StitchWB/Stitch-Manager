@@ -50,16 +50,11 @@ export const autoReg: AutoRegTranslations = {
       notify: "Notifications",
     },
     engineTab: {
-      auto: "Auto",
       cardsLoaded: "Cards Loaded",
-      generateCard: "Generate card",
-      generated: "Generated card: ",
       logsLabel: "Logs Label",
-      manual: "Manual",
       openai_captcha: "Openai captcha",
       passwordLengthTooltip: "Password Length Tooltip",
       rust: "Rust",
-      savedCards: "Saved Cards",
       symbolUnit: "Symbol Unit",
       v2: "V2"
     },

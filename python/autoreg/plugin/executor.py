@@ -23,7 +23,6 @@ from .capabilities import (
     StepResult,
     account_save_capability,
     branch_capability,
-    captcha_solve_capability,
     extract_capability,
     firebase_auth_capability,
     imap_otp_capability,
@@ -31,7 +30,6 @@ from .capabilities import (
     resolve_selector,
     resolve_template,
     sms_otp_capability,
-    stripe_fill_checkout_capability,
     totp_register_capability,
 )
 
@@ -587,12 +585,6 @@ class ScenarioExecutor:
     def _sms_otp(self, step: ScenarioStep) -> StepResult:
         return sms_otp_capability(step, self._store)
 
-    def _captcha_solve(self, step: ScenarioStep) -> StepResult:
-        return captcha_solve_capability(step, self._browser)
-
-    def _stripe_fill_checkout(self, step: ScenarioStep) -> StepResult:
-        return stripe_fill_checkout_capability(step, self._browser, self._store)
-
     def _totp_register(self, step: ScenarioStep) -> StepResult:
         return totp_register_capability(step, self._browser, self._store)
 
@@ -617,8 +609,6 @@ _KIND_TO_METHOD: dict[str, str] = {
     "branch": "_branch",
     "imap.otp": "_imap_otp",
     "sms.otp": "_sms_otp",
-    "captcha.solve": "_captcha_solve",
-    "stripe.fill_checkout": "_stripe_fill_checkout",
     "totp.register": "_totp_register",
     "firebase.auth": "_firebase_auth",
     "account.save": "_account_save",

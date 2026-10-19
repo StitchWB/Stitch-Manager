@@ -168,7 +168,6 @@ module = [
     "pyotp",
     "aiogram.*",
     "autoreg.browser.*",
-    "autoreg.spoofers.*",
     "autoreg.services.*",
     "autoreg.email_providers.*",
     "autoreg.pipeline.*",

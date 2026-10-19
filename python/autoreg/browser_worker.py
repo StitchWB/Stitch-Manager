@@ -17,7 +17,6 @@ Browser Worker - принимает команды от Rust, выполняет
 - execute_js: Выполнить JavaScript
 - get_cookies: Получить cookies
 - set_human_delays: Включить/выключить человеческие задержки
-- apply_spoofers: Применить anti-detection спуферы
 - close: Закрыть браузер
 """
 
@@ -118,8 +117,6 @@ class BrowserWorker(BrowserWorkerHandlersMixin):
                 return self._get_cookies(cmd)
             elif action == 'set_human_delays':
                 return self._set_human_delays(cmd)
-            elif action == 'apply_spoofers':
-                return self._apply_spoofers(cmd)
             elif action == 'get_imap_lookup_email':
                 return self._get_imap_lookup_email()
             elif action == 'close':

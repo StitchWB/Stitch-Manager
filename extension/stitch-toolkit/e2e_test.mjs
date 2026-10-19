@@ -221,7 +221,7 @@ async function main() {
     return Boolean(panel && panel.classList.contains('tk-open'));
   });
   check('panel opens on float button click', panelOpen);
-  await testPage.screenshot({ path: path.join(SHOTS_DIR, '03-panel-stripe.png') });
+  await testPage.screenshot({ path: path.join(SHOTS_DIR, '03-panel-open.png') });
 
   // Switch to recorder tab
   await testPage.evaluate(() => {

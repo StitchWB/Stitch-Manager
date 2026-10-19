@@ -20,18 +20,6 @@ autoreg/
 │   ├── register.py       # Главный оркестратор
 │   └── register_auto.py  # Авто-регистрация с email стратегиями
 │
-├── spoofers/             # Anti-fingerprint модули (20+)
-│   ├── cdp_spoofer.py    # CDP-based spoofing
-│   ├── navigator.py      # Navigator spoofing
-│   ├── canvas.py         # Canvas fingerprint
-│   ├── webgl.py          # WebGL fingerprint
-│   ├── audio.py          # Audio fingerprint
-│   ├── screen.py         # Screen resolution
-│   ├── timezone.py       # Timezone sync
-│   ├── fonts.py          # Font list
-│   ├── behavior.py       # Human-like behavior
-│   └── ...               # И другие
-│
 ├── services/             # Сервисы для Kiro
 │   ├── kiro_patcher_service.py  # Патчинг extension.js
 │   ├── kiro_service.py          # Управление Kiro IDE
@@ -59,7 +47,6 @@ autoreg/
 │   └── ...
 │
 ├── cli.py                # CLI entry point
-├── spoof.py              # Фасад для spoofers
 └── requirements.txt      # Python зависимости
 ```
 
@@ -159,20 +146,6 @@ python -m debugger.run
 | `plus_alias` | Gmail/Outlook алиасы | `user+kiro123@gmail.com` |
 | `catch_all` | Catch-all домен | `random123@mydomain.com` |
 | `pool` | Пул готовых email'ов | `["user1@mail.ru", "user2@mail.ru:password"]` |
-
-## Anti-Fingerprint
-
-Встроенные модули спуфинга:
-
-- Canvas, WebGL, Audio fingerprint
-- Navigator (userAgent, platform, languages)
-- Screen resolution
-- Timezone (синхронизация с IP)
-- WebRTC (скрытие локального IP)
-- Fonts list
-- Behavior (человеческие задержки)
-
-Профили сохраняются для каждого email в `~/.stitch-manager/profiles/`.
 
 ## Конфигурация
 

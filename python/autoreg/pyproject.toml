@@ -41,7 +41,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "registration*", "spoofers*", "services*", "debugger*", "llm*", "app*"]
+include = ["core*", "registration*", "services*", "debugger*", "llm*", "app*"]
 
 [tool.black]
 line-length = 100
