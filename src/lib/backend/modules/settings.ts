@@ -36,6 +36,9 @@ type ExtendedSettingsData = SettingsData & {
   captchaSoundFile?: string;
   telemetry_consent?: string;
   community_enabled?: string;
+  'groups.max_per_user'?: number;
+  'groups.open.max_members'?: number;
+  'groups.max_gated_plugins'?: number;
 };
 
 export async function updateSettings(
@@ -134,4 +137,48 @@ export async function setEmailCounter(params: {
     strategy: params.strategy,
     counter: params.counter,
   });
+}
+
+/**
+ * Numeric group caps stored as server settings rows. ``null`` means the
+ * key is unset and the backend falls back to its built-in default.
+ */
+export interface GroupsLimits {
+  maxPerUser: number | null;
+  openMaxMembers: number | null;
+  maxGatedPlugins: number | null;
+}
+
+const GROUPS_LIMITS_KEYS = {
+  maxPerUser: 'groups.max_per_user',
+  openMaxMembers: 'groups.open.max_members',
+  maxGatedPlugins: 'groups.max_gated_plugins',
+} as const;
+
+export async function getGroupsLimits(): Promise<GroupsLimits> {
+  const all = (await getSettings()) as unknown as Record<string, unknown>;
+  const pick = (key: string): number | null => {
+    const v = all[key];
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  };
+  return {
+    maxPerUser: pick(GROUPS_LIMITS_KEYS.maxPerUser),
+    openMaxMembers: pick(GROUPS_LIMITS_KEYS.openMaxMembers),
+    maxGatedPlugins: pick(GROUPS_LIMITS_KEYS.maxGatedPlugins),
+  };
+}
+
+/**
+ * Persist group limits. ``null`` fields are skipped — there is no
+ * settings-delete command, so an unset key keeps the backend default.
+ */
+export async function setGroupsLimits(limits: GroupsLimits): Promise<void> {
+  const updates: Partial<ExtendedSettingsData> = {};
+  for (const field of Object.keys(GROUPS_LIMITS_KEYS) as (keyof GroupsLimits)[]) {
+    const value = limits[field];
+    if (value != null) {
+      updates[GROUPS_LIMITS_KEYS[field]] = value;
+    }
+  }
+  await updateSettings(updates);
 }

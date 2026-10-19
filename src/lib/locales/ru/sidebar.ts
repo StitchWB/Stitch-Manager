@@ -29,6 +29,7 @@ export const sidebar: SidebarTranslations = {
     telegramChannel: "Наш Telegram-канал",
     tools: "Инструменты",
     website: "Сайт",
-    groups: "Группы"
+    groups: "Группы",
+    groupsAdmin: "Админ групп"
   }
 };

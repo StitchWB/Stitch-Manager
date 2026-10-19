@@ -19,6 +19,7 @@ import { GroupMembersTab } from './GroupMembersTab';
 import { GroupSettingsTab } from './GroupSettingsTab';
 import { GroupUsageTab } from './GroupUsageTab';
 import { GroupQuotasTab } from './GroupQuotasTab';
+import { GroupPluginsTab } from './GroupPluginsTab';
 import { GroupAccountsTab } from './GroupAccountsTab';
 
 interface GroupDetailProps {
@@ -29,7 +30,7 @@ interface GroupDetailProps {
   onLeft: () => void;
 }
 
-type DetailTab = 'pool' | 'members' | 'accounts' | 'usage' | 'quotas' | 'settings';
+type DetailTab = 'pool' | 'members' | 'accounts' | 'usage' | 'quotas' | 'plugins' | 'settings';
 
 /**
  * Right pane of the Groups master-detail. Renders a PageHeader with an
@@ -236,6 +237,13 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
           label={t('ai.groups.quotas.title')}
         />
         <TabButton
+          active={tab === 'plugins'}
+          onClick={() => setTab('plugins')}
+          appearance="section"
+          size="sm"
+          label={t('ai.groups.plugins.title')}
+        />
+        <TabButton
           active={tab === 'settings'}
           onClick={() => setTab('settings')}
           appearance="section"
@@ -263,6 +271,9 @@ export function GroupDetail({ groupId, currentUserId, onBack, onDeleted, onLeft 
         )}
         {tab === 'quotas' && (
           <GroupQuotasTab groupId={groupId} isOwner={isOwner} />
+        )}
+        {tab === 'plugins' && (
+          <GroupPluginsTab groupId={groupId} isOwner={isOwner} />
         )}
         {tab === 'settings' && (
           <GroupSettingsTab

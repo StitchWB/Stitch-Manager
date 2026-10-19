@@ -79,6 +79,7 @@ const Friends = lazy(() => import('./pages/Friends'));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
 const NotebookLM = lazy(() => import('./pages/NotebookLM'));
 const AdminOverview = lazy(() => import('./pages/AdminOverview'));
+const GroupsAdmin = lazy(() => import('./pages/GroupsAdmin'));
 const Users = lazy(() => import('./pages/Users'));
 const UserProfile = lazy(() => import('./pages/UserProfile'));
 const Codes = lazy(() => import('./pages/Codes'));
@@ -627,6 +628,7 @@ function App() {
             <Route path="/totp" element={<Totp />} />
             {/* Admin zone — guarded by AdminRoute */}
             <Route path="/admin" element={<AdminRoute><AdminOverview /></AdminRoute>} />
+            <Route path="/admin/groups" element={<AdminRoute><GroupsAdmin /></AdminRoute>} />
             <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
             <Route path="/users/:userId" element={<AdminRoute><UserProfile /></AdminRoute>} />
             <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />

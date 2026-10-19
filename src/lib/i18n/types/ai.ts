@@ -107,6 +107,28 @@ export interface AiTranslations {
         deleted: string;
         invalidAmount: string;
       };
+      plugins: {
+        title: string;
+        empty: string;
+        memberReadonly: string;
+        granted: string;
+        notGranted: string;
+        updated: string;
+        toggleFailed: string;
+        togglePlugin: string;
+        cap: string;
+        level: {
+          open: string;
+          verified: string;
+          suspended: string;
+        };
+        audience: {
+          public: string;
+          group: string;
+          tier: string;
+          private: string;
+        };
+      };
       pool: {
         title: string;
         empty: string;
