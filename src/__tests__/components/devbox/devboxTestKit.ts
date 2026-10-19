@@ -52,6 +52,8 @@ export const gatewayFixture: DevboxOverviewGateway = {
   enabled: true,
   up: true,
   port: 8765,
+  calls: 12,
+  errors: 1,
   exposed_mcps: [
     { name: 'stitch-totp', mode: 'readonly', tools: ['totp_get', 'totp_list'] },
     { name: 'stitch-mail', mode: 'full', tools: ['wait_for_email', 'send_email'] },

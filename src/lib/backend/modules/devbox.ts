@@ -11,6 +11,7 @@ export interface DevboxVitalCard {
   value: string;
   tone: DevboxTone;
   hint?: string;
+  sub?: string | null;
   updatedAt?: string | number | null;
 }
 
@@ -336,6 +337,8 @@ export interface DevboxOverviewGateway {
   enabled: boolean;
   up: boolean;
   port: number | null;
+  calls: number;
+  errors: number;
   exposed_mcps: DevboxExposedMcp[];
 }
 
@@ -363,6 +366,8 @@ export function devboxNormalizeGateway(payload: unknown): DevboxOverviewGateway 
     enabled: row.enabled,
     up: row.up,
     port: typeof row.port === 'number' && Number.isFinite(row.port) ? row.port : null,
+    calls: typeof row.calls === 'number' && Number.isFinite(row.calls) ? row.calls : 0,
+    errors: typeof row.errors === 'number' && Number.isFinite(row.errors) ? row.errors : 0,
     exposed_mcps: exposed,
   };
 }

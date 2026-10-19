@@ -6,6 +6,7 @@ export interface DevboxPageTranslations {
     tabInfra: string;
     headerProjectLabel: string;
     profileSelectEmpty: string;
+    gatewayMetrics: string;
     projectAddOption: string;
     projectManageOption: string;
     switchProfileConfirmTitle: string;

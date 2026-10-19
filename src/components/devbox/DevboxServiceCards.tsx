@@ -86,6 +86,7 @@ function gatewayVital(
     title: name,
     value: gateway.up ? 'up' : 'down',
     tone: gateway.up ? 'ok' : 'warn',
+    sub: t('devboxPage.gatewayMetrics', { calls: gateway.calls, errors: gateway.errors }),
     updatedAt: null,
   };
 }
@@ -211,6 +212,14 @@ export function DevboxServiceCards({
                   >
                     {card === null ? '—' : card.value}
                   </span>
+                  {card?.sub ? (
+                    <span
+                      className="truncate text-2xs text-slate-500"
+                      data-testid={`devbox-service-sub-${service.id}`}
+                    >
+                      {card.sub}
+                    </span>
+                  ) : null}
                 </span>
                 {updatedAt !== null && updatedAt !== undefined && updatedAt !== '' && (
                   <span className="shrink-0 text-2xs text-slate-500">
