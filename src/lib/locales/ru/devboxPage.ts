@@ -112,6 +112,8 @@ export const devboxPage: DevboxPageTranslations = {
     consoleFilterErrors: "Только ошибки",
     consoleAutoscroll: "Автопрокрутка",
     consoleClear: "Очистить",
+    consoleCopy: "Скопировать",
+    consoleCopied: "Скопировано",
     consoleEmptyFiltered: "Ничего не найдено",
     colProfile: "Название проекта",
     colMode: "Режим",

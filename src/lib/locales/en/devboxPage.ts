@@ -110,6 +110,8 @@ export const devboxPage: DevboxPageTranslations = {
     consoleFilterErrors: "Errors only",
     consoleAutoscroll: "Autoscroll",
     consoleClear: "Clear",
+    consoleCopy: "Copy",
+    consoleCopied: "Copied",
     consoleEmptyFiltered: "Nothing found",
     colProfile: "Project name",
     colMode: "Mode",

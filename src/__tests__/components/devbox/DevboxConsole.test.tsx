@@ -235,6 +235,31 @@ describe('DevboxConsole toolbar', () => {
     expect(screen.getByTestId('devbox-console-empty').textContent).toBe('Nothing found');
   });
 
+  it('copy button writes the visible events to the clipboard', async () => {
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    renderConsole();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('devbox-console-copy'));
+    });
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copiedText = writeText.mock.calls[0][0] as string;
+    expect(copiedText.split('\n')).toHaveLength(2);
+    expect(copiedText).toContain('bash');
+    expect((await screen.findByTestId('devbox-console-copy')).textContent).toContain('Copied');
+  });
+
+  it('copy button is disabled when the visible buffer is empty', () => {
+    renderConsole({ events: [] });
+
+    expect((screen.getByTestId('devbox-console-copy') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('renders the poll error with retry outside the logs tab', () => {
     const onRetry = renderConsole({ error: 'poll exploded' });
 

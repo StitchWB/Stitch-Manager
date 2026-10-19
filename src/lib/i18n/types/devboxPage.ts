@@ -101,6 +101,8 @@ export interface DevboxPageTranslations {
     consoleFilterErrors: string;
     consoleAutoscroll: string;
     consoleClear: string;
+    consoleCopy: string;
+    consoleCopied: string;
     consoleEmptyFiltered: string;
     colProfile: string;
     colMode: string;

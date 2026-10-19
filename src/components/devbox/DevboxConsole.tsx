@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   ExternalLink,
   FileText,
   History,
@@ -171,6 +173,40 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
     }
   };
 
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<number | null>(null);
+
+  const copyText = useMemo(() => {
+    if (tab === 'events') return visibleEvents.map(row => devboxEventLine(row)).join('\n');
+    if (tab === 'logs')
+      return visibleSources
+        .filter(s => s.lines.length > 0)
+        .map(s => [s.name, ...s.lines].join('\n'))
+        .join('\n');
+    return visibleActions
+      .map(row =>
+        [row.cmd, row.status, devboxTime(row.startedAt), devboxTime(row.finishedAt), row.exit ?? ''].join('\t'),
+      )
+      .join('\n');
+  }, [tab, visibleEvents, visibleSources, visibleActions]);
+
+  const copyCurrent = async () => {
+    if (copyText === '') return;
+    try {
+      await navigator.clipboard.writeText(copyText);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = copyText;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+    setCopied(true);
+    if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => setCopied(false), 1500);
+  };
+
   const filteredAway = query !== '' || errorsOnly || eventsBaseline > 0 || actionsBaseline > 0;
 
   return (
@@ -229,6 +265,16 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
               onChange={setAutoscroll}
             />
           )}
+          <Button
+            size="xs"
+            variant="ghost"
+            leftIcon={copied ? <Check size={12} /> : <Copy size={12} />}
+            data-testid="devbox-console-copy"
+            disabled={copyText === ''}
+            onClick={() => void copyCurrent()}
+          >
+            {copied ? t('devboxPage.consoleCopied') : t('devboxPage.consoleCopy')}
+          </Button>
           <Button
             size="xs"
             variant="ghost"
