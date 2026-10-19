@@ -121,7 +121,9 @@ export function Tooltip({
   useEffect(() => {
     const node = tooltipNodeRef.current;
     if (isVisible && node) {
+      // framer-motion overwrites style.transform, so centering via translate(-50%) is impossible.
       const arrow = node.lastElementChild as HTMLElement | null;
+      const horizontal = side === 'top' || side === 'bottom';
       const { left, top, arrowShift } = placeTooltip(
         side,
         position.x,
@@ -131,20 +133,14 @@ export function Tooltip({
         document.documentElement.clientWidth,
         document.documentElement.clientHeight,
       );
-      node.style.left = `${left}px`;
-      node.style.top = `${top}px`;
+      node.style.left = `${horizontal ? left - node.offsetWidth / 2 : left}px`;
+      node.style.top = `${horizontal ? top : top - node.offsetHeight / 2}px`;
       if (arrow) {
-        if (side === 'top' || side === 'bottom') arrow.style.marginLeft = `${arrowShift}px`;
+        if (horizontal) arrow.style.marginLeft = `${arrowShift}px`;
         else arrow.style.marginTop = `${arrowShift}px`;
       }
     }
   }, [isVisible, tooltipEl, side, position.x, position.y]);
-
-  const getTransform = () => {
-    if (side === 'top' || side === 'bottom') return 'translateX(-50%)';
-    if (side === 'left' || side === 'right') return 'translateY(-50%)';
-    return 'none';
-  };
 
   return (
     <>
@@ -176,7 +172,6 @@ export function Tooltip({
             style={{
               left: `${position.x}px`,
               top: `${position.y}px`,
-              transform: getTransform(),
             }}
           >
             {content}
