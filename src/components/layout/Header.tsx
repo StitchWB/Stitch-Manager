@@ -61,7 +61,7 @@ export default function Header({ title, subtitle, icon, actions }: HeaderProps) 
           </span>
         )}
         <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-sm font-medium text-white truncate" title={title}>{title}</h1>
+          <h1 className="text-sm font-medium text-white leading-snug" title={title}>{title}</h1>
           {subtitle && (
             <>
               <span className="text-slate-700" aria-hidden="true">/</span>

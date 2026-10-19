@@ -33,7 +33,7 @@ export function EmptyState({
         <div className="flex-1 min-w-0">
           <p className="text-xs text-slate-300 truncate">{title}</p>
           {description ? (
-            <p className="text-[11px] text-slate-500 truncate">{description}</p>
+            <p className="text-[11px] text-slate-500 line-clamp-2">{description}</p>
           ) : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}

@@ -143,7 +143,7 @@ export function DevboxNowRail({
             data-testid="devbox-security-banner"
           >
             <ShieldAlert size={13} className="shrink-0 text-amber-300" aria-hidden />
-            <span className="flex-1 truncate text-2xs text-slate-300">
+            <span className="flex-1 min-w-0 text-2xs text-slate-300">
               {t('devboxPage.securityBanner')}
             </span>
             <IconButton
