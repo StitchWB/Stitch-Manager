@@ -131,7 +131,12 @@ export const devboxPage: DevboxPageTranslations = {
     editorInvalidJson: "JSON невалиден",
     editorErrors: "Ошибки валидации",
     editorSaved: "Проект сохранён",
-    editorAdvanced: "JSON дополнительно",
+    editorJsonToggle: "JSON профиля",
+    editorJsonCaption: "JSON — источник профиля; форма выше правит тот же документ.",
+    tipModeGroup:
+      "Стандарт: каждая мутация — запрос в «Разрешениях», если клиент агента не включил авто-одобрение (--auto или критерии приёмки). Полный доступ: запросов нет вовсе.",
+    tipFieldGit: "Git-идентичность, под которой агент коммитит внутри контейнера toolbox.",
+    tipFieldProjectDir: "Папка, монтируемая в контейнер; агент видит только её и /agent.",
     addProfile: "Добавить проект",
     editorCreateTitle: "Новый проект",
     editorCreateHint:

@@ -129,7 +129,12 @@ export const devboxPage: DevboxPageTranslations = {
     editorInvalidJson: "Invalid JSON",
     editorErrors: "Validation errors",
     editorSaved: "Project saved",
-    editorAdvanced: "Advanced JSON",
+    editorJsonToggle: "Profile JSON",
+    editorJsonCaption: "The JSON is the source of truth; the form above edits the same document.",
+    tipModeGroup:
+      "Standard asks for approval per mutation unless the agent client passes --auto or acceptance criteria; full access never asks.",
+    tipFieldGit: "Git identity the agent uses for commits inside the toolbox container.",
+    tipFieldProjectDir: "The folder mounted into the container; the agent sees only it and /agent.",
     addProfile: "Add project",
     editorCreateTitle: "New project",
     editorCreateHint:

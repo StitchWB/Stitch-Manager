@@ -101,6 +101,7 @@ describe('Devbox profile editor', () => {
     renderProfiles();
 
     fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
+    fireEvent.click(await screen.findByTestId('devbox-profile-json-toggle'));
     const editor = (await screen.findByTestId(
       'devbox-profile-editor',
     )) as HTMLTextAreaElement;
@@ -113,8 +114,27 @@ describe('Devbox profile editor', () => {
     expect(devboxCalls(invokeMock, 'profile_put')).toHaveLength(0);
   });
 
+  it('keeps the raw JSON collapsed on plain edit until the toggle opens it', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_get: { json: '{"mode": "standard"}', valid: true, errors: [] },
+        }),
+      ),
+    );
+    renderProfiles();
+
+    fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
+    expect(await screen.findByTestId('devbox-profile-form')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-profile-editor')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('devbox-profile-json-toggle'));
+    expect(screen.getByTestId('devbox-profile-editor')).toBeTruthy();
+  });
+
   it('saves valid JSON via profile_put and closes on success', async () => {
     const onChanged = renderProfilesOnPut({ valid: true, errors: [] });
+    fireEvent.click(await screen.findByTestId('devbox-profile-json-toggle'));
     const editor = (await screen.findByTestId(
       'devbox-profile-editor',
     )) as HTMLTextAreaElement;
@@ -135,6 +155,7 @@ describe('Devbox profile editor', () => {
 
   it('renders put validation errors under the editor and keeps it open', async () => {
     renderProfilesOnPut({ valid: false, errors: ['R7: allowed_ports out of range'] });
+    fireEvent.click(await screen.findByTestId('devbox-profile-json-toggle'));
     const editor = (await screen.findByTestId(
       'devbox-profile-editor',
     )) as HTMLTextAreaElement;
@@ -194,6 +215,7 @@ describe('Devbox profile editor', () => {
     fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
     expect(await screen.findByTestId('devbox-profile-form')).toBeTruthy();
 
+    fireEvent.click(screen.getByTestId('devbox-profile-json-toggle'));
     const editor = (await screen.findByTestId(
       'devbox-profile-editor',
     )) as HTMLTextAreaElement;
