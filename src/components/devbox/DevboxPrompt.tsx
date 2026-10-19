@@ -238,13 +238,13 @@ export function DevboxPrompt({
   const copyButton = (
     <Button
       variant="primary"
-      size="md"
+      size="sm"
       disabled={copyDisabled}
       className={cn(
         copyFlash &&
           'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:border-emerald-400/60 hover:bg-emerald-500/25 hover:text-white',
       )}
-      leftIcon={copyFlash ? <Check size={16} /> : <Copy size={16} />}
+      leftIcon={copyFlash ? <Check size={14} /> : <Copy size={14} />}
       data-testid="devbox-prompt-copy"
       onClick={() => void copy()}
     >
@@ -480,7 +480,10 @@ export function DevboxPrompt({
               ) : (
                 copyButton
               )}
-              <span className="text-xs text-slate-400" data-testid="devbox-prompt-hint">
+              <span
+                className="max-w-[320px] text-right text-2xs text-slate-500"
+                data-testid="devbox-prompt-hint"
+              >
                 {clientHint}
               </span>
             </div>
