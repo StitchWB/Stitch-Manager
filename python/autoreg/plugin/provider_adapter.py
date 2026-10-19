@@ -23,17 +23,28 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .browser_lifecycle import (
-    cleanup_profile_dir,
-    close_browser,
-    create_browser,
-)
+try:
+    from .browser_lifecycle import (
+        cleanup_profile_dir,
+        close_browser,
+        create_browser,
+    )
+except ImportError:  # open-core: browser lifecycle is a closed zone
+    cleanup_profile_dir = None
+    close_browser = None
+    create_browser = None
+
 from .dependency_resolver import (
     DependencyResolutionError,
     ResolvedDependency,
     resolve_dependencies,
 )
-from .email_gen import generate_email
+
+try:
+    from .email_gen import generate_email
+except ImportError:  # open-core: email generation is a closed zone
+    generate_email = None
+
 from .entry_files import (
     apply_local_override,
     apply_selector_overlay,

@@ -6,7 +6,6 @@ Kiro Batch Login - Autoreg Module
 
 Структура:
     core/           - Базовые компоненты (config, paths, exceptions)
-    services/       - Бизнес-логика (tokens, quota, machine_id, kiro)
     registration/   - Авторегистрация аккаунтов
     _legacy/        - Устаревший код (для справки)
 
@@ -35,27 +34,39 @@ _KIRO_SERVICE = None
 def get_token_service():
     global _TOKEN_SERVICE
     if _TOKEN_SERVICE is None:
-        from .services.token_service import TokenService
+        try:
+            from .services.token_service import TokenService
+        except ImportError:
+            return None
         _TOKEN_SERVICE = TokenService()
     return _TOKEN_SERVICE
 
 def get_quota_service():
     global _QUOTA_SERVICE
     if _QUOTA_SERVICE is None:
-        from .services.quota_service import QuotaService
+        try:
+            from .services.quota_service import QuotaService
+        except ImportError:
+            return None
         _QUOTA_SERVICE = QuotaService()
     return _QUOTA_SERVICE
 
 def get_machine_id_service():
     global _MACHINE_ID_SERVICE
     if _MACHINE_ID_SERVICE is None:
-        from .services.machine_id_service import MachineIdService
+        try:
+            from .services.machine_id_service import MachineIdService
+        except ImportError:
+            return None
         _MACHINE_ID_SERVICE = MachineIdService()
     return _MACHINE_ID_SERVICE
 
 def get_kiro_service():
     global _KIRO_SERVICE
     if _KIRO_SERVICE is None:
-        from .services.kiro_service import KiroService
+        try:
+            from .services.kiro_service import KiroService
+        except ImportError:
+            return None
         _KIRO_SERVICE = KiroService()
     return _KIRO_SERVICE

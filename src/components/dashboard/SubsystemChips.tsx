@@ -5,7 +5,6 @@ import { StatItem } from '@/components/ui/StatItem';
 
 import { formatDuration } from './ServiceRow';
 
-// Official plugin matrix size (README): 9 service + engine-pack + 7 autoreg + legacy.
 const OFFICIAL_PLUGIN_TOTAL = 17;
 
 interface SubsystemChipsProps {
