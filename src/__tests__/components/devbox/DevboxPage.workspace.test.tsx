@@ -11,6 +11,7 @@
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { toast } from 'sonner';
 
 jest.mock('@/lib/backend/core/invoke', () => ({
   safeInvoke: jest.fn(),
@@ -428,6 +429,46 @@ describe('Devbox page header control bar', () => {
     });
     expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: diagnostics...');
     expect(start.getAttribute('title')).toContain('Running: run_doctor');
+  });
+
+  it('toasts once when a newer finished run_doctor arrives', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        action_status: {
+          busy: false,
+          current: null,
+          recent: [
+            { id: 'd1', cmd: 'run_doctor', status: 'finished', startedAt: 1, finishedAt: 2, exit: 1 },
+          ],
+        },
+      }),
+    });
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-services');
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+
+    mockRoutes({
+      poll: devboxPollBundle({
+        action_status: {
+          busy: false,
+          current: null,
+          recent: [
+            { id: 'd1', cmd: 'run_doctor', status: 'finished', startedAt: 1, finishedAt: 2, exit: 1 },
+            { id: 'd2', cmd: 'run_doctor', status: 'finished', startedAt: 3, finishedAt: 4, exit: 0 },
+          ],
+        },
+      }),
+    });
+    fireEvent.click(screen.getByTestId('devbox-refresh'));
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByTestId('devbox-refresh'));
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('busy header labels stop commands with the stopping chip', async () => {

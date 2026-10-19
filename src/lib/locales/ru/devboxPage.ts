@@ -9,6 +9,8 @@ export const devboxPage: DevboxPageTranslations = {
     headerProjectLabel: "Проект",
     profileSelectEmpty: "Профиль не выбран",
     gatewayMetrics: "{calls} вызовов · {errors} ошибок",
+    toastDoctorDone: "Doctor завершился - отчёт во вкладке «Действия»",
+    toastDoctorFailed: "Doctor завершился с ошибками - отчёт во вкладке «Действия»",
     projectAddOption: "+ Новый проект",
     projectManageOption: "Настройки проектов",
     switchProfileConfirmTitle: "Сменить профиль на {name}?",

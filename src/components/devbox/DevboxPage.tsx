@@ -20,6 +20,7 @@ import { TabButton } from '@/components/ui/TabButton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { useAppStore } from '@/stores/app';
 import {
   devboxCockpitOpen,
@@ -134,6 +135,21 @@ export function DevboxPage() {
   const cards = useMemo(() => devboxNormalizeCards(poll.data?.overview), [poll.data]);
   const gateway = useMemo(() => devboxNormalizeGateway(poll.data?.overview), [poll.data]);
   const status = poll.data?.action_status ?? null;
+
+  const lastDoctorId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const rows = status?.recent ?? [];
+    const done = [...rows].reverse().find(r => r.cmd === 'run_doctor' && r.status === 'finished');
+    if (!done) return;
+    if (lastDoctorId.current === undefined) {
+      lastDoctorId.current = done.id;
+      return;
+    }
+    if (lastDoctorId.current === done.id) return;
+    lastDoctorId.current = done.id;
+    if (done.exit === 0) toast.success(t('devboxPage.toastDoctorDone'));
+    else toast.warning(t('devboxPage.toastDoctorFailed'));
+  }, [status]);
   const jobs = useMemo(
     () => devboxObservedRows<DevboxJobRow>(poll.data?.jobs),
     [poll.data],
