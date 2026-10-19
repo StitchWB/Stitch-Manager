@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stripe Filler — Test Form (Multi-locale)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; max-width: 600px; margin: 0 auto; background: #f5f7fa; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    h2 { font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #4a5568; }
+    p { font-size: 13px; color: #718096; margin-bottom: 16px; }
+    form { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 4px; margin-top: 12px; }
+    input, select { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+    input:focus, select:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+    .row { display: flex; gap: 12px; }
+    .row > * { flex: 1; }
+    .meta { font-size: 11px; color: #a0aec0; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<h1>Stripe Filler — Test Forms</h1>
+<p>
+  These forms simulate various Stripe checkout layouts (different locales, attribute styles).
+  Use the Stitch Toolkit extension → Stripe Filler → <strong>Detect</strong> or <strong>Fill</strong>
+  on this page to verify field discovery and filling.
+</p>
+
+<!-- ── Form A: Standard Stripe IDs (English) ─────────────────────────────── -->
+<h2>Form A: Standard Stripe IDs (English)</h2>
+<p>Uses exact Stripe element IDs like <code>cardNumber</code>, <code>cardExpiry</code>, etc.</p>
+<form id="form-a">
+  <label for="cardNumber">Card number</label>
+  <input id="cardNumber" autocomplete="cc-number" placeholder="0000 0000 0000 0000" />
+
+  <label for="cardExpiry">Expiration</label>
+  <input id="cardExpiry" autocomplete="cc-exp" placeholder="MM / YY" />
+
+  <label for="cardCvc">CVC</label>
+  <input id="cardCvc" autocomplete="cc-csc" placeholder="123" />
+
+  <label for="billingName">Name on card</label>
+  <input id="billingName" autocomplete="cc-name" placeholder="Jane Doe" />
+
+  <label for="billingCountry">Country</label>
+  <select id="billingCountry">
+    <option value="">Select country…</option>
+    <option value="US">United States</option>
+    <option value="GB">United Kingdom</option>
+    <option value="DE">Germany</option>
+    <option value="FR">France</option>
+    <option value="RU">Russia</option>
+    <option value="JP">Japan</option>
+  </select>
+
+  <label for="billingAddressLine1">Address</label>
+  <input id="billingAddressLine1" autocomplete="address-line1" placeholder="123 Main St" />
+
+  <label for="billingPostalCode">Postal code</label>
+  <input id="billingPostalCode" autocomplete="postal-code" placeholder="12345" />
+</form>
+
+<!-- ── Form B: French localized (aria-label + label) ───────────────────────── -->
+<h2>Form B: French localized (aria-label + label)</h2>
+<p>Simulates Stripe checkout rendered in French. No IDs, only <code>aria-label</code> and <code>&lt;label&gt;</code> text.</p>
+<form id="form-b">
+  <label>Numéro de carte
+    <input aria-label="Numéro de carte" autocomplete="cc-number" placeholder="0000 0000 0000 0000" />
+  </label>
+
+  <label>Date d'expiration
+    <input aria-label="Date d'expiration" autocomplete="cc-exp" placeholder="MM/AA" />
+  </label>
+
+  <label>CVC
+    <input aria-label="CVC" autocomplete="cc-csc" placeholder="123" />
+  </label>
+
+  <label>Nom sur la carte
+    <input aria-label="Nom sur la carte" autocomplete="cc-name" placeholder="Jean Dupont" />
+  </label>
+
+  <label>Pays
+    <select aria-label="Pays">
+      <option value="">Sélectionner…</option>
+      <option value="FR">France</option>
+      <option value="DE">Allemagne</option>
+      <option value="US">États-Unis</option>
+    </select>
+  </label>
+
+  <label>Adresse
+    <input aria-label="Adresse" autocomplete="address-line1" placeholder="1 rue de Rivoli" />
+  </label>
+
+  <label>Code postal
+    <input aria-label="Code postal" autocomplete="postal-code" placeholder="75001" />
+  </label>
+</form>
+
+<!-- ── Form C: German localized (data-testid + placeholder) ───────────────── -->
+<h2>Form C: German localized (data-testid + placeholder)</h2>
+<p>Uses <code>data-testid</code> and German <code>placeholder</code>. No standard IDs or autocomplete.</p>
+<form id="form-c">
+  <input data-testid="cardnumber-input" placeholder="Kartennummer" />
+  <input data-testid="expiry-input" placeholder="Ablaufdatum MM/JJ" />
+  <input data-testid="cvc-input" placeholder="CVC" />
+  <input data-testid="name-input" placeholder="Name auf der Karte" />
+  <select data-testid="country-select">
+    <option value="">Land wählen…</option>
+    <option value="DE">Deutschland</option>
+    <option value="AT">Österreich</option>
+  </select>
+  <input data-testid="address-input" placeholder="Straße und Hausnummer" />
+  <input data-testid="postalcode-input" placeholder="Postleitzahl" />
+</form>
+
+<!-- ── Form D: Minimal / Edge cases ───────────────────────────────────────── -->
+<h2>Form D: Minimal / Edge cases</h2>
+<p>Very minimal markup. Tests fallback label-matching and fuzzy matching.</p>
+<form id="form-d">
+  <label>
+    Card
+    <input name="card[number]" />
+  </label>
+
+  <label>
+    Exp
+    <input name="card[expiry]" />
+  </label>
+
+  <label>
+    Security code
+    <input name="card[cvc]" />
+  </label>
+
+  <label>
+    Full name
+    <input name="billing[name]" />
+  </label>
+
+  <label>
+    Country / Region
+    <select name="billing[country]">
+      <option value="">Pick one</option>
+      <option value="US">United States of America</option>
+      <option value="GB">Great Britain</option>
+    </select>
+  </label>
+
+  <label>
+    Street address
+    <input name="billing[address]" />
+  </label>
+
+  <label>
+    ZIP
+    <input name="billing[zip]" />
+  </label>
+</form>
+
+</body>
+</html>

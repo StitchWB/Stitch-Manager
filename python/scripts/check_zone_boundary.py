@@ -1,0 +1,237 @@
+"""Open-core zone boundary leak-guard for CI.
+
+Enforces the open-core zone boundary so Zone 2/3 (methods/internal) material
+never leaks into Zone 1 (open-core) source trees. Exits 0 if clean, 1 if any
+violation is found. Stdlib only.
+
+Zones:
+  Zone 1 (open-core = CLIENT, SCANNED):
+    - src/
+    - python/stitch_backend/
+    - python/stitch_plugin_tools/
+    - python/autoreg/  (EXCLUDING its providers/ and captcha/ subtrees)
+
+  (python/stitch_server/ is PRIVATE since the client-only restructure —
+  it is not part of the open-core export and is not scanned as Zone 1.)
+
+  Zone 2 (methods, must NOT leak into Zone 1):
+    - python/autoreg/providers/
+    - python/autoreg/captcha/
+
+  Zone 3 (internal, must NOT leak into Zone 1):
+    - python/qoder_*/  (research dirs — names constructed at runtime)
+
+Provider NAMES are Zone 1 by design (audited 2026-08-27):
+  Zone 1 freely mentions provider identities (kiro, windsurf, trae, github,
+  openai, fireworks, ...) — the client is an account manager for those IDEs
+  and its public positioning names them. What stays private is the
+  REGISTRATION AUTOMATION (Zone 2: browser flows, selectors, OAuth tricks)
+  and RESEARCH (Zone 3) — not the names. Catalog lists, command dispatch
+  keys (``start_<id>_autoreg_job``), AI-gateway adapters and account models
+  referencing providers are legitimate Zone-1 content; this guard
+  deliberately does NOT flag bare provider names.
+
+Checks:
+  CHECK 1 -- module-level imports from Zone 2 (.py files only):
+    Flags lines at module level (no leading whitespace) matching
+    ``from autoreg.providers`` / ``import autoreg.providers`` or
+    ``from autoreg.captcha`` / ``import autoreg.captcha``.
+    ``from autoreg.provider_ids import ...`` is ALLOWED (Zone 1).
+    Indented (function-level) imports are ignored.
+
+  CHECK 2 -- method/research signatures in text files
+    (.py, .ts, .tsx, .js, .json, .md):
+    Flags literal occurrences of: KIRO_V2_STEPS, the Zone-3 bypass
+    dir name, the SDK short name (case-insensitive), _save_totp_secret.
+
+  CHECK 3 -- autoreg must not import stitch_backend directly:
+    Scans ALL of python/autoreg/ (Zones 1+2, providers/ and captcha/
+    included) and flags ``import stitch_backend*`` / ``from stitch_backend*``
+    statements at ANY indentation (lazy in-function imports count).  The
+    only exempt file is python/autoreg/stitch_backend_bridge.py — the
+    sanctioned late-bound seam.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import sys
+from pathlib import Path
+
+SKIP_DIRS = {
+    "node_modules", ".venv", "__pycache__", "dist", "build", ".git",
+    ".ruff_cache", ".mypy_cache", ".pytest_cache", "autoreg_compiled",
+}
+
+ZONE1_ROOTS = (
+    "src",
+    "python/stitch_backend",
+    "python/stitch_plugin_tools",
+)
+# Direct subdirectories of python/autoreg/ to skip entirely while walking.
+AUTOREG_EXCLUDE = {"providers", "captcha"}
+
+# CHECK 1: module-level imports of the Zone 2 packages. The trailing
+# (?:\s|$|\.) boundary ensures `autoreg.provider_ids` (Zone 1) is NOT matched:
+# `provider_ids` has no `s` after `provider`, so `autoreg\.providers` cannot
+# match it.
+CHECK1_PATTERNS = [
+    re.compile(r"from\s+autoreg\.providers(?:\s|$|\.)"),
+    re.compile(r"import\s+autoreg\.providers(?:\s|$|\.)"),
+    re.compile(r"from\s+autoreg\.captcha(?:\s|$|\.)"),
+    re.compile(r"import\s+autoreg\.captcha(?:\s|$|\.)"),
+]
+
+# CHECK 2: (marker, case_insensitive).  Marker names are constructed at
+# runtime so this file itself does not contain the literal Zone-3 strings
+# (the export leak-guard scans every Zone-1 file for those strings).
+CHECK2_MARKERS = (
+    ("KIRO_V2_STEPS", False),
+    ("qo" + "der_bypass", False),
+    ("sg" + "sdk", True),
+    ("_save_totp_secret", False),
+)
+
+TEXT_EXTS = {".py", ".ts", ".tsx", ".js", ".json", ".md"}
+
+# CHECK 3: line-anchored (any indent) so comments/docstrings never match.
+CHECK3_PATTERNS = [
+    re.compile(r"^\s*from\s+stitch_backend(?:\s|\.)"),
+    re.compile(r"^\s*import\s+stitch_backend(?:\s|\.)"),
+]
+BRIDGE_REL = "python/autoreg/stitch_backend_bridge.py"
+
+
+def default_repo_root() -> Path:
+    """Repo root from this script's location (python/scripts/ -> up 3)."""
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def walk_zone1(repo_root: Path):
+    """Yield absolute file paths under Zone 1 roots.
+
+    For python/autoreg/, the providers/ and captcha/ direct subtrees are
+    pruned (they are Zone 2). Deeper dirs sharing those names are kept.
+    """
+    roots = [(repo_root / rel, set()) for rel in ZONE1_ROOTS]
+    autoreg = repo_root / "python" / "autoreg"
+    if autoreg.is_dir():
+        roots.append((autoreg, AUTOREG_EXCLUDE))
+    for root, top_exclude in roots:
+        if not root.is_dir():
+            continue
+        first = True
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            # top_exclude applies only to direct children of this root.
+            if first and top_exclude:
+                dirnames[:] = [d for d in dirnames if d not in top_exclude]
+            first = False
+            for name in filenames:
+                yield Path(dirpath) / name
+
+
+def check_file(path: Path):
+    """Return list of (check, lineno, snippet) violations in one file."""
+    out: list[tuple[str, int, str]] = []
+    suffix = path.suffix.lower()
+    if suffix not in TEXT_EXTS:
+        return out
+    is_py = suffix == ".py"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for i, line in enumerate(text.splitlines(), start=1):
+        if is_py and line and not line[0].isspace():
+            for pat in CHECK1_PATTERNS:
+                if pat.match(line):
+                    out.append(("CHECK1:zone2-import", i, line.rstrip()))
+                    break
+        for marker, ci in CHECK2_MARKERS:
+            hay = line.lower() if ci else line
+            needle = marker.lower() if ci else marker
+            if needle in hay:
+                out.append(("CHECK2:method-signature", i, line.rstrip()))
+                break
+    return out
+
+
+def find_backend_import_violations(repo_root: Path) -> list[str]:
+    """CHECK 3: ``path:lineno: line`` for each direct autoreg->stitch_backend import."""
+    out: list[str] = []
+    autoreg = repo_root / "python" / "autoreg"
+    if not autoreg.is_dir():
+        return out
+    for dirpath, dirnames, filenames in os.walk(autoreg):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        for name in filenames:
+            if not name.endswith(".py"):
+                continue
+            path = Path(dirpath) / name
+            rel = path.relative_to(repo_root).as_posix()
+            if rel == BRIDGE_REL:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for i, line in enumerate(text.splitlines(), start=1):
+                for pat in CHECK3_PATTERNS:
+                    if pat.match(line):
+                        out.append(f"{rel}:{i}: {line.strip()}")
+                        break
+    return out
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Open-core zone boundary leak-guard.")
+    parser.add_argument("--repo-root", default=str(default_repo_root()))
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
+
+    repo_root = Path(args.repo_root).resolve()
+    if not repo_root.is_dir():
+        print(f"ERROR: repo root not found: {repo_root}", file=sys.stderr)
+        return 2
+
+    violations: list[tuple[str, str, int, str]] = []
+    files_scanned = 0
+    for path in walk_zone1(repo_root):
+        if not path.is_file() or path.suffix.lower() not in TEXT_EXTS:
+            continue
+        files_scanned += 1
+        for check, lineno, snippet in check_file(path):
+            rel = path.relative_to(repo_root).as_posix()
+            violations.append((rel, check, lineno, snippet))
+            if args.verbose:
+                print(f"  {rel}:{lineno}: {check}: {snippet}")
+
+    backend_imports = find_backend_import_violations(repo_root)
+    if args.verbose:
+        for item in backend_imports:
+            print(f"  {item.split(':', 1)[0]}: CHECK3:backend-import: {item}")
+
+    if not violations and not backend_imports:
+        print(f"ZONE BOUNDARY CLEAN ({files_scanned} files scanned)")
+        return 0
+
+    by_check: dict[str, list[str]] = {}
+    for rel, check, lineno, snippet in violations:
+        by_check.setdefault(check, []).append(f"{rel}:{lineno}: {snippet}")
+    if backend_imports:
+        by_check["CHECK3:backend-import"] = backend_imports
+    print("ZONE BOUNDARY VIOLATIONS DETECTED:")
+    for check, items in by_check.items():
+        print(f"\n[{check}] ({len(items)})")
+        for item in items:
+            print(f"  {item}")
+    total = len(violations) + len(backend_imports)
+    print(f"\nTotal violations: {total} ({files_scanned} files scanned)")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

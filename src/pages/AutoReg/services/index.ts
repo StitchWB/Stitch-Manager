@@ -1,0 +1,20 @@
+/**
+ * AutoReg Services
+ * Business logic extracted from AutoReg.tsx
+ */
+
+export {
+  generateEmail,
+  type EmailGenerationOptions,
+  type EmailGenerationResult,
+} from './emailGenerator';
+
+export {
+  runRegistration,
+  cancelActiveRegistrationJob,
+  getActivePythonJobId,
+  type RegistrationOptions,
+  type RegistrationSummary,
+  type LogLevel,
+  type RegistrationStatus,
+} from './registrationRunner';

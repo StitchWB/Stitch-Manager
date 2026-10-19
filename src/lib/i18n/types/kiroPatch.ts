@@ -1,0 +1,47 @@
+export interface KiroPatchTranslations {
+  kiroPatch: {
+    bindError: string;
+    bindModalAccountId: string;
+    bindModalAccountIdPlaceholder: string;
+    bindModalBind: string;
+    bindModalCancel: string;
+    bindModalGenerate: string;
+    bindModalMachineId: string;
+    bindModalMachineIdPlaceholder: string;
+    bindModalTitle: string;
+    bindNewAccount: string;
+    bindSuccess: string;
+    bindingsEmpty: string;
+    bindingsTitle: string;
+    collapse: string;
+    constantsTitle: string;
+    copyDefaults: string;
+    expand: string;
+    generateNew: string;
+    generateSuccess: string;
+    idCopied: string;
+    loadError: string;
+    logLevelTitle: string;
+    machineIdDescription: string;
+    machineIdTitle: string;
+    maxTokens: string;
+    presetTitle: string;
+    presetDescription: string;
+    outboundProxy: string;
+    outboundProxyHint: string;
+    promptEditorTitle: string;
+    proxyDescription: string;
+    proxyPort: string;
+    proxyPortHint: string;
+    proxyStarted: string;
+    proxyStopped: string;
+    proxyTitle: string;
+    saveConfig: string;
+    saveError: string;
+    saveSuccess: string;
+    unbind: string;
+    unbindError: string;
+    unbindSuccess: string;
+    writeLimit: string;
+  };
+}

@@ -1,0 +1,35 @@
+/**
+ * AdminRoute — route guard. Wraps admin-only pages so a non-admin user
+ * (role === 'user') is redirected to '/' instead of seeing the page.
+ *
+ * When auth is disabled, the gate in App.tsx never renders the routes at
+ * all (the whole app is unauthenticated), so this guard is only reached
+ * when auth is enabled and the user is logged in.
+ */
+
+import { Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { useAuthStore, effectiveRole } from '../../stores/auth';
+
+interface AdminRouteProps {
+  children: ReactNode;
+}
+
+export function AdminRoute({ children }: AdminRouteProps) {
+  const user = useAuthStore(state => state.user);
+
+  if (!user) {
+    // No session — the gate in App.tsx should have caught this, but guard
+    // against direct navigation just in case.
+    return <Navigate to="/app" replace />;
+  }
+
+  // Use the EFFECTIVE role so an admin previewing a non-admin role is
+  // redirected away from admin-only pages (the backend enforces the same
+  // on the API side; this is the UX mirror).
+  if (effectiveRole(user) !== 'admin') {
+    return <Navigate to="/app" replace />;
+  }
+
+  return <>{children}</>;
+}

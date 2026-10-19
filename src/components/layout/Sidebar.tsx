@@ -1,0 +1,515 @@
+import { NavLink } from 'react-router-dom';
+import { useEffect } from 'react';
+import {
+  LayoutDashboard,
+  Users,
+  RefreshCw,
+  Code,
+  Settings,
+  FileText,
+  Mail,
+  ChevronLeft,
+  ChevronRight,
+  Repeat,
+  Wrench,
+  ShieldCheck,
+  KeyRound,
+  Radar,
+  HeartHandshake,
+  Send,
+  LogOut,
+  UserCircle,
+  Store,
+  ShieldOff,
+  Ticket,
+  Activity,
+  Globe,
+  Crown,
+  Home,
+} from
+  'lucide-react';
+import { useAppStore } from '../../stores/app';
+import { useAuthStore, effectiveRole } from '../../stores/auth';
+import { t } from '@/lib/i18n';
+import { cn } from '../../lib/utils';
+import { version as appVersion } from '../../../package.json';
+import { ButtonBase } from '@/components/ui/ButtonBase';
+import { IconButton } from '@/components/ui/IconButton';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { Badge } from '@/components/ui/Badge';
+import { TierBadge } from '@/components/ui/TierBadge';
+import { OverflowMenu } from '@/components/ui/OverflowMenu';
+import { openUrlInBrowser } from '@/lib/backend/modules/aiProxy';
+
+/** Guest-state account CTA. Desktop is local-only or TG-bound — the local
+ * account setup is a web surface, so desktop leads to the TG bind flow. */
+function guestCta(authHasUsers: boolean): { view: 'telegram' | 'login' | 'setup'; label: string } {
+  if (isDesktopApp()) return { view: 'telegram', label: t('auth.login.tgLink') };
+  return authHasUsers
+    ? { view: 'login', label: t('auth.guest.login') }
+    : { view: 'setup', label: t('auth.guest.createLocal') };
+}
+import { isDesktopApp } from '@/lib/backend/core/url';
+import { MAIN_TELEGRAM_URL } from '@/lib/links';
+import { Eye } from 'lucide-react';
+
+interface NavItemProps {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  collapsed?: boolean;
+}
+
+function NavItem({ to, icon, label, collapsed }: NavItemProps) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cn(
+          'flex items-center transition-all duration-200 rounded-xl group relative',
+          collapsed ? 'justify-center px-2 py-2.5 mx-1' : 'gap-3 px-3 py-2.5 mx-2',
+          isActive ?
+            'bg-white/[0.06] text-white font-semibold' :
+            'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+        )
+      }>
+
+      <span className="shrink-0">{icon}</span>
+      {!collapsed &&
+        <span className="text-sm tracking-tight animate-in fade-in slide-in-from-left-2 duration-300">
+          {label}
+        </span>
+      }
+      {collapsed &&
+        <div className="absolute left-full ml-4 px-2 py-1 bg-vsc-sidebar text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap shadow-xl border border-white/10">
+          {label}
+        </div>
+      }
+    </NavLink>);
+}
+
+interface SidebarItemConfig {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+  visible: boolean;
+}
+
+interface SidebarSectionConfig {
+  key: string;
+  label?: string;
+  separator?: boolean;
+  items: SidebarItemConfig[];
+}
+
+export default function Sidebar() {
+  const { sidebarCollapsed, toggleSidebar, language } = useAppStore();
+  const {
+    enabled: authEnabled,
+    required: authRequired,
+    hasUsers: authHasUsers,
+    user: authUser,
+    guest: authGuest,
+    logout: authLogout,
+    busy: authBusy,
+    exitGuest,
+    hasPermission,
+    setPreviewRole,
+  } = useAuthStore();
+
+  useEffect(() => {
+    // Auto-collapse sidebar on small screens (< 1200px)
+    const handleResize = () => {
+      const shouldCollapse = window.innerWidth < 1200;
+      const isCollapsed = useAppStore.getState().sidebarCollapsed;
+      if (shouldCollapse && !isCollapsed) {
+        useAppStore.getState().toggleSidebar();
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial check
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  void language;
+
+  // Role-based visibility: the whole product surface is open to any
+  // authenticated user; only the admin zone (users / codes / monitoring)
+  // requires the admin role. When auth is disabled, show everything
+  // (desktop mode). Uses the EFFECTIVE role so an admin previewing a
+  // non-admin role loses admin-only nav until they exit the preview.
+  const isAdmin = !authEnabled || effectiveRole(authUser) === 'admin';
+
+  const desktop = isDesktopApp();
+  const adminZone = isAdmin && authEnabled;
+
+  const sections: SidebarSectionConfig[] = [
+    {
+      key: 'top',
+      items: [
+        { to: desktop ? '/' : '/app', icon: <LayoutDashboard size={20} />, label: t('sidebar.dashboard'), visible: true },
+      ],
+    },
+    {
+      key: 'operations',
+      label: t('sidebar.sectionOperations'),
+      items: [
+        { to: '/accounts', icon: <Users size={20} />, label: t('sidebar.accounts'), visible: true },
+        { to: '/groups', icon: <Users size={20} />, label: t('sidebar.groups'), visible: Boolean(authUser) },
+        { to: '/autoreg', icon: <RefreshCw size={20} />, label: t('sidebar.autoReg'), visible: hasPermission('section.autoreg') },
+        { to: '/automation', icon: <Repeat size={20} />, label: t('sidebar.automation'), visible: hasPermission('section.automation') },
+        { to: '/mail', icon: <Mail size={20} />, label: t('sidebar.mail'), visible: hasPermission('section.mail') },
+      ],
+    },
+    {
+      key: 'toolsAi',
+      label: t('sidebar.sectionToolsAi'),
+      items: [
+        { to: '/patcher', icon: <Code size={20} />, label: t('sidebar.idePatch'), visible: desktop },
+        { to: '/ai', icon: <ShieldCheck size={20} />, label: t('sidebar.aiHub'), visible: hasPermission('section.ai_hub') },
+        { to: '/radar', icon: <Radar size={20} />, label: t('sidebar.radar'), visible: true },
+        { to: '/tools', icon: <Wrench size={20} />, label: t('sidebar.tools'), visible: hasPermission('section.tools') },
+        { to: '/totp', icon: <KeyRound size={20} />, label: '2FA', visible: hasPermission('section.totp') },
+      ],
+    },
+    {
+      key: 'ecosystem',
+      label: t('sidebar.sectionEcosystem'),
+      items: [
+        { to: '/marketplace', icon: <Store size={20} />, label: t('sidebar.marketplace'), visible: true },
+        { to: '/friends', icon: <HeartHandshake size={20} />, label: t('sidebar.friends'), visible: true },
+      ],
+    },
+    {
+      key: 'system',
+      label: t('sidebar.system'),
+      separator: true,
+      items: [
+        { to: '/', icon: <Globe size={20} />, label: t('sidebar.website'), visible: !desktop },
+        { to: '/settings', icon: <Settings size={20} />, label: t('sidebar.settings'), visible: hasPermission('section.settings') },
+        { to: '/logs', icon: <FileText size={20} />, label: t('sidebar.logs'), visible: hasPermission('section.logs') },
+        { to: '/admin', icon: <Home size={20} />, label: t('sidebar.adminOverview'), visible: adminZone },
+        { to: '/admin/groups', icon: <Users size={20} />, label: t('sidebar.groupsAdmin'), visible: adminZone },
+        { to: '/users', icon: <UserCircle size={20} />, label: t('auth.users.title'), visible: adminZone },
+        { to: '/codes', icon: <Ticket size={20} />, label: t('codes.title'), visible: adminZone },
+        { to: '/partners', icon: <Crown size={20} />, label: t('sidebar.partners'), visible: adminZone },
+        { to: '/monitoring', icon: <Activity size={20} />, label: t('monitoring.title'), visible: adminZone },
+        { to: '/privileges', icon: <ShieldCheck size={20} />, label: t('sidebar.privileges'), visible: adminZone },
+      ],
+    },
+  ];
+
+  return (
+    <aside
+      className={cn(
+        'flex flex-col shrink-0 transition-all duration-300 ease-in-out border-r border-white/10 relative z-40 bg-vsc-sidebar-solid/80 backdrop-blur-3xl group',
+        sidebarCollapsed ? 'w-16' : 'w-52'
+      )}>
+
+      {/* Collapse Toggle Button — integrated into border-right */}
+      <ButtonBase
+        onClick={toggleSidebar}
+        aria-label={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+        title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-8 rounded-full bg-vsc-sidebar text-slate-400 flex items-center justify-center shadow-lg hover:text-white hover:bg-vsc-panel transition-colors z-50 border border-white/20 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity">
+
+        {sidebarCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+      </ButtonBase>
+
+      {/* Logo */}
+      <div className={cn('h-20 flex items-center mb-2', sidebarCollapsed ? 'px-3 justify-center' : 'px-5')}>
+        <div className="flex items-center gap-3 overflow-hidden">
+          <img
+            src="/stitchwb-mark.png"
+            alt="StitchWB"
+            className="w-10 h-10 shrink-0 object-contain"
+          />
+          {!sidebarCollapsed &&
+            <div className="flex flex-col min-w-0 animate-in fade-in slide-in-from-left-2 duration-500">
+              <h1 className="text-white text-base font-black tracking-tighter leading-tight truncate uppercase">{t("common.sidebar.stitch")}
+
+              </h1>
+              <span className="text-indigo-400/80 text-[10px] font-bold tracking-widest uppercase">{t("common.sidebar.manager_v")}
+                {appVersion}
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-2 space-y-1 no-scrollbar">
+        {sections.map(section => {
+          const items = section.items.filter(item => item.visible);
+          if (items.length === 0) return null;
+          return (
+            <div key={section.key} className="space-y-1">
+              {section.separator && (
+                <div className="mx-5 pt-6 mt-6 border-t border-white/5 opacity-80">
+                  {!sidebarCollapsed &&
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                      {section.label}
+                    </p>
+                  }
+                </div>
+              )}
+              {!section.separator && section.label && !sidebarCollapsed && (
+                <div className="mx-5 mt-5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                    {section.label}
+                  </p>
+                </div>
+              )}
+              {items.map(item => (
+                <NavItem
+                  key={item.to}
+                  to={item.to}
+                  icon={item.icon}
+                  label={item.label}
+                  collapsed={sidebarCollapsed} />
+              ))}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Footer */}
+      <div className={cn('border-t border-white/5 shrink-0', sidebarCollapsed ? 'p-2 space-y-2' : 'p-4 space-y-2')}>
+        {/* Auth user chip + logout — only when auth is enabled */}
+        {authEnabled && authUser && (
+          <div className={cn(
+            'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
+            sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2'
+          )}>
+            {(() => {
+              const showTier = authUser.tg_tier && authUser.tg_tier !== 'user';
+              const effRole = effectiveRole(authUser);
+              const tierLine = showTier
+                ? ` · ${t(`auth.role.${authUser.tg_tier}`)} · ID ${String(authUser.id)}`
+                : ` · ID ${String(authUser.id)}`;
+              const tooltipContent = (
+                <>
+                  <div>{authUser.username} · {t(`auth.role.${effRole}`)}{tierLine}</div>
+                  {showTier && (
+                    <div className="text-slate-400 text-[11px] mt-0.5">{t('footer.tierHint')}</div>
+                  )}
+                </>
+              );
+              if (sidebarCollapsed) {
+                const isRealAdmin = authUser.role === 'admin';
+                const previewRoles = ['user', 'vip', 'premium', 'elite', 'admin'] as const;
+                return (
+                  <>
+                    <Tooltip content={tooltipContent} side="right">
+                      <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                        <UserCircle className="w-4 h-4" />
+                      </div>
+                    </Tooltip>
+                    {isRealAdmin && (
+                      <Tooltip content={t('auth.preview.title')} side="right">
+                        <OverflowMenu
+                          size="sm"
+                          triggerIcon={<Eye size={14} />}
+                          triggerLabel={t('auth.preview.title')}
+                          triggerClassName={
+                            effRole !== 'admin'
+                              ? 'text-amber-300 hover:text-amber-200'
+                              : undefined
+                          }
+                          items={[
+                            ...previewRoles
+                              .filter(r => r !== 'admin')
+                              .map(r => ({
+                                id: `preview-${r}`,
+                                label: t(`auth.role.${r}`),
+                                disabled: effRole === r,
+                                onSelect: () => void setPreviewRole(r),
+                              })),
+                            {
+                              id: 'preview-exit',
+                              label: t('auth.preview.myRole'),
+                              disabled: effRole === 'admin',
+                              onSelect: () => void setPreviewRole(null),
+                            },
+                          ]}
+                        />
+                      </Tooltip>
+                    )}
+                  </>
+                );
+              }
+              // Real admins get a static badge with the EFFECTIVE role plus
+              // a compact eye menu (right side, next to logout) as the
+              // preview entry point. Non-admins keep the plain static Badge.
+              const isRealAdmin = authUser.role === 'admin';
+              const previewRoles = ['user', 'vip', 'premium', 'elite', 'admin'] as const;
+              return (
+                <>
+                  <Tooltip content={tooltipContent} side="top">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">
+                        <UserCircle className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <span className="text-xs font-medium text-slate-200 truncate">
+                          {authUser.username}
+                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Badge
+                            variant={
+                              !isRealAdmin
+                                ? 'default'
+                                : effRole === 'admin'
+                                  ? 'info'
+                                  : 'warning'
+                            }
+                            size="sm"
+                            className="shrink-0 max-w-full overflow-hidden"
+                          >
+                            {t(`auth.role.${effRole}`)}
+                          </Badge>
+                          {showTier && (
+                            <TierBadge tier={authUser.tg_tier} size="sm" className="shrink-0" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </Tooltip>
+                  {isRealAdmin && (
+                    <Tooltip content={t('auth.preview.title')} side="top">
+                      <OverflowMenu
+                        size="sm"
+                        triggerIcon={<Eye className="w-3.5 h-3.5" />}
+                        triggerLabel={t('auth.preview.title')}
+                        triggerClassName={
+                          effRole !== 'admin'
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : undefined
+                        }
+                        items={[
+                          ...previewRoles
+                            .filter(r => r !== 'admin')
+                            .map(r => ({
+                              id: `preview-${r}`,
+                              label: t(`auth.role.${r}`),
+                              disabled: effRole === r,
+                              onSelect: () => void setPreviewRole(r),
+                            })),
+                          {
+                            id: 'preview-exit',
+                            label: t('auth.preview.myRole'),
+                            disabled: effRole === 'admin',
+                            onSelect: () => void setPreviewRole(null),
+                          },
+                        ]}
+                      />
+                    </Tooltip>
+                  )}
+                </>
+              );
+            })()}
+            <div className="shrink-0">
+              <Tooltip content={t('auth.logout')} side={sidebarCollapsed ? 'right' : 'top'}>
+                <IconButton
+                  onClick={() => void authLogout()}
+                  size="md"
+                  variant="ghost"
+                  disabled={authBusy}
+                  aria-label={t('auth.logout')}
+                  className="text-slate-500 hover:text-red-400"
+                >
+                  <LogOut size={16} />
+                </IconButton>
+              </Tooltip>
+            </div>
+          </div>
+        )}
+
+        {/* Guest chip — auth enabled, not required, user chose guest mode.
+            Shows a subtle "Guest" badge and a button to opt into protection
+            (Setup when no users exist, Login otherwise). */}
+        {authEnabled && !authRequired && authGuest && !authUser && (
+          <div className={cn(
+            'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
+            sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2'
+          )}>
+            {sidebarCollapsed ? (
+              <Tooltip content={t('auth.guest.badge')} side="right">
+                <div className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0">
+                  <ShieldOff className="w-4 h-4" />
+                </div>
+              </Tooltip>
+            ) : (
+              <>
+                <div className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0">
+                  <ShieldOff className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <span className="text-xs font-medium text-slate-200 truncate">
+                    {t('auth.guest.badge')}
+                  </span>
+                  <Badge variant="default" size="sm" className="mt-0.5 self-start">
+                    {t('auth.guest.badge')}
+                  </Badge>
+                </div>
+              </>
+            )}
+            <Tooltip
+              content={guestCta(authHasUsers).label}
+              side={sidebarCollapsed ? 'right' : 'top'}
+            >
+              <IconButton
+                onClick={() => exitGuest(guestCta(authHasUsers).view)}
+                size="md"
+                variant="ghost"
+                aria-label={guestCta(authHasUsers).label}
+                className="text-slate-500 hover:text-indigo-400"
+              >
+                <ShieldCheck size={16} />
+              </IconButton>
+            </Tooltip>
+          </div>
+        )}
+
+        {/* Local mode indicator — hidden when auth is enabled (replaced by user chip) */}
+        {!authEnabled && (
+          <div
+            className={cn(
+              'flex items-center rounded-xl bg-white/[0.02] border border-white/5',
+              sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
+            )}
+          >
+            {sidebarCollapsed ? (
+              <Tooltip content={t('sidebar.localMode')} side="right">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+              </Tooltip>
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+            )}
+            {!sidebarCollapsed &&
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                {t('sidebar.localMode')}
+              </span>
+            }
+          </div>
+        )}
+
+        {/* Telegram channel — always visible */}
+        <div className={cn('flex', sidebarCollapsed ? 'justify-center' : 'justify-end')}>
+          <Tooltip content={t('sidebar.telegramChannel')} side={sidebarCollapsed ? 'right' : 'top'}>
+            <IconButton
+              onClick={() => void openUrlInBrowser(MAIN_TELEGRAM_URL)}
+              size="md"
+              variant="ghost"
+              aria-label={t('sidebar.telegramChannel')}
+            >
+              <Send size={16} />
+            </IconButton>
+          </Tooltip>
+        </div>
+      </div>
+    </aside>);
+
+}

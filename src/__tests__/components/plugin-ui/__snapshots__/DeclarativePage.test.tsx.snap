@@ -1,0 +1,130 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
+<div>
+  <div
+    class="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8"
+  >
+    <h1
+      class="text-2xl font-bold tracking-tight text-white"
+    >
+      Title
+    </h1>
+    <div
+      class="text-xl font-semibold tracking-tight text-slate-100"
+    >
+      Overview
+    </div>
+    <div
+      class="space-y-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+    >
+      <div
+        class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+      >
+        Settings
+      </div>
+      <div
+        class="max-w-md"
+      >
+        <div
+          data-testid="ui-input"
+        >
+          <label>
+            Name
+          </label>
+          <input
+            value="Alice"
+          />
+        </div>
+      </div>
+      <div
+        class="max-w-md"
+      >
+        <div
+          data-testid="ui-select"
+        >
+          <label>
+            Role
+          </label>
+          <select>
+            <option
+              value="admin"
+            >
+              Admin
+            </option>
+            <option
+              value="user"
+            >
+              User
+            </option>
+          </select>
+        </div>
+      </div>
+      <label
+        data-testid="ui-toggle"
+      >
+        <input
+          checked=""
+          type="checkbox"
+        />
+        Active
+      </label>
+    </div>
+    <div
+      class="space-y-2"
+    >
+      <div
+        class="overflow-hidden rounded-xl border border-white/[0.06]"
+      >
+        <table
+          data-testid="ui-table"
+        >
+          <thead>
+            <tr>
+              <th>
+                Name
+              </th>
+              <th>
+                Email
+              </th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                Alice
+              </td>
+              <td>
+                a@b.c
+              </td>
+              <td>
+                <div
+                  class="flex justify-end gap-2"
+                >
+                  <button
+                    data-loading="false"
+                    data-testid="ui-button"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div
+      class="flex flex-wrap items-center gap-2"
+    >
+      <button
+        data-loading="false"
+        data-testid="ui-button"
+      >
+        Ping
+      </button>
+    </div>
+  </div>
+</div>
+`;

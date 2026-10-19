@@ -1,0 +1,43 @@
+import type { TotpTranslations } from '../../i18n/types/totp';
+
+export const totp: TotpTranslations = {
+  totp: {
+    title: "TOTP Keys",
+    pageTitle: "2FA / Authenticator",
+    subtitle: "Manage Time-based One-Time Password secrets. Codes are generated locally — your secrets never leave this device.",
+    addKey: "Add key",
+    adding: "Adding…",
+    searchPlaceholder: "Search keys…",
+    sortNewest: "Newest first",
+    sortAlpha: "A–Z",
+    groupByIssuer: "Group by issuer",
+    noIssuer: "No issuer",
+    noMatch: "No keys match your search",
+    emptyTitle: "No 2FA keys yet",
+    emptyDescription: "Add a TOTP secret key to start generating codes",
+    formTitle: "New TOTP key",
+    labelLabel: "Label",
+    labelPlaceholder: "e.g. My Kiro account",
+    issuerLabel: "Issuer",
+    issuerPlaceholder: "e.g. Kiro, GitHub (optional)",
+    secretLabel: "Secret key",
+    secretPlaceholder: "Base32 secret or otpauth:// URI",
+    labelRequired: "Label is required",
+    invalidSecret: "Invalid secret — must be a Base32 string (A–Z, 2–7)",
+    invalidOtpauth: "Invalid otpauth:// URI — expected otpauth://totp/…?secret=…",
+    keyAdded: "2FA key added",
+    keyUpdated: "Key updated",
+    keyRemoved: "Key removed",
+    addFailed: "Failed to add key",
+    updateFailed: "Failed to update key",
+    removeFailed: "Failed to remove key",
+    deleteConfirm: "Remove",
+    editTooltip: "Edit label",
+    removeTooltip: "Remove key",
+    copyCode: "2FA: {code} — click to copy",
+    columnHeader: "2FA",
+    codeCopied: "2FA code copied",
+    linkedAccount: "Linked to an account",
+    uriDetected: "otpauth:// URI detected — fields filled"
+  }
+};
