@@ -468,7 +468,13 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
                         </TableCell>
                         <TableCell>{devboxTime(row.startedAt)}</TableCell>
                         <TableCell>{devboxTime(row.finishedAt)}</TableCell>
-                        <TableCell>{row.exit ?? '—'}</TableCell>
+                        <TableCell
+                          className={cn(
+                            row.exit !== null && row.exit !== undefined && row.exit !== 0 && 'font-semibold text-red-300',
+                          )}
+                        >
+                          {row.exit ?? '—'}
+                        </TableCell>
                         <TableCell>
                           {hasPayload && (
                             <IconButton
