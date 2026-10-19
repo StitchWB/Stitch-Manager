@@ -98,14 +98,20 @@ async def bootstrap() -> None:
     import stitch_backend.domains.prompts.commands  # noqa: F401
     import stitch_backend.domains.proxy_library.commands  # noqa: F401
     import stitch_backend.domains.python_jobs.commands  # noqa: F401
-    import stitch_backend.domains.registration.commands  # noqa: F401
+    try:
+        import stitch_backend.domains.registration.commands  # noqa: F401
+    except ImportError:  # open-core: registration domain is a closed module
+        pass
     import stitch_backend.domains.replenishment.commands  # noqa: F401
     import stitch_backend.domains.router.commands  # noqa: F401
     import stitch_backend.domains.scenarios.commands  # noqa: F401
     import stitch_backend.domains.scheduler.commands  # noqa: F401
     import stitch_backend.domains.settings.commands  # noqa: F401
     import stitch_backend.domains.totp.commands  # noqa: F401
-    import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
+    try:
+        import stitch_backend.domains.turnstile_solver.commands  # noqa: F401
+    except ImportError:  # open-core: turnstile solver is a closed module
+        pass
     import stitch_backend.domains.utility.commands  # noqa: F401
     import stitch_backend.domains.utility.file_dialogs  # noqa: F401
     import stitch_backend.domains.utility.stubs  # noqa: F401

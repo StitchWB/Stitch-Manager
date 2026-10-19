@@ -24,13 +24,24 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+
 import logging
 from typing import Any, cast
 
 from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.exceptions import ProfileError
 from stitch_backend.database import run_in_read_session, run_in_session
-from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+
+_FingerprintService: type[FingerprintService] | None
+
+try:
+    from stitch_backend.domains.profiles.fingerprint_service import (
+        FingerprintService as _FingerprintService,
+    )
+except ImportError:  # open-core: fingerprint profiles are a closed module
+    _FingerprintService = None
 from stitch_backend.domains.profiles.schemas import (
     DeleteProfileRequest,
     ExportBundleRequest,
@@ -62,21 +73,27 @@ def _caller_uid(params: dict) -> int | None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
+def _require_fingerprint_service():
+    if _FingerprintService is None:
+        raise ProfileError("fingerprint profiles are not available in this build")
+    return _FingerprintService
+
+
 @register_command("generate_profile_rust")
 async def cmd_generate_profile(params: dict) -> Any:
-    return FingerprintService.generate()
+    return _require_fingerprint_service().generate()
 
 
 @register_command("get_or_create_profile_rust")
 async def cmd_get_or_create_profile(params: dict) -> Any:
     req = _parse(GetOrCreateProfileRequest, params)
-    return FingerprintService.get_or_create(req.email)
+    return _require_fingerprint_service().get_or_create(req.email)
 
 
 @register_command("load_profile_rust")
 async def cmd_load_profile(params: dict) -> Any:
     req = _parse(LoadProfileRequest, params)
-    result = FingerprintService.load(req.email)
+    result = _require_fingerprint_service().load(req.email)
     if result is None:
         return None
     return result
@@ -85,7 +102,7 @@ async def cmd_load_profile(params: dict) -> Any:
 @register_command("save_profile_rust")
 async def cmd_save_profile(params: dict) -> dict:
     req = _parse(SaveProfileRequest, params)
-    FingerprintService.save(req.email, req.profile)
+    _require_fingerprint_service().save(req.email, req.profile)
     return {"success": True}
 
 
@@ -93,7 +110,8 @@ async def cmd_save_profile(params: dict) -> dict:
 async def cmd_delete_profile(db: AsyncSession, params: dict) -> dict:
     req = _parse(DeleteProfileRequest, params)
     owner_id = _caller_uid(params)
-    FingerprintService.delete(req.email)
+    if _FingerprintService is not None:
+        _FingerprintService.delete(req.email)
     # Also delete settings if they exist (owner-filtered)
 
     svc = ProfileSettingsService(db)
@@ -118,8 +136,9 @@ async def cmd_list_profiles(params: dict) -> list[str]:
 
     db_aliases = await run_in_read_session(_op)
     seen = {a.lower() for a in db_aliases}
+    file_aliases = _FingerprintService.list_aliases() if _FingerprintService else []
     return list(db_aliases) + [
-        a for a in FingerprintService.list_aliases() if a.lower() not in seen
+        a for a in file_aliases if a.lower() not in seen
     ]
 
 

@@ -462,10 +462,14 @@ async def cmd_initialize_app(params: dict) -> dict:
         BackgroundManagerConfig,
         normalise_background_manager_config,
     )
-    from stitch_backend.domains.registration.service import registration_service
     from stitch_backend.domains.scheduler.service import get_tasks, task_to_dict
     from stitch_backend.domains.scheduler.worker import get_worker as get_scheduler_worker
     from stitch_backend.domains.settings.service import SettingsService
+
+    try:
+        from stitch_backend.domains.registration.service import registration_service
+    except ImportError:  # open-core: registration domain is a closed module
+        registration_service = None  # type: ignore[assignment]
 
     async def _op(session):
         # Get settings
@@ -546,8 +550,11 @@ async def cmd_initialize_app(params: dict) -> dict:
     scheduler_status = get_scheduler_worker().is_running
 
     # Registration status and jobs
+    jobs = (
+        registration_service.list_jobs() if registration_service is not None else []
+    )
     running_jobs = [
-        j for j in registration_service.list_jobs()
+        j for j in jobs
         if j.get("state") == "running"
     ]
     if running_jobs:
@@ -565,7 +572,7 @@ async def cmd_initialize_app(params: dict) -> dict:
             "completedAt": None,
         }
     else:
-        all_jobs = registration_service.list_jobs()
+        all_jobs = jobs
         if all_jobs:
             job = all_jobs[0]
             success = job.get("state") == "succeeded"
@@ -589,10 +596,11 @@ async def cmd_initialize_app(params: dict) -> dict:
                 "startedAt": None, "completedAt": None,
             }
 
-    registration_jobs = [
-        registration_service.to_frontend_dict(j)
-        for j in registration_service.list_jobs()
-    ]
+    registration_jobs = (
+        [registration_service.to_frontend_dict(j) for j in jobs]
+        if registration_service is not None
+        else []
+    )
 
     # Merge into result
     result["proxyStatus"] = proxy_status

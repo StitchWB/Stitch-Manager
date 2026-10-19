@@ -196,16 +196,15 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     # host is registered, generate_cards / check_card_rust
     # commands are routed to the plugin (identity mapping — no prefix to
     # strip) BEFORE falling through to the built-in handler.
-    from stitch_backend.domains.plugin_runtime.cards_dual import (
-        _FALLTHROUGH as _CARDS_FALLTHROUGH,
-    )
-    from stitch_backend.domains.plugin_runtime.cards_dual import (
-        try_cards_dual_route,
-    )
+    try:
+        from stitch_backend.domains.plugin_runtime import cards_dual
+    except ImportError:  # open-core: cards dual routing is a closed module
+        cards_dual = None  # type: ignore[assignment]
 
-    _cards_result = await try_cards_dual_route(name, body)
-    if _cards_result is not _CARDS_FALLTHROUGH:
-        return JSONResponse(content=_serialise(_cards_result))
+    if cards_dual is not None:
+        _cards_result = await cards_dual.try_cards_dual_route(name, body)
+        if _cards_result is not cards_dual._FALLTHROUGH:
+            return JSONResponse(content=_serialise(_cards_result))
 
     # Look up handler
     try:
