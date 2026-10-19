@@ -21,13 +21,35 @@ from ..stitch_backend_bridge import (
     register_builtin_spis,
     resolve_email_verification,
 )
-from . import capabilities_account as _account_impl
 from . import capabilities_branch as _branch_impl
 from . import capabilities_extract as _extract_impl
-from . import capabilities_firebase as _firebase_impl
-from . import capabilities_mail as _mail_impl
 from . import capabilities_totp as _totp_impl
-from .capabilities_account import _capture_session
+
+try:
+    from . import capabilities_account as _account_impl
+    from .capabilities_account import _capture_session
+except ImportError:  # open-core: registration methods are a closed zone
+    _account_impl = None
+    _capture_session = None
+
+try:
+    from . import capabilities_firebase as _firebase_impl
+    from .capabilities_firebase import (
+        _firebase_get_api_key,
+        _firebase_login_direct,
+        _firebase_login_worker,
+    )
+except ImportError:  # open-core: registration methods are a closed zone
+    _firebase_impl = None
+    _firebase_get_api_key = None
+    _firebase_login_direct = None
+    _firebase_login_worker = None
+
+try:
+    from . import capabilities_mail as _mail_impl
+except ImportError:  # open-core: registration methods are a closed zone
+    _mail_impl = None
+
 from .capabilities_base import (
     _TEMPLATE_RE,
     ExecutorError,
@@ -38,11 +60,6 @@ from .capabilities_base import (
     resolve_template,
 )
 from .capabilities_extract import _cookie_value
-from .capabilities_firebase import (
-    _firebase_get_api_key,
-    _firebase_login_direct,
-    _firebase_login_worker,
-)
 from .capabilities_totp import (
     _BASE32_RE,
     _extract_totp_secret_from_page,
@@ -109,6 +126,11 @@ def imap_otp_capability(
     imap_factory: Callable[[dict[str, Any]], Any] | None,
     store: dict[str, Any],
 ) -> StepResult:
+    if _mail_impl is None:
+        return StepResult(
+            step.id, step.kind, False,
+            error="imap.otp: capability not available in this build",
+        )
     return _mail_impl.imap_otp_capability(step, imap_config, imap_factory, store)
 
 
@@ -130,12 +152,22 @@ def totp_register_capability(
 def account_save_capability(
     step: ScenarioStep, store: dict[str, Any], browser: Any = None
 ) -> StepResult:
+    if _account_impl is None:
+        return StepResult(
+            step.id, step.kind, False,
+            error="account.save: capability not available in this build",
+        )
     return _account_impl.account_save_capability(step, store, browser)
 
 
 def firebase_auth_capability(
     step: ScenarioStep, store: dict[str, Any], proxy: str | None = None
 ) -> StepResult:
+    if _firebase_impl is None:
+        return StepResult(
+            step.id, step.kind, False,
+            error="firebase.auth: capability not available in this build",
+        )
     return _firebase_impl.firebase_auth_capability(
         step,
         store,

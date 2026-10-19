@@ -205,6 +205,12 @@ module = [
     "stitch_backend.domains.plugin_runtime.cards_dual",
     "stitch_backend.domains.registration.*",
     "stitch_backend.domains.turnstile_solver.*",
+    "autoreg.plugin.browser_lifecycle",
+    "autoreg.plugin.capabilities_account",
+    "autoreg.plugin.capabilities_firebase",
+    "autoreg.plugin.capabilities_mail",
+    "autoreg.plugin.email_gen",
+    "autoreg.plugin.engine_pack",
 ]
 ignore_missing_imports = true
 

@@ -49,7 +49,7 @@
 
 ## 🎯 What is Stitch Manager?
 
-**Stitch Manager** is a cross-platform desktop app for managing multiple accounts across AI-powered IDEs and AI inference providers. It features a plugin-driven architecture with a marketplace for community extensions.
+**Stitch Manager** is a cross-platform desktop app — an account & session manager for AI-powered IDEs and AI inference providers. It features a plugin-driven architecture with a marketplace for community extensions; registration and automation methods are not built in and ship as signed, gated plugins.
 
 ### Why use it?
 
@@ -61,31 +61,6 @@
 ---
 
 ## ✨ Features
-
-### Provider Matrix
-
-Built-in providers from `python/autoreg/providers/registry.py`:
-
-| Category | Provider | AutoReg | Quota Tracking | AI Proxy |
-|----------|----------|:------:|:--------------:|:--------:|
-| **IDE autoreg** | Kiro | ✅ | ✅ | ✅ |
-| | Kiro v2 | ✅ | ✅ | ✅ |
-| | Windsurf | ✅ | ✅ | ✅ |
-| | Trae | ✅ | ❌ | ❌ |
-| | Qoder | ✅ | ❌ | ❌ |
-| **Git auth** | GitHub | ❌ | ❌ | ❌ |
-| | Bitbucket | ❌ | ❌ | ❌ |
-| **Cloud** | AWS | ❌ | ❌ | ❌ |
-| | AWS Builder ID | ❌ | ❌ | ❌ |
-| **AI inference** | OpenAI | ❌ | ❌ | ✅ |
-| | Copilot | ❌ | ❌ | ✅ |
-| | Claude | ❌ | ❌ | ✅ |
-| | Anthropic | ❌ | ❌ | ✅ |
-| | Gemini | ❌ | ❌ | ✅ |
-| | Antigravity | ❌ | ❌ | ✅ |
-| | Z.AI | ❌ | ❌ | ✅ |
-| | Fireworks | ✅ | ❌ | ✅ |
-| | v0.dev | ✅ | ❌ | ❌ |
 
 ### Feature Bullets
 
@@ -144,7 +119,7 @@ Built-in AI gateway (`python/stitch_backend/domains/ai_gateway/routing_engine.py
 
 ## 🧩 Plugin Ecosystem
 
-**17 official plugins** = 9 service plugins + engine-pack + 7 autoreg provider plugins + github-autoreg legacy v1.
+**17 official plugins** = 9 service plugins + 7 autoreg provider plugins + github-autoreg legacy v1.
 
 ### Service Plugins (9)
 
@@ -164,7 +139,7 @@ Built-in AI gateway (`python/stitch_backend/domains/ai_gateway/routing_engine.py
 
 kiro · kiro-v2 · windsurf · trae · fireworks · qoder · v0-app
 
-Plus **github-autoreg** legacy v1.
+Plus **github-autoreg** legacy v1. Registration methods are not built into the open-core client — they ship as signed, gated plugins.
 
 ### Marketplace
 
@@ -172,7 +147,7 @@ Marketplace page surfaces categories, status, features, and changelog from manif
 
 ### Publishing
 
-Official publishing runs exclusively through the [stitch-ci farm](https://github.com/StitchWB/stitch-ci) workflows: `gh workflow run publish-<kind>.yml --repo StitchWB/stitch-ci` (pin `-f version=` to the manifest semver for providers/engine-pack). `python -m stitch_plugin_tools publish-all --dry-run` is the local pipeline validation only. The `STITCH_SIGNING_KEY`, `STITCH_PUBLISH_URL`, `STITCH_ADMIN_KEY` secrets live in the farm, not in this repo.
+Official publishing runs exclusively through the [stitch-ci farm](https://github.com/StitchWB/stitch-ci) workflows: `gh workflow run publish-<kind>.yml --repo StitchWB/stitch-ci` (pin `-f version=` to the manifest semver for providers). `python -m stitch_plugin_tools publish-all --dry-run` is the local pipeline validation only. The `STITCH_SIGNING_KEY`, `STITCH_PUBLISH_URL`, `STITCH_ADMIN_KEY` secrets live in the farm, not in this repo.
 
 ### Authoring
 
@@ -187,7 +162,7 @@ One line per sidebar page:
 - **Dashboard** (`/app`) — overview
 - **Accounts** (`/accounts`) — account list and management
 - **Groups** (`/groups`) — user groups
-- **AutoReg** (`/autoreg`) — automated registration flows
+- **AutoReg** (`/autoreg`) — registration plugin workflows
 - **IDE Patch** (`/patcher`) — extension patching (desktop only)
 - **AI Hub** (`/ai`) — AI gateway routing and provider management
 - **AiApiRadar** (`/radar`) — offer tracking
@@ -293,7 +268,7 @@ pip install -r python/requirements-dev.txt    # Python dev dependencies
 **Requirements:**
 
 - Node.js 18+ (for the frontend build)
-- Python 3.11+ (backend + auto-registration)
+- Python 3.11+ (backend)
 - Git (for cloning)
 
 **Optional (recommended):**
@@ -329,7 +304,7 @@ pip install -r python/requirements-dev.txt    # Python dev dependencies
 ```
 Frontend:  React 18 • TypeScript • TailwindCSS • Zustand
 Backend:   Python • FastAPI • SQLite • SQLAlchemy
-Automation: Python • DrissionPage • IMAPClient
+Automation: Python • scenario record/replay
 ```
 
 ## 📚 Deep Dives
@@ -354,7 +329,7 @@ MIT License — see [LICENSE](LICENSE)
 
 ## 🎯 Что такое Stitch Manager?
 
-**Stitch Manager** — кроссплатформенное приложение для управления аккаунтами в AI IDE и AI-провайдерах. Плагинная архитектура с маркетплейсом для расширений сообщества.
+**Stitch Manager** — кроссплатформенное приложение: менеджер аккаунтов и сессий для AI IDE и AI-провайдеров. Плагинная архитектура с маркетплейсом для расширений сообщества; методы регистрации и автоматизации не встроены в клиент и поставляются как подписанные gated-плагины.
 
 ### Зачем это нужно?
 
@@ -366,31 +341,6 @@ MIT License — see [LICENSE](LICENSE)
 ---
 
 ## ✨ Возможности
-
-### Матрица провайдеров
-
-Встроенные провайдеры из `python/autoreg/providers/registry.py`:
-
-| Категория | Провайдер | Авторег | Квоты | AI-прокси |
-|-----------|-----------|:------:|:-----:|:--------:|
-| **IDE авторег** | Kiro | ✅ | ✅ | ✅ |
-| | Kiro v2 | ✅ | ✅ | ✅ |
-| | Windsurf | ✅ | ✅ | ✅ |
-| | Trae | ✅ | ❌ | ❌ |
-| | Qoder | ✅ | ❌ | ❌ |
-| **Git auth** | GitHub | ❌ | ❌ | ❌ |
-| | Bitbucket | ❌ | ❌ | ❌ |
-| **Cloud** | AWS | ❌ | ❌ | ❌ |
-| | AWS Builder ID | ❌ | ❌ | ❌ |
-| **AI inference** | OpenAI | ❌ | ❌ | ✅ |
-| | Copilot | ❌ | ❌ | ✅ |
-| | Claude | ❌ | ❌ | ✅ |
-| | Anthropic | ❌ | ❌ | ✅ |
-| | Gemini | ❌ | ❌ | ✅ |
-| | Antigravity | ❌ | ❌ | ✅ |
-| | Z.AI | ❌ | ❌ | ✅ |
-| | Fireworks | ✅ | ❌ | ✅ |
-| | v0.dev | ✅ | ❌ | ❌ |
 
 ### Список возможностей
 
@@ -419,13 +369,6 @@ MIT License — see [LICENSE](LICENSE)
 - **Статистика использования и мониторинг здоровья**
 - **Сохранение сессий для быстрого входа**
 - **Сохранение данных регистрации**
-
-### 🤖 Авто-регистрация
-
-- Браузерная автоматизация через DrissionPage
-- IMAP интеграция для верификации email
-- Поддержка прокси
-- Настраиваемые паттерны email
 
 ### 🔧 Патчер IDE
 
@@ -456,7 +399,7 @@ MIT License — see [LICENSE](LICENSE)
 
 ## 🧩 Экосистема плагинов
 
-**17 официальных плагинов** = 9 сервисных + engine-pack + 7 плагинов autoreg провайдеров + github-autoreg legacy v1.
+**17 официальных плагинов** = 9 сервисных + 7 плагинов autoreg провайдеров + github-autoreg legacy v1.
 
 ### Сервисные плагины (9)
 
@@ -476,7 +419,7 @@ MIT License — see [LICENSE](LICENSE)
 
 kiro · kiro-v2 · windsurf · trae · fireworks · qoder · v0.dev
 
-Плюс **github-autoreg** legacy v1.
+Плюс **github-autoreg** legacy v1. Методы регистрации не встроены в open-core клиент — они поставляются как подписанные gated-плагины.
 
 ### Маркетплейс
 
@@ -484,7 +427,7 @@ kiro · kiro-v2 · windsurf · trae · fireworks · qoder · v0.dev
 
 ### Публикация
 
-Официальная публикация идёт только через воркфлоу фермы [stitch-ci](https://github.com/StitchWB/stitch-ci): `gh workflow run publish-<kind>.yml --repo StitchWB/stitch-ci` (для провайдеров и engine-pack фиксируйте `-f version=` по semver манифеста). Локально `python -m stitch_plugin_tools publish-all --dry-run` — только валидация пайплайна. Секреты `STITCH_SIGNING_KEY`, `STITCH_PUBLISH_URL`, `STITCH_ADMIN_KEY` живут на ферме, не в этом репо.
+Официальная публикация идёт только через воркфлоу фермы [stitch-ci](https://github.com/StitchWB/stitch-ci): `gh workflow run publish-<kind>.yml --repo StitchWB/stitch-ci` (для провайдеров фиксируйте `-f version=` по semver манифеста). Локально `python -m stitch_plugin_tools publish-all --dry-run` — только валидация пайплайна. Секреты `STITCH_SIGNING_KEY`, `STITCH_PUBLISH_URL`, `STITCH_ADMIN_KEY` живут на ферме, не в этом репо.
 
 ### Создание плагинов
 
@@ -499,7 +442,7 @@ kiro · kiro-v2 · windsurf · trae · fireworks · qoder · v0.dev
 - **Dashboard** (`/app`) — обзор
 - **Accounts** (`/accounts`) — список и управление аккаунтами
 - **Groups** (`/groups`) — группы пользователей
-- **AutoReg** (`/autoreg`) — потоки автоматической регистрации
+- **AutoReg** (`/autoreg`) — рабочие процессы плагинов регистрации
 - **IDE Patch** (`/patcher`) — патчинг расширений (только десктоп)
 - **AI Hub** (`/ai`) — маршрутизация AI шлюза и управление провайдерами
 - **AiApiRadar** (`/radar`) — отслеживание офферов
@@ -603,7 +546,7 @@ pip install -r python/requirements-dev.txt    # Python dev dependencies
 **Requirements:**
 
 - Node.js 18+ (for the frontend build)
-- Python 3.11+ (backend + auto-registration)
+- Python 3.11+ (backend)
 - Git (for cloning)
 
 **Optional (recommended):**
@@ -616,7 +559,7 @@ pip install -r python/requirements-dev.txt    # Python dev dependencies
 ```
 Frontend:  React 18 • TypeScript • TailwindCSS • Zustand
 Backend:   Python • FastAPI • SQLite • SQLAlchemy
-Автоматизация: Python • DrissionPage • IMAPClient
+Автоматизация: Python • сценарии record/replay
 ```
 
 ## 📚 Глубокое погружение

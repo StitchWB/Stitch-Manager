@@ -128,7 +128,7 @@ export interface AdvancedSettings {
 
   // Card pool (pipe/CSV/space format, one per line)
   cardsText?: string;
-  cardBin?: string; // BIN for auto-generating Live cards
+  cardBin?: string; // BIN prefix for card-based registration
 
   // Kiro-specific
   kiroPlan?: string; // free | pro | pro_plus | pro_max | power

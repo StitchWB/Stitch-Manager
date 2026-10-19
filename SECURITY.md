@@ -1,20 +1,9 @@
 # Security Policy
 
-## Reporting a Vulnerability
+## Reporting a vulnerability or abuse
 
-Stitch Manager handles accounts and tokens; we take security seriously.
+If you discover a security vulnerability or evidence of abuse involving this
+project, please report it privately via GitHub Security Advisories:
+https://github.com/StitchWB/Stitch-Manager/security/advisories/new
 
-- **Do NOT** open a public issue for security vulnerabilities.
-- Report privately via the repository's **private vulnerability reporting**
-  (Security -> "Report a vulnerability") or contact the maintainers directly.
-- Include: affected version, reproduction steps, impact, and any proof-of-concept.
-
-## Supported Versions
-
-Only the latest release of **Stitch-Manager** is supported with security fixes.
-Private provider methods and the distribution server are maintained separately.
-
-## Response
-
-We aim to acknowledge reports within 72 hours and will coordinate disclosure.
-Thank you for helping keep the ecosystem safe.
+Please do not open public issues for security or abuse reports.

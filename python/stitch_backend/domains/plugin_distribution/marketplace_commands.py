@@ -27,7 +27,13 @@ from typing import Any
 import httpx
 
 from autoreg.plugin.crypto import load_embedded_pubkey
-from autoreg.plugin.engine_pack import ENGINE_PACK_ID, locate_engine_pack
+
+try:
+    from autoreg.plugin.engine_pack import ENGINE_PACK_ID, locate_engine_pack
+except ImportError:  # open-core: engine-pack is a closed zone
+    ENGINE_PACK_ID = ""
+    locate_engine_pack = lambda *a, **kw: None  # noqa: E731
+
 from autoreg.plugin.install import list_installed_versions
 from autoreg.plugin.layout import plugins_cache_dir, plugins_local_dir, resolve_link
 from autoreg.plugin.manifest import parse_semver, resolve_i18n, validate_manifest
