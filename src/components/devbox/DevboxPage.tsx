@@ -111,6 +111,12 @@ export function DevboxPage() {
     };
   }, [profilesTick]);
 
+  useEffect(() => {
+    if (!profilesError) return;
+    const timer = window.setTimeout(() => setProfilesTick(x => x + 1), 5000);
+    return () => window.clearTimeout(timer);
+  }, [profilesError, profilesTick]);
+
   const [pending, setPending] = useState(false);
   const [promptTick, setPromptTick] = useState(0);
   const onAction = useCallback(
@@ -251,6 +257,7 @@ export function DevboxPage() {
         aria-label={t('devboxPage.headerProjectLabel')}
         containerClassName="w-56"
         options={projectOptions}
+        placeholder={activeProfile ? undefined : t('devboxPage.profileSelectEmpty')}
         value={selectedProfile ?? activeProfile}
         data-testid="devbox-profile-select"
         onValueChange={onProjectSelect}

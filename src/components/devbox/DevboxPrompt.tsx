@@ -350,9 +350,9 @@ export function DevboxPrompt({
                 value={task}
                 placeholder={t('devboxPage.promptTaskPlaceholder')}
                 data-testid="devbox-prompt-task"
-                containerClassName="min-h-0 flex-1"
-                shellClassName="flex min-h-0 flex-1 flex-col"
-                className="min-h-[160px] flex-1 resize-none overflow-y-auto placeholder:text-slate-400"
+                containerClassName="min-h-0"
+                shellClassName="flex flex-col"
+                className="min-h-[200px] max-h-[420px] resize-y overflow-y-auto placeholder:text-slate-400"
                 onChange={e => {
                   taskRef.current = e.target.value;
                   setTask(e.target.value);

@@ -757,14 +757,14 @@ describe('DevboxPrompt editor layout', () => {
     expect(toggle.querySelector('svg.lucide-plus')).toBeTruthy();
   });
 
-  it('stretches the task textarea to the footer with flex-1', async () => {
+  it('caps the task textarea height and keeps it resizable', async () => {
     renderPrompt();
     await promptReady();
 
     const task = screen.getByTestId('devbox-prompt-task') as HTMLTextAreaElement;
-    expect(task.className).toContain('flex-1');
-    expect(task.className).toContain('min-h-[160px]');
-    expect(task.className).not.toContain('max-h-[40vh]');
+    expect(task.className).toContain('min-h-[200px]');
+    expect(task.className).toContain('max-h-[420px]');
+    expect(task.className).toContain('resize-y');
 
     fireEvent.change(task, { target: { value: 'x'.repeat(400) } });
     expect(task.style.height).toBe('');

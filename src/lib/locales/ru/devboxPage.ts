@@ -7,6 +7,7 @@ export const devboxPage: DevboxPageTranslations = {
     tabTask: "Задача",
     tabInfra: "Инфраструктура",
     headerProjectLabel: "Проект",
+    profileSelectEmpty: "Профиль не выбран",
     projectAddOption: "+ Новый проект",
     projectManageOption: "Настройки проектов",
     switchProfileConfirmTitle: "Сменить профиль на {name}?",
