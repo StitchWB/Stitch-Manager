@@ -197,7 +197,7 @@ async def dispatch_command(name: str, request: Request) -> JSONResponse:
     # commands are routed to the plugin (identity mapping — no prefix to
     # strip) BEFORE falling through to the built-in handler.
     try:
-        from stitch_backend.domains.plugin_runtime import cards_dual
+        import stitch_backend.domains.plugin_runtime.cards_dual as cards_dual
     except ImportError:  # open-core: cards dual routing is a closed module
         cards_dual = None  # type: ignore[assignment]
 

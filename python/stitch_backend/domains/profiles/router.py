@@ -29,20 +29,19 @@ from pydantic import BaseModel
 
 from stitch_backend.database import get_db
 
-_FingerprintService: type[FingerprintService] | None
+_FingerprintService: type[FingerprintService] | None = None
 
 try:
-    from stitch_backend.domains.profiles.fingerprint_service import (
-        FingerprintService as _FingerprintService,
-    )
+    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+
+    _FingerprintService = FingerprintService
 except ImportError:  # open-core: fingerprint profiles are a closed module
-    _FingerprintService = None
+    pass
 from stitch_backend.domains.profiles.settings_service import ProfileSettingsService
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
     from stitch_backend.domains.profiles.schemas import (
         ProfileSettingsV1,
     )
@@ -66,14 +65,16 @@ def _require_fingerprint_service() -> type[FingerprintService]:
 @profiles_router.get("/fingerprints")
 async def list_fingerprints() -> list[str]:
     svc = _require_fingerprint_service()
-    return svc.list_aliases()
+    aliases: list[str] = svc.list_aliases()
+    return aliases
 
 
 @profiles_router.post("/fingerprints/generate")
 async def generate_fingerprint() -> dict[str, Any]:
     svc = _require_fingerprint_service()
     profile = svc.generate()
-    return profile.model_dump(mode="json", by_alias=True)
+    dumped: dict[str, Any] = profile.model_dump(mode="json", by_alias=True)
+    return dumped
 
 
 @profiles_router.get("/fingerprints/{email:path}")
@@ -82,7 +83,8 @@ async def load_fingerprint(email: str) -> dict[str, Any] | None:
     result = svc.load(email)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Profile not found: {email}")
-    return result.model_dump(mode="json", by_alias=True)
+    dumped: dict[str, Any] = result.model_dump(mode="json", by_alias=True)
+    return dumped
 
 
 @profiles_router.delete("/fingerprints/{email:path}")

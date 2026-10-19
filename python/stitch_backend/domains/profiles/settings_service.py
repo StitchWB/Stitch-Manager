@@ -28,14 +28,14 @@ from stitch_backend.core.exceptions import (
     ProfileNotFoundError,
 )
 
-_FingerprintService: type[FingerprintService] | None
+_FingerprintService: type[FingerprintService] | None = None
 
 try:
-    from stitch_backend.domains.profiles.fingerprint_service import (
-        FingerprintService as _FingerprintService,
-    )
+    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+
+    _FingerprintService = FingerprintService
 except ImportError:  # open-core: fingerprint profiles are a closed module
-    _FingerprintService = None
+    pass
 from stitch_backend.domains.profiles.models import ProfileSettings
 from stitch_backend.domains.profiles.schemas import (
     ProfileSettingsRecord,
@@ -44,8 +44,6 @@ from stitch_backend.domains.profiles.schemas import (
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
 

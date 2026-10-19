@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
-
 import logging
 from typing import Any, cast
 
@@ -34,14 +32,14 @@ from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import ProfileError
 from stitch_backend.database import run_in_read_session, run_in_session
 
-_FingerprintService: type[FingerprintService] | None
+_FingerprintService: type[FingerprintService] | None = None
 
 try:
-    from stitch_backend.domains.profiles.fingerprint_service import (
-        FingerprintService as _FingerprintService,
-    )
+    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+
+    _FingerprintService = FingerprintService
 except ImportError:  # open-core: fingerprint profiles are a closed module
-    _FingerprintService = None
+    pass
 from stitch_backend.domains.profiles.schemas import (
     DeleteProfileRequest,
     ExportBundleRequest,
