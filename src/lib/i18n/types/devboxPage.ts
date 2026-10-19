@@ -7,6 +7,8 @@ export interface DevboxPageTranslations {
     headerProjectLabel: string;
     profileSelectEmpty: string;
     gatewayMetrics: string;
+    toastDoctorDone: string;
+    toastDoctorFailed: string;
     projectAddOption: string;
     projectManageOption: string;
     switchProfileConfirmTitle: string;
