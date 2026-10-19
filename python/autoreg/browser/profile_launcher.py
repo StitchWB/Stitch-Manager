@@ -23,7 +23,6 @@ from typing import Any, Literal, cast
 
 from ..core.paths import get_paths
 from .async_shardbrowser_wrapper import AsyncShardBrowserWrapper
-from .cloakbrowser_profile_manager import CloakBrowserProfileManager
 from .cookie_loader import _load_cookies_from_config
 from .engine_state import engine_state_path, load_engine_state, save_engine_state
 from .playwright_cdp_attachment import PlaywrightCdpAttachment
@@ -33,8 +32,21 @@ from .profile_lock import (
     profile_lock_path,
     release_profile_lock,
 )
-from .proxy_geo import _parse_proxy_any, _safe_stderr
 from .window_sizing import _resolve_browser_window
+
+try:
+    from .proxy_geo import _parse_proxy_any, _safe_stderr
+except ImportError:  # open-core: proxy utilities are a closed module
+
+    def _parse_proxy_any(proxy: Any) -> None:
+        if proxy:
+            logger.warning(
+                "proxy configured but proxy utilities are unavailable in this build"
+            )
+        return None
+
+    def _safe_stderr(msg: str) -> None:
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +264,8 @@ class ProfileLauncher:
 
     async def _start_cloakbrowser(self) -> Any:
         """Start CloakBrowser and drive it with real Playwright over CDP."""
+        from .cloakbrowser_profile_manager import CloakBrowserProfileManager
+
         proxy_url = self._proxy.to_url(include_auth=True) if self._proxy else None
         tz = self._effective_timezone()
         geo = self._effective_geolocation()

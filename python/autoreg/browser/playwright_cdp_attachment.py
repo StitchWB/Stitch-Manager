@@ -25,11 +25,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from playwright.async_api import async_playwright
 
-from .cloakbrowser_profile_manager import CloakBrowserProfileManager
+if TYPE_CHECKING:
+    from .cloakbrowser_profile_manager import CloakBrowserProfileManager
 
 logger = logging.getLogger(__name__)
 

@@ -27,7 +27,15 @@ from stitch_backend.core.exceptions import (
     ProfileError,
     ProfileNotFoundError,
 )
-from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+
+_FingerprintService: type[FingerprintService] | None
+
+try:
+    from stitch_backend.domains.profiles.fingerprint_service import (
+        FingerprintService as _FingerprintService,
+    )
+except ImportError:  # open-core: fingerprint profiles are a closed module
+    _FingerprintService = None
 from stitch_backend.domains.profiles.models import ProfileSettings
 from stitch_backend.domains.profiles.schemas import (
     ProfileSettingsRecord,
@@ -36,6 +44,8 @@ from stitch_backend.domains.profiles.schemas import (
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +240,8 @@ class ProfileSettingsService(BaseService):
 
         # Check new alias doesn't collide with an existing profile
         # (fingerprint files or settings rows visible to this caller)
-        existing = {a.lower() for a in FingerprintService.list_aliases()}
+        file_aliases = _FingerprintService.list_aliases() if _FingerprintService else []
+        existing = {a.lower() for a in file_aliases}
         existing |= {
             a.lower() for a in await self.list_setting_aliases(owner_id=owner_id)
         }
@@ -238,10 +249,11 @@ class ProfileSettingsService(BaseService):
             raise ProfileAliasExistsError(new_alias)
 
         # Rename fingerprint file
-        old_profile = FingerprintService.load(old_alias)
-        if old_profile:
-            FingerprintService.save(new_alias, old_profile)
-            FingerprintService.delete(old_alias)
+        if _FingerprintService is not None:
+            old_profile = _FingerprintService.load(old_alias)
+            if old_profile:
+                _FingerprintService.save(new_alias, old_profile)
+                _FingerprintService.delete(old_alias)
 
         # Rename in profile_settings (owner-scoped when owner_id is set)
         await self._repo.rename_alias(old_alias, new_alias, owner_id=owner_id)
@@ -312,7 +324,7 @@ class ProfileSettingsService(BaseService):
         if not destination_path.strip():
             raise ProfileError("destination_path is required")
 
-        profile = FingerprintService.load(alias)
+        profile = _FingerprintService.load(alias) if _FingerprintService else None
         settings_record = await self.get_settings(alias)
         if profile is None and settings_record is None:
             raise ProfileNotFoundError(alias)
@@ -356,7 +368,8 @@ class ProfileSettingsService(BaseService):
         alias = (target_alias or source_alias).strip()
 
         # Check conflict (scoped to caller-visible aliases)
-        existing = {a.lower() for a in FingerprintService.list_aliases()}
+        file_aliases = _FingerprintService.list_aliases() if _FingerprintService else []
+        existing = {a.lower() for a in file_aliases}
         existing |= {
             a.lower() for a in await self.list_setting_aliases(owner_id=owner_id)
         }
@@ -365,12 +378,12 @@ class ProfileSettingsService(BaseService):
 
         # Import fingerprint
         profile_data = raw.get("profile")
-        if profile_data:
+        if profile_data and _FingerprintService is not None:
             from stitch_backend.domains.profiles.schemas import (
                 BrowserFingerprintProfile,
             )
             profile = BrowserFingerprintProfile.model_validate(profile_data)
-            FingerprintService.save(alias, profile)
+            _FingerprintService.save(alias, profile)
 
         # Import settings
         settings_obj = raw.get("settings")

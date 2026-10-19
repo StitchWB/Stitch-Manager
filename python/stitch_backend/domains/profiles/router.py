@@ -28,12 +28,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from stitch_backend.database import get_db
-from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
+
+_FingerprintService: type[FingerprintService] | None
+
+try:
+    from stitch_backend.domains.profiles.fingerprint_service import (
+        FingerprintService as _FingerprintService,
+    )
+except ImportError:  # open-core: fingerprint profiles are a closed module
+    _FingerprintService = None
 from stitch_backend.domains.profiles.settings_service import ProfileSettingsService
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from stitch_backend.domains.profiles.fingerprint_service import FingerprintService
     from stitch_backend.domains.profiles.schemas import (
         ProfileSettingsV1,
     )
@@ -45,20 +54,32 @@ profiles_router = APIRouter(prefix="/v1/profiles", tags=["Profiles"])
 
 # ── Fingerprint endpoints ────────────────────────────────────────────────────
 
+def _require_fingerprint_service() -> type[FingerprintService]:
+    if _FingerprintService is None:
+        raise HTTPException(
+            status_code=503,
+            detail="fingerprint profiles are not available in this build",
+        )
+    return _FingerprintService
+
+
 @profiles_router.get("/fingerprints")
 async def list_fingerprints() -> list[str]:
-    return FingerprintService.list_aliases()
+    svc = _require_fingerprint_service()
+    return svc.list_aliases()
 
 
 @profiles_router.post("/fingerprints/generate")
 async def generate_fingerprint() -> dict[str, Any]:
-    profile = FingerprintService.generate()
+    svc = _require_fingerprint_service()
+    profile = svc.generate()
     return profile.model_dump(mode="json", by_alias=True)
 
 
 @profiles_router.get("/fingerprints/{email:path}")
 async def load_fingerprint(email: str) -> dict[str, Any] | None:
-    result = FingerprintService.load(email)
+    svc = _require_fingerprint_service()
+    result = svc.load(email)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Profile not found: {email}")
     return result.model_dump(mode="json", by_alias=True)
@@ -66,7 +87,8 @@ async def load_fingerprint(email: str) -> dict[str, Any] | None:
 
 @profiles_router.delete("/fingerprints/{email:path}")
 async def delete_fingerprint(email: str) -> dict[str, bool]:
-    FingerprintService.delete(email)
+    svc = _require_fingerprint_service()
+    svc.delete(email)
     return {"success": True}
 
 

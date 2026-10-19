@@ -9,11 +9,16 @@ Provides reusable components for browser automation:
 - DebuggingMixin: Screenshots, debugging, and error analysis
 """
 
-from .anti_detection import AntiDetectionMixin
 from .cookie_handling import CookieHandlingMixin
 from .debugging import DebuggingMixin
-from .human_behavior import HumanBehaviorMixin
 from .network_logging import NetworkLoggingMixin
+
+try:
+    from .anti_detection import AntiDetectionMixin
+    from .human_behavior import HumanBehaviorMixin
+except ImportError:  # open-core: anti-detection mixins are closed modules
+    AntiDetectionMixin = None
+    HumanBehaviorMixin = None
 
 __all__ = [
     "AntiDetectionMixin",
