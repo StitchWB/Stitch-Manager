@@ -191,6 +191,7 @@ export default function Sidebar() {
         { to: '/settings', icon: <Settings size={20} />, label: t('sidebar.settings'), visible: hasPermission('section.settings') },
         { to: '/logs', icon: <FileText size={20} />, label: t('sidebar.logs'), visible: hasPermission('section.logs') },
         { to: '/admin', icon: <Home size={20} />, label: t('sidebar.adminOverview'), visible: adminZone },
+        { to: '/admin/groups', icon: <Users size={20} />, label: t('sidebar.groupsAdmin'), visible: adminZone },
         { to: '/users', icon: <UserCircle size={20} />, label: t('auth.users.title'), visible: adminZone },
         { to: '/codes', icon: <Ticket size={20} />, label: t('codes.title'), visible: adminZone },
         { to: '/partners', icon: <Crown size={20} />, label: t('sidebar.partners'), visible: adminZone },

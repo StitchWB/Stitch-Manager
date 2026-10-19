@@ -10,6 +10,7 @@ export interface SidebarTranslations {
     expand: string;
     friends: string;
     groups: string;
+    groupsAdmin: string;
     idePatch: string;
     localMode: string;
     logs: string;

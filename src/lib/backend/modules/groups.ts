@@ -52,6 +52,10 @@ export interface Group {
   /** Per-member daily request cap (null=unlimited). Optional because the
    *  backend's ``_group_to_dict`` may omit it in older responses. */
   max_requests_per_member_daily?: number | null;
+  /** 'open' | 'verified' | 'suspended'; optional for older backends. */
+  level?: string;
+  /** 'active' | 'suspended'; optional for older backends. */
+  status?: string;
   created_at: string;
 }
 
@@ -134,6 +138,19 @@ export async function groupsList(): Promise<GroupsListResponse> {
 
 export async function groupsAdminList(): Promise<GroupsAdminListResponse> {
   return safeInvoke('groups_admin_list', {}, { noCache: true });
+}
+
+/** Set the group's level to 'verified' (admin only). Returns the updated group. */
+export async function groupVerify(groupId: string): Promise<Group> {
+  return safeInvoke('group_verify', { groupId }, { noCache: true });
+}
+
+/**
+ * Set the group's level to 'suspended' and revoke all of its plugin
+ * grants (admin only). Returns the updated group.
+ */
+export async function groupSuspend(groupId: string): Promise<Group> {
+  return safeInvoke('group_suspend', { groupId }, { noCache: true });
 }
 
 export async function groupsGet(params: { groupId: string }): Promise<GroupDetailResponse> {

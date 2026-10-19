@@ -109,6 +109,28 @@ export const ai: AiTranslations = {
         deleted: "Quota rule deleted",
         invalidAmount: "Amount must be a whole positive number or empty",
       },
+      plugins: {
+        title: "Plugins",
+        empty: "No plugins available — the marketplace manifest is empty or unreachable",
+        memberReadonly: "Only the group owner or an admin can change plugin access",
+        granted: "Granted",
+        notGranted: "Not granted",
+        updated: "Plugin access updated",
+        toggleFailed: "Failed to update plugin access",
+        togglePlugin: "Toggle access to {plugin}",
+        cap: "{used} of {max} gated plugins used",
+        level: {
+          open: "Open",
+          verified: "Verified",
+          suspended: "Suspended",
+        },
+        audience: {
+          public: "Public",
+          group: "Group",
+          tier: "Tier",
+          private: "Private",
+        },
+      },
       pool: {
         title: "Key pool",
         empty: "No keys in pool",

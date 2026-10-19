@@ -97,7 +97,7 @@ describe('Sidebar sections', () => {
     expect(ecosystem.compareDocumentPosition(system) & DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const hrefs = navHrefs(container);
-    for (const path of ['/admin', '/users', '/codes', '/partners', '/monitoring', '/privileges']) {
+    for (const path of ['/admin', '/admin/groups', '/users', '/codes', '/partners', '/monitoring', '/privileges']) {
       expect(hrefs).toContain(path);
     }
     expect(hrefs).not.toContain('/plugins');
