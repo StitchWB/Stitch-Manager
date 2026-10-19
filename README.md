@@ -54,7 +54,6 @@
 ### Why use it?
 
 - 🔄 **Switch accounts instantly** — No IDE restart required
-- 🤖 **Auto-registration** — Create accounts automatically with browser automation
 - 🔧 **IDE Patcher** — Enable multi-account support in IDE extensions
 - 📊 **Quota tracking** — Monitor usage across all accounts
 - 🎨 **Beautiful UI** — Modern Deep Space theme with glassmorphism
@@ -139,16 +138,15 @@ Built-in AI gateway (`python/stitch_backend/domains/ai_gateway/routing_engine.py
 - **Backend:** Python FastAPI + SQLite + SQLAlchemy
 - **Frontend:** React 18 + TypeScript + TailwindCSS + Zustand
 - **Plugins:** isolated subprocesses communicating over stdio JSON-RPC with declarative contributions (`stitch.plugin/v2` schema)
-- **Engine-pack:** ships captcha solvers including a bundled vendor service
 - Compiled (Nuitka) provider artifacts supported
 
 ---
 
 ## 🧩 Plugin Ecosystem
 
-**18 official plugins** = 10 service plugins + engine-pack + 7 autoreg provider plugins + github-autoreg legacy v1.
+**17 official plugins** = 9 service plugins + engine-pack + 7 autoreg provider plugins + github-autoreg legacy v1.
 
-### Service Plugins (10)
+### Service Plugins (9)
 
 | Plugin | Description |
 |--------|-------------|
@@ -158,7 +156,6 @@ Built-in AI gateway (`python/stitch_backend/domains/ai_gateway/routing_engine.py
 | [`stitch-radar`](https://github.com/StitchWB/stitch-radar) | AiApiRadar offers tracking and usage statistics |
 | [`stitch-opencode`](https://github.com/StitchWB/stitch-opencode) | OpenCode config management and API testing |
 | [`stitch-notebooklm`](https://github.com/StitchWB/stitch-notebooklm) | NotebookLM notebooks, Q&A, and audio generation |
-| [`stitch-cards`](https://github.com/StitchWB/stitch-cards) | Card tools for registration workflows |
 | `stitch-freemodel` | FreeModel bridge: Claude models (FM-*) via local proxy |
 | [`stitch-antigravity`](https://github.com/StitchWB/stitch-antigravity) | Antigravity: Google OAuth login (PKCE+loopback) and auth files |
 | [`stitch-relaycheck`](https://github.com/StitchWB/stitch-relaycheck) | RelayCheck: local audit of AI providers and relays (fingerprint, watering, security scan, trust score) |
@@ -362,7 +359,6 @@ MIT License — see [LICENSE](LICENSE)
 ### Зачем это нужно?
 
 - 🔄 **Мгновенное переключение** — Без перезапуска IDE
-- 🤖 **Авто-регистрация** — Создание аккаунтов через браузерную автоматизацию
 - 🔧 **Патчер IDE** — Включение мульти-аккаунтов в расширениях
 - 📊 **Отслеживание квот** — Мониторинг использования всех аккаунтов
 - 🎨 **Красивый UI** — Современная тема Deep Space с glassmorphism
@@ -454,16 +450,15 @@ MIT License — see [LICENSE](LICENSE)
 - **Бэкенд:** Python FastAPI + SQLite + SQLAlchemy
 - **Фронтенд:** React 18 + TypeScript + TailwindCSS + Zustand
 - **Плагины:** изолированные подпроцессы, общающиеся через stdio JSON-RPC с декларативными вкладками (`stitch.plugin/v2` схема)
-- **Engine-pack:** включает решатели captcha, включая встроенный вендорный сервис
 - Поддерживаются скомпилированные (Nuitka) артефакты провайдеров
 
 ---
 
 ## 🧩 Экосистема плагинов
 
-**18 официальных плагинов** = 10 сервисных + engine-pack + 7 плагинов autoreg провайдеров + github-autoreg legacy v1.
+**17 официальных плагинов** = 9 сервисных + engine-pack + 7 плагинов autoreg провайдеров + github-autoreg legacy v1.
 
-### Сервисные плагины (10)
+### Сервисные плагины (9)
 
 | Плагин | Описание |
 |--------|----------|
@@ -473,7 +468,6 @@ MIT License — see [LICENSE](LICENSE)
 | [`stitch-radar`](https://github.com/StitchWB/stitch-radar) | Отслеживание офферов AiApiRadar и статистика использования |
 | [`stitch-opencode`](https://github.com/StitchWB/stitch-opencode) | Управление конфигурацией OpenCode и тестирование API |
 | [`stitch-notebooklm`](https://github.com/StitchWB/stitch-notebooklm) | Ноутбуки NotebookLM, Q&A и генерация аудио |
-| [`stitch-cards`](https://github.com/StitchWB/stitch-cards) | Карточные инструменты для рабочих процессов регистрации |
 | `stitch-freemodel` | Мост FreeModel: Claude-модели (FM-*) через локальный прокси |
 | [`stitch-antigravity`](https://github.com/StitchWB/stitch-antigravity) | Antigravity: вход через Google OAuth (PKCE+loopback) и auth-файлы |
 | [`stitch-relaycheck`](https://github.com/StitchWB/stitch-relaycheck) | RelayCheck: локальный аудит AI-провайдеров и relay-станций (fingerprint, «водность», security-скан, trust score) |

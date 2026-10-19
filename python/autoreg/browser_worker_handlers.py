@@ -393,18 +393,6 @@ class BrowserWorkerHandlersMixin:
         self.human_delays_enabled = enabled
         return {'status': 'ok', 'human_delays_enabled': enabled}
 
-    def _apply_spoofers(self, cmd: dict) -> dict:
-        """
-        Apply anti-detection spoofers.
-        Note: Spoofers are applied automatically in BrowserAutomation.__init__
-        This command can be used to re-apply or verify spoofers.
-
-        Returns:
-            {'status': 'ok'}
-        """
-        # Spoofers are applied during browser init; this no-op confirms they are active
-        return {'status': 'ok', 'message': 'Spoofers applied during browser initialization'}
-
     def _get_imap_lookup_email(self) -> dict:
         """
         Get IMAP lookup email (may differ from registration email for aliases).

@@ -680,8 +680,6 @@ export default function AutoRegNext() {
         }
         cardsText={config.advanced.cardsText || ''}
         onCardsTextChange={cardsText => useRegistrationStore.getState().setAdvancedSettings({ cardsText })}
-        cardBin={config.advanced.cardBin || ''}
-        onCardBinChange={(cardBin: string) => useRegistrationStore.getState().setAdvancedSettings({ cardBin })}
         kiroPlan={config.advanced.kiroPlan || 'free'}
         onKiroPlanChange={(kiroPlan: string) => useRegistrationStore.getState().setAdvancedSettings({ kiroPlan })}
         browserEngine={config.advanced.browserEngine || 'cloakbrowser'}

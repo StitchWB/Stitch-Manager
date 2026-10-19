@@ -1,8 +1,8 @@
 """
 PatchrightEngine — unified browser engine for registration and profile launch.
 
-Uses patchright.sync_api with real Chrome channel for anti-detection.
-Supports persistent profiles, proxy, JS anti-detection injection, human-like delays.
+Uses patchright.sync_api with real Chrome channel.
+Supports persistent profiles, proxy, human-like delays.
 """
 from __future__ import annotations
 
@@ -19,12 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 class PatchrightEngine:
-    """Browser engine using Patchright (stealth Playwright fork).
+    """Browser engine using Patchright (Playwright fork).
 
     Features:
-    - Real Chrome channel (not Chromium) — better fingerprint
+    - Real Chrome channel (not Chromium)
     - Persistent profiles (Chromium user-data-dir)
-    - Automatic anti-detection JS injection
     - Proxy support
     - Human-like delays built-in
     """
@@ -38,7 +37,6 @@ class PatchrightEngine:
         locale: str = "en-US",
         timezone: str | None = None,
         humanize: bool = True,
-        anti_detect: bool = True,
     ):
         self.headless = headless
         self.proxy = proxy
@@ -47,7 +45,6 @@ class PatchrightEngine:
         self.locale = locale
         self.timezone = timezone
         self.humanize = humanize
-        self.anti_detect = anti_detect
 
         self._playwright = None
         self._browser: Browser | None = None
@@ -120,10 +117,6 @@ class PatchrightEngine:
         )
         self.page = self._context.pages[0] if self._context.pages else self._context.new_page()
         logger.info(f"[PatchrightEngine] Persistent context: {self.profile_path}")
-
-        # Inject anti-detection scripts
-        if self.anti_detect:
-            self._inject_anti_detection()
 
         return self.page
 
@@ -246,69 +239,6 @@ class PatchrightEngine:
         with open(path, encoding="utf-8") as f:
             cookies = json.load(f)
         self.set_cookies(cookies)
-
-    # ── Anti-detection ────────────────────────────────────────────────
-
-    def _inject_anti_detection(self) -> None:
-        """Inject JS to hide automation signals."""
-        if not self.page:
-            return
-
-        scripts = [
-            # navigator.webdriver
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})",
-            # chrome.runtime
-            "window.chrome = { runtime: {} }",
-            # Permissions
-            """
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ||
-                parameters.name === 'clipboard-read' ||
-                parameters.name === 'clipboard-write'
-                    ? Promise.resolve({ state: Notification.permission })
-                    : originalQuery(parameters)
-            );
-            """,
-            # Plugins
-            """
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
-            });
-            Object.defineProperty(navigator, 'mimeTypes', {
-                get: () => [1, 2, 3, 4, 5]
-            });
-            """,
-            # WebGL vendor/renderer
-            """
-            const getParameter = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                if (parameter === 37445) return 'Intel Inc.';
-                if (parameter === 37446) return 'Intel Iris OpenGL Engine';
-                return getParameter(parameter);
-            };
-            """,
-            # Notification permission
-            """
-            const originalNotification = window.Notification;
-            Object.defineProperty(window, 'Notification', {
-                get: function() {
-                    if (arguments.length > 0 && arguments[0] === 'permission') {
-                        return 'default';
-                    }
-                    return originalNotification;
-                }
-            });
-            """,
-        ]
-
-        for script in scripts:
-            try:
-                self.page.add_init_script(script)
-            except Exception as e:
-                logger.debug(f"Anti-detection script injection failed: {e}")
-
-        logger.info("[PatchrightEngine] Anti-detection scripts injected")
 
     # ── Human behavior ────────────────────────────────────────────────
 

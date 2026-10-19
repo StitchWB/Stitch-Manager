@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Stitch Toolkit",
   "version": "0.7.0",
-  "description": "Unified Stitch extension: CloakBrowser tool panel (Stripe filler, settings) and scenario recorder/replayer with localhost bridge.",
+  "description": "Unified Stitch extension: CloakBrowser tool panel (settings) and scenario recorder/replayer with localhost bridge.",
   "permissions": [
     "storage",
     "scripting",

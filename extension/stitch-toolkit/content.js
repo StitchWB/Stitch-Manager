@@ -32,15 +32,9 @@
       posY: null,
       panelPosX: null,
       panelPosY: null,
-      activeTab: 'stripe',
+      activeTab: 'recorder',
       theme: 'auto',
-      autoExpand: true,
-      clipboardWatch: true,
       soundEffects: false,
-      autoDetect: true,
-      cardHistory: [],
-      billingProfiles: [],
-      lastCard: null,
       recordingSteps: [],
       recorderPaused: false,
     };
@@ -152,7 +146,7 @@
       document.addEventListener('keydown', function (e) {
         if (!e || !(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
         var key = (e.ctrlKey ? 'Ctrl+' : 'Cmd+') + 'Shift+' + e.key.toUpperCase();
-        var map = { 'Ctrl+Shift+S': 'toggle', 'Cmd+Shift+S': 'toggle', 'Ctrl+Shift+F': 'quick-fill', 'Cmd+Shift+F': 'quick-fill', 'Ctrl+Shift+R': 'recorder-toggle', 'Cmd+Shift+R': 'recorder-toggle', 'Ctrl+Shift+E': 'export', 'Cmd+Shift+E': 'export' };
+        var map = { 'Ctrl+Shift+S': 'toggle', 'Cmd+Shift+S': 'toggle', 'Ctrl+Shift+R': 'recorder-toggle', 'Cmd+Shift+R': 'recorder-toggle', 'Ctrl+Shift+E': 'export', 'Cmd+Shift+E': 'export' };
         var action = map[key];
         if (action) { e.preventDefault(); e.stopPropagation(); EventBus.emit('shortcut:' + action, e); }
       }, true);
@@ -163,7 +157,6 @@
   // ── SVG Icons (Phosphor-style, inline) ───────────────────────────────
   var ICONS = {
     logo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-    stripe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
     recorder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>',
     settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
     moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
@@ -235,8 +228,7 @@
           '<button class="tk-close-btn" id="tk-close" title="' + window.StitchI18n.t('tooltip.close') + '">' + ICONS.close + '</button>' +
         '</div>' +
         '<div class="tk-tabs" id="tk-tabs">' +
-          '<button class="tk-tab tk-active" data-id="stripe"><span class="tk-tab-icon">' + ICONS.stripe + '</span><span>' + window.StitchI18n.t('tab.stripe') + '</span></button>' +
-          '<button class="tk-tab" data-id="recorder"><span class="tk-tab-icon">' + ICONS.recorder + '</span><span>' + window.StitchI18n.t('tab.recorder') + '</span><span class="tk-steps-badge" id="tk-rec-badge" style="display:none">0</span></button>' +
+          '<button class="tk-tab tk-active" data-id="recorder"><span class="tk-tab-icon">' + ICONS.recorder + '</span><span>' + window.StitchI18n.t('tab.recorder') + '</span><span class="tk-steps-badge" id="tk-rec-badge" style="display:none">0</span></button>' +
           '<button class="tk-tab" data-id="settings"><span class="tk-tab-icon">' + ICONS.settings + '</span><span>' + window.StitchI18n.t('tab.settings') + '</span></button>' +
         '</div>' +
         '<div class="tk-tool-content" id="tk-tool-content"></div>';
@@ -399,7 +391,7 @@
     function updateTabUI(activeId) {
       panel.querySelectorAll('.tk-tab').forEach(function (t) { t.classList.toggle('tk-active', t.dataset.id === activeId); });
       var title = panel.querySelector('.tk-panel-subtitle');
-      var titles = { stripe: window.StitchI18n.t('stripe.cardDetails'), recorder: window.StitchI18n.t('recorder.title'), settings: window.StitchI18n.t('tab.settings') };
+      var titles = { recorder: window.StitchI18n.t('recorder.title'), settings: window.StitchI18n.t('tab.settings') };
       if (title) title.textContent = titles[activeId] || window.StitchI18n.t('app.ready');
     }
 
@@ -466,20 +458,16 @@
       menu.style.top = y + 'px';
       var i18n = window.StitchI18n.t;
       menu.innerHTML =
-        '<div class="tk-ctx-item" id="tk-ctx-fill"><span class="tk-ctx-icon">⚡</span> ' + i18n('ctx.quickFill') + ' <span class="tk-ctx-shortcut">⌘⇧F</span></div>' +
         '<div class="tk-ctx-item" id="tk-ctx-rec"><span class="tk-ctx-icon">⏺</span> ' + i18n('ctx.toggleRecorder') + ' <span class="tk-ctx-shortcut">⌘⇧R</span></div>' +
         '<div class="tk-ctx-item" id="tk-ctx-export"><span class="tk-ctx-icon">📤</span> ' + i18n('ctx.exportScenario') + ' <span class="tk-ctx-shortcut">⌘⇧E</span></div>' +
         '<div class="tk-ctx-sep"></div>' +
-        '<div class="tk-ctx-item" id="tk-ctx-stripe"><span class="tk-ctx-icon">💳</span> ' + i18n('ctx.stripeFiller') + '</div>' +
         '<div class="tk-ctx-item" id="tk-ctx-recorder"><span class="tk-ctx-icon">⏺</span> ' + i18n('ctx.recorder') + '</div>' +
         '<div class="tk-ctx-sep"></div>' +
         '<div class="tk-ctx-item" id="tk-ctx-expand"><span class="tk-ctx-icon">⬆</span> ' + (StateManager.get('expanded') ? i18n('ctx.collapse') : i18n('ctx.expand')) + '</div>';
       shadow.appendChild(menu);
 
-      menu.querySelector('#tk-ctx-fill').onclick = function () { EventBus.emit('shortcut:quick-fill'); hideContextMenu(); };
       menu.querySelector('#tk-ctx-rec').onclick = function () { EventBus.emit('shortcut:recorder-toggle'); hideContextMenu(); };
       menu.querySelector('#tk-ctx-export').onclick = function () { EventBus.emit('shortcut:export'); hideContextMenu(); };
-      menu.querySelector('#tk-ctx-stripe').onclick = function () { ToolRegistry.activate('stripe'); updateTabUI('stripe'); hideContextMenu(); };
       menu.querySelector('#tk-ctx-recorder').onclick = function () { ToolRegistry.activate('recorder'); updateTabUI('recorder'); hideContextMenu(); };
       menu.querySelector('#tk-ctx-expand').onclick = function () { togglePanel(); hideContextMenu(); };
 
@@ -550,237 +538,6 @@
   // ─────────────────────────────────────────────────────────────────────
 
   // ─────────────────────────────────────────────────────────────────────
-  // ClipboardWatcher — NO side effects here
-  // ─────────────────────────────────────────────────────────────────────
-  var ClipboardWatcher = (function () {
-    var lastClipboard = '';
-    var intervalId = null;
-
-    function isCardNumber(text) {
-      if (!text) return false;
-      var stripped = text.replace(/\D/g, '');
-      return stripped.length >= 13 && stripped.length <= 19 && /^\d{13,19}$/.test(stripped);
-    }
-
-    function parseCardFromText(text) {
-      if (!text) return null;
-      var parts = text.split('|');
-      if (parts.length >= 4) return parts.map(function (p) { return p.trim(); }).join('|');
-      var match = text.match(/(\d{13,19})\D+(\d{1,2})\D+(\d{2,4})\D+(\d{3,4})/);
-      if (match) return [match[1], match[2], match[3], match[4]].join('|');
-      if (isCardNumber(text)) return text;
-      return null;
-    }
-
-    function check() {
-      if (!StateManager.get('clipboardWatch')) return;
-      try {
-        navigator.clipboard.readText().then(function (text) {
-          if (text && text !== lastClipboard && parseCardFromText(text)) {
-            lastClipboard = text;
-            EventBus.emit('clipboard:card', text);
-          }
-        }).catch(function (e) { console.warn('[TK Clipboard] read failed:', e && e.message); });
-      } catch (e) {}
-    }
-
-    function start() {
-      if (intervalId) return; // Already running
-      if (!StateManager.get('clipboardWatch')) return;
-      check(); // Immediate first check
-      intervalId = setInterval(check, 8000); // Reduced from 5s to 8s
-    }
-
-    function stop() {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    }
-
-    function init() {
-      // Start only if panel is open or setting enabled
-      if (StateManager.get('clipboardWatch') && StateManager.get('expanded')) {
-        start();
-      }
-    }
-
-    return { init: init, start: start, stop: stop };
-  })();
-
-  // ─────────────────────────────────────────────────────────────────────
-  // AutoDetector — NO side effects here
-  // ─────────────────────────────────────────────────────────────────────
-  var AutoDetector = (function () {
-    function hasStripeFields() {
-      var selectors = [
-        'input#cardNumber', 'input#cardExpiry', 'input#cardCvc',
-        'input[name="cardnumber"]', 'input[autocomplete="cc-number"]',
-        'input[name="cardExpiry"]', 'input[autocomplete="cc-exp"]',
-        'iframe[src*="js.stripe.com"]', 'iframe[src*="stripe.com"]',
-        '[class*="StripeElement"]', '[class*="stripe"]',
-      ];
-      for (var i = 0; i < selectors.length; i++) {
-        try { if (document.querySelector(selectors[i])) return true; } catch (e) {}
-      }
-      try {
-        var iframes = document.querySelectorAll('iframe');
-        for (var j = 0; j < iframes.length; j++) {
-          var src = iframes[j].getAttribute('src') || iframes[j].src;
-          if (src && typeof src === 'string' && (src.indexOf('stripe') !== -1 || src.indexOf('js.stripe') !== -1)) return true;
-        }
-      } catch (e) {}
-      return false;
-    }
-
-    function run() {
-      if (!StateManager.get('autoDetect')) return;
-      var isStripe = hasStripeFields();
-      if (isStripe && StateManager.get('activeTab') !== 'stripe') {
-        ToolRegistry.activate('stripe');
-        EventBus.emit('stripe:detected');
-      }
-    }
-
-    function init() {
-      if (!StateManager.get('autoDetect')) return;
-      setTimeout(run, 1500);
-      var origPush = history.pushState;
-      var origReplace = history.replaceState;
-      history.pushState = function () { var r = origPush.apply(this, arguments); setTimeout(run, 800); return r; };
-      history.replaceState = function () { var r = origReplace.apply(this, arguments); setTimeout(run, 800); return r; };
-      window.addEventListener('popstate', function () { setTimeout(run, 800); });
-    }
-
-    return { init: init, run: run };
-  })();
-
-  // ─────────────────────────────────────────────────────────────────────
-  // PasteInterceptor — auto-fill on Ctrl+V for Stripe checkout pages
-  // Parses checker formats: 5154620021124134|12|2031|982 or with flags
-  // ─────────────────────────────────────────────────────────────────────
-  const PasteInterceptor = (function () {
-    var _enabled = true;
-    var _countryMap = {
-      '\ud83c\uddfa\ud83c\uddf8': 'US', '\ud83c\udde6\ud83c\uddfa': 'AU', '\ud83c\udde7\ud83c\udded': 'CH',
-      '\ud83c\udde8\ud83c\udde6': 'CA', '\ud83c\udde9\ud83c\uddea': 'DE', '\ud83c\uddec\ud83c\udde7': 'GB',
-      '\ud83c\uddee\ud83c\uddf9': 'IT', '\ud83c\uddf3\ud83c\uddf1': 'NL', '\ud83c\uddf5\ud83c\uddf1': 'PL',
-      '\ud83c\uddf7\ud83c\uddfa': 'RU', '\ud83c\uddf8\ud83c\udde6': 'SE', '\ud83c\uddf9\ud83c\udded': 'TH',
-      '\ud83c\uddf0\ud83c\uddf7': 'KR', '\ud83c\udde6\ud83c\uddf1': 'AL', '\ud83c\udde6\ud83c\uddf7': 'AR',
-      '\ud83c\udde9\ud83c\uddf0': 'DK', '\ud83c\uddea\ud83c\uddf8': 'ES', '\ud83c\uddeb\ud83c\uddf7': 'FR',
-      '\ud83c\uddec\ud83c\uddf1': 'GL', '\ud83c\udded\ud83c\uddf9': 'HU', '\ud83c\uddee\ud83c\uddf4': 'IO',
-      '\ud83c\uddef\ud83c\uddf5': 'JP', '\ud83c\uddf1\ud83c\uddfb': 'LV', '\ud83c\uddf2\ud83c\uddf4': 'MO',
-      '\ud83c\uddf2\ud83c\uddfd': 'MX', '\ud83c\uddf3\ud83c\uddec': 'NG', '\ud83c\uddf5\ud83c\uddf9': 'PT',
-      '\ud83c\uddf7\ud83c\uddf4': 'RO', '\ud83c\uddf9\ud83c\uddfc': 'TW', '\ud83c\uddfa\ud83c\uddf8': 'US',
-      '\ud83c\uddfb\ud83c\udde6': 'VE', '\ud83c\uddf8\ud83c\uddff': 'ZA', '\ud83c\uddf9\ud83c\uddf3': 'TR',
-      '\ud83c\uddf8\ud83c\uddea': 'SG', '\ud83c\udde8\ud83c\uddff': 'CZ', '\ud83c\uddee\ud83c\uddf3': 'IN',
-      '\ud83c\uddf3\ud83c\uddfe': 'UA', '\ud83c\uddf2\ud83c\udde9': 'ID', '\ud83c\uddf0\ud83c\uddff': 'KZ',
-    };
-
-    function isStripeCheckout() {
-      return location.hostname.includes('checkout.stripe.com') ||
-        location.hostname.includes('pay.stripe.com') ||
-        document.querySelector('iframe[src*="stripe"], iframe[src*="js.stripe.com"]') !== null;
-    }
-
-    function parseCheckerOutput(text) {
-      var t = String(text || '').trim();
-      if (!t) return null;
-
-      // Remove common prefixes/suffixes
-      t = t.replace(/^Live\s*\|?\s*/i, '').replace(/\|?\s*Charge\s+OK\.?\s*\[.*?\]\s*$/i, '');
-      t = t.replace(/\[BIN:\s*.*?\]\s*\|?/gi, '');
-      t = t.replace(/^\|?\s*|\s*\|?$/g, '');
-
-      var parts = t.split('|');
-      if (parts.length >= 4) {
-        var number = parts[0].trim().replace(/\D/g, '');
-        var month = parts[1].trim().replace(/\D/g, '').padStart(2, '0');
-        var year = parts[2].trim().replace(/\D/g, '');
-        var cvc = parts[3].trim().replace(/\D/g, '');
-
-        // Validate
-        if (number.length < 13 || number.length > 19) return null;
-        if (month.length > 2) return null;
-        if (year.length !== 2 && year.length !== 4) return null;
-        if (cvc.length < 3 || cvc.length > 4) return null;
-
-        // Extract country from emoji flag
-        var country = null;
-        for (var flag in _countryMap) {
-          if (text.indexOf(flag) !== -1) { country = _countryMap[flag]; break; }
-        }
-
-        return { number: number, month: month, year: year.length === 2 ? '20' + year : year, cvc: cvc, country: country || 'US' };
-      }
-
-      // Fallback regex for space/comma separated
-      var m = t.match(/(\d{13,19})\D+(\d{1,2})\D+(\d{2,4})\D+(\d{3,4})/);
-      if (m) {
-        var y = m[3];
-        return { number: m[1], month: m[2].padStart(2, '0'), year: y.length === 2 ? '20' + y : y, cvc: m[4], country: 'US' };
-      }
-
-      return null;
-    }
-
-    function autoFill(data) {
-      if (!data) return;
-      var cardData = {
-        number: data.number,
-        month: data.month,
-        year: data.year,
-        cvc: data.cvc,
-        name: 'John Doe',
-        country: data.country || 'US',
-        address: '123 Main St',
-        city: 'New York',
-        state: 'NY',
-        postalCode: '10001',
-      };
-
-      chrome.runtime.sendMessage({
-        type: 'tk:stripe-fill',
-        payload: { cardData: cardData, billing: true }
-      }).then(function (resp) {
-        if (resp && resp.ok) {
-          NotificationService.success('Card auto-filled from clipboard (' + (resp.filledFrames || '?') + ' frame(s))');
-        }
-      }).catch(function (e) {
-        console.warn('[TK PasteInterceptor] Fill failed:', e);
-      });
-    }
-
-    function onPaste(e) {
-      if (!_enabled || !isStripeCheckout()) return;
-      var clipboard = e.clipboardData || window.clipboardData;
-      if (!clipboard) return;
-
-      var text = clipboard.getData('text');
-      if (!text || text.indexOf('|') === -1) return;
-
-      var data = parseCheckerOutput(text);
-      if (!data) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      autoFill(data);
-
-      // Also save as last card
-      StateManager.set('lastCard', data.number + '|' + data.month + '|' + data.year + '|' + data.cvc);
-    }
-
-    function init() {
-      document.addEventListener('paste', onPaste, true);
-    }
-
-    function setEnabled(v) { _enabled = Boolean(v); }
-
-    return { init: init, setEnabled: setEnabled };
-  })();
-
-  // ─────────────────────────────────────────────────────────────────────
   // Subscriptions — ALL EventBus.on happen HERE, after all modules defined
   // This prevents TDZ (Temporal Dead Zone) issues
   // ─────────────────────────────────────────────────────────────────────
@@ -794,11 +551,6 @@
     }
   });
 
-  EventBus.on('stripe:detected', function () {
-    if (StateManager.get('autoExpand')) PanelManager.expandPanel();
-    PanelManager.pulseFloatBtn();
-  });
-
   EventBus.on('recorder:state', function (data) {
     PanelManager.setRecordingUI(data.mode || (data.recording ? 'record' : null), data.paused);
   });
@@ -807,52 +559,9 @@
     PanelManager.updateStepsBadge();
   });
 
-  // Panel lifecycle — controls ClipboardWatcher polling
-  EventBus.on('panel:opened', function () {
-    ClipboardWatcher.start();
-  });
-  EventBus.on('panel:closed', function () {
-    ClipboardWatcher.stop();
-  });
-
   // Shortcuts
   EventBus.on('shortcut:toggle', function () { PanelManager.togglePanel(); });
-  EventBus.on('shortcut:quick-fill', function () { if (window.StripeFillerTool) window.StripeFillerTool.quickFill(); });
   EventBus.on('shortcut:export', function () { EventBus.emit('export:show'); });
-
-  // StripeFillerTool subscriptions
-  EventBus.on('fill:quick', function (raw) {
-    var lastCard = StateManager.get('lastCard');
-    if (!lastCard) { NotificationService.warn('No last card'); return; }
-    var data = parseCard(lastCard);
-    if (!data) { NotificationService.error('Invalid last card'); return; }
-    PanelManager.setSubtitle('Filling last card...');
-    fillForm(data, null).then(function (resp) {
-      NotificationService.success('Filled last card (' + (resp.filledFrames || '?') + ' frame(s))');
-      PanelManager.setSubtitle('Card Filler');
-    }).catch(function (e) {
-      NotificationService.error('Fill failed: ' + (e.message || ''));
-      PanelManager.setSubtitle('Card Filler');
-    });
-
-    function parseCard(raw) {
-      var t = String(raw || '').trim();
-      if (!t) return null;
-      var p = t.split('|');
-      if (p.length >= 4) return { number: p[0].trim(), month: p[1].trim(), year: p[2].trim(), cvc: p[3].trim() };
-      var m = t.match(/(\d{13,19})\D+(\d{1,2})\D+(\d{2,4})\D+(\d{3,4})/);
-      if (m) return { number: m[1], month: m[2], year: m[3], cvc: m[4] };
-      return null;
-    }
-
-    function fillForm(data, billing) {
-      return chrome.runtime.sendMessage({ type: 'tk:stripe-fill', payload: { cardData: data, billing: billing } })
-        .then(function (resp) {
-          if (resp && resp.ok) return resp;
-          throw new Error(resp && resp.error ? resp.error : 'No Stripe fields found');
-        });
-    }
-  });
 
   // RecorderTool subscriptions — steps live in the background session now
   EventBus.on('export:show', function () {
@@ -866,16 +575,6 @@
   });
 
   EventBus.on('shortcut:recorder-toggle', function () { if (window.RecorderTool) window.RecorderTool.toggle(); });
-
-  // Clipboard watcher
-  EventBus.on('clipboard:card', function (raw) {
-    var i18n = window.StitchI18n.t;
-    NotificationService.showToast('🃏 ' + i18n('notif.cardDetected') + ' — ' + raw.replace(/\d(?=\d{4})/g, '*'), 'info', {
-      action: i18n('notif.fillNow'),
-      actionFn: function () { if (window.StripeFillerTool) window.StripeFillerTool.quickFill(); },
-      duration: 6000,
-    });
-  });
 
   // ─────────────────────────────────────────────────────────────────────
   // RecorderBridge — sync panel UI with background recording sessions
@@ -926,7 +625,6 @@
   function bootstrap() {
     // Register tools — warn if external file failed to load
     var tools = [
-      { ref: window.StripeFillerTool, name: 'StripeFillerTool', file: 'panel/tools/stripe-filler.js' },
       { ref: window.RecorderTool, name: 'RecorderTool', file: 'panel/tools/recorder-tool.js' },
       { ref: window.SettingsTool, name: 'SettingsTool', file: 'panel/tools/settings-tool.js' },
     ];
@@ -940,9 +638,6 @@
 
     PanelManager.createUI();
     ShortcutManager.init();
-    AutoDetector.init();
-    ClipboardWatcher.init();
-    PasteInterceptor.init();
     RecorderBridge.init();
 
     // Mount initial tool
@@ -959,7 +654,6 @@
 
   // Cleanup on page unload / extension reload
   window.addEventListener('beforeunload', function () {
-    ClipboardWatcher.stop();
     if (window.RecorderTool && window.RecorderTool.cleanup) window.RecorderTool.cleanup();
     window.__stitchToolkitInjected = false;
   });

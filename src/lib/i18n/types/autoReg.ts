@@ -48,16 +48,11 @@ export interface AutoRegTranslations {
       notify: string;
     };
     engineTab: {
-      auto: string;
       cardsLoaded: string;
-      generateCard: string;
-      generated: string;
       logsLabel: string;
-      manual: string;
       openai_captcha: string;
       passwordLengthTooltip: string;
       rust: string;
-      savedCards: string;
       symbolUnit: string;
       v2: string;
     }

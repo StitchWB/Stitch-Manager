@@ -128,18 +128,17 @@ try {
 
 // Load panel tools in manifest order (they register on window namespace;
 // bootstrap picks them up because it is deferred via setTimeout).
-['panel/tools/stripe-filler.js', 'panel/tools/recorder-tool.js', 'panel/tools/settings-tool.js'].forEach(function (file) {
+['panel/tools/recorder-tool.js', 'panel/tools/settings-tool.js'].forEach(function (file) {
   try {
     loadScript(file);
   } catch (e) {
     fail(file + ' load error: ' + e.message);
   }
 });
-if (window.StripeFillerTool && window.RecorderTool && window.SettingsTool) {
+if (window.RecorderTool && window.SettingsTool) {
   pass('All panel tools registered');
 } else {
   fail('Panel tools missing: ' + [
-    window.StripeFillerTool ? null : 'StripeFillerTool',
     window.RecorderTool ? null : 'RecorderTool',
     window.SettingsTool ? null : 'SettingsTool',
   ].filter(Boolean).join(', '));
@@ -191,7 +190,7 @@ if (shadowHost && shadowHost.shadowRoot) {
 
   // Check tabs
   var tabs = shadowHost.shadowRoot.querySelectorAll('.tk-tab');
-  if (tabs.length >= 3) {
+  if (tabs.length >= 2) {
     pass('Tabs rendered (' + tabs.length + ' tabs)');
   } else {
     fail('Tabs NOT rendered (found ' + tabs.length + ')');
@@ -243,16 +242,16 @@ console.log('');
 console.log('4. Checking i18n functionality');
 
 if (window.StitchI18n) {
-  var enText = window.StitchI18n.t('stripe.fillCard');
-  if (enText && enText.indexOf('Fill') !== -1) {
+  var enText = window.StitchI18n.t('tab.recorder');
+  if (enText && enText.indexOf('Recorder') !== -1) {
     pass('i18n English works: "' + enText + '"');
   } else {
     fail('i18n English returns: "' + enText + '"');
   }
 
   window.StitchI18n.setLocale('ru');
-  var ruText = window.StitchI18n.t('stripe.fillCard');
-  if (ruText && ruText.indexOf('Заполнить') !== -1) {
+  var ruText = window.StitchI18n.t('tab.recorder');
+  if (ruText && ruText.indexOf('Запись') !== -1) {
     pass('i18n Russian works: "' + ruText + '"');
   } else {
     fail('i18n Russian returns: "' + ruText + '"');

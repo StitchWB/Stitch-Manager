@@ -24,31 +24,8 @@
       'app.version': 'Stitch Toolkit v{version}',
 
       // Tabs
-      'tab.stripe': 'Stripe',
       'tab.recorder': 'Recorder',
       'tab.settings': 'Settings',
-
-      // Stripe Filler
-      'stripe.cardDetails': 'Card Details',
-      'stripe.saveCard': 'Save card',
-      'stripe.address': 'Address',
-      'stripe.fillCard': 'Fill Card',
-      'stripe.formatHint': 'Format: number|MM|YYYY|CVC',
-      'stripe.saved': 'Saved!',
-      'stripe.invalidFormat': 'Invalid format',
-      'stripe.enterCardFirst': 'Enter a card first',
-      'stripe.filledFrames': 'Filled {count} frame(s)',
-      'stripe.fillFailed': 'Fill failed',
-      'stripe.noLastCard': 'No last card',
-      'stripe.invalidLastCard': 'Invalid last card',
-      'stripe.filledLastCard': 'Filled last card ({count} frame(s))',
-      'stripe.shortcuts': '⌘⇧F — quick fill · ⌘⇧S — toggle panel',
-      'stripe.billing': 'Billing',
-      'stripe.name': 'Name',
-      'stripe.city': 'City',
-      'stripe.state': 'State',
-      'stripe.postal': 'ZIP',
-      'stripe.history': '— history —',
 
       // Recorder
       'recorder.title': 'Scenario Recorder',
@@ -113,42 +90,23 @@
       'settings.language': 'Language',
       'settings.languageDesc': 'Interface language',
       'settings.general': 'General',
-      'settings.autoDetectStripe': 'Auto-detect Stripe',
-      'settings.autoDetectStripeDesc': 'Switch to Stripe tab when Stripe form detected',
-      'settings.autoExpand': 'Auto-expand panel',
-      'settings.autoExpandDesc': 'Expand panel when Stripe detected',
-      'settings.clipboardWatch': 'Clipboard watcher',
-      'settings.clipboardWatchDesc': 'Show toast when card copied to clipboard',
       'settings.soundEffects': 'Sound effects',
-      'settings.soundEffectsDesc': 'Play sound on fill success/error',
+      'settings.soundEffectsDesc': 'Play sound on success/error',
       'settings.appearance': 'Appearance',
       'settings.theme': 'Theme',
       'settings.themeAuto': 'Auto (system)',
       'settings.themeDark': 'Dark',
       'settings.themeLight': 'Light',
-      'settings.billingProfiles': 'Billing Profiles',
-      'settings.addProfile': '+ Add Profile',
-      'settings.profileName': 'Profile name (e.g., "Personal", "Business"):',
-      'settings.countryCode': 'Country code (e.g., US, GB):',
-      'settings.address': 'Address:',
-      'settings.postalCode': 'Postal code:',
       'settings.data': 'Data',
       'settings.exportAll': '📤 Export All',
       'settings.clearAll': '🗑 Clear All',
-      'settings.confirmClearAll': 'Clear ALL data (cards, profiles, settings)? This cannot be undone.',
-      'settings.profileSaved': 'Profile saved',
+      'settings.confirmClearAll': 'Clear ALL data? This cannot be undone.',
       'settings.configExported': 'Config exported',
       'settings.allDataCleared': 'All data cleared',
 
-      // Notifications
-      'notif.cardDetected': 'Card detected',
-      'notif.fillNow': 'Fill now',
-
       // Context menu
-      'ctx.quickFill': '⚡ Quick Fill',
       'ctx.toggleRecorder': '⏺ Toggle Recorder',
       'ctx.exportScenario': '📤 Export Scenario',
-      'ctx.stripeFiller': '💳 Stripe Filler',
       'ctx.recorder': '⏺ Recorder',
       'ctx.expand': 'Expand',
       'ctx.collapse': 'Collapse',
@@ -157,9 +115,6 @@
       'tooltip.toggleTheme': 'Toggle theme',
       'tooltip.settings': 'Settings',
       'tooltip.close': 'Collapse (⌘⇧S)',
-
-      // Status
-      'status.filling': '⏳ Filling...',
     },
 
     ru: {
@@ -169,31 +124,8 @@
       'app.version': 'Stitch Toolkit v{version}',
 
       // Tabs
-      'tab.stripe': 'Stripe',
       'tab.recorder': 'Запись',
       'tab.settings': 'Настройки',
-
-      // Stripe Filler
-      'stripe.cardDetails': 'Данные карты',
-      'stripe.saveCard': 'Сохранить карту',
-      'stripe.address': 'Адрес',
-      'stripe.fillCard': '⚡ Заполнить',
-      'stripe.formatHint': 'Формат: номер|ММ|ГГГГ|CVC',
-      'stripe.saved': 'Сохранено!',
-      'stripe.invalidFormat': 'Неверный формат',
-      'stripe.enterCardFirst': 'Сначала введите карту',
-      'stripe.filledFrames': 'Заполнено {count} фрейм(ов)',
-      'stripe.fillFailed': 'Ошибка заполнения',
-      'stripe.noLastCard': 'Нет последней карты',
-      'stripe.invalidLastCard': 'Неверная последняя карта',
-      'stripe.filledLastCard': 'Заполнена последняя карта ({count} фрейм(ов))',
-      'stripe.shortcuts': '⌘⇧F — быстрое заполнение · ⌘⇧S — свернуть/развернуть',
-      'stripe.billing': 'Биллинг',
-      'stripe.name': 'Имя',
-      'stripe.city': 'Город',
-      'stripe.state': 'Область',
-      'stripe.postal': 'Индекс',
-      'stripe.history': '— история —',
 
       // Recorder
       'recorder.title': 'Запись сценария',
@@ -258,12 +190,6 @@
       'settings.language': 'Язык',
       'settings.languageDesc': 'Язык интерфейса',
       'settings.general': 'Основные',
-      'settings.autoDetectStripe': 'Автодетект Stripe',
-      'settings.autoDetectStripeDesc': 'Переключаться на вкладку Stripe при обнаружении формы',
-      'settings.autoExpand': 'Авторазворот панели',
-      'settings.autoExpandDesc': 'Разворачивать панель при обнаружении Stripe',
-      'settings.clipboardWatch': 'Мониторинг буфера',
-      'settings.clipboardWatchDesc': 'Показывать уведомление при копировании карты',
       'settings.soundEffects': 'Звуковые эффекты',
       'settings.soundEffectsDesc': 'Воспроизводить звук при успехе/ошибке',
       'settings.appearance': 'Внешний вид',
@@ -271,29 +197,16 @@
       'settings.themeAuto': 'Авто (системная)',
       'settings.themeDark': 'Тёмная',
       'settings.themeLight': 'Светлая',
-      'settings.billingProfiles': 'Платёжные профили',
-      'settings.addProfile': '+ Добавить профиль',
-      'settings.profileName': 'Название профиля (например, "Личный", "Рабочий"):',
-      'settings.countryCode': 'Код страны (например, RU, KZ):',
-      'settings.address': 'Адрес:',
-      'settings.postalCode': 'Индекс:',
       'settings.data': 'Данные',
       'settings.exportAll': '📤 Экспорт всего',
       'settings.clearAll': '🗑 Очистить всё',
-      'settings.confirmClearAll': 'Очистить ВСЕ данные (карты, профили, настройки)? Это необратимо.',
-      'settings.profileSaved': 'Профиль сохранён',
+      'settings.confirmClearAll': 'Очистить ВСЕ данные? Это необратимо.',
       'settings.configExported': 'Настройки экспортированы',
       'settings.allDataCleared': 'Все данные очищены',
 
-      // Notifications
-      'notif.cardDetected': 'Карта обнаружена',
-      'notif.fillNow': 'Заполнить',
-
       // Context menu
-      'ctx.quickFill': '⚡ Быстрое заполнение',
       'ctx.toggleRecorder': '⏺ Переключить запись',
       'ctx.exportScenario': '📤 Экспорт сценария',
-      'ctx.stripeFiller': '💳 Stripe заполнитель',
       'ctx.recorder': '⏺ Запись',
       'ctx.expand': 'Развернуть',
       'ctx.collapse': 'Свернуть',
@@ -302,9 +215,6 @@
       'tooltip.toggleTheme': 'Переключить тему',
       'tooltip.settings': 'Настройки',
       'tooltip.close': 'Свернуть (⌘⇧S)',
-
-      // Status
-      'status.filling': '⏳ Заполнение...',
     }
   };
 

@@ -50,16 +50,11 @@ export const autoReg: AutoRegTranslations = {
       notify: "Уведомления",
     },
     engineTab: {
-      auto: "Авто",
       cardsLoaded: "Карты загружены",
-      generateCard: "Сгенерировать карту",
-      generated: "Сгенерированная карта: ",
       logsLabel: "Логи",
-      manual: "Вручную",
       openai_captcha: "OpenAI captcha",
       passwordLengthTooltip: "Длина пароля",
       rust: "Rust",
-      savedCards: "Сохранённые карты",
       symbolUnit: "симв.",
       v2: "v2"
     },

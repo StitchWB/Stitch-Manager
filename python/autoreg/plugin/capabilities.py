@@ -23,12 +23,9 @@ from ..stitch_backend_bridge import (
 )
 from . import capabilities_account as _account_impl
 from . import capabilities_branch as _branch_impl
-from . import capabilities_captcha as _captcha_impl
 from . import capabilities_extract as _extract_impl
 from . import capabilities_firebase as _firebase_impl
 from . import capabilities_mail as _mail_impl
-from . import capabilities_sms as _sms_impl
-from . import capabilities_stripe as _stripe_impl
 from . import capabilities_totp as _totp_impl
 from .capabilities_account import _capture_session
 from .capabilities_base import (
@@ -40,26 +37,23 @@ from .capabilities_base import (
     resolve_selector,
     resolve_template,
 )
-from .capabilities_captcha import (
-    _CAPTCHA_SOLVERS,
-    _resolve_aliyun_solver,
-    _resolve_turnstile_solver,
-    _solve_aliyun,
-    _solve_im_human,
-)
 from .capabilities_extract import _cookie_value
 from .capabilities_firebase import (
     _firebase_get_api_key,
     _firebase_login_direct,
     _firebase_login_worker,
 )
-from .capabilities_stripe import _fill_stripe_via_mixin
 from .capabilities_totp import (
     _BASE32_RE,
     _extract_totp_secret_from_page,
     _generate_totp,
     _persist_totp_secret,
 )
+
+try:
+    from . import capabilities_sms as _sms_impl
+except ImportError:  # open-core: sms capability is a closed module
+    _sms_impl = None
 
 # Import-time SPI registration — enables resolve(SPI_EMAIL_VERIFICATION) before any bootstrap import.
 register_builtin_spis()
@@ -71,26 +65,18 @@ __all__ = [
     "SelectorCandidate",
     "StepResult",
     "_BASE32_RE",
-    "_CAPTCHA_SOLVERS",
     "_TEMPLATE_RE",
     "_capture_session",
     "_cookie_value",
     "_extract_totp_secret_from_page",
-    "_fill_stripe_via_mixin",
     "_firebase_get_api_key",
     "_firebase_login_direct",
     "_firebase_login_worker",
     "_generate_totp",
     "_persist_totp_secret",
-    "_resolve_aliyun_solver",
-    "_resolve_turnstile_solver",
-    "_solve_aliyun",
-    "_solve_im_human",
-    "_solve_turnstile",
     "account_save_capability",
     "branch_capability",
     "build_selector",
-    "captcha_solve_capability",
     "extract_capability",
     "firebase_auth_capability",
     "get_database_path",
@@ -101,7 +87,6 @@ __all__ = [
     "resolve_selector",
     "resolve_template",
     "sms_otp_capability",
-    "stripe_fill_checkout_capability",
     "totp_register_capability",
 ]
 
@@ -128,25 +113,12 @@ def imap_otp_capability(
 
 
 def sms_otp_capability(step: ScenarioStep, store: dict[str, Any]) -> StepResult:
+    if _sms_impl is None:
+        return StepResult(
+            step.id, step.kind, False,
+            error="sms.otp: capability not available in this build",
+        )
     return _sms_impl.sms_otp_capability(step, store)
-
-
-def captcha_solve_capability(step: ScenarioStep, browser: Any) -> StepResult:
-    return _captcha_impl.captcha_solve_capability(step, browser)
-
-
-def _solve_turnstile(browser: Any, step: ScenarioStep) -> bool:
-    return _captcha_impl._solve_turnstile(
-        browser, step, resolve_solver=_resolve_turnstile_solver
-    )
-
-
-def stripe_fill_checkout_capability(
-    step: ScenarioStep, browser: Any, store: dict[str, Any]
-) -> StepResult:
-    return _stripe_impl.stripe_fill_checkout_capability(
-        step, browser, store, fill_mixin=_fill_stripe_via_mixin
-    )
 
 
 def totp_register_capability(

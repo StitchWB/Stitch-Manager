@@ -49,34 +49,7 @@ def create_browser(
     if proxy:
         options.set_argument(f"--proxy-server={proxy}")
     page = ChromiumPage(options)
-    # anti-detection must run before any navigation — parity with built-in providers
-    self._apply_spoofing(page, email)
     return page
-
-
-def apply_spoofing(self: PluginScenarioProvider, page: Any, email: str | None) -> None:
-    """Apply pre-navigation anti-detection spoofing (parity with built-ins).
-
-    Uses the same ``ProfileStorage`` + CDP spoofer the built-in providers
-    use, keyed by the account email so the fingerprint persona stays
-    consistent for the account across runs.  Lazy imports keep the
-    Zone-1 export guard happy; any failure degrades to "no spoofing"
-    with a warning rather than failing the registration.
-    """
-    if not email:
-        return
-    try:
-        from ..core.paths import get_paths
-        from ..spoofers.cdp_spoofer import apply_pre_navigation_spoofing
-        from ..spoofers.profile_storage import ProfileStorage
-
-        profile = ProfileStorage(get_paths().tokens_dir).get_or_create(email)
-        apply_pre_navigation_spoofing(page, profile)
-        self.log("anti-detection spoofing applied")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "spoofing unavailable — continuing without it: %s", exc
-        )
 
 
 def close_browser(browser: Any) -> None:

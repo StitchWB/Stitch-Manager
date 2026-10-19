@@ -99,10 +99,6 @@ interface CommandCenterProps {
   captchaTimeout: number;
   onCaptchaTimeoutChange: (timeout: number) => void;
 
-  // Cards
-  cardBin?: string;
-  onCardBinChange?: (text: string) => void;
-
   // Kiro plan
   kiroPlan?: string;
   onKiroPlanChange?: (plan: string) => void;
@@ -281,8 +277,6 @@ export const CommandCenter = ({
   onScreenshotsOnErrorChange,
   cardsText,
   onCardsTextChange,
-  cardBin,
-  onCardBinChange,
   kiroPlan,
   onKiroPlanChange,
   captchaSoundEnabled,
@@ -523,8 +517,6 @@ export const CommandCenter = ({
                 onPasswordLengthChange={onPasswordLengthChange}
                 cardsText={cardsText}
                 onCardsTextChange={onCardsTextChange}
-                cardBin={cardBin}
-                onCardBinChange={onCardBinChange}
                 kiroPlan={kiroPlan}
                 onKiroPlanChange={onKiroPlanChange}
                 disabled={disabled}
