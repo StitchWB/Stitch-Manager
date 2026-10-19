@@ -5,6 +5,7 @@ param(
     [switch]$NoDesktop,
     [int]$ApiPort = 25584,
     [int]$WebPort = 5174,
+    [string]$DbPath,
     [string]$SeedFromHub,
     [string]$WebRoot,
     [switch]$ForceSeed

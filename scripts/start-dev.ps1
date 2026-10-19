@@ -5,6 +5,7 @@ param(
     [switch]$NoDesktop,
     [int]$ApiPort = 25584,
     [int]$WebPort = 5174,
+    [string]$DbPath,
     [string]$SeedFromHub,
     [string]$WebRoot,
     [switch]$ForceSeed
@@ -28,7 +29,7 @@ if ($WebRoot) {
     $VITE_ROOT = $resolvedWebRoot.Path
 }
 $VITE_ENTRY = Join-Path $VITE_ROOT "node_modules\vite\bin\vite.js"
-$DEV_DB_PATH = Join-Path $REPO_ROOT "stitch.db"
+$DEV_DB_PATH = if ($DbPath) { $DbPath } else { Join-Path $REPO_ROOT "stitch.db" }
 # Outside the repo: uvicorn --reload watches the checkout and restarts on log writes.
 $LOG_ROOT = Join-Path $env:LOCALAPPDATA "stitch-manager\dev-logs"
 $script:devLogStreams = @()
