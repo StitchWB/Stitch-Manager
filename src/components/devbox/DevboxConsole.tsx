@@ -104,6 +104,12 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
     };
   }, [tab, source, logsTick]);
 
+  useEffect(() => {
+    if (tab !== 'logs') return;
+    const timer = window.setInterval(() => setLogsTick(x => x + 1), 5000);
+    return () => window.clearInterval(timer);
+  }, [tab]);
+
   const query = search.trim().toLowerCase();
   const errorsOnly = errorFilter === 'errors';
 

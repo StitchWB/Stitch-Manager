@@ -9,6 +9,8 @@ export interface DevboxPageTranslations {
     gatewayMetrics: string;
     toastDoctorDone: string;
     toastDoctorFailed: string;
+    toastCockpitDone: string;
+    toastCockpitOpen: string;
     projectAddOption: string;
     projectManageOption: string;
     switchProfileConfirmTitle: string;
