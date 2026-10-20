@@ -150,6 +150,32 @@ export function DevboxPage() {
     if (done.exit === 0) toast.success(t('devboxPage.toastDoctorDone'));
     else toast.warning(t('devboxPage.toastDoctorFailed'));
   }, [status]);
+
+  const lastCockpitId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const rows = status?.recent ?? [];
+    const done = [...rows].reverse().find(r => r.cmd === 'cockpit_open' && r.status === 'finished');
+    if (!done) return;
+    if (lastCockpitId.current === undefined) {
+      lastCockpitId.current = done.id;
+      return;
+    }
+    if (lastCockpitId.current === done.id) return;
+    lastCockpitId.current = done.id;
+    const payload = (done.payload ?? null) as Record<string, unknown> | null;
+    const url = typeof payload?.url === 'string' ? payload.url : null;
+    toast.success(
+      t('devboxPage.toastCockpitDone'),
+      url
+        ? {
+            action: {
+              label: t('devboxPage.toastCockpitOpen'),
+              onClick: () => window.open(url, '_blank', 'noopener,noreferrer'),
+            },
+          }
+        : undefined,
+    );
+  }, [status]);
   const jobs = useMemo(
     () => devboxObservedRows<DevboxJobRow>(poll.data?.jobs),
     [poll.data],

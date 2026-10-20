@@ -471,6 +471,67 @@ describe('Devbox page header control bar', () => {
     });
   });
 
+  it('toasts with an open action when a newer cockpit_open finishes', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({
+        action_status: {
+          busy: false,
+          current: null,
+          recent: [
+            {
+              id: 'c1',
+              cmd: 'cockpit_open',
+              status: 'finished',
+              startedAt: 1,
+              finishedAt: 2,
+              exit: 0,
+              payload: { url: 'http://127.0.0.1:8793/?t=x' },
+            },
+          ],
+        },
+      }),
+    });
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-services');
+    expect(toast.success).not.toHaveBeenCalled();
+
+    mockRoutes({
+      poll: devboxPollBundle({
+        action_status: {
+          busy: false,
+          current: null,
+          recent: [
+            {
+              id: 'c1',
+              cmd: 'cockpit_open',
+              status: 'finished',
+              startedAt: 1,
+              finishedAt: 2,
+              exit: 0,
+              payload: { url: 'http://127.0.0.1:8793/?t=x' },
+            },
+            {
+              id: 'c2',
+              cmd: 'cockpit_open',
+              status: 'finished',
+              startedAt: 3,
+              finishedAt: 4,
+              exit: 0,
+              payload: { url: 'http://127.0.0.1:8793/?t=y' },
+            },
+          ],
+        },
+      }),
+    });
+    fireEvent.click(screen.getByTestId('devbox-refresh'));
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining('Cockpit'),
+        expect.objectContaining({ action: expect.objectContaining({ label: expect.any(String) }) }),
+      );
+    });
+  });
+
   it('busy header labels stop commands with the stopping chip', async () => {
     mockRoutes({
       poll: devboxPollBundle({

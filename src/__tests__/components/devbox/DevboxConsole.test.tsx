@@ -133,6 +133,29 @@ describe('DevboxConsole tabs', () => {
     });
   });
 
+  it('auto-refreshes logs every 5 seconds while the logs tab is open', async () => {
+    jest.useFakeTimers();
+    try {
+      renderConsole();
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('devbox-console-tab-logs'));
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const before = devboxCallArgs(invokeMock, 'logs').length;
+      expect(before).toBe(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      expect(devboxCallArgs(invokeMock, 'logs').length).toBe(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('renders the gateway source chip from the RPC payload and its lines when selected', async () => {
     invokeMock.mockImplementation(
       devboxRouter(
