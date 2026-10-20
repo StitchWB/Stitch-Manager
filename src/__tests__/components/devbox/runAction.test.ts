@@ -27,8 +27,9 @@ describe('runDevboxAction rejection surfacing', () => {
       reason: 'watchdog cannot run while the devbox stack is down',
     });
     const onAccepted = jest.fn(() => undefined);
+    const onStale = jest.fn(() => undefined);
 
-    const ok = await runDevboxAction(rejected, onAccepted);
+    const ok = await runDevboxAction(rejected, onAccepted, onStale);
 
     expect(ok).toBe(false);
     expect(toast.error).toHaveBeenCalledWith(
@@ -36,6 +37,26 @@ describe('runDevboxAction rejection surfacing', () => {
     );
     expect(toast.info).not.toHaveBeenCalled();
     expect(onAccepted).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+  });
+
+  it('toasts a stale permission rejection as info, fires onStale and returns false', async () => {
+    const stale = Promise.resolve<DevboxAccepted>({
+      accepted: false,
+      reason: "no pending permission matches 'p1'",
+    });
+    const onAccepted = jest.fn(() => undefined);
+    const onStale = jest.fn(() => undefined);
+
+    const ok = await runDevboxAction(stale, onAccepted, onStale);
+
+    expect(ok).toBe(false);
+    expect(toast.info).toHaveBeenCalledWith(
+      'Permission request is no longer pending: the agent withdrew it or the job ended',
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(onStale).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to the generic failure message when the reason is empty', async () => {

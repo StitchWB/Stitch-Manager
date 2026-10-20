@@ -30,6 +30,7 @@ import {
   devboxNormalizeEventRows,
   devboxNormalizeGateway,
   devboxObservedRows,
+  devboxPermissionReply,
   devboxPoll,
   devboxProfilesList,
   devboxProfileUse,
@@ -120,6 +121,7 @@ export function DevboxPage() {
 
   const [pending, setPending] = useState(false);
   const [promptTick, setPromptTick] = useState(0);
+  const [dismissedPermissions, setDismissedPermissions] = useState<string[]>([]);
   const onAction = useCallback(
     (action: Promise<DevboxAccepted>) => {
       setPending(true);
@@ -128,6 +130,22 @@ export function DevboxPage() {
         reloadPoll();
         setPromptTick(x => x + 1);
       }).finally(() => setPending(false));
+    },
+    [reloadProfiles, reloadPoll],
+  );
+
+  const onPermissionReply = useCallback(
+    (id: string, decision: 'once' | 'reject') => {
+      setPending(true);
+      void runDevboxAction(
+        devboxPermissionReply(id, decision),
+        () => {
+          reloadProfiles();
+          reloadPoll();
+          setPromptTick(x => x + 1);
+        },
+        () => setDismissedPermissions(prev => (prev.includes(id) ? prev : [...prev, id])),
+      ).finally(() => setPending(false));
     },
     [reloadProfiles, reloadPoll],
   );
@@ -180,10 +198,23 @@ export function DevboxPage() {
     () => devboxObservedRows<DevboxJobRow>(poll.data?.jobs),
     [poll.data],
   );
-  const permissions = useMemo(
-    () => devboxObservedRows<DevboxPermissionRow>(poll.data?.permissions),
-    [poll.data],
-  );
+  const permissions = useMemo(() => {
+    const observed = devboxObservedRows<DevboxPermissionRow>(poll.data?.permissions);
+    const rows = dismissedPermissions.length
+      ? observed.rows.filter(row => !dismissedPermissions.includes(row.id))
+      : observed.rows;
+    return { rows, bridge: observed.bridge };
+  }, [poll.data, dismissedPermissions]);
+
+  useEffect(() => {
+    if (dismissedPermissions.length === 0) return;
+    const live = new Set(
+      devboxObservedRows<DevboxPermissionRow>(poll.data?.permissions).rows.map(row => row.id),
+    );
+    const kept = dismissedPermissions.filter(id => live.has(id));
+    if (kept.length !== dismissedPermissions.length) setDismissedPermissions(kept);
+  }, [poll.data, dismissedPermissions]);
+
   const events = useMemo(() => devboxNormalizeEventRows(poll.data?.events), [poll.data]);
   const busy = status?.busy === true || pending;
 
@@ -500,6 +531,7 @@ export function DevboxPage() {
               events={events}
               busy={busy}
               onAction={onAction}
+              onPermissionReply={onPermissionReply}
               onGoInfra={() => setTab('infra')}
             />
           </div>
