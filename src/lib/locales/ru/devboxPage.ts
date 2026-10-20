@@ -96,6 +96,8 @@ export const devboxPage: DevboxPageTranslations = {
     railOnboard3: "Вставь в Claude / Cursor / OpenCode",
     railOnboard4: "Следи за вызовами инструментов здесь в реальном времени",
     permissionApprove: "Одобрить",
+    permissionStale:
+      "Запрос разрешения уже неактуален: агент снял его или джоб завершился",
     securityBanner: "Токен агента эквивалентен удалённому shell в контейнере",
     railRecent: "Последняя активность",
     railGoInfra: "Вся история — на вкладке Инфраструктура",

@@ -17,7 +17,6 @@ import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import {
   devboxJobCancel,
-  devboxPermissionReply,
   devboxTime,
   type DevboxAccepted,
   type DevboxEventRow,
@@ -71,6 +70,7 @@ export interface DevboxNowRailProps {
   events: DevboxEventRow[];
   busy: boolean;
   onAction: (action: Promise<DevboxAccepted>) => void;
+  onPermissionReply: (id: string, decision: 'once' | 'reject') => void;
   onGoInfra: () => void;
 }
 
@@ -80,6 +80,7 @@ export function DevboxNowRail({
   events,
   busy,
   onAction,
+  onPermissionReply,
   onGoInfra,
 }: DevboxNowRailProps) {
   const [bannerDismissed, setBannerDismissed] = useState(
@@ -250,9 +251,9 @@ export function DevboxNowRail({
                 <Button
                   size="xs"
                   variant="primary"
-                  disabled={busy}
+                  disabled={busy || permissions?.bridge === 'down'}
                   data-testid={`devbox-permission-approve-${row.id}`}
-                  onClick={() => onAction(devboxPermissionReply(row.id, 'once'))}
+                  onClick={() => onPermissionReply(row.id, 'once')}
                 >
                   {t('devboxPage.permissionApprove')}
                 </Button>
@@ -260,10 +261,10 @@ export function DevboxNowRail({
               <ConfirmActionButton
                 size="xs"
                 variant="danger"
-                disabled={busy}
+                disabled={busy || permissions?.bridge === 'down'}
                 data-testid={`devbox-permission-reject-${row.id}`}
                 tooltip={t('devboxPage.tipReject')}
-                onConfirm={() => onAction(devboxPermissionReply(row.id, 'reject'))}
+                onConfirm={() => onPermissionReply(row.id, 'reject')}
               >
                 {t('devboxPage.reject')}
               </ConfirmActionButton>

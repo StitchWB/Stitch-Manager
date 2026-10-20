@@ -50,6 +50,7 @@ function observed<T>(rows: T[], bridge: 'up' | 'down' = 'up'): DevboxObserved<T>
 
 function renderRail(props: Partial<DevboxNowRailProps> = {}) {
   const onAction = jest.fn((_action: Promise<DevboxAccepted>) => undefined);
+  const onPermissionReply = jest.fn((_id: string, _decision: 'once' | 'reject') => undefined);
   const onGoInfra = jest.fn(() => undefined);
   render(
     <DevboxNowRail
@@ -58,11 +59,12 @@ function renderRail(props: Partial<DevboxNowRailProps> = {}) {
       events={[]}
       busy={false}
       onAction={onAction as unknown as (action: Promise<DevboxAccepted>) => void}
+      onPermissionReply={onPermissionReply}
       onGoInfra={onGoInfra}
       {...props}
     />,
   );
-  return { onAction, onGoInfra };
+  return { onAction, onPermissionReply, onGoInfra };
 }
 
 beforeEach(() => {
@@ -71,7 +73,6 @@ beforeEach(() => {
   invokeMock.mockImplementation(
     devboxRouter(
       pageRoutes({
-        permission_reply: { accepted: true, actionId: 'act-p1' },
         job_cancel: { accepted: true, actionId: 'act-j1' },
       }),
     ),
@@ -139,33 +140,36 @@ describe('DevboxNowRail active job', () => {
 });
 
 describe('DevboxNowRail permissions', () => {
-  it('approve dispatches permission_reply with decision=once through onAction', async () => {
-    const { onAction } = renderRail({ permissions: observed([pendingPermissionFixture()]) });
+  it('approve calls onPermissionReply with the row id and decision=once', () => {
+    const { onPermissionReply } = renderRail({
+      permissions: observed([pendingPermissionFixture()]),
+    });
 
     expect(screen.getByText('rm -rf build/')).toBeTruthy();
     fireEvent.click(screen.getByTestId('devbox-permission-approve-p1'));
 
-    await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'permission_reply')).toEqual([
-        { permissionId: 'p1', decision: 'once' },
-      ]);
-    });
-    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onPermissionReply).toHaveBeenCalledWith('p1', 'once');
   });
 
-  it('reject is confirm-gated and dispatches decision=reject', async () => {
-    renderRail({ permissions: observed([pendingPermissionFixture()]) });
+  it('reject is confirm-gated and calls onPermissionReply with decision=reject', () => {
+    const { onPermissionReply } = renderRail({
+      permissions: observed([pendingPermissionFixture()]),
+    });
 
     const reject = screen.getByTestId('devbox-permission-reject-p1');
     fireEvent.click(reject);
-    expect(devboxCalls(invokeMock, 'permission_reply')).toHaveLength(0);
+    expect(onPermissionReply).not.toHaveBeenCalled();
     fireEvent.click(reject);
 
-    await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'permission_reply')).toEqual([
-        { permissionId: 'p1', decision: 'reject' },
-      ]);
-    });
+    expect(onPermissionReply).toHaveBeenCalledWith('p1', 'reject');
+  });
+
+  it('disables both permission buttons while the permissions bridge is down', () => {
+    renderRail({ permissions: observed([pendingPermissionFixture()], 'down') });
+
+    expect(screen.getByTestId('devbox-permission-approve-p1')).toBeDisabled();
+    expect(screen.getByTestId('devbox-permission-reject-p1')).toBeDisabled();
+    expect(screen.getByTestId('devbox-rail-permissions-degraded')).toBeTruthy();
   });
 });
 

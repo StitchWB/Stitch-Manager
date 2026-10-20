@@ -94,6 +94,8 @@ export const devboxPage: DevboxPageTranslations = {
     railOnboard3: "Paste it into Claude / Cursor / OpenCode",
     railOnboard4: "Watch tool calls here in real time",
     permissionApprove: "Approve",
+    permissionStale:
+      "Permission request is no longer pending: the agent withdrew it or the job ended",
     securityBanner: "The agent token is equivalent to a remote shell in the container",
     railRecent: "Recent activity",
     railGoInfra: "Full history — on the Infrastructure tab",

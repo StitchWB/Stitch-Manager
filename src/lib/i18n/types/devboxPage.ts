@@ -85,6 +85,7 @@ export interface DevboxPageTranslations {
     railOnboard3: string;
     railOnboard4: string;
     permissionApprove: string;
+    permissionStale: string;
     securityBanner: string;
     railRecent: string;
     railGoInfra: string;

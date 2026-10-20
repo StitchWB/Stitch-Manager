@@ -170,6 +170,29 @@ describe('Devbox page poll contract', () => {
   });
 });
 
+describe('Devbox page permission cards', () => {
+  it('dismisses the card with an info toast when the reply comes back stale', async () => {
+    mockRoutes({
+      poll: devboxPollBundle({ permissions: [pendingPermissionFixture()] }),
+      permission_reply: { accepted: false, reason: "no pending permission matches 'p1'" },
+    });
+    render(<DevboxPage />);
+
+    expect(await screen.findByTestId('devbox-rail-permission-p1')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('devbox-permission-approve-p1'));
+
+    await waitFor(() => {
+      expect(toast.info).toHaveBeenCalledWith(
+        'Permission request is no longer pending: the agent withdrew it or the job ended',
+      );
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByTestId('devbox-rail-permission-p1')).toBeNull();
+    });
+  });
+});
+
 describe('Devbox page header control bar', () => {
   it('derives the composite stack badge from the poll cards', async () => {
     render(<DevboxPage />);
