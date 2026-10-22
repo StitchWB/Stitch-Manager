@@ -190,10 +190,62 @@ export interface DevboxAgentPromptReady {
   runner: boolean;
 }
 
+export interface DevboxConnectionEndpoint {
+  id: string;
+  url: string;
+  token: string;
+  note: string;
+}
+
+export interface DevboxConnectionAuth {
+  mode: string;
+  header: string;
+  scheme: string;
+  oauth: boolean;
+}
+
+export interface DevboxConnection {
+  endpoints: DevboxConnectionEndpoint[];
+  auth: DevboxConnectionAuth;
+  ingress_url: string;
+}
+
+export function devboxNormalizeConnection(raw: unknown): DevboxConnection | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const block = raw as Record<string, unknown>;
+  const auth = block.auth;
+  const endpoints = block.endpoints;
+  if (auth === null || typeof auth !== 'object' || !Array.isArray(endpoints)) return null;
+  const authBlock = auth as Record<string, unknown>;
+  const list: DevboxConnectionEndpoint[] = [];
+  for (const item of endpoints) {
+    if (item === null || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.url !== 'string' || row.url === '') continue;
+    list.push({
+      id: typeof row.id === 'string' ? row.id : '',
+      url: row.url,
+      token: typeof row.token === 'string' ? row.token : '',
+      note: typeof row.note === 'string' ? row.note : '',
+    });
+  }
+  return {
+    endpoints: list,
+    auth: {
+      mode: typeof authBlock.mode === 'string' ? authBlock.mode : '',
+      header: typeof authBlock.header === 'string' ? authBlock.header : '',
+      scheme: typeof authBlock.scheme === 'string' ? authBlock.scheme : '',
+      oauth: authBlock.oauth === true,
+    },
+    ingress_url: typeof block.ingress_url === 'string' ? block.ingress_url : '',
+  };
+}
+
 export interface DevboxAgentPrompt {
   prompt: string;
   masked: boolean;
   ready?: DevboxAgentPromptReady;
+  connection?: DevboxConnection | null;
 }
 
 export function devboxAgentPrompt(params: {

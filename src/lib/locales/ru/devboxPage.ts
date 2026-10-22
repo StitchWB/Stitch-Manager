@@ -67,6 +67,20 @@ export const devboxPage: DevboxPageTranslations = {
       "Чувствительные токены скрыты в превью, но будут скопированы",
     promptTabEditor: "Редактор задачи",
     promptTabPrompt: "Готовый промпт",
+    promptModeSandbox: "Промпт для песочницы",
+    promptModeRemote: "Remote MCP",
+    remoteAuthLabel: "Тип авторизации",
+    remoteAuthUnsupported:
+      "Пока не поддерживается: devbox принимает только Bearer-токены. OAuth будет добавлен позже.",
+    remoteCopyUrl: "Копировать URL",
+    remoteCopyToken: "Копировать токен",
+    remoteCopyHeader: "Копировать Bearer",
+    remoteCopied: "Скопировано",
+    remoteHint:
+      "Токен в URL не входит: авторизация передаётся заголовком Authorization. Токен даёт сайту доступ к инструментам проекта.",
+    remoteOtherEndpoints: "Другие эндпоинты",
+    remoteFooterHint:
+      "Для сайтов и интеграций: вставь URL и токен в поля подключения. Для чат-агентов — режим «Промпт для песочницы».",
     promptHintUniversal:
       "Скопируй промпт и вставь в чат или терминал твоего кодинг-агента.",
     promptHintClient:
