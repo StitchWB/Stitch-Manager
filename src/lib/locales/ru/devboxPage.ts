@@ -70,15 +70,22 @@ export const devboxPage: DevboxPageTranslations = {
     promptModeSandbox: "Промпт для песочницы",
     promptModeRemote: "Remote MCP",
     remoteAuthLabel: "Тип авторизации",
-    remoteAuthUnsupported:
-      "Пока не поддерживается: devbox принимает только Bearer-токены. OAuth будет добавлен позже.",
+    remoteAuthSoon: "(скоро)",
+    remoteAuthBadge:
+      "Devbox сейчас работает по схеме Bearer-токена. Для внешних сервисов используй тип API Key / Bearer.",
+    remoteUrlLabel: "MCP URL (Server Endpoint)",
+    remoteTokenLabel: "Секретный токен (Bearer Token)",
     remoteCopyUrl: "Копировать URL",
-    remoteCopyToken: "Копировать токен",
-    remoteCopyHeader: "Копировать Bearer",
+    remoteCopyToken: "Токен",
+    remoteCopyHeader: "Значение «Bearer <токен>»",
     remoteCopied: "Скопировано",
     remoteHint:
       "Токен в URL не входит: авторизация передаётся заголовком Authorization. Токен даёт сайту доступ к инструментам проекта.",
-    remoteOtherEndpoints: "Другие эндпоинты",
+    remoteOtherEndpoints: "Прямые эндпоинты (Runner, Gateway)",
+    remoteCheck: "Проверить доступность MCP",
+    remoteChecking: "Проверяю…",
+    remoteCheckOk: "Эндпоинт доступен снаружи ({tools} тулов активно, {latency} мс)",
+    remoteCheckFail: "Ошибка: {error}",
     remoteFooterHint:
       "Для сайтов и интеграций: вставь URL и токен в поля подключения. Для чат-агентов — режим «Промпт для песочницы».",
     promptHintUniversal:
@@ -151,7 +158,7 @@ export const devboxPage: DevboxPageTranslations = {
     editorInvalidJson: "JSON невалиден",
     editorErrors: "Ошибки валидации",
     editorSaved: "Проект сохранён",
-    editorJsonToggle: "JSON профиля",
+    editorJsonToggle: "Показать расширенную конфигурацию (JSON)",
     editorJsonCaption: "JSON — источник профиля; форма выше правит тот же документ.",
     tipModeGroup:
       "Стандарт: каждая мутация — запрос в «Разрешениях», если клиент агента не включил авто-одобрение (--auto или критерии приёмки). Полный доступ: запросов нет вовсе.",

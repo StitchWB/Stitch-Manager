@@ -248,6 +248,19 @@ export interface DevboxAgentPrompt {
   connection?: DevboxConnection | null;
 }
 
+export interface DevboxConnectionCheckResult {
+  ok: boolean;
+  url?: string;
+  tools?: number;
+  server?: string;
+  latency_ms?: number;
+  error?: string;
+}
+
+export function devboxConnectionCheck(): Promise<DevboxConnectionCheckResult> {
+  return safeInvoke<DevboxConnectionCheckResult>(`${NS}.connection_check`, {}, NO_CACHE);
+}
+
 export function devboxAgentPrompt(params: {
   task: string;
   acceptance: string;

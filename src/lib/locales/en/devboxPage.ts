@@ -69,15 +69,22 @@ export const devboxPage: DevboxPageTranslations = {
     promptModeSandbox: "Sandbox prompt",
     promptModeRemote: "Remote MCP",
     remoteAuthLabel: "Auth type",
-    remoteAuthUnsupported:
-      "Not supported yet: devbox accepts Bearer tokens only. OAuth is planned.",
+    remoteAuthSoon: "(soon)",
+    remoteAuthBadge:
+      "Devbox currently runs on the Bearer-token scheme. For external services use the API Key / Bearer type.",
+    remoteUrlLabel: "MCP URL (Server Endpoint)",
+    remoteTokenLabel: "Secret token (Bearer Token)",
     remoteCopyUrl: "Copy URL",
-    remoteCopyToken: "Copy token",
-    remoteCopyHeader: "Copy Bearer",
+    remoteCopyToken: "Token",
+    remoteCopyHeader: "Bearer header value",
     remoteCopied: "Copied",
     remoteHint:
       "The URL carries no token: authorization goes in the Authorization header. The token grants the site access to project tools.",
-    remoteOtherEndpoints: "Other endpoints",
+    remoteOtherEndpoints: "Direct endpoints (Runner, Gateway)",
+    remoteCheck: "Check MCP availability",
+    remoteChecking: "Checking…",
+    remoteCheckOk: "Endpoint reachable ({tools} tools active, {latency} ms)",
+    remoteCheckFail: "Error: {error}",
     remoteFooterHint:
       "For sites and integrations: paste the URL and token into their connection fields. For chat agents use the Sandbox prompt mode.",
     promptHintUniversal:
@@ -149,7 +156,7 @@ export const devboxPage: DevboxPageTranslations = {
     editorInvalidJson: "Invalid JSON",
     editorErrors: "Validation errors",
     editorSaved: "Project saved",
-    editorJsonToggle: "Profile JSON",
+    editorJsonToggle: "Show advanced configuration (JSON)",
     editorJsonCaption: "The JSON is the source of truth; the form above edits the same document.",
     tipModeGroup:
       "Standard asks for approval per mutation unless the agent client passes --auto or acceptance criteria; full access never asks.",

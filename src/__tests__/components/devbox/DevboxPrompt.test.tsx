@@ -324,6 +324,14 @@ describe('DevboxPrompt remote MCP mode', () => {
     expect(screen.getByTestId('devbox-prompt-task')).toBeTruthy();
   });
 
+  it('hides the sandbox prompt tabs while in remote mode', async () => {
+    renderPrompt();
+    await promptReady();
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
+
+    expect(screen.queryByTestId('devbox-prompt-tabs')).toBeNull();
+  });
+
   it('copies URL, token, and header value separately, revealing on demand', async () => {
     renderPrompt();
     await promptReady();
@@ -345,34 +353,80 @@ describe('DevboxPrompt remote MCP mode', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('bridge-secret-1'));
   });
 
-  it('warns that OAuth auth types are not supported', async () => {
+  it('shows an info badge for OAuth types but keeps the connection fields visible', async () => {
     renderPrompt();
     await promptReady();
     fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
 
     expect(screen.queryByTestId('devbox-remote-auth-unsupported')).toBeNull();
+    expect(screen.getByTestId('devbox-remote-url')).toBeTruthy();
 
     fireEvent.change(screen.getByTestId('devbox-remote-auth'), {
       target: { value: 'oauth-dynamic' },
     });
     expect(screen.getByTestId('devbox-remote-auth-unsupported').textContent).toBe(
-      t('devboxPage.remoteAuthUnsupported'),
+      t('devboxPage.remoteAuthBadge'),
     );
-    expect(screen.queryByTestId('devbox-remote-url')).toBeNull();
+    expect(screen.getByTestId('devbox-remote-url')).toBeTruthy();
 
     fireEvent.change(screen.getByTestId('devbox-remote-auth'), {
       target: { value: 'bearer' },
     });
     expect(screen.queryByTestId('devbox-remote-auth-unsupported')).toBeNull();
-    expect(screen.getByTestId('devbox-remote-url')).toBeTruthy();
   });
 
-  it('lists additional endpoints with copy buttons', async () => {
+  it('runs a live connection check and reports tools on success', async () => {
+    invokeMock.mockImplementation(
+      promptRoutes({
+        connection_check: () => ({
+          ok: true,
+          url: 'https://x.trycloudflare.com/p/8787/mcp',
+          tools: 16,
+          server: 'opencode-mcp-bridge',
+          latency_ms: 42,
+        }),
+      }),
+    );
     renderPrompt();
     await promptReady();
     fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
 
+    fireEvent.click(screen.getByTestId('devbox-remote-check'));
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-remote-check-ok').textContent).toBe(
+        t('devboxPage.remoteCheckOk', { tools: 16, latency: 42 }),
+      );
+    });
+  });
+
+  it('shows the failure reason when the connection check fails', async () => {
+    invokeMock.mockImplementation(
+      promptRoutes({
+        connection_check: () => ({ ok: false, error: 'HTTP 401' }),
+      }),
+    );
+    renderPrompt();
+    await promptReady();
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
+
+    fireEvent.click(screen.getByTestId('devbox-remote-check'));
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-remote-check-fail').textContent).toBe(
+        t('devboxPage.remoteCheckFail', { error: 'HTTP 401' }),
+      );
+    });
+  });
+
+  it('collapses additional endpoints behind a toggle', async () => {
+    renderPrompt();
+    await promptReady();
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
+
+    expect(screen.queryByTestId('devbox-remote-endpoints')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('devbox-remote-endpoints-toggle'));
     expect(screen.getByTestId('devbox-remote-endpoints')).toBeTruthy();
+
     fireEvent.click(screen.getByTestId('devbox-remote-copy-url-runner'));
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith('https://x.trycloudflare.com/p/8796/mcp'),

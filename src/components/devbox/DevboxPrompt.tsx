@@ -2,15 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Eye,
   EyeOff,
+  Info,
   Lock,
   Play,
   Plus,
   Power,
   RefreshCw,
   X,
+  Zap,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -26,6 +30,7 @@ import { cn } from '@/lib/utils';
 import {
   devboxActionSucceeded,
   devboxAgentPrompt,
+  devboxConnectionCheck,
   devboxIngressControl,
   devboxNormalizeConnection,
   devboxStackStart,
@@ -48,6 +53,12 @@ const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', 'stack_s
 const COPY_FLASH_MS = 2000;
 
 type ConnectionMode = 'sandbox' | 'remote';
+
+type CheckState =
+  | { status: 'idle' }
+  | { status: 'running' }
+  | { status: 'ok'; tools: number; latency: number }
+  | { status: 'fail'; error: string };
 
 const AGENT_CLIENTS: ReadonlyArray<readonly [string, string]> = [
   ['claude-code', 'Claude Code'],
@@ -146,6 +157,8 @@ export function DevboxPrompt({
   const [copied, setCopied] = useState<{ at: number; fingerprint: string } | null>(null);
   const [copyFlash, setCopyFlash] = useState(false);
   const [remoteCopied, setRemoteCopied] = useState<string | null>(null);
+  const [endpointsOpen, setEndpointsOpen] = useState(false);
+  const [check, setCheck] = useState<CheckState>({ status: 'idle' });
   const revealedRef = useRef(false);
   const taskRef = useRef('');
   const acceptanceRef = useRef('');
@@ -237,6 +250,25 @@ export function DevboxPrompt({
     const token = payload?.connection?.endpoints[0]?.token;
     return typeof token === 'string' && token !== '' ? token : null;
   }, [ensureRevealed]);
+
+  const runCheck = async () => {
+    setCheck({ status: 'running' });
+    try {
+      const result = await devboxConnectionCheck();
+      if (result.ok) {
+        setCheck({ status: 'ok', tools: result.tools ?? 0, latency: result.latency_ms ?? 0 });
+      } else {
+        setCheck({ status: 'fail', error: result.error ?? t('pluginUi.actionFailed') });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (STALE_COMMAND_RE.test(message)) {
+        setCheck({ status: 'fail', error: t('devboxPage.handoffErrorStale') });
+      } else {
+        setCheck({ status: 'fail', error: message });
+      }
+    }
+  };
 
   const activeProfileName = useMemo(
     () => (Array.isArray(profiles) ? profiles.find(row => row.active)?.name ?? '' : ''),
@@ -409,117 +441,202 @@ export function DevboxPrompt({
           </div>
 
           {mode === 'remote' ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-3" data-testid="devbox-remote-panel">
+            <div className="flex flex-col gap-3" data-testid="devbox-remote-panel">
               <Select
                 label={t('devboxPage.remoteAuthLabel')}
-                options={AUTH_TYPES.map(([value, label]) => ({ value, label }))}
+                options={AUTH_TYPES.map(([value, label]) => ({
+                  value,
+                  label:
+                    value === 'bearer'
+                      ? label
+                      : `${label} ${t('devboxPage.remoteAuthSoon')}`,
+                }))}
                 value={authType}
                 containerClassName="shrink-0"
                 data-testid="devbox-remote-auth"
                 onValueChange={setAuthType}
               />
               {authType !== 'bearer' && (
-                <span className="text-xs text-amber-300" data-testid="devbox-remote-auth-unsupported">
-                  {t('devboxPage.remoteAuthUnsupported')}
+                <span
+                  className="flex shrink-0 items-start gap-1.5 self-start rounded border border-sky-500/40 bg-sky-500/10 px-2 py-1 text-xs text-sky-200"
+                  data-testid="devbox-remote-auth-unsupported"
+                >
+                  <Info size={12} className="mt-0.5 shrink-0" aria-hidden />
+                  {t('devboxPage.remoteAuthBadge')}
                 </span>
               )}
-              {authType === 'bearer' && remoteEndpoint !== null && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={remoteEndpoint.url}
-                      readOnly
-                      containerClassName="min-w-0 flex-1"
-                      data-testid="devbox-remote-url"
-                    />
-                    <Button
-                      size="xs"
-                      variant="secondary"
-                      leftIcon={remoteCopied === 'url' ? <Check size={12} /> : <Copy size={12} />}
-                      data-testid="devbox-remote-copy-url"
-                      onClick={() => void copyRemote('url', remoteEndpoint.url)}
-                    >
-                      {remoteCopied === 'url' ? t('devboxPage.remoteCopied') : t('devboxPage.remoteCopyUrl')}
-                    </Button>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={remoteEndpoint.token}
-                      readOnly
-                      containerClassName="min-w-0 flex-1"
-                      data-testid="devbox-remote-token"
-                    />
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      leftIcon={revealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                      data-testid="devbox-remote-reveal"
-                      onClick={() => void ensureRevealed()}
-                    >
-                      {t('devboxPage.promptTokens')}
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="secondary"
-                      leftIcon={remoteCopied === 'token' ? <Check size={12} /> : <Copy size={12} />}
-                      data-testid="devbox-remote-copy-token"
-                      onClick={() => void (async () => {
-                        const current = await revealedToken();
-                        if (current === null) return;
-                        await copyRemote('token', current);
-                      })()}
-                    >
-                      {remoteCopied === 'token' ? t('devboxPage.remoteCopied') : t('devboxPage.remoteCopyToken')}
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="secondary"
-                      leftIcon={remoteCopied === 'header' ? <Check size={12} /> : <Copy size={12} />}
-                      data-testid="devbox-remote-copy-header"
-                      onClick={() => void (async () => {
-                        const current = await revealedToken();
-                        if (current === null) return;
-                        await copyRemote('header', `Bearer ${current}`);
-                      })()}
-                    >
-                      {remoteCopied === 'header' ? t('devboxPage.remoteCopied') : t('devboxPage.remoteCopyHeader')}
-                    </Button>
-                  </div>
-
-                  <span className="text-2xs text-slate-500" data-testid="devbox-remote-hint">
-                    {t('devboxPage.remoteHint')}
-                  </span>
-                </div>
-              )}
-
-              {authType === 'bearer' && (connection?.endpoints.length ?? 0) > 1 && (
+              {remoteEndpoint !== null && (
                 <div
-                  className="flex flex-col gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5"
-                  data-testid="devbox-remote-endpoints"
+                  className="flex shrink-0 flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                  data-testid="devbox-remote-box"
                 >
-                  <span className="text-2xs uppercase tracking-wider text-slate-400">
-                    {t('devboxPage.remoteOtherEndpoints')}
-                  </span>
-                  {connection?.endpoints.slice(1).map(endpoint => (
-                    <div key={endpoint.id} className="flex items-center gap-2">
-                      <span className="w-16 shrink-0 text-2xs text-slate-300">{endpoint.id}</span>
-                      <span className="min-w-0 flex-1 truncate font-mono text-2xs text-slate-400" title={endpoint.url}>
-                        {endpoint.url}
-                      </span>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-slate-300" htmlFor="devbox-remote-url">
+                      {t('devboxPage.remoteUrlLabel')}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={remoteEndpoint.url}
+                        readOnly
+                        containerClassName="min-w-0 flex-1"
+                        className="font-mono text-xs"
+                        data-testid="devbox-remote-url"
+                      />
                       <Button
-                        size="xs"
-                        variant="ghost"
-                        leftIcon={remoteCopied === `url-${endpoint.id}` ? <Check size={12} /> : <Copy size={12} />}
-                        data-testid={`devbox-remote-copy-url-${endpoint.id}`}
-                        onClick={() => void copyRemote(`url-${endpoint.id}`, endpoint.url)}
+                        size="sm"
+                        variant="secondary"
+                        leftIcon={remoteCopied === 'url' ? <Check size={14} /> : <Copy size={14} />}
+                        data-testid="devbox-remote-copy-url"
+                        onClick={() => void copyRemote('url', remoteEndpoint.url)}
                       >
-                        {remoteCopied === `url-${endpoint.id}`
+                        {remoteCopied === 'url'
                           ? t('devboxPage.remoteCopied')
                           : t('devboxPage.remoteCopyUrl')}
                       </Button>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-slate-300" htmlFor="devbox-remote-token">
+                      {t('devboxPage.remoteTokenLabel')}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={remoteEndpoint.token}
+                        readOnly
+                        type={revealed ? 'text' : 'password'}
+                        containerClassName="min-w-0 flex-1"
+                        className="font-mono text-xs"
+                        data-testid="devbox-remote-token"
+                      />
+                      <IconButton
+                        size="sm"
+                        variant="ghost"
+                        aria-label={t('devboxPage.promptTokens')}
+                        data-testid="devbox-remote-reveal"
+                        onClick={() => void ensureRevealed()}
+                      >
+                        {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </IconButton>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        leftIcon={remoteCopied === 'token' ? <Check size={14} /> : <Copy size={14} />}
+                        data-testid="devbox-remote-copy-token"
+                        onClick={() => void (async () => {
+                          const current = await revealedToken();
+                          if (current === null) return;
+                          await copyRemote('token', current);
+                        })()}
+                      >
+                        {remoteCopied === 'token'
+                          ? t('devboxPage.remoteCopied')
+                          : t('devboxPage.remoteCopyToken')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        leftIcon={remoteCopied === 'header' ? <Check size={14} /> : <Copy size={14} />}
+                        data-testid="devbox-remote-copy-header"
+                        onClick={() => void (async () => {
+                          const current = await revealedToken();
+                          if (current === null) return;
+                          await copyRemote('header', `Bearer ${current}`);
+                        })()}
+                      >
+                        {remoteCopied === 'header'
+                          ? t('devboxPage.remoteCopied')
+                          : t('devboxPage.remoteCopyHeader')}
+                      </Button>
+                    </div>
+                    <span className="text-2xs text-slate-500" data-testid="devbox-remote-hint">
+                      {t('devboxPage.remoteHint')}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      leftIcon={<Zap size={14} />}
+                      disabled={check.status === 'running'}
+                      data-testid="devbox-remote-check"
+                      onClick={() => void runCheck()}
+                    >
+                      {check.status === 'running'
+                        ? t('devboxPage.remoteChecking')
+                        : t('devboxPage.remoteCheck')}
+                    </Button>
+                    {check.status === 'ok' && (
+                      <span
+                        className="flex items-center gap-1.5 text-xs text-emerald-300"
+                        data-testid="devbox-remote-check-ok"
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden />
+                        {t('devboxPage.remoteCheckOk', {
+                          tools: check.tools,
+                          latency: check.latency,
+                        })}
+                      </span>
+                    )}
+                    {check.status === 'fail' && (
+                      <span
+                        className="flex min-w-0 items-center gap-1.5 text-xs text-red-300"
+                        data-testid="devbox-remote-check-fail"
+                      >
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" aria-hidden />
+                        <span className="truncate" title={check.error}>
+                          {t('devboxPage.remoteCheckFail', { error: check.error })}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(connection?.endpoints.length ?? 0) > 1 && (
+                <div className="flex shrink-0 flex-col rounded-lg border border-white/[0.08] bg-white/[0.02]">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 px-2.5 py-2 text-left text-2xs uppercase tracking-wider text-slate-400 hover:text-slate-300"
+                    data-testid="devbox-remote-endpoints-toggle"
+                    onClick={() => setEndpointsOpen(v => !v)}
+                  >
+                    {endpointsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    {t('devboxPage.remoteOtherEndpoints')}
+                  </button>
+                  {endpointsOpen && (
+                    <div
+                      className="flex flex-col gap-1.5 border-t border-white/[0.06] p-2.5"
+                      data-testid="devbox-remote-endpoints"
+                    >
+                      {connection?.endpoints.slice(1).map(endpoint => (
+                        <div key={endpoint.id} className="flex items-center gap-2">
+                          <span className="w-16 shrink-0 text-2xs text-slate-300">{endpoint.id}</span>
+                          <span
+                            className="min-w-0 flex-1 truncate font-mono text-2xs text-slate-400"
+                            title={endpoint.url}
+                          >
+                            {endpoint.url}
+                          </span>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            leftIcon={
+                              remoteCopied === `url-${endpoint.id}` ? <Check size={12} /> : <Copy size={12} />
+                            }
+                            data-testid={`devbox-remote-copy-url-${endpoint.id}`}
+                            onClick={() => void copyRemote(`url-${endpoint.id}`, endpoint.url)}
+                          >
+                            {remoteCopied === `url-${endpoint.id}`
+                              ? t('devboxPage.remoteCopied')
+                              : t('devboxPage.remoteCopyUrl')}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
