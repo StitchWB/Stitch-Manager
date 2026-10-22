@@ -15,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
@@ -26,12 +27,14 @@ import {
   devboxActionSucceeded,
   devboxAgentPrompt,
   devboxIngressControl,
+  devboxNormalizeConnection,
   devboxStackStart,
   devboxVitalValue,
   type DevboxAccepted,
   type DevboxActionStatus,
   type DevboxAgentPrompt as DevboxAgentPromptPayload,
   type DevboxAgentPromptReady,
+  type DevboxConnectionEndpoint,
   type DevboxOverviewGateway,
   type DevboxProfileRow,
   type DevboxVitalCard,
@@ -43,6 +46,8 @@ const STALE_COMMAND_RE = /method not found|-32601/i;
 const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', 'stack_start']);
 
 const COPY_FLASH_MS = 2000;
+
+type ConnectionMode = 'sandbox' | 'remote';
 
 const AGENT_CLIENTS: ReadonlyArray<readonly [string, string]> = [
   ['claude-code', 'Claude Code'],
@@ -98,6 +103,27 @@ export interface DevboxPromptProps {
 
 type PromptTab = 'editor' | 'prompt';
 
+const AUTH_TYPES: ReadonlyArray<readonly [string, string]> = [
+  ['bearer', 'API key / Bearer'],
+  ['oauth-dynamic', 'OAuth 2 Dynamic'],
+  ['oauth-pkce', 'OAuth 2 Code + PKCE'],
+];
+
+async function copyValue(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = value;
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  }
+}
+
 export function DevboxPrompt({
   profiles,
   overviewCards,
@@ -109,14 +135,17 @@ export function DevboxPrompt({
   const [data, setData] = useState<DevboxAgentPromptPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [mode, setMode] = useState<ConnectionMode>('sandbox');
   const [tab, setTab] = useState<PromptTab>('editor');
   const [manualCopy, setManualCopy] = useState(false);
   const [acceptanceOpen, setAcceptanceOpen] = useState(false);
   const [task, setTask] = useState('');
   const [acceptance, setAcceptance] = useState('');
   const [client, setClient] = useState('universal');
+  const [authType, setAuthType] = useState('bearer');
   const [copied, setCopied] = useState<{ at: number; fingerprint: string } | null>(null);
   const [copyFlash, setCopyFlash] = useState(false);
+  const [remoteCopied, setRemoteCopied] = useState<string | null>(null);
   const revealedRef = useRef(false);
   const taskRef = useRef('');
   const acceptanceRef = useRef('');
@@ -160,6 +189,54 @@ export function DevboxPrompt({
     () => data?.ready ?? readyFromCards(overviewCards),
     [data, overviewCards],
   );
+
+  const connection = useMemo(
+    () => (data !== null ? devboxNormalizeConnection(data.connection) : null),
+    [data],
+  );
+
+  const remoteEndpoint = useMemo<DevboxConnectionEndpoint | null>(
+    () => connection?.endpoints[0] ?? null,
+    [connection],
+  );
+
+  const ensureRevealed = useCallback(async (): Promise<DevboxAgentPromptPayload | null> => {
+    if (revealed && data !== null) return data;
+    try {
+      const payload = await devboxAgentPrompt({
+        task: taskRef.current,
+        acceptance: acceptanceRef.current,
+        reveal: true,
+        client: clientRef.current,
+      });
+      setData(payload);
+      setRevealed(true);
+      revealedRef.current = true;
+      return payload;
+    } catch {
+      appToast.error(t('pluginUi.actionFailed'));
+      return null;
+    }
+  }, [revealed, data]);
+
+  const copyRemote = async (key: string, value: string) => {
+    const ok = await copyValue(value);
+    if (!ok) {
+      appToast.error(t('pluginUi.actionFailed'));
+      return;
+    }
+    setRemoteCopied(key);
+    window.setTimeout(
+      () => setRemoteCopied(current => (current === key ? null : current)),
+      COPY_FLASH_MS,
+    );
+  };
+
+  const revealedToken = useCallback(async (): Promise<string | null> => {
+    const payload = await ensureRevealed();
+    const token = payload?.connection?.endpoints[0]?.token;
+    return typeof token === 'string' && token !== '' ? token : null;
+  }, [ensureRevealed]);
 
   const activeProfileName = useMemo(
     () => (Array.isArray(profiles) ? profiles.find(row => row.active)?.name ?? '' : ''),
@@ -319,121 +396,253 @@ export function DevboxPrompt({
     >
       {data !== null && error === null && (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div className="shrink-0" data-testid="devbox-prompt-tabs">
+          <div className="shrink-0" data-testid="devbox-prompt-mode">
             <SegmentedControl
               size="sm"
-              value={tab}
-              onChange={value => setTab(value === 'prompt' ? 'prompt' : 'editor')}
+              value={mode}
+              onChange={value => setMode(value === 'remote' ? 'remote' : 'sandbox')}
               options={[
-                { value: 'editor', label: t('devboxPage.promptTabEditor') },
-                { value: 'prompt', label: t('devboxPage.promptTabPrompt') },
+                { value: 'sandbox', label: t('devboxPage.promptModeSandbox') },
+                { value: 'remote', label: t('devboxPage.promptModeRemote') },
               ]}
             />
           </div>
 
-          {tab === 'editor' ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-3">
+          {mode === 'remote' ? (
+            <div className="flex min-h-0 flex-1 flex-col gap-3" data-testid="devbox-remote-panel">
               <Select
-                label={t('devboxPage.promptClientLabel')}
-                options={clientOptions}
-                value={client}
+                label={t('devboxPage.remoteAuthLabel')}
+                options={AUTH_TYPES.map(([value, label]) => ({ value, label }))}
+                value={authType}
                 containerClassName="shrink-0"
-                data-testid="devbox-prompt-client"
-                onValueChange={value => {
-                  clientRef.current = value;
-                  setClient(value);
-                  load(false);
-                }}
+                data-testid="devbox-remote-auth"
+                onValueChange={setAuthType}
               />
-
-              <Textarea
-                value={task}
-                placeholder={t('devboxPage.promptTaskPlaceholder')}
-                data-testid="devbox-prompt-task"
-                containerClassName="min-h-0"
-                shellClassName="flex flex-col"
-                className="min-h-[200px] max-h-[420px] resize-y overflow-y-auto placeholder:text-slate-400"
-                onChange={e => {
-                  taskRef.current = e.target.value;
-                  setTask(e.target.value);
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    if (!copyDisabled) void copy();
-                  }
-                }}
-              />
-
-              {acceptanceOpen && (
-                <div
-                  className="shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]"
-                  data-testid="devbox-prompt-acceptance-panel"
-                >
-                  <div className="border-b border-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-slate-300">
-                    {t('devboxPage.promptCriteriaHeader')}
+              {authType !== 'bearer' && (
+                <span className="text-xs text-amber-300" data-testid="devbox-remote-auth-unsupported">
+                  {t('devboxPage.remoteAuthUnsupported')}
+                </span>
+              )}
+              {authType === 'bearer' && remoteEndpoint !== null && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={remoteEndpoint.url}
+                      readOnly
+                      containerClassName="min-w-0 flex-1"
+                      data-testid="devbox-remote-url"
+                    />
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      leftIcon={remoteCopied === 'url' ? <Check size={12} /> : <Copy size={12} />}
+                      data-testid="devbox-remote-copy-url"
+                      onClick={() => void copyRemote('url', remoteEndpoint.url)}
+                    >
+                      {remoteCopied === 'url' ? t('devboxPage.remoteCopied') : t('devboxPage.remoteCopyUrl')}
+                    </Button>
                   </div>
-                  <Textarea
-                    rows={3}
-                    className="min-h-0 text-xs placeholder:text-slate-400"
-                    shellClassName="rounded-none border-0 bg-transparent"
-                    value={acceptance}
-                    placeholder={t('devboxPage.promptAcceptancePlaceholder')}
-                    data-testid="devbox-prompt-acceptance"
-                    onChange={e => {
-                      acceptanceRef.current = e.target.value;
-                      setAcceptance(e.target.value);
-                    }}
-                  />
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={remoteEndpoint.token}
+                      readOnly
+                      containerClassName="min-w-0 flex-1"
+                      data-testid="devbox-remote-token"
+                    />
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      leftIcon={revealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                      data-testid="devbox-remote-reveal"
+                      onClick={() => void ensureRevealed()}
+                    >
+                      {t('devboxPage.promptTokens')}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      leftIcon={remoteCopied === 'token' ? <Check size={12} /> : <Copy size={12} />}
+                      data-testid="devbox-remote-copy-token"
+                      onClick={() => void (async () => {
+                        const current = await revealedToken();
+                        if (current === null) return;
+                        await copyRemote('token', current);
+                      })()}
+                    >
+                      {remoteCopied === 'token' ? t('devboxPage.remoteCopied') : t('devboxPage.remoteCopyToken')}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      leftIcon={remoteCopied === 'header' ? <Check size={12} /> : <Copy size={12} />}
+                      data-testid="devbox-remote-copy-header"
+                      onClick={() => void (async () => {
+                        const current = await revealedToken();
+                        if (current === null) return;
+                        await copyRemote('header', `Bearer ${current}`);
+                      })()}
+                    >
+                      {remoteCopied === 'header' ? t('devboxPage.remoteCopied') : t('devboxPage.remoteCopyHeader')}
+                    </Button>
+                  </div>
+
+                  <span className="text-2xs text-slate-500" data-testid="devbox-remote-hint">
+                    {t('devboxPage.remoteHint')}
+                  </span>
                 </div>
               )}
 
-              {copyDisabled
-                ? blockingAlert
-                : !ready.runner
-                  ? alertPlate(
-                      'devbox-prompt-runner-warning',
-                      t('devboxPage.promptRunnerDownHint'),
-                    )
-                  : null}
+              {authType === 'bearer' && (connection?.endpoints.length ?? 0) > 1 && (
+                <div
+                  className="flex flex-col gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5"
+                  data-testid="devbox-remote-endpoints"
+                >
+                  <span className="text-2xs uppercase tracking-wider text-slate-400">
+                    {t('devboxPage.remoteOtherEndpoints')}
+                  </span>
+                  {connection?.endpoints.slice(1).map(endpoint => (
+                    <div key={endpoint.id} className="flex items-center gap-2">
+                      <span className="w-16 shrink-0 text-2xs text-slate-300">{endpoint.id}</span>
+                      <span className="min-w-0 flex-1 truncate font-mono text-2xs text-slate-400" title={endpoint.url}>
+                        {endpoint.url}
+                      </span>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        leftIcon={remoteCopied === `url-${endpoint.id}` ? <Check size={12} /> : <Copy size={12} />}
+                        data-testid={`devbox-remote-copy-url-${endpoint.id}`}
+                        onClick={() => void copyRemote(`url-${endpoint.id}`, endpoint.url)}
+                      >
+                        {remoteCopied === `url-${endpoint.id}`
+                          ? t('devboxPage.remoteCopied')
+                          : t('devboxPage.remoteCopyUrl')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              {gatewayDown
-                ? alertPlate(
-                    'devbox-prompt-gateway-warning',
-                    t('devboxPage.gatewayWarnChip'),
-                  )
-                : null}
+              {copyDisabled ? blockingAlert : null}
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-2">
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                {data.masked && (
-                  <Badge
-                    variant="info"
-                    size="sm"
-                    className="normal-case tracking-normal"
-                    data-testid="devbox-prompt-preview-locked"
-                  >
-                    <Lock size={12} aria-hidden />
-                    {t('devboxPage.promptPreviewLocked')}
-                  </Badge>
-                )}
-                {manualCopy && (
-                  <span className="text-xs text-red-300" data-testid="devbox-prompt-manual-copy">
-                    {t('devboxPage.promptManualCopy')}
-                  </span>
-                )}
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
+              <div className="shrink-0" data-testid="devbox-prompt-tabs">
+                <SegmentedControl
+                  size="sm"
+                  value={tab}
+                  onChange={value => setTab(value === 'prompt' ? 'prompt' : 'editor')}
+                  options={[
+                    { value: 'editor', label: t('devboxPage.promptTabEditor') },
+                    { value: 'prompt', label: t('devboxPage.promptTabPrompt') },
+                  ]}
+                />
               </div>
-              <pre
-                data-testid="devbox-prompt-preview"
-                className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-slate-300 whitespace-pre-wrap break-words"
-              >
-                {data.prompt}
-              </pre>
+              {tab === 'editor' ? (
+                <div className="flex min-h-0 flex-1 flex-col gap-3">
+                  <Select
+                    label={t('devboxPage.promptClientLabel')}
+                    options={clientOptions}
+                    value={client}
+                    containerClassName="shrink-0"
+                    data-testid="devbox-prompt-client"
+                    onValueChange={value => {
+                      clientRef.current = value;
+                      setClient(value);
+                      load(false);
+                    }}
+                  />
+
+                  <Textarea
+                    value={task}
+                    placeholder={t('devboxPage.promptTaskPlaceholder')}
+                    data-testid="devbox-prompt-task"
+                    containerClassName="min-h-0"
+                    shellClassName="flex flex-col"
+                    className="min-h-[200px] max-h-[420px] resize-y overflow-y-auto placeholder:text-slate-400"
+                    onChange={e => {
+                      taskRef.current = e.target.value;
+                      setTask(e.target.value);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        if (!copyDisabled) void copy();
+                      }
+                    }}
+                  />
+
+                  {acceptanceOpen && (
+                    <div
+                      className="shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]"
+                      data-testid="devbox-prompt-acceptance-panel"
+                    >
+                      <div className="border-b border-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-slate-300">
+                        {t('devboxPage.promptCriteriaHeader')}
+                      </div>
+                      <Textarea
+                        rows={3}
+                        className="min-h-0 text-xs placeholder:text-slate-400"
+                        shellClassName="rounded-none border-0 bg-transparent"
+                        value={acceptance}
+                        placeholder={t('devboxPage.promptAcceptancePlaceholder')}
+                        data-testid="devbox-prompt-acceptance"
+                        onChange={e => {
+                          acceptanceRef.current = e.target.value;
+                          setAcceptance(e.target.value);
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {copyDisabled
+                    ? blockingAlert
+                    : !ready.runner
+                      ? alertPlate(
+                          'devbox-prompt-runner-warning',
+                          t('devboxPage.promptRunnerDownHint'),
+                        )
+                      : null}
+
+                  {gatewayDown
+                    ? alertPlate(
+                        'devbox-prompt-gateway-warning',
+                        t('devboxPage.gatewayWarnChip'),
+                      )
+                    : null}
+                </div>
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {data.masked && (
+                      <Badge
+                        variant="info"
+                        size="sm"
+                        className="normal-case tracking-normal"
+                        data-testid="devbox-prompt-preview-locked"
+                      >
+                        <Lock size={12} aria-hidden />
+                        {t('devboxPage.promptPreviewLocked')}
+                      </Badge>
+                    )}
+                    {manualCopy && (
+                      <span className="text-xs text-red-300" data-testid="devbox-prompt-manual-copy">
+                        {t('devboxPage.promptManualCopy')}
+                      </span>
+                    )}
+                  </div>
+                  <pre
+                    data-testid="devbox-prompt-preview"
+                    className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-slate-300 whitespace-pre-wrap break-words"
+                  >
+                    {data.prompt}
+                  </pre>
+                </div>
+              )}
             </div>
           )}
 
-          {stale && (
+          {mode === 'sandbox' && stale && (
             <span
               className="text-xs text-amber-300 shrink-0"
               data-testid="devbox-prompt-stale"
@@ -446,47 +655,58 @@ export function DevboxPrompt({
             className="flex shrink-0 items-start justify-between gap-3"
             data-testid="devbox-prompt-footer"
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="xs"
-                variant={acceptanceOpen ? 'secondary' : 'ghost'}
-                leftIcon={acceptanceOpen ? <X size={12} /> : <Plus size={12} />}
-                data-testid="devbox-prompt-acceptance-toggle"
-                onClick={() => setAcceptanceOpen(v => !v)}
-              >
-                {acceptanceOpen
-                  ? t('devboxPage.promptCriteriaClose')
-                  : t('devboxPage.promptCriteria')}
-              </Button>
-              <Button
-                size="xs"
-                variant="ghost"
-                leftIcon={revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-                data-testid="devbox-prompt-reveal"
-                onClick={() => load(!revealed)}
-              >
-                {t('devboxPage.promptTokens')}
-              </Button>
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              {copyDisabled ? (
-                <Tooltip
-                  content={t('devboxPage.promptBlockedTip', {
-                    fix: blockingLabels.join(' · '),
-                  })}
-                >
-                  {copyButton}
-                </Tooltip>
-              ) : (
-                copyButton
-              )}
+            {mode === 'sandbox' ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="xs"
+                    variant={acceptanceOpen ? 'secondary' : 'ghost'}
+                    leftIcon={acceptanceOpen ? <X size={12} /> : <Plus size={12} />}
+                    data-testid="devbox-prompt-acceptance-toggle"
+                    onClick={() => setAcceptanceOpen(v => !v)}
+                  >
+                    {acceptanceOpen
+                      ? t('devboxPage.promptCriteriaClose')
+                      : t('devboxPage.promptCriteria')}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    leftIcon={revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                    data-testid="devbox-prompt-reveal"
+                    onClick={() => load(!revealed)}
+                  >
+                    {t('devboxPage.promptTokens')}
+                  </Button>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  {copyDisabled ? (
+                    <Tooltip
+                      content={t('devboxPage.promptBlockedTip', {
+                        fix: blockingLabels.join(' · '),
+                      })}
+                    >
+                      {copyButton}
+                    </Tooltip>
+                  ) : (
+                    copyButton
+                  )}
+                  <span
+                    className="max-w-[320px] text-right text-2xs text-slate-500"
+                    data-testid="devbox-prompt-hint"
+                  >
+                    {clientHint}
+                  </span>
+                </div>
+              </>
+            ) : (
               <span
-                className="max-w-[320px] text-right text-2xs text-slate-500"
-                data-testid="devbox-prompt-hint"
+                className="max-w-[480px] text-2xs text-slate-500"
+                data-testid="devbox-remote-footer-hint"
               >
-                {clientHint}
+                {t('devboxPage.remoteFooterHint')}
               </span>
-            </div>
+            )}
           </div>
         </div>
       )}

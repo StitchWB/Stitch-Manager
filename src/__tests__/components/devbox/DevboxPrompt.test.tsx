@@ -305,6 +305,81 @@ describe('DevboxPrompt copy flow', () => {
   });
 });
 
+describe('DevboxPrompt remote MCP mode', () => {
+  it('shows the sandbox editor by default and switches to the remote panel', async () => {
+    renderPrompt();
+    await promptReady();
+
+    expect(screen.getByTestId('devbox-prompt-task')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-remote-panel')).toBeNull();
+
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
+    expect(screen.getByTestId('devbox-remote-panel')).toBeTruthy();
+    expect(screen.getByTestId('devbox-remote-url')).toHaveValue(
+      'https://x.trycloudflare.com/p/8787/mcp',
+    );
+    expect(screen.queryByTestId('devbox-prompt-task')).toBeNull();
+
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeSandbox')));
+    expect(screen.getByTestId('devbox-prompt-task')).toBeTruthy();
+  });
+
+  it('copies URL, token, and header value separately, revealing on demand', async () => {
+    renderPrompt();
+    await promptReady();
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
+
+    fireEvent.click(screen.getByTestId('devbox-remote-copy-url'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://x.trycloudflare.com/p/8787/mcp'));
+
+    fireEvent.click(screen.getByTestId('devbox-remote-copy-header'));
+    await waitFor(() => {
+      expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
+        reveal: true,
+        client: 'universal',
+      });
+    });
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('Bearer bridge-secret-1'));
+
+    fireEvent.click(screen.getByTestId('devbox-remote-copy-token'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('bridge-secret-1'));
+  });
+
+  it('warns that OAuth auth types are not supported', async () => {
+    renderPrompt();
+    await promptReady();
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
+
+    expect(screen.queryByTestId('devbox-remote-auth-unsupported')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('devbox-remote-auth'), {
+      target: { value: 'oauth-dynamic' },
+    });
+    expect(screen.getByTestId('devbox-remote-auth-unsupported').textContent).toBe(
+      t('devboxPage.remoteAuthUnsupported'),
+    );
+    expect(screen.queryByTestId('devbox-remote-url')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('devbox-remote-auth'), {
+      target: { value: 'bearer' },
+    });
+    expect(screen.queryByTestId('devbox-remote-auth-unsupported')).toBeNull();
+    expect(screen.getByTestId('devbox-remote-url')).toBeTruthy();
+  });
+
+  it('lists additional endpoints with copy buttons', async () => {
+    renderPrompt();
+    await promptReady();
+    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
+
+    expect(screen.getByTestId('devbox-remote-endpoints')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('devbox-remote-copy-url-runner'));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith('https://x.trycloudflare.com/p/8796/mcp'),
+    );
+  });
+});
+
 describe('DevboxPrompt preview and errors', () => {
   it('keeps the prompt tab hidden by default and switches to it via the tabs only', async () => {
     renderPrompt();

@@ -98,16 +98,36 @@ export function pendingPermissionFixture(id = 'p1'): DevboxPermissionRow {
 
 const readyAll = { profile: true, bridge: true, ingress: true, runner: true };
 
+const connectionMasked = {
+  endpoints: [
+    { id: 'bridge', url: 'https://x.trycloudflare.com/p/8787/mcp', token: 'abcd...wxyz', note: 'project tools' },
+    { id: 'runner', url: 'https://x.trycloudflare.com/p/8796/mcp', token: 'efgh...stuv', note: 'host commands' },
+  ],
+  auth: { mode: 'bearer', header: 'Authorization', scheme: 'Bearer', oauth: false },
+  ingress_url: 'https://x.trycloudflare.com',
+};
+
+const connectionRevealed = {
+  endpoints: [
+    { id: 'bridge', url: 'https://x.trycloudflare.com/p/8787/mcp', token: 'bridge-secret-1', note: 'project tools' },
+    { id: 'runner', url: 'https://x.trycloudflare.com/p/8796/mcp', token: 'runner-secret-2', note: 'host commands' },
+  ],
+  auth: { mode: 'bearer', header: 'Authorization', scheme: 'Bearer', oauth: false },
+  ingress_url: 'https://x.trycloudflare.com',
+};
+
 export const maskedAgentPromptFixture: DevboxAgentPrompt = {
   prompt: 'CONNECT to devbox\nINGRESS=https://x.trycloudflare.com\nMCP_TOKEN=••••••',
   masked: true,
   ready: readyAll,
+  connection: connectionMasked,
 };
 
 export const revealedAgentPromptFixture: DevboxAgentPrompt = {
   prompt: 'CONNECT to devbox\nINGRESS=https://x.trycloudflare.com\nMCP_TOKEN=abc123',
   masked: false,
   ready: readyAll,
+  connection: connectionRevealed,
 };
 
 export const agentPromptNoReadyFixture = {

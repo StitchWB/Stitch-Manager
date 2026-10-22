@@ -61,6 +61,17 @@ export interface DevboxPageTranslations {
     promptPreviewLocked: string;
     promptTabEditor: string;
     promptTabPrompt: string;
+    promptModeSandbox: string;
+    promptModeRemote: string;
+    remoteAuthLabel: string;
+    remoteAuthUnsupported: string;
+    remoteCopyUrl: string;
+    remoteCopyToken: string;
+    remoteCopyHeader: string;
+    remoteCopied: string;
+    remoteHint: string;
+    remoteOtherEndpoints: string;
+    remoteFooterHint: string;
     promptHintUniversal: string;
     promptHintClient: string;
     promptStackDownWarning: string;

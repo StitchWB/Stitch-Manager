@@ -66,6 +66,20 @@ export const devboxPage: DevboxPageTranslations = {
       "Sensitive tokens are hidden in the preview but will be copied",
     promptTabEditor: "Task editor",
     promptTabPrompt: "Ready prompt",
+    promptModeSandbox: "Sandbox prompt",
+    promptModeRemote: "Remote MCP",
+    remoteAuthLabel: "Auth type",
+    remoteAuthUnsupported:
+      "Not supported yet: devbox accepts Bearer tokens only. OAuth is planned.",
+    remoteCopyUrl: "Copy URL",
+    remoteCopyToken: "Copy token",
+    remoteCopyHeader: "Copy Bearer",
+    remoteCopied: "Copied",
+    remoteHint:
+      "The URL carries no token: authorization goes in the Authorization header. The token grants the site access to project tools.",
+    remoteOtherEndpoints: "Other endpoints",
+    remoteFooterHint:
+      "For sites and integrations: paste the URL and token into their connection fields. For chat agents use the Sandbox prompt mode.",
     promptHintUniversal:
       "Copy the prompt and paste it into your coding agent's chat or terminal.",
     promptHintClient:
