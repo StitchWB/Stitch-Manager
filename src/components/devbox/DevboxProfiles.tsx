@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Copy, FolderCog, FolderOpen, Info, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, FolderCog, FolderOpen, Info, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -916,6 +916,7 @@ export function DevboxProfiles({
                       size="xs"
                       variant="ghost"
                       className="self-start"
+                      leftIcon={jsonOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                       data-testid="devbox-profile-json-toggle"
                       onClick={() => setJsonOpen(v => !v)}
                     >
@@ -928,9 +929,9 @@ export function DevboxProfiles({
                         </span>
                         <Textarea
                           value={editor.json}
-                          rows={10}
+                          rows={4}
                           spellCheck={false}
-                          className="font-mono text-xs"
+                          className="max-h-[120px] overflow-y-auto font-mono text-xs"
                           data-testid="devbox-profile-editor"
                           onChange={e =>
                             setEditor(prev => (prev ? { ...prev, json: e.target.value } : prev))

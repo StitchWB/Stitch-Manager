@@ -26,7 +26,7 @@ export function DevboxMcpSection({ gateway, onConfigure }: DevboxMcpSectionProps
           action={
             <Button
               size="sm"
-              variant="secondary"
+              variant="outline"
               data-testid="devbox-mcp-configure"
               onClick={onConfigure}
             >
