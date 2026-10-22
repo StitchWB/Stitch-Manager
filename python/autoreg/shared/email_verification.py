@@ -224,6 +224,16 @@ def extract_body_text(msg: Any) -> str:
     return ""
 
 
+def open_imap_connection(host: str, port: int | str = 993, timeout: int = 10) -> imaplib.IMAP4:
+    """Open an IMAP connection: implicit TLS on port 993, STARTTLS on any other port."""
+    port_num = int(port)
+    if port_num == 993:
+        return imaplib.IMAP4_SSL(str(host), port_num, timeout=timeout)
+    mail = imaplib.IMAP4(str(host), port_num, timeout=timeout)
+    mail.starttls()
+    return mail
+
+
 def get_verification_code_from_imap(
     imap_config: dict[str, Any],
     sender_keywords: list[str],
@@ -379,7 +389,7 @@ def _get_verification_code_internal(
 
     while time.time() - start_time < max_wait:
         try:
-            mail = imaplib.IMAP4_SSL(str(host), int(port), timeout=10)
+            mail = open_imap_connection(str(host), port, timeout=10)
             try:
                 if getattr(mail, 'sock', None):
                     mail.sock.settimeout(10)
