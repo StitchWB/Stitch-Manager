@@ -1,0 +1,668 @@
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { Toaster } from 'sonner';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, Loader2, Terminal, Plus } from 'lucide-react';
+import Layout from './components/layout/Layout';
+
+import { t } from '@/lib/i18n';
+import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { useAppStore } from './stores/app';
+import { useAuthStore } from './stores/auth';
+import { useLogsStore } from './stores/logs';
+import { useRegistrationStore } from './stores/registration';
+import { useRuntimeStore } from './stores/registration/runtime.store';
+import { useSettingsStore } from './stores/settings';
+import { useUIPreferencesStore } from './stores/uiPreferences';
+import { useTotpStore } from './stores/totp';
+import { useAccountsStore } from './stores/accounts';
+import { useSchedulerStore } from './stores/scheduler';
+import { useAiProxyStore } from './stores/aiProxy';
+import { CommandPalette } from '@/components/ui/CommandPalette';
+import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
+import { AdminRoute } from './components/auth/AdminRoute';
+import { LEGACY_REDIRECTS, LegacyRedirectRoutes } from './components/ai-proxy/LegacyRedirects';
+import { resolveRestoreRoute } from './lib/routing/restoreRoute';
+import { safeInvoke } from './lib/backend';
+import { isDesktopApp } from '@/lib/backend/core/url';
+import type { Account, ProxyStatus, ScheduledTask, SettingsData } from './types/generated';
+import type { TotpKey } from './lib/backend/modules/totp';
+import type { RegistrationJob, RegistrationStatus } from './types/ui';
+import type { BackgroundManagerConfig } from './lib/backend/modules/backgroundManager';
+
+/** Shape returned by backend get_registration_status — richer than the frontend RegistrationStatus union. */
+interface RegistrationStatusResponse {
+  isRunning: boolean;
+  success: boolean | null;
+  status: string | null;
+  provider: string | null;
+  email: string | null;
+  step: string | null;
+  progress: number | null;
+  error: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+import Dashboard from './pages/Dashboard';
+import Accounts from './pages/Accounts';
+import Login from './pages/Login';
+import Landing from './pages/Landing';
+import CatalogPage from './pages/CatalogPage';
+import Setup from './pages/Setup';
+import TelegramLogin from './components/auth/TelegramLogin';
+const AutoReg = lazy(() => import('./pages/AutoReg'));
+const AiProvidersPage = lazy(() => import('./pages/AiProvidersPage'));
+const AiRoutingPage = lazy(() => import('./pages/AiRoutingPage'));
+const AiMonitorPage = lazy(() => import('./pages/AiMonitorPage'));
+const AiOverview = lazy(() => import('./pages/AiOverview'));
+const AiGroupsPage = lazy(() => import('./pages/AiGroupsPage'));
+const Antigravity = lazy(() => import('./pages/Antigravity'));
+const Devbox = lazy(() => import('./pages/Devbox'));
+const Patcher = lazy(() => import('./pages/Patcher'));
+const Scheduler = lazy(() => import('./pages/Scheduler'));
+const Mail = lazy(() => import('./pages/Mail'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Logs = lazy(() => import('./pages/Logs'));
+const Chat = lazy(() => import('./pages/Chat'));
+const AiIntegrations = lazy(() => import('./pages/AiIntegrations'));
+const OpenCodeConfig = lazy(() => import('./pages/OpenCodeConfig'));
+const Scenarios = lazy(() => import('./pages/Scenarios'));
+const Tools = lazy(() => import('./pages/Tools'));
+const Automation = lazy(() => import('./pages/Automation'));
+const Totp = lazy(() => import('./pages/Totp'));
+const AiHubLayout = lazy(() =>
+  import('./components/ai-proxy/AiHubLayout').then(m => ({ default: m.AiHubLayout }))
+);
+const Radar = lazy(() => import('./pages/Radar'));
+const Friends = lazy(() => import('./pages/Friends'));
+const Marketplace = lazy(() => import('./pages/Marketplace'));
+const NotebookLM = lazy(() => import('./pages/NotebookLM'));
+const AdminOverview = lazy(() => import('./pages/AdminOverview'));
+const GroupsAdmin = lazy(() => import('./pages/GroupsAdmin'));
+const Users = lazy(() => import('./pages/Users'));
+const UserProfile = lazy(() => import('./pages/UserProfile'));
+const Codes = lazy(() => import('./pages/Codes'));
+const PartnerChannels = lazy(() => import('./pages/PartnerChannels'));
+const Monitoring = lazy(() => import('./pages/Monitoring'));
+const Privileges = lazy(() => import('./pages/Privileges'));
+const Plugins = lazy(() => import('./pages/Plugins'));
+const PluginPageHost = lazy(() => import('./components/plugin-ui/DeclarativePage').then(m => ({ default: m.PluginPageHost })));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+// Route prefetchers (idle/low-priority)
+const prefetchAccounts = () => import('./pages/Accounts');
+const prefetchScenarios = () => import('./pages/Scenarios');
+const prefetchScheduler = () => import('./pages/Scheduler');
+const prefetchMail = () => import('./pages/Mail');
+const prefetchLogs = () => import('./pages/Logs');
+const prefetchSettings = () => import('./pages/Settings');
+
+type NavigatorConnectionLike = {
+  saveData?: boolean;
+  effectiveType?: string;
+};
+
+type NavigatorWithConnection = Navigator & {
+  connection?: NavigatorConnectionLike;
+};
+
+type WindowWithIdleCallback = Window & {
+  requestIdleCallback?: (
+    callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
+    opts?: { timeout?: number }
+  ) => number;
+  cancelIdleCallback?: (id: number) => void;
+};
+
+function RouteLoadingFallback() {
+  return (
+    <div className="h-full w-full min-h-[200px] flex items-center justify-center text-sm text-vsc-text-muted">
+      {t('common.loading') || 'Loading...'}
+    </div>
+  );
+}
+
+/**
+ * Themed loading splash shown while the auth gate is resolving (fetching
+ * /api/auth/status and /api/auth/me). Same Deep Space aesthetic as the
+ * login/setup pages so the transition is seamless.
+ */
+function AuthLoadingSplash() {
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-vsc-bg">
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99,102,241,0.18), transparent 60%), radial-gradient(ellipse 60% 50% at 20% 100%, rgba(139,92,246,0.12), transparent 60%), radial-gradient(ellipse 60% 50% at 80% 100%, rgba(59,130,246,0.10), transparent 60%)',
+        }}
+      />
+      <div className="relative flex flex-col items-center gap-4">
+        <div className="rounded-xl w-12 h-12 flex items-center justify-center bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-xl shadow-indigo-900/40">
+          <Terminal className="w-6 h-6 text-white" />
+        </div>
+        <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tracks route changes and persists/restores the active route.
+ */
+function RouteTracker() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const hasRestored = useRef(false);
+  const { activeRoute, setActiveRoute } = useUIPreferencesStore();
+
+  // Restore route on first mount (once only)
+  useEffect(() => {
+    if (hasRestored.current) return;
+    hasRestored.current = true;
+
+    // Restore the last workspace only when the app opens at the root.
+    // Explicit deep links must always win over persisted navigation state.
+    // On web "/" is the public landing — a deliberate destination, never
+    // bounce from it. Desktop keeps the restore-to-last-workspace behavior.
+    if (activeRoute && activeRoute !== '/' && location.pathname === '/' && isDesktopApp()) {
+      // Ensure the route exists in our route list
+      const validRoutes = [
+        '/',
+        '/app',
+        '/accounts',
+        '/groups',
+        '/autoreg',
+        '/ai',
+        '/ai/antigravity',
+        '/ai/devbox',
+        '/ai/chat',
+        '/ai/:section',
+        '/patcher',
+        '/scheduler',
+        '/automation',
+        '/mail',
+        '/settings',
+        '/logs',
+        '/scenarios',
+        '/tools',
+        '/marketplace',
+      ];
+      const aiHubSections = [
+        'providers',
+        'routing',
+        'monitor',
+        'integrations',
+        'opencode-config',
+        'chat',
+        'notebooklm',
+        'antigravity',
+        'devbox',
+        'overview',
+        'groups',
+        'usage',
+        'diagnostics',
+        'freemodel',
+        'gateway',
+      ].map(section => `/ai/${section}`);
+      const exists = (path: string) =>
+        validRoutes.includes(path) ||
+        aiHubSections.includes(path) ||
+        (path.startsWith('/ai/') && LEGACY_REDIRECTS.some(redirect => redirect.from === path));
+      const resolved = resolveRestoreRoute(activeRoute, exists, LEGACY_REDIRECTS);
+      if (resolved) {
+        navigate(resolved, { replace: true });
+      } else if (activeRoute.startsWith('/ai')) {
+        navigate('/ai', { replace: true });
+      }
+    }
+  }, [activeRoute, navigate, location.pathname]);
+
+  // Persist route on every change (web "/" is the landing — don't clobber
+  // the last workspace route with it).
+  useEffect(() => {
+    const isWebLanding = location.pathname === '/' && !isDesktopApp();
+    const current = location.pathname + location.search;
+    if (current !== activeRoute && !isWebLanding) {
+      setActiveRoute(current);
+    }
+  }, [location.pathname, location.search, activeRoute, setActiveRoute]);
+
+  return null;
+}
+
+/**
+ * Groups page wrapper. Promotes the groups surface (previously only an
+ * AI Hub tab at /ai/groups) to a first-class top-level route at /groups.
+ *
+ * Guards: groups are only available when a session user exists. With no
+ * session user (auth disabled, or auth enabled but not logged in) the
+ * route redirects to "/" so the sidebar link and direct URL access both
+ * land the user on the dashboard/landing instead of a dead surface.
+ *
+ * The "Create Group" button lives in the PageHeader actions slot and
+ * controls <AiGroupsPage />'s createGroupOpen prop.
+ */
+function GroupsPage() {
+  const authUser = useAuthStore(state => state.user);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+
+  if (!authUser) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <PageHeader
+        eyebrow={t('sidebar.aiHub')}
+        title={t('ai.groups.title')}
+        description=""
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setCreateGroupOpen(true)}
+            leftIcon={<Plus size={14} />}
+          >
+            {t('ai.groups.create.cta')}
+          </Button>
+        }
+      />
+      <div className="flex-1 min-h-0">
+        <AiGroupsPage
+          createGroupOpen={createGroupOpen}
+          setCreateGroupOpen={setCreateGroupOpen}
+        />
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const theme = useAppStore(state => state.theme);
+  const uiScale = useRegistrationStore(state => state.config.uiScale);
+  const loadSettings = useRegistrationStore(state => state.loadSettings);
+
+  const subscribeToLogs = useLogsStore(state => state.subscribeToLogs);
+  const unsubscribeFromLogs = useLogsStore(state => state.unsubscribeFromLogs);
+  const fetchLogs = useLogsStore(state => state.fetchLogs);
+  const fetchTotpKeys = useTotpStore(state => state.fetchKeys);
+
+  // Auth gate state
+  const authEnabled = useAuthStore(state => state.enabled);
+  const authRequired = useAuthStore(state => state.required);
+  const authHasUsers = useAuthStore(state => state.hasUsers);
+  const authChecked = useAuthStore(state => state.checked);
+  const authUser = useAuthStore(state => state.user);
+  const authGuest = useAuthStore(state => state.guest);
+  const authView = useAuthStore(state => state.authView);
+  const authInit = useAuthStore(state => state.init);
+  const location = useLocation();
+  const isCatalogRoute = location.pathname === '/store';
+
+  const hasInitialized = useRef(false);
+
+  useEffect(() => {
+    const baseSize = 16; // Standard base size
+    const apply = () => {
+      // Large-monitor comfort scaling: gently bump the rem base on >=2K /
+      // >=2.5K viewports; composes with the user's uiScale setting.
+      const w = window.innerWidth;
+      const viewportFactor = w >= 2560 ? 1.125 : w >= 2000 ? 1.0625 : 1;
+      const scaledSize = baseSize * uiScale * viewportFactor;
+      document.documentElement.style.setProperty('--app-font-size', `${scaledSize}px`);
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, [uiScale]);
+
+  // Apply theme on mount and when it changes
+
+  useEffect(() => {
+    const applyTheme = () => {
+      if (
+        theme === 'dark' ||
+        (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    applyTheme();
+
+    // Listen for system theme changes when using 'system' theme
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = () => applyTheme();
+
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+  }, [theme]);
+
+  // Initialize auth state first. The app gate below waits for `authChecked`
+  // before rendering either the loading splash, the setup page, the login
+  // page, or the normal app. When auth is disabled, init() resolves with
+  // {enabled:false, checked:true} and the app renders exactly as before.
+  useEffect(() => {
+    void authInit();
+  }, [authInit]);
+
+  // Initialize settings and logging system — only after the auth gate has
+  // resolved (so we don't fire /api/* calls that would 401 while the user
+  // is still on the login/setup surface).
+  useEffect(() => {
+    if (!authChecked) return;
+    // When auth is required, only initialize the app once the user is logged
+    // in — otherwise the /api/initialize_app call would 401 and trigger the
+    // session-expired handler. When auth is optional (guest mode or auth
+    // disabled), the backend serves /api/* without a session.
+    if (authEnabled && authRequired && !authUser) return;
+    if (authEnabled && !authUser && !authGuest) return;
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
+    // Use single initialization endpoint instead of multiple concurrent calls
+    const initializeApp = async () => {
+      try {
+        const data = await safeInvoke<{
+          settings: Record<string, unknown>;
+          accounts: Account[];
+          activeAccounts: Record<string, string>;
+          dashboardStats: Record<string, unknown>;
+          totpKeys: TotpKey[];
+          scheduledTasks: ScheduledTask[];
+          proxyStatus: ProxyStatus;
+          schedulerStatus: boolean;
+          registrationStatus: RegistrationStatusResponse;
+          registrationJobs: RegistrationJob[];
+          backgroundManagerConfig: BackgroundManagerConfig;
+        }>('initialize_app');
+        
+        // Populate accounts store
+        if (data.accounts) {
+          useAccountsStore.setState({ accounts: data.accounts });
+        }
+        
+        // Populate active accounts (backend returns string IDs, store expects number | null)
+        if (data.activeAccounts) {
+          const converted: Record<string, number | null> = {};
+          for (const [k, v] of Object.entries(data.activeAccounts)) {
+            const num = Number(v);
+            converted[k] = Number.isFinite(num) ? num : null;
+          }
+          useAccountsStore.setState({ activeAccountIds: converted });
+        }
+        
+        // Populate scheduler store
+        if (data.scheduledTasks) {
+          useSchedulerStore.setState({ tasks: data.scheduledTasks });
+        }
+        if (data.schedulerStatus !== undefined) {
+          useSchedulerStore.setState({ isRunning: data.schedulerStatus });
+        }
+        
+        // Populate proxy store
+        if (data.proxyStatus) {
+          useAiProxyStore.getState().setStatus(data.proxyStatus);
+        }
+        
+        // Populate TOTP store
+        if (data.totpKeys && data.totpKeys.length > 0) {
+          useTotpStore.setState({ keys: data.totpKeys });
+        }
+        
+        // Populate registration store (use runtime store directly, not facade)
+        if (data.registrationStatus) {
+          const rs = data.registrationStatus;
+          const status: RegistrationStatus =
+            rs.status === 'running' || rs.status === 'completed' || rs.status === 'failed' || rs.status === 'cancelled'
+              ? rs.status
+              : 'pending';
+          useRuntimeStore.setState({
+            isRunning: rs.isRunning,
+            status,
+            activeProvider: rs.provider ?? 'all',
+          });
+        }
+
+        // Populate settings store
+        if (data.settings) {
+          useSettingsStore.getState().setSettings(data.settings as SettingsData);
+        }
+        if (data.backgroundManagerConfig) {
+          useSettingsStore.getState().setBackgroundManagerConfig(data.backgroundManagerConfig);
+        }
+        
+        // Subscribe to real-time log events from backend
+        subscribeToLogs();
+        
+        // Fetch initial logs from database (not included in init response)
+        fetchLogs();
+        
+        // Load settings (this still needs to be called to populate the full config)
+        loadSettings();
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        // Fallback to individual API calls if initialization fails
+        loadSettings();
+        subscribeToLogs();
+        fetchLogs();
+        void fetchTotpKeys().catch(() => { });
+      }
+    };
+
+    void initializeApp();
+
+    return () => {
+      unsubscribeFromLogs();
+    };
+  }, [loadSettings, subscribeToLogs, unsubscribeFromLogs, fetchLogs, fetchTotpKeys, authChecked, authEnabled, authRequired, authUser, authGuest]);
+
+  // Idle route prefetch to speed up first navigation.
+  useEffect(() => {
+    const nav = navigator as NavigatorWithConnection;
+    const connection = nav.connection;
+
+    const saveData = Boolean(connection?.saveData);
+    const effectiveType = (connection?.effectiveType ?? '').toLowerCase();
+    const constrainedNetwork = saveData || effectiveType.includes('2g');
+
+    if (constrainedNetwork) {
+      return;
+    }
+
+    const tasks = [
+      prefetchAccounts,
+      prefetchScenarios,
+      prefetchScheduler,
+      prefetchMail,
+      prefetchLogs,
+      prefetchSettings,
+    ];
+
+    const runPrefetch = () => {
+      let delay = 0;
+      for (const task of tasks) {
+        window.setTimeout(() => {
+          void task().catch(() => {
+            // best-effort prefetch only
+          });
+        }, delay);
+        delay += 400;
+      }
+    };
+
+    const w = window as WindowWithIdleCallback;
+    if (typeof w.requestIdleCallback === 'function') {
+      const idleId = w.requestIdleCallback(
+        () => {
+          runPrefetch();
+        },
+        { timeout: 2500 }
+      );
+
+      return () => {
+        if (typeof w.cancelIdleCallback === 'function') {
+          w.cancelIdleCallback(idleId);
+        }
+      };
+    }
+
+    const fallbackTimer = window.setTimeout(runPrefetch, 1200);
+    return () => window.clearTimeout(fallbackTimer);
+  }, []);
+
+  // Auth gate. Order matters:
+  //   1. !checked                              → themed loading splash
+  //   2. required && !hasUsers && !user         → <Setup/>   (mandatory)
+  //   3. required && hasUsers && !user          → <Login/>   (mandatory, TG reachable via link)
+  //   4. required && authView='telegram'        → <TelegramLogin/>  (from Login link)
+  //   5. !required && !user && !guest          → <TelegramLogin/>  (merged optional root: TG + guest + web password/setup)
+  //   6. !required && !user && guest            → the normal app (guest mode)
+  //   7. !required && !user && authView='setup' → <Setup/>   (web only, with back link)
+  //   8. !required && !user && authView='login' → <Login/>   (web only, with back link)
+  //   9. otherwise (user present)               → the normal app
+  if (!authChecked) {
+    return <AuthLoadingSplash />;
+  }
+  if (authEnabled && authUser) {
+    // Logged in — render the app.
+  } else if (authEnabled && authRequired) {
+    // Mandatory auth. Setup when no users; otherwise the WEB shows the public
+    // Landing (demo) as its default surface with login separate, while the
+    // desktop app goes straight to Login. TG login reachable from either.
+    if (authView === 'telegram') {
+      return <TelegramLogin />;
+    }
+    if (!authHasUsers) {
+      return <Setup />;
+    }
+    if (authView === 'login') {
+      return <Login />;
+    }
+    if (isDesktopApp()) {
+      return <Login />;
+    }
+    // Web default surface; /store stays browsable while logged out.
+    return isCatalogRoute ? <CatalogPage /> : <Landing />;
+  } else if (authEnabled && !authGuest) {
+    // Optional auth, not yet a guest: TelegramLogin is the merged root
+    // surface (Telegram login + guest entry + web-only password/setup);
+    // setup/login render only on web when the user navigated to them.
+    // Desktop: local-only or TG-bound — local password accounts are a web
+    // concept, so the setup/login pages never render on desktop.
+    const desktop = isDesktopApp();
+    if (authView === 'setup' && !desktop) {
+      return <Setup />;
+    }
+    if (authView === 'login' && !desktop) {
+      return <Login />;
+    }
+    return isCatalogRoute ? <CatalogPage /> : <TelegramLogin />;
+  }
+  // Otherwise: auth disabled, or guest mode, or user present → render the app.
+
+  return (
+    <>
+      {/* Skip to main content link for keyboard navigation */}
+      <Link to="#main-content" className="skip-to-content">
+        {t('common.skipToMainContent')}
+      </Link>
+
+      <Layout>
+        <RouteTracker />
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <Routes>
+            {/* Web: "/" is the product landing (also for logged-in users —
+                they enter the workspace via "Open app"). Desktop has no
+                landing: "/" goes straight to the dashboard. */}
+            <Route
+              path="/"
+              element={
+                isDesktopApp() ? <Dashboard /> : <Landing authenticated={Boolean(authUser)} />
+              }
+            />
+            <Route path="/app" element={<Dashboard />} />
+            <Route path="/accounts" element={<Accounts />} />
+            {/* Groups — first-class section. Guarded inside GroupsPage:
+                no session user → redirect to "/". /ai/groups redirects here. */}
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/radar" element={<Radar />} />
+            <Route path="/friends" element={<Friends />} />
+            <Route path="/marketplace" element={<Marketplace />} />
+            {/* Public plugin catalog — same page the logged-out gate serves */}
+            <Route path="/store" element={<CatalogPage authenticated={Boolean(authUser)} />} />
+            {/* Product surface — open to any authenticated user */}
+            <Route path="/autoreg" element={<AutoReg />} />
+            {/* AI Hub — vertical rail layout shared by all /ai/* pages */}
+            <Route element={<AiHubLayout />}>
+              <Route path="/ai" element={<AiOverview />} />
+              {LegacyRedirectRoutes('ai-hub')}
+              <Route path="/ai/integrations" element={<AiIntegrations />} />
+              <Route path="/ai/antigravity" element={<Antigravity />} />
+              <Route path="/ai/devbox" element={<Devbox />} />
+              <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
+              <Route path="/ai/chat" element={<Chat />} />
+              <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
+              <Route path="/ai/providers" element={<AiProvidersPage />} />
+              <Route path="/ai/routing" element={<AiRoutingPage />} />
+              <Route path="/ai/monitor" element={<AiMonitorPage />} />
+              <Route path="/ai/notebooklm" element={<NotebookLM />} />
+              <Route path="/ai/*" element={<NotFound />} />
+            </Route>
+            {LegacyRedirectRoutes('top-level')}
+            <Route path="/patcher" element={isDesktopApp() ? <Patcher /> : <Navigate to="/app" replace />} />
+            <Route path="/scheduler" element={<Scheduler />} />
+            <Route path="/automation" element={<Automation />} />
+            <Route path="/automation/:tab" element={<Automation />} />
+            <Route path="/mail" element={<Mail />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/logs" element={<Logs />} />
+            <Route path="/scenarios" element={<Scenarios />} />
+            <Route path="/tools" element={<Tools />} />
+            <Route path="/totp" element={<Totp />} />
+            {/* Admin zone — guarded by AdminRoute */}
+            <Route path="/admin" element={<AdminRoute><AdminOverview /></AdminRoute>} />
+            <Route path="/admin/groups" element={<AdminRoute><GroupsAdmin /></AdminRoute>} />
+            <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
+            <Route path="/users/:userId" element={<AdminRoute><UserProfile /></AdminRoute>} />
+            <Route path="/codes" element={<AdminRoute><Codes /></AdminRoute>} />
+            <Route path="/partners" element={<AdminRoute><PartnerChannels /></AdminRoute>} />
+            <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
+            <Route path="/privileges" element={<AdminRoute><Privileges /></AdminRoute>} />
+            <Route path="/plugins" element={<AdminRoute><Plugins /></AdminRoute>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </Layout>
+      <Toaster
+        position="bottom-right"
+        expand={false}
+        closeButton
+        gap={10}
+        offset={24}
+        visibleToasts={3}
+        icons={{
+          success: <CheckCircle2 size={15} />,
+          error: <AlertCircle size={15} />,
+          warning: <AlertTriangle size={15} />,
+          info: <Info size={15} />,
+        }}
+        toastOptions={{
+          style: { color: '#e2e8f0' },
+          className: 'sonner-toast',
+        }}
+        theme="dark"
+      />
+      <ConfirmDialogHost />
+      <CommandPalette />
+    </>
+  );
+}
+
+export default App;

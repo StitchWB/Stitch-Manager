@@ -1,0 +1,149 @@
+/**
+ * Legacy redirect map tests.
+ *
+ * Verifies every LEGACY_REDIRECTS entry lands on its target in a single
+ * hop: MemoryRouter starts at `from`, the router mounts both redirect
+ * scopes plus stub terminal routes for every target, and the LocationSpy
+ * must record exactly two locations (start + target).
+ */
+
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { useEffect } from 'react';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { LEGACY_REDIRECTS, LegacyRedirectRoutes } from '@/components/ai-proxy/LegacyRedirects';
+
+jest.mock('@/lib/backend/core/invoke', () => ({
+  setAuthExpiredHandler: jest.fn(),
+  safeInvoke: jest.fn(),
+  BackendError: class extends Error {},
+}));
+
+jest.mock('@/lib/i18n', () => ({
+  t: (key: string) => key,
+}));
+
+let locations: string[] = [];
+
+function LocationSpy() {
+  const loc = useLocation();
+  useEffect(() => {
+    locations.push(loc.pathname + loc.search);
+  }, [loc.pathname, loc.search]);
+  return null;
+}
+
+const TERMINAL_TARGETS = [
+  '/ai',
+  '/groups',
+  '/ai/monitor',
+  '/ai/providers',
+  '/ai/routing',
+  '/ai/chat',
+  '/ai/antigravity',
+  '/ai/notebooklm',
+  '/ai/opencode-config',
+  '/totp',
+];
+
+describe('LegacyRedirects', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    locations = [];
+  });
+
+  for (const entry of LEGACY_REDIRECTS) {
+    const target = typeof entry.to === 'function' ? entry.to(new URLSearchParams()) : entry.to;
+
+    it(`redirects ${entry.from} to ${target} in a single hop`, () => {
+      render(
+        <MemoryRouter initialEntries={[entry.from]}>
+          <LocationSpy />
+          <Routes>
+            {LegacyRedirectRoutes('ai-hub')}
+            {LegacyRedirectRoutes('top-level')}
+            {TERMINAL_TARGETS.map(path => (
+              <Route key={path} path={path} element={<div data-testid="terminal" />} />
+            ))}
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(locations[locations.length - 1]).toBe(target);
+      expect(locations).toHaveLength(2);
+      expect(screen.getByTestId('terminal')).toBeTruthy();
+    });
+  }
+});
+
+describe('LegacyRedirects plugin path redirects', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    locations = [];
+  });
+
+  const PLUGIN_PATH_CASES: Array<{ from: string; expected: string }> = [
+    { from: '/ai/plugin/stitch-antigravity', expected: '/ai/antigravity' },
+    { from: '/ai/plugin/stitch-notebooklm', expected: '/ai/notebooklm' },
+    { from: '/ai/plugin/stitch-opencode', expected: '/ai/opencode-config' },
+    { from: '/ai/plugin/stitch-totp', expected: '/totp' },
+  ];
+
+  for (const { from, expected } of PLUGIN_PATH_CASES) {
+    it(`redirects ${from} to ${expected} in a single hop`, () => {
+      render(
+        <MemoryRouter initialEntries={[from]}>
+          <LocationSpy />
+          <Routes>
+            {LegacyRedirectRoutes('ai-hub')}
+            {LegacyRedirectRoutes('top-level')}
+            {TERMINAL_TARGETS.map(path => (
+              <Route key={path} path={path} element={<div data-testid="terminal" />} />
+            ))}
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(locations[locations.length - 1]).toBe(expected);
+      expect(locations).toHaveLength(2);
+      expect(screen.getByTestId('terminal')).toBeTruthy();
+    });
+  }
+});
+
+describe('LegacyRedirects dedup kills', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    locations = [];
+  });
+
+  const KILL_CASES: Array<{ from: string; expected: string }> = [
+    { from: '/ai/tools', expected: '/ai/routing?tab=holone' },
+    { from: '/ai/tools?tab=compression', expected: '/ai/routing?tab=compression' },
+    { from: '/ai/holone', expected: '/ai/routing?tab=holone' },
+    { from: '/ai/analytics', expected: '/ai/monitor?tab=analytics' },
+    { from: '/ai-analytics', expected: '/ai/monitor?tab=analytics' },
+    { from: '/chat', expected: '/ai/chat' },
+  ];
+
+  for (const { from, expected } of KILL_CASES) {
+    it(`redirects ${from} to ${expected} in a single hop`, () => {
+      render(
+        <MemoryRouter initialEntries={[from]}>
+          <LocationSpy />
+          <Routes>
+            {LegacyRedirectRoutes('ai-hub')}
+            {LegacyRedirectRoutes('top-level')}
+            {TERMINAL_TARGETS.map(path => (
+              <Route key={path} path={path} element={<div data-testid="terminal" />} />
+            ))}
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(locations[locations.length - 1]).toBe(expected);
+      expect(locations).toHaveLength(2);
+      expect(screen.getByTestId('terminal')).toBeTruthy();
+    });
+  }
+});

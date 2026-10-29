@@ -1,0 +1,38 @@
+import type { CatalogTranslations } from '../../i18n/types/catalog';
+
+export const catalog: CatalogTranslations = {
+  catalog: {
+    brand: "Stitch Manager",
+    title: "Каталог плагинов",
+    subtitle: "Все плагины Stitch Manager — без аккаунта. Войдите, чтобы устанавливать.",
+    backHome: "На главную",
+    navMarketplace: "Маркетплейс",
+    searchPlaceholder: "Поиск по названию или описанию...",
+    filterAll: "Все",
+    filterOfficial: "Официальные",
+    filterCommunity: "Сообщество",
+    resultCount: "Плагинов: {count}",
+    noResultsTitle: "Ничего не найдено",
+    noResultsDesc: "Ни один плагин не подходит под условия поиска или фильтры.",
+    sourceOfficial: "Официальный",
+    sourceCommunity: "Сообщество",
+    ctaLoggedIn: "Открыть в маркетплейсе",
+    ctaLoggedOut: "Войти, чтобы установить",
+    loading: "Загрузка каталога...",
+    errorTitle: "Не удалось загрузить каталог",
+    retry: "Повторить",
+    emptyTitle: "Плагинов пока нет",
+    emptyDesc: "Каталог пуст — загляните позже.",
+    noDescription: "Без описания",
+    detailsToggle: "Подробнее",
+    linkHomepage: "Сайт",
+    linkRepository: "Репозиторий",
+    changelogTitle: "Последние изменения",
+    status: {
+      stable: "Стабильный",
+      beta: "Бета",
+      deprecated: "Устаревший",
+      planned: "Запланировано",
+    },
+  },
+};

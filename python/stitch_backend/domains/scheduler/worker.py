@@ -1,0 +1,305 @@
+"""Background scheduler worker.
+
+Periodically checks for pending tasks and executes them.
+Mirrors the Rust ``services/scheduler/worker.rs``.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from typing import Any
+
+from stitch_backend.core.event_bus import event_bus
+from stitch_backend.database import get_session_factory, run_in_session
+from stitch_backend.domains.scheduler.service import (
+    ScheduledTask,
+    complete_execution,
+    get_pending_tasks,
+    start_execution,
+    update_next_run,
+)
+
+logger = logging.getLogger(__name__)
+
+POLL_INTERVAL_SECONDS = 30
+TICK_FAILURE_ALERT_THRESHOLD = 3
+MAX_TICK_ERROR_LENGTH = 200
+_REGISTER_COUNT_MAX = 10
+
+
+class SchedulerWorker:
+    """Asyncio-based scheduler worker that polls and executes pending tasks."""
+
+    def __init__(self) -> None:
+        self._running = False
+        self._task: asyncio.Task[None] | None = None
+        self._consecutive_failures = 0
+        self._last_tick_error: str | None = None
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    @property
+    def consecutive_failures(self) -> int:
+        return self._consecutive_failures
+
+    @property
+    def last_tick_error(self) -> str | None:
+        return self._last_tick_error
+
+    def _status_payload(self) -> dict[str, Any]:
+        return {
+            "running": self._running,
+            "consecutive_failures": self._consecutive_failures,
+            "last_tick_error": self._last_tick_error,
+        }
+
+    async def start(self) -> None:
+        if self._running:
+            logger.warning("[Scheduler] Already running")
+            return
+        self._running = True
+        self._task = asyncio.create_task(self._loop())
+        logger.info("[Scheduler] Worker started (poll every %ds)", POLL_INTERVAL_SECONDS)
+        await event_bus.emit("scheduler.status_changed", self._status_payload())
+
+    async def stop(self) -> None:
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        logger.info("[Scheduler] Worker stopped")
+        await event_bus.emit("scheduler.status_changed", self._status_payload())
+
+    async def _loop(self) -> None:
+        while self._running:
+            try:
+                await self._tick()
+            except Exception as exc:
+                self._consecutive_failures += 1
+                self._last_tick_error = str(exc)[:MAX_TICK_ERROR_LENGTH]
+                logger.warning(
+                    "[Scheduler] Tick failed (%d consecutive)",
+                    self._consecutive_failures,
+                    exc_info=True,
+                )
+                if self._consecutive_failures == TICK_FAILURE_ALERT_THRESHOLD:
+                    logger.error(
+                        "[Scheduler] %d consecutive tick failures — worker degraded",
+                        self._consecutive_failures,
+                    )
+                    try:
+                        await event_bus.emit("scheduler.status_changed", self._status_payload())
+                    except Exception:
+                        logger.debug("[Scheduler] failed to emit status_changed", exc_info=True)
+            else:
+                self._consecutive_failures = 0
+                self._last_tick_error = None
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+    async def _tick(self) -> None:
+        factory = get_session_factory()
+        async with factory() as session:
+            pending = await get_pending_tasks(session)
+
+        results: list[tuple[ScheduledTask, str | None, str | None]] = []
+        for task in pending:
+            try:
+                result = await self._execute_task(task)
+                results.append((task, result, None))
+            except Exception as exc:
+                logger.exception("[Scheduler] Task %d failed", task.id)
+                results.append((task, None, str(exc)))
+        if results:
+            await self._batch_persist_results(results)
+
+    async def _execute_task(self, task: ScheduledTask) -> str:
+        logger.info("[Scheduler] Executing task: %s (id=%d, type=%s)", task.name, task.id, task.task_type.type)
+        return await self._run_task(task)
+
+    async def _batch_persist_results(self, results: list[tuple[ScheduledTask, str | None, str | None]]) -> None:
+        """Persist all task execution results in one transaction."""
+        async def _op(session):
+            for task, result, error in results:
+                exec_id = await start_execution(session, task.id)
+                await session.flush()
+
+                if error is None:
+                    await complete_execution(session, exec_id, task.id, "Success", result, None)
+                else:
+                    await complete_execution(session, exec_id, task.id, "Failed", None, error)
+
+                # Reschedule (for interval/daily) or disable (for once)
+                if task.schedule.type == "once":
+                    task.enabled = False
+                    await session.flush()
+                else:
+                    await update_next_run(session, task.id, task.schedule)
+                    await session.flush()
+
+        await run_in_session(_op)
+        logger.debug("[Scheduler] batch persisted %d results", len(results))
+        try:
+            await event_bus.emit("scheduler.tasks_changed", {"count": len(results)})
+        except Exception:
+            logger.debug("[Scheduler] failed to emit tasks_changed", exc_info=True)
+
+    async def _run_task(self, task: ScheduledTask) -> str:
+        """Execute the actual task logic."""
+        tt = task.task_type
+        config = json.loads(task.config) if task.config else {}
+
+        if tt.type == "registerProvider":
+            return await self._execute_register(tt.provider or "", config)
+        elif tt.type == "loginAccount":
+            return await self._execute_login(tt.account_id or 0, config)
+        elif tt.type == "refreshToken":
+            return await self._execute_refresh(tt.account_id or 0, config)
+        elif tt.type == "checkinProvider":
+            return await self._execute_checkin(tt.provider or "", tt.account_id, config)
+        elif tt.type == "refreshTokenPool":
+            return await self._execute_pool_refresh(tt.provider or "outlook", config)
+        elif tt.type == "customScript":
+            return await self._execute_script(tt.script_path or "", config)
+        else:
+            raise RuntimeError(f"unknown task type: {tt.type}")
+
+    async def _execute_register(self, provider: str, config: dict) -> str:
+        logger.info("[TaskExecutor] Registering provider: %s", provider)
+        try:
+            from stitch_backend.domains.registration.service import registration_service
+        except ImportError as exc:
+            raise RuntimeError(
+                "registration domain not available in this build"
+            ) from exc
+        try:
+            count = int(config.get("count", 1))
+        except (TypeError, ValueError):
+            count = 1
+        count = max(1, min(count, _REGISTER_COUNT_MAX))
+        try:
+            results = []
+            for _ in range(count):
+                results.append(await registration_service.run(provider, config))
+        except Exception as exc:
+            raise RuntimeError(f"Registration failed: {exc}") from exc
+        return json.dumps(results[0] if count == 1 else results)
+
+    async def _execute_login(self, account_id: int, config: dict) -> str:
+        logger.info("[TaskExecutor] Login account: %d", account_id)
+        # No registered command handler for "login_account" — the closest
+        # equivalent "auto_login" needs email/password, not account_id.
+        raise RuntimeError(
+            "unsupported task type: loginAccount — "
+            "no registered command handler 'login_account'"
+        )
+
+    async def _execute_refresh(self, account_id: int, config: dict) -> str:
+        logger.info("[TaskExecutor] Refresh token for account: %d", account_id)
+        from stitch_backend.core.command_registry import get_command_handler
+        try:
+            handler = get_command_handler("refresh_oauth_token")
+            # system actor: scheduled tasks are admin-gated at creation
+            result = await handler(
+                {"accountId": account_id, **config, "_caller_role": "admin"}
+            )
+            return json.dumps(result)
+        except Exception as exc:
+            raise RuntimeError(f"Token refresh failed: {exc}") from exc
+
+    async def _execute_checkin(self, provider: str, account_id: int | None, config: dict) -> str:
+        logger.info("[TaskExecutor] Provider check-in: %s", provider)
+        from stitch_backend.core.command_registry import get_command_handler
+        try:
+            handler = get_command_handler("provider_checkin")
+            params = {**config, "provider": provider}
+            if account_id:
+                params["accountId"] = account_id
+            result = await handler(params)
+            return json.dumps(result)
+        except Exception as exc:
+            raise RuntimeError(f"Provider check-in failed: {exc}") from exc
+
+    async def _execute_pool_refresh(self, provider: str, config: dict) -> str:
+        logger.info("[TaskExecutor] Refreshing token pool: %s", provider)
+        from stitch_backend.core.command_registry import get_command_handler
+        try:
+            handler = get_command_handler("refresh_outlook_pool")
+            result = await handler({**config, "provider": provider})
+            return json.dumps(result)
+        except Exception as exc:
+            raise RuntimeError(f"Token pool refresh failed: {exc}") from exc
+
+    async def _execute_script(self, script_path: str, config: dict) -> str:
+        logger.info("[TaskExecutor] Running script: %s", script_path)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "python", script_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+            return stdout.decode(errors="replace")
+        except TimeoutError:
+            raise RuntimeError("Script timed out after 300s") from None
+        except Exception as exc:
+            raise RuntimeError(f"Script execution failed: {exc}") from exc
+
+
+async def execute_task_now(task: ScheduledTask) -> str:
+    """Execute a task immediately (called from command handler).
+
+    The task itself runs OUTSIDE any DB session so the single write
+    connection is not held hostage during long-running operations
+    (subprocess up to 300s, HTTP token refresh up to 30s).
+
+    Flow:
+      1. WRITE session #1 — ``start_execution`` → close.
+      2. OUTSIDE session — ``worker._run_task(task)``.
+      3. WRITE session #2 — ``complete_execution(success/failure)`` → close.
+    """
+    worker = SchedulerWorker()
+
+    # Session #1: record start
+    async def _start(session):
+        exec_id = await start_execution(session, task.id)
+        await session.flush()
+        return exec_id
+
+    exec_id = await run_in_session(_start)
+
+    # Run task OUTSIDE any DB session
+    try:
+        result = await worker._run_task(task)
+    except Exception as exc:
+        error = str(exc)
+        # Session #2: record failure
+        async def _fail(session):
+            await complete_execution(session, exec_id, task.id, "Failed", None, error)
+        await run_in_session(_fail)
+        raise
+
+    # Session #2: record success
+    async def _success(session):
+        await complete_execution(session, exec_id, task.id, "Success", result, None)
+
+    await run_in_session(_success)
+    return result
+
+
+# Singleton
+_worker: SchedulerWorker | None = None
+
+
+def get_worker() -> SchedulerWorker:
+    global _worker
+    if _worker is None:
+        _worker = SchedulerWorker()
+    return _worker

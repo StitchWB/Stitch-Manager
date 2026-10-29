@@ -1,0 +1,566 @@
+"""Plugin manifest schema + tolerant reader (plan §4.2).
+
+The manifest is the signed contract between a plugin author and the engine.
+``validate_manifest`` parses a raw dict (from ``plugin.json``) into a typed
+``PluginManifest`` dataclass.  Unknown fields are silently ignored so that
+newer manifests do not break older engines (tolerant reader, plan §3.1 item 1).
+
+Required fields are enforced; missing or invalid values raise
+``ManifestValidationError`` carrying the offending field name.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import logging
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+SCHEMA_ID = "stitch.plugin/v1"
+SCHEMA_ID_V2 = "stitch.plugin/v2"
+SCHEMA_IDS = (SCHEMA_ID, SCHEMA_ID_V2)
+MANIFEST_FILENAME = "plugin.json"
+
+# Valid plugin kinds across v1 + v2 schemas.
+# "data" — v1 registration scenario plugin (trust tier: data-only).
+# "engine-pack" — trusted engine module (captcha solvers).
+# "provider" — code plugin shipping a provider class.
+# "service" — v2 out-of-process plugin (subprocess JSON-RPC, plan v2).
+VALID_KINDS = ("data", "engine-pack", "provider", "service")
+
+# Optional in the manifest; the official publish path requires description/category/status.
+VALID_CATEGORIES = (
+    "autoreg",
+    "engine",
+    "ide-integration",
+    "ai-tools",
+    "productivity",
+    "security",
+    "communication",
+    "data",
+)
+VALID_STATUSES = ("stable", "beta", "deprecated")
+VALID_FEATURE_STATUSES = ("stable", "beta", "planned")
+
+# Param types accepted in contributions.commands[].params.<name>.type.
+VALID_PARAM_TYPES = ("string", "number", "boolean", "object", "array")
+
+_logger = logging.getLogger(__name__)
+
+# Semver 2.0.0 — MAJOR.MINOR.PATCH with optional prerelease and build metadata.
+_SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+
+# CalVer — YYYY.MM (zero-padded month 01-12).  v1 signed packages use this
+# format for engine.min (e.g. "2026.08").  We validate but never rewrite
+# signed artifacts.
+_CALVER_RE = re.compile(r"^\d{4}\.(0[1-9]|1[0-2])$")
+
+# Safe plugin id — a single directory-name component. Blocks path separators,
+# "..", and anything outside [A-Za-z0-9_-] so a malicious id cannot escape the
+# plugins/ cache directory (path-traversal guard).
+_PLUGIN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+class ManifestValidationError(Exception):
+    """Raised when a manifest fails validation.
+
+    ``field`` carries the offending field name so callers can surface a
+    precise error in UI / logs.
+    """
+
+    def __init__(self, field: str, message: str) -> None:
+        self.field = field
+        super().__init__(f"{field}: {message}")
+
+
+def resolve_i18n(value: Any, lang: str = "ru") -> str:
+    """Resolve an I18nString (``str`` or ``{locale: str}``) to a plain string.
+
+    Strings pass through unchanged.  Objects resolve the requested ``lang``
+    member, falling back to ``"ru"``, then to the first string value.
+    Anything else (None, empty object, non-string values) resolves to ``""``.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in (lang, "ru"):
+            member = value.get(key)
+            if isinstance(member, str) and member:
+                return member
+        for member in value.values():
+            if isinstance(member, str) and member:
+                return member
+    return ""
+
+
+def _check_i18n(value: Any, field_name: str) -> None:
+    """Type-check an I18nString field (``str`` or ``{locale: str}``)."""
+    if isinstance(value, str):
+        if not value.strip():
+            raise ManifestValidationError(field_name, "must be a non-empty string")
+        return
+    if isinstance(value, dict):
+        if not value or not all(
+            isinstance(k, str) and isinstance(v, str) and v.strip()
+            for k, v in value.items()
+        ):
+            raise ManifestValidationError(
+                field_name, "must map locales to non-empty strings"
+            )
+        return
+    raise ManifestValidationError(
+        field_name, "must be a string or an object of locale -> string"
+    )
+
+
+def _validate_marketplace_metadata(raw: dict[str, Any]) -> None:
+    """Type-check the optional rich marketplace fields (stitch.plugin/v2).
+
+    Every field is OPTIONAL — absent keys are skipped so old manifests keep
+    parsing.  Present-but-mistyped values raise ``ManifestValidationError``.
+    The fields stay in ``PluginManifest.extras`` (tolerant reader); the
+    official publish path additionally requires description/category/status.
+    """
+    if "description" in raw:
+        _check_i18n(raw["description"], "description")
+    if "author" in raw:
+        if not isinstance(raw["author"], str) or not raw["author"].strip():
+            raise ManifestValidationError("author", "must be a non-empty string")
+    if "category" in raw and raw["category"] not in VALID_CATEGORIES:
+        raise ManifestValidationError(
+            "category", f'must be one of {VALID_CATEGORIES}, got "{raw["category"]}"'
+        )
+    if "status" in raw and raw["status"] not in VALID_STATUSES:
+        raise ManifestValidationError(
+            "status", f'must be one of {VALID_STATUSES}, got "{raw["status"]}"'
+        )
+    if "icon" in raw:
+        if not isinstance(raw["icon"], str) or not raw["icon"].strip():
+            raise ManifestValidationError("icon", "must be a non-empty emoji string")
+    for url_field in ("homepage", "repository"):
+        if url_field in raw:
+            url = raw[url_field]
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                raise ManifestValidationError(
+                    url_field, "must be an http(s) URL string"
+                )
+
+    features_raw = raw.get("features")
+    if features_raw is not None:
+        if not isinstance(features_raw, list):
+            raise ManifestValidationError("features", "must be a list")
+        for i, feat in enumerate(features_raw):
+            if not isinstance(feat, dict):
+                raise ManifestValidationError(f"features[{i}]", "must be an object")
+            if "title" not in feat:
+                raise ManifestValidationError(
+                    f"features[{i}].title", "required field missing"
+                )
+            _check_i18n(feat["title"], f"features[{i}].title")
+            if feat.get("status") not in VALID_FEATURE_STATUSES:
+                raise ManifestValidationError(
+                    f"features[{i}].status",
+                    f'must be one of {VALID_FEATURE_STATUSES}, got "{feat.get("status")}"',
+                )
+
+    changelog_raw = raw.get("changelog")
+    if changelog_raw is not None:
+        if not isinstance(changelog_raw, list):
+            raise ManifestValidationError("changelog", "must be a list")
+        for i, entry in enumerate(changelog_raw):
+            if not isinstance(entry, dict):
+                raise ManifestValidationError(f"changelog[{i}]", "must be an object")
+            version = entry.get("version")
+            if not isinstance(version, str) or not _SEMVER_RE.match(version):
+                raise ManifestValidationError(
+                    f"changelog[{i}].version",
+                    f'"{version}" is not a valid semver 2.0.0 string',
+                )
+            date = entry.get("date")
+            if not isinstance(date, str):
+                raise ManifestValidationError(
+                    f"changelog[{i}].date", 'must be a "YYYY-MM-DD" date string'
+                )
+            try:
+                _dt.date.fromisoformat(date)
+            except ValueError:
+                raise ManifestValidationError(
+                    f"changelog[{i}].date",
+                    f'"{date}" is not a valid "YYYY-MM-DD" date',
+                ) from None
+            changes = entry.get("changes")
+            if not isinstance(changes, list) or not changes:
+                raise ManifestValidationError(
+                    f"changelog[{i}].changes", "must be a non-empty list"
+                )
+            for j, change in enumerate(changes):
+                _check_i18n(change, f"changelog[{i}].changes[{j}]")
+
+
+@dataclass(frozen=True)
+class PluginManifest:
+    """Validated plugin manifest (plan §4.2).
+
+    ``kind`` is required to be ``"data"`` in v1 — it is the trust-tier hook
+    for v2 (``"code"`` plugins will need manual review + canary).
+    ``"engine-pack"`` is the trusted engine module (captcha solvers).
+    ``"provider"`` is a code plugin shipping a provider class that
+    overrides/extends a built-in reger provider.
+    """
+
+    schema: str
+    id: str
+    name: str
+    version: str
+    service: str
+    kind: str
+    engine: dict[str, Any]
+    depends: list[str]
+    entry: dict[str, Any]
+    capabilities: list[str]
+    outputs: list[str]
+    signature: str = ""
+
+    # Optional alias ids that this package also serves (multi-service manifests).
+    # ``service`` is always the canonical id; ``services`` lists additional ids
+    # that should resolve to this package.  Absent → empty list (only
+    # ``service`` matches).  Duplicates of ``service`` are tolerated.
+    services: list[str] = field(default_factory=list)
+
+    # Extra/unknown fields preserved for forward-compat inspection.
+    # NOT used by the engine in v1 (tolerant reader ignores them at parse time).
+    extras: dict[str, Any] = field(default_factory=dict)
+
+    # v2 contributions (plan plugin-platform-v2 todo 1).
+    # kind=service plugins declare SPI registrations, namespaced commands,
+    # declarative UI tabs, i18n bundles, and storage declarations here.
+    # Defaults to empty so v1 manifests parse identically.
+    contributions: dict[str, Any] = field(default_factory=dict)
+
+    def service_ids(self) -> list[str]:
+        """Return all service ids this package serves.
+
+        Always starts with the canonical ``service``, followed by any
+        ``services`` aliases not already seen (deduped, order-preserving).
+        Used by the loader to match a requested id against a package's
+        declared service surface.
+        """
+        seen: set[str] = {self.service}
+        ids = [self.service]
+        for s in self.services:
+            if s not in seen:
+                seen.add(s)
+                ids.append(s)
+        return ids
+
+    @property
+    def signature_bytes(self) -> bytes | None:
+        """Decode the ``ed25519:<base64>`` signature into raw 64 bytes.
+
+        Returns ``None`` when the signature field is empty (unsigned package).
+        """
+        if not self.signature:
+            return None
+        if not self.signature.startswith("ed25519:"):
+            return None
+        import base64
+
+        try:
+            return base64.b64decode(self.signature.removeprefix("ed25519:"))
+        except (ValueError, base64.binascii.Error):  # type: ignore[attr-defined]
+            return None
+
+
+def _validate_command_params(contributions: dict[str, Any]) -> None:
+    """Type-check ``contributions.commands[].params`` (optional, v2).
+
+    Absent ``params`` is fine (backward compat); unknown keys inside a
+    param entry are ignored (forward compat).  Malformed values raise
+    ``ManifestValidationError`` with the ``<cmd>.params[.<name>]`` field.
+    """
+    commands = contributions.get("commands")
+    if not isinstance(commands, list):
+        return
+    for i, entry in enumerate(commands):
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        cmd = name if isinstance(name, str) and name else f"commands[{i}]"
+        params = entry.get("params")
+        if params is None:
+            continue
+        if not isinstance(params, dict):
+            raise ManifestValidationError(f"{cmd}.params", "must be an object")
+        for param_name, spec in params.items():
+            field = f"{cmd}.params.{param_name}"
+            if not isinstance(spec, dict):
+                raise ManifestValidationError(field, "must be an object")
+            if spec.get("type") not in VALID_PARAM_TYPES:
+                raise ManifestValidationError(
+                    field,
+                    f'type must be one of {VALID_PARAM_TYPES}, '
+                    f'got "{spec.get("type")}"',
+                )
+            if "required" in spec and not isinstance(spec["required"], bool):
+                raise ManifestValidationError(field, "required must be a boolean")
+
+
+def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
+    """Parse + validate a raw manifest dict into ``PluginManifest``.
+
+    Tolerant reader: unknown fields are captured in ``extras`` but never
+    cause a failure.  Required fields are type-checked and semantically
+    validated (schema value, kind value, semver version, engine.api int).
+    """
+    if not isinstance(raw, dict):
+        raise ManifestValidationError("manifest", "must be a JSON object")
+
+    def _require_str(field_name: str) -> str:
+        val = raw.get(field_name)
+        if val is None:
+            raise ManifestValidationError(field_name, "required field missing")
+        if not isinstance(val, str) or not val.strip():
+            raise ManifestValidationError(field_name, "must be a non-empty string")
+        return val
+
+    schema = _require_str("schema")
+    if schema not in SCHEMA_IDS:
+        raise ManifestValidationError(
+            "schema", f'must be one of {SCHEMA_IDS}, got "{schema}"'
+        )
+
+    plugin_id = _require_str("id")
+    if not _PLUGIN_ID_RE.match(plugin_id):
+        raise ManifestValidationError(
+            "id",
+            f'"{plugin_id}" is not a safe plugin id '
+            "(must be a single [A-Za-z0-9_-] directory component)",
+        )
+    name = _require_str("name")
+    version = _require_str("version")
+    if not _SEMVER_RE.match(version):
+        raise ManifestValidationError(
+            "version", f'"{version}" is not a valid semver 2.0.0 string'
+        )
+    service = _require_str("service")
+
+    kind = _require_str("kind")
+    # "data" is the v1 trust tier for registration plugins.  "engine-pack" is
+    # the trusted engine module (captcha solvers now, hooks-runtime later) that
+    # ships through the same gated channel — it is NOT a data-only plugin but
+    # is signed with the same offline key, so it validates here too.
+    # "provider" is a code plugin that ships a provider class (subclass of
+    # BaseProvider) overriding/extending a built-in reger — the entry points
+    # at a Python module + class name instead of a scenario file.
+    # "service" is a v2 out-of-process plugin (subprocess JSON-RPC).
+    if kind not in VALID_KINDS:
+        # Tolerant reader (plan §3.1 item 1): unknown kind → soft-skip.
+        # The manifest is returned with the unknown kind; the loader decides
+        # whether to load it.  Forward-compatible — newer manifests with kind
+        # values the engine doesn't know yet don't break the parser.
+        _logger.warning(
+            "Unknown plugin kind %r in manifest %r — soft-skipping "
+            "(manifest parsed, loader will skip)",
+            kind,
+            plugin_id,
+        )
+
+    engine_raw = raw.get("engine")
+    if not isinstance(engine_raw, dict):
+        raise ManifestValidationError("engine", "required field missing or not an object")
+    if "min" not in engine_raw or not isinstance(engine_raw["min"], str):
+        raise ManifestValidationError("engine.min", "required string missing")
+    # engine.api defaults to 1 when absent (v1 manifests predate the field —
+    # v1 semantics: CalVer engine.min, no semver engine gate at discovery).
+    # Present but wrong type → still raise (contract enforcement).
+    if "api" not in engine_raw:
+        engine_api = 1
+    elif not isinstance(engine_raw["api"], int):
+        raise ManifestValidationError("engine.api", "must be an integer")
+    else:
+        engine_api = engine_raw["api"]
+    # engine.min format is validated per api level:
+    #   api >= 2 → semver 2.0.0 (v2 service plugins)
+    #   api == 1 → CalVer YYYY.MM (v1 signed packages, e.g. "2026.08")
+    engine_min = engine_raw["min"]
+    if engine_api >= 2:
+        if not _SEMVER_RE.match(engine_min):
+            raise ManifestValidationError(
+                "engine.min",
+                f'"{engine_min}" is not a valid semver 2.0.0 string (required for api >= 2)',
+            )
+    else:
+        if not _CALVER_RE.match(engine_min):
+            raise ManifestValidationError(
+                "engine.min",
+                f'"{engine_min}" is not a valid Calver YYYY.MM string (required for api == 1)',
+            )
+
+    depends_raw = raw.get("depends", [])
+    if not isinstance(depends_raw, list) or not all(
+        isinstance(d, str) for d in depends_raw
+    ):
+        raise ManifestValidationError("depends", "must be a list of strings")
+    depends = list(depends_raw)
+
+    entry_raw = raw.get("entry")
+    if kind == "engine-pack":
+        # engine-pack is a code module, not a scenario plugin — entry is optional.
+        entry = dict(entry_raw) if isinstance(entry_raw, dict) else {}
+    elif kind == "provider":
+        # provider plugin: entry points at a Python module + class name.
+        # The loader imports the module and finds the class by name.
+        if not isinstance(entry_raw, dict):
+            raise ManifestValidationError("entry", "required field missing or not an object")
+        for key in ("module", "class"):
+            if key not in entry_raw or not isinstance(entry_raw[key], str):
+                raise ManifestValidationError(
+                    f"entry.{key}", "required string missing"
+                )
+        entry = dict(entry_raw)
+    elif kind == "service":
+        # v2 service plugin: entry points at a Python module spawned as a
+        # subprocess (sys.executable -m <entry.module>).  The host communicates
+        # via stdio JSON-RPC (plan plugin-platform-v2 todo 2-3).
+        if not isinstance(entry_raw, dict):
+            raise ManifestValidationError("entry", "required field missing or not an object")
+        if "module" not in entry_raw or not isinstance(entry_raw["module"], str):
+            raise ManifestValidationError("entry.module", "required string missing")
+        entry = dict(entry_raw)
+    elif kind == "data":
+        if not isinstance(entry_raw, dict):
+            raise ManifestValidationError("entry", "required field missing or not an object")
+        for key in ("scenario", "selectors", "profile"):
+            if key not in entry_raw or not isinstance(entry_raw[key], str):
+                raise ManifestValidationError(
+                    f"entry.{key}", "required string missing"
+                )
+        entry = dict(entry_raw)
+    else:
+        # Unknown kind — lenient entry validation (soft-skip, tolerant reader).
+        entry = dict(entry_raw) if isinstance(entry_raw, dict) else {}
+
+    capabilities_raw = raw.get("capabilities", [])
+    if not isinstance(capabilities_raw, list) or not all(
+        isinstance(c, str) for c in capabilities_raw
+    ):
+        raise ManifestValidationError("capabilities", "must be a list of strings")
+    capabilities = list(capabilities_raw)
+
+    outputs_raw = raw.get("outputs", [])
+    if not isinstance(outputs_raw, list) or not all(
+        isinstance(o, str) for o in outputs_raw
+    ):
+        raise ManifestValidationError("outputs", "must be a list of strings")
+    outputs = list(outputs_raw)
+
+    services_raw = raw.get("services", [])
+    if not isinstance(services_raw, list) or not all(
+        isinstance(s, str) for s in services_raw
+    ):
+        raise ManifestValidationError("services", "must be a list of strings")
+    services = list(services_raw)
+
+    signature = raw.get("signature", "")
+    if not isinstance(signature, str):
+        raise ManifestValidationError("signature", "must be a string")
+
+    # v2 contributions (plan plugin-platform-v2 todo 1).
+    # Parsed as a plain dict — deep validation of spi/commands/ui/i18n/storage
+    # is the host's responsibility (tolerant reader: unknown keys tolerated).
+    contributions_raw = raw.get("contributions", {})
+    if not isinstance(contributions_raw, dict):
+        raise ManifestValidationError("contributions", "must be an object")
+    contributions = dict(contributions_raw)
+    _validate_command_params(contributions)
+
+    # Validated here but kept in extras on purpose: publish reads them from extras.
+    _validate_marketplace_metadata(raw)
+
+    known = {
+        "schema", "id", "name", "version", "service", "kind",
+        "engine", "depends", "entry", "capabilities", "outputs", "signature",
+        "services", "contributions",
+    }
+    extras = {k: v for k, v in raw.items() if k not in known}
+
+    # Store the engine dict with the resolved api level so downstream
+    # consumers (discovery, sandbox) see it explicitly even when the
+    # original manifest omitted engine.api (v1 backward compat).
+    engine_dict = dict(engine_raw)
+    engine_dict["api"] = engine_api
+
+    return PluginManifest(
+        schema=schema,
+        id=plugin_id,
+        name=name,
+        version=version,
+        service=service,
+        kind=kind,
+        engine=engine_dict,
+        depends=depends,
+        entry=entry,
+        capabilities=capabilities,
+        outputs=outputs,
+        signature=signature,
+        services=services,
+        extras=extras,
+        contributions=contributions,
+    )
+
+
+def parse_semver(version: str) -> tuple[int, int, int]:
+    """Parse a semver string into a ``(major, minor, patch)`` tuple.
+
+    Prerelease/build metadata are stripped — they only matter for ordering
+    between otherwise-equal versions, which the installer does not need
+    (monotonicity rejects ``<=`` installed, so equal is rejected anyway).
+    Raises ``ValueError`` if the string is not valid semver.
+    """
+    m = _SEMVER_RE.match(version)
+    if not m:
+        raise ValueError(f"invalid semver: {version!r}")
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+def semver_sort_key(version: str) -> tuple:
+    """Return a sort key for a semver string that respects prerelease ordering.
+
+    The key is ``(major, minor, patch, is_release, prerelease_key)`` where:
+
+    - ``is_release`` is ``1`` for a release and ``0`` for a prerelease, so a
+      prerelease of a triple (e.g. ``"0.4.0-alpha"``) sorts BELOW the release
+      of the same triple (``"0.4.0"``).
+    - ``prerelease_key`` is a tuple of per-part sort keys (empty for a
+      release).  Numeric identifiers sort below alphanumeric (semver 2.0.0
+      §11), numerically within numeric, lexically within alphanumeric.
+
+    A prerelease of a HIGHER triple (``"0.4.0-alpha"``) still sorts ABOVE a
+    lower release (``"0.3.0"``) because the major/minor/patch fields dominate.
+
+    Use this instead of bare ``parse_semver`` tuple compares in engine gates
+    so that ``engine.min = "0.4.0-alpha"`` is correctly rejected (newer than
+    ``SERVICE_ENGINE_VERSION = "0.3.0"``) while ``"0.3.0-rc.1"`` is accepted
+    (same-triple prerelease ≤ current release).
+
+    Raises ``ValueError`` if the string is not valid semver.
+    """
+    m = _SEMVER_RE.match(version)
+    if not m:
+        raise ValueError(f"invalid semver: {version!r}")
+    major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    # Strip build metadata (+...) then split prerelease (-...).
+    core = version.split("+", 1)[0]
+    prerelease: str | None = core.split("-", 1)[1] if "-" in core else None
+    if prerelease is None:
+        return (major, minor, patch, 1, ())
+    pre_key = tuple(
+        (0, int(p)) if p.isdigit() else (1, p)
+        for p in prerelease.split(".")
+    )
+    return (major, minor, patch, 0, pre_key)
