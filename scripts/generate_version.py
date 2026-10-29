@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -51,7 +51,7 @@ def main() -> int:
     OUT_FILE.write_text(
         TEMPLATE.format(
             version=version,
-            build_date=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            build_date=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             git_commit=get_git_commit(),
         ),
         encoding="utf-8",
