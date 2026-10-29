@@ -206,6 +206,7 @@ module = [
     "stitch_backend.domains.plugin_runtime.cards_dual",
     "stitch_backend.domains.registration.*",
     "stitch_backend.domains.turnstile_solver.*",
+    "stitch_backend.domains.ai_proxy.zai_token_commands",
     "autoreg.plugin.browser_lifecycle",
     "autoreg.plugin.capabilities_account",
     "autoreg.plugin.capabilities_firebase",
