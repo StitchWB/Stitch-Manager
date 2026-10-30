@@ -139,3 +139,75 @@ describe('lib/Backend/modules/aiProxy', () => {
     );
   });
 });
+
+type AiProxyModule = typeof import('../../../../lib/backend/modules/aiProxy');
+
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+const loadFreshModule = async (): Promise<AiProxyModule> => {
+  jest.resetModules();
+  return import('../../../../lib/backend/modules/aiProxy');
+};
+
+const mockFetchReject = () => {
+  globalThis.fetch = jest.fn<any>().mockRejectedValue(new TypeError('Failed to fetch')) as unknown as typeof fetch;
+};
+
+const mockFetchError = (status: number, body: unknown) => {
+  globalThis.fetch = jest.fn<any>().mockResolvedValue({
+    ok: false,
+    status,
+    json: () => Promise.resolve(body),
+  }) as unknown as typeof fetch;
+};
+
+const kimiModel = {
+  id: 'moonshotai/kimi-k3.1-pro',
+  provider: 'velly',
+  ownedBy: 'Velly',
+  source: 'local_bridge',
+};
+
+describe('getAvailableModelsSafe backoff', () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('keeps serving the last good list while the backend is unreachable', async () => {
+    const mod = await loadFreshModule();
+    mockFetchOk([kimiModel]);
+    await expect(mod.getAvailableModelsSafe()).resolves.toEqual([kimiModel]);
+
+    await sleep(60);
+    mockFetchReject();
+    await expect(mod.getAvailableModelsSafe()).resolves.toEqual([kimiModel]);
+
+    const failedFetch = globalThis.fetch as jest.Mock;
+    await expect(mod.getAvailableModelsSafe()).resolves.toEqual([kimiModel]);
+    expect(failedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the last good list when the management API reports a failure', async () => {
+    const mod = await loadFreshModule();
+    mockFetchOk([kimiModel]);
+    await mod.getAvailableModelsSafe();
+
+    await sleep(60);
+    mockFetchError(500, { detail: 'Failed to list models' });
+    await expect(mod.getAvailableModelsSafe()).resolves.toEqual([kimiModel]);
+  });
+
+  it('replaces the cache when a successful response is empty', async () => {
+    const mod = await loadFreshModule();
+    mockFetchOk([kimiModel]);
+    await mod.getAvailableModelsSafe();
+
+    await sleep(60);
+    mockFetchOk([]);
+    await expect(mod.getAvailableModelsSafe()).resolves.toEqual([]);
+
+    await sleep(60);
+    mockFetchReject();
+    await expect(mod.getAvailableModelsSafe()).resolves.toEqual([]);
+  });
+});
