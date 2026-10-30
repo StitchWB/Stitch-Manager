@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Button, Input, Modal, Select, Textarea } from '@/components/ui';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import { bulkTestOpenCodeApi } from '@/lib/backend/modules/opencodeConfig';
-import { parseProviderEntries } from '@/lib/utils/parseProviderText';
+import { parseProviderEntries, looksLikeApiKey } from '@/lib/utils/parseProviderText';
 import type { ParsedProviderEntry } from '@/lib/utils/parseProviderText';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
@@ -58,6 +58,7 @@ function splitKeys(text: string): string[] {
   for (const raw of text.split(/[\n,;]+/)) {
     const key = raw.trim();
     if (!key || seen.has(key)) continue;
+    if (!looksLikeApiKey(key)) continue;
     seen.add(key);
     keys.push(key);
   }
@@ -158,28 +159,34 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     }
   }, []);
 
+  const applyParsedEntries = useCallback((entries: ParsedProviderEntry[]) => {
+    if (entries.length > 1) {
+      setBatchEntries(entries);
+      return;
+    }
+    if (entries.length === 1) {
+      const entry = entries[0];
+      const matched = presetForBaseUrl(entry.baseUrl);
+      setPresetId(matched ? matched.id : CUSTOM_PRESET_ID);
+      setName(entry.name ?? (matched ? matched.label : hostFromUrl(entry.baseUrl)));
+      setBaseUrl(entry.baseUrl);
+      if (entry.keys.length > 0) setText(entry.keys.join('\n'));
+    }
+  }, []);
+
   const handleSmartPaste = useCallback(async () => {
     try {
       const clipboard = await navigator.clipboard.readText();
       const entries = parseProviderEntries(clipboard);
-      if (entries.length > 1) {
-        setBatchEntries(entries);
-        return;
-      }
-      if (entries.length === 1) {
-        const entry = entries[0];
-        const matched = PROVIDER_PRESETS.find(preset => preset.baseUrl === entry.baseUrl);
-        setPresetId(matched ? matched.id : CUSTOM_PRESET_ID);
-        setName(entry.name ?? (matched ? matched.label : hostFromUrl(entry.baseUrl)));
-        setBaseUrl(entry.baseUrl);
-        if (entry.keys.length > 0) setText(entry.keys.join('\n'));
+      if (entries.length > 0) {
+        applyParsedEntries(entries);
         return;
       }
       setText(prev => (prev ? `${prev.trimEnd()}\n${clipboard.trim()}` : clipboard.trim()));
     } catch {
       toast.error(t('aiHub.pasteFirst.clipboardFailed'));
     }
-  }, []);
+  }, [applyParsedEntries]);
 
   const handleBatchAdd = useCallback(async () => {
     if (!batchEntries || batchEntries.length === 0) return;
@@ -428,6 +435,14 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
         <Textarea
           value={text}
           onChange={event => setText(event.target.value)}
+          onPaste={event => {
+            const pasted = event.clipboardData.getData('text');
+            const entries = parseProviderEntries(pasted);
+            if (entries.length > 0) {
+              event.preventDefault();
+              applyParsedEntries(entries);
+            }
+          }}
           placeholder={t('aiHub.pasteFirst.emptyHint')}
           rows={6}
         />

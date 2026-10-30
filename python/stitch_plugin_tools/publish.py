@@ -387,6 +387,7 @@ _PUBLISH_ALL_PROVIDERS = (
     "dahl", "vani", "abliteration", "codebuff", "notion", "kauz", "intern",
     "apodex", "moda", "outlook", "logicc", "tokenharbor", "remalt", "grok",
     "mlh", "jev", "octopusx", "type", "leonardo", "newapi_panels", "beatapi",
+    "wispbyte", "gname_eucc",
 )
 
 
@@ -398,7 +399,7 @@ async def publish_all(
     only: list[str] | None = None,
     dry_run: bool = False,
 ) -> list[dict]:
-    """Publish every official package in one run (29 packages).
+    """Publish every official package in one run (46 packages).
 
     Registry:
       1. every ``plugins-src/<id>/`` whose manifest has ``kind == "service"``
