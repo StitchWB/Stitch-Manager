@@ -564,9 +564,13 @@ export interface AiHubTranslations {
       modelsLater: string;
       batchTitle: string;
       batchAddAll: string;
+      batchAddSelected: string;
       batchKeys: string;
       batchModels: string;
+      batchTestSummary: string;
       batchBack: string;
+      batchIgnored: string;
+      addedToastSkipped: string;
       mechanismHint: {
         oauth: string;
         web: string;

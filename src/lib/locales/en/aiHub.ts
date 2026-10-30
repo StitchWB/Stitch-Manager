@@ -566,9 +566,13 @@ export const aiHub: AiHubTranslations = {
       modelsLater: "Models will refresh automatically",
       batchTitle: "Multiple providers detected",
       batchAddAll: "Add all ({count})",
+      batchAddSelected: "Add selected ({count})",
       batchKeys: "{count} key(s)",
       batchModels: "{count} model(s)",
+      batchTestSummary: "valid: {ok} · invalid: {invalid}",
       batchBack: "Back",
+      batchIgnored: "Ignored: {labels} - not inference providers, unused by AI Hub",
+      addedToastSkipped: "Added {count} keys, {skipped} already present",
       mechanismHint: {
         oauth: "Paste accepts API keys only — add OAuth accounts via Add Account with browser sign-in.",
         web: "Paste accepts API keys only — web accounts are added through the browser session flow.",

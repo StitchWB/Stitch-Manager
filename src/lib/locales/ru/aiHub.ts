@@ -566,9 +566,13 @@ export const aiHub: AiHubTranslations = {
       modelsLater: "Модели обновятся автоматически",
       batchTitle: "Найдено несколько провайдеров",
       batchAddAll: "Добавить все ({count})",
+      batchAddSelected: "Добавить выбранные ({count})",
       batchKeys: "ключей: {count}",
       batchModels: "моделей: {count}",
+      batchTestSummary: "валидных: {ok} · невалидных: {invalid}",
       batchBack: "Назад",
+      batchIgnored: "Игнорировано: {labels} — это не inference-провайдеры, AI Hub их не использует",
+      addedToastSkipped: "Добавлено ключей: {count}, уже были: {skipped}",
       mechanismHint: {
         oauth: "Вставка принимает только API-ключи — OAuth-аккаунты добавляются через «Добавить аккаунт» с входом в браузере.",
         web: "Вставка принимает только API-ключи — веб-аккаунты добавляются через сессию в браузере.",
