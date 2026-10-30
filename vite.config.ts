@@ -39,6 +39,10 @@ export default defineConfig({
     port: 5174,
     strictPort: true,
     proxy: {
+      '/v1': {
+        target: `http://127.0.0.1:${process.env.STITCH_API_PORT || '25584'}`,
+        changeOrigin: true,
+      },
       '/api': {
         target: `http://127.0.0.1:${process.env.STITCH_API_PORT || '25584'}`,
         changeOrigin: true,

@@ -166,7 +166,7 @@ export interface JobStart {
  */
 export type UiNode =
   | { kind: 'heading'; text: string; level?: number }
-  | { kind: 'section'; title?: string; nodes: UiNode[] }
+  | { kind: 'section'; title?: string; nodes: UiNode[]; collapsible?: boolean; defaultOpen?: boolean }
   | {
       kind: 'field';
       field: 'text' | 'select' | 'toggle';

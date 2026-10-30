@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { AiTransferModal } from '@/components/ai-proxy/modals/AiTransferModal';
+import { VellyConnectionCard } from '@/components/ai-proxy/VellyConnectionCard';
 import Header from '@/components/layout/Header';
 import { Button, GlassCard, Input, PageHeader, StatusBadge } from '@/components/ui';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
@@ -145,7 +146,8 @@ export function AiIntegrations({
         className="px-4 py-2.5 md:px-5 md:py-3"
       />
 
-      <div className="flex-1 overflow-y-auto p-3 md:p-4">
+      <div className="flex-1 space-y-3 overflow-y-auto p-3 md:p-4">
+        <VellyConnectionCard />
         <GlassCard className="mx-auto w-full max-w-[1200px] overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-3">
             <div className="min-w-0">

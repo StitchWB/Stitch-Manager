@@ -1,7 +1,11 @@
 import type { ModelInfo } from '../types/generated';
 import { API_BASE_URL } from '../lib/backend/core/invoke';
 
-type ChatRouteModel = Pick<ModelInfo, 'id' | 'provider' | 'ownedBy'>;
+type ChatRouteModel = Pick<ModelInfo, 'id' | 'provider' | 'ownedBy'> & { protocol?: string };
+
+export function isVellyChatModel(model: ChatRouteModel | undefined): boolean {
+  return model?.provider.toLowerCase() === 'velly' || model?.id.startsWith('velly/') === true;
+}
 
 export function isZaiChatModel(model: ChatRouteModel | undefined): boolean {
   return model?.provider.toLowerCase() === 'zai' || model?.ownedBy.toLowerCase() === 'zai';
@@ -26,6 +30,7 @@ export function resolveWebBridgeProvider(model: ChatRouteModel | undefined): str
 }
 
 export function resolveChatCompletionsUrl(model: ChatRouteModel | undefined, proxyPort: number): string {
+  if (isVellyChatModel(model)) return `${API_BASE_URL}/v1/${model?.protocol === 'messages' ? 'messages' : 'chat/completions'}`;
   if (
     isZaiChatModel(model) ||
     model?.provider.toLowerCase() === 'qoder' ||

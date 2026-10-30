@@ -7,6 +7,7 @@ export const CORE_PAGE_ROUTES: Record<string, string> = {
   'stitch-radar': '/radar',
   'stitch-devbox': '/ai/devbox',
   'stitch-cards': '/tools',
+  'stitch-velly': '/ai/velly',
 };
 
 // checked by link resolvers before CORE_PAGE_ROUTES

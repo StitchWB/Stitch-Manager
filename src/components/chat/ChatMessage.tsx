@@ -383,6 +383,9 @@ export const ChatMessage = memo(function ChatMessage({
               })}
             </div>
           )}
+          {message.debug?.error && !normalizedBlocks.text && (
+            <span role="alert" className="text-sm text-vsc-red">{message.debug.error}</span>
+          )}
           {renderedContent ||
             (message.isStreaming && (
               <span className="text-vsc-text-muted italic flex items-center gap-2">

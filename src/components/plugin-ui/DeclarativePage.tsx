@@ -460,6 +460,18 @@ function renderNode(
       );
     }
     case 'section':
+      if (node.collapsible) {
+        return (
+          <details key={index} open={node.defaultOpen} className="rounded-lg border border-white/[0.06] bg-white/[0.02]">
+            <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-slate-300 hover:text-white">
+              {node.title && resolveLabel(pluginId, node.title)}
+            </summary>
+            <div className="space-y-3 border-t border-white/[0.06] p-4">
+              {renderNodeList(pluginId, node.nodes ?? [], fields, refresh)}
+            </div>
+          </details>
+        );
+      }
       return (
         <div
           key={index}

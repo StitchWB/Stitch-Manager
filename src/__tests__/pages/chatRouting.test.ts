@@ -7,6 +7,18 @@ import {
 } from '../../pages/chatRouting';
 
 describe('chat routing', () => {
+  it.each(['anthropic/sonnet', 'deepseek/flash', 'moonshot/kimi', 'antigravity/argon'])(
+    'uses native Messages for Velly model %s when advertised by the catalog', id => {
+      const model = { id: `velly/${id}`, provider: 'velly', ownedBy: 'velly', protocol: 'messages' };
+      expect(resolveChatCompletionsUrl(model, 25584)).toBe('/v1/messages');
+    }
+  );
+  it('routes Velly models to the backend gateway independently of the legacy proxy port', () => {
+    expect(resolveChatCompletionsUrl({
+      id: 'velly/anthropic/claude-sonnet-5.5', provider: 'velly', ownedBy: 'velly',
+    }, 25583)).toBe('/v1/chat/completions');
+  });
+
   it('routes Z.AI provider models to the FastAPI chat endpoint', () => {
     const model = {
       id: 'glm-4.5',

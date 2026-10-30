@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
@@ -21,7 +21,7 @@ import { useAppStore } from '../stores/app';
 import type { ContentBlock, ModelInfo } from '../types/generated';
 import { t } from '../lib/i18n';
 import { formatTime } from '../lib/utils';
-import { isZaiChatModel, resolveChatCompletionsUrl, resolveWebBridgeProvider } from './chatRouting';
+import { isVellyChatModel, isZaiChatModel, resolveChatCompletionsUrl, resolveWebBridgeProvider } from './chatRouting';
 
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
@@ -40,6 +40,7 @@ import { Button, ButtonBase, Checkbox, EmptyState, Input, LoadingSpinner, Select
 
 interface ChatModelInfo extends ModelInfo {
   name: string;
+  protocol?: string;
 }
 
 interface SetupSnapshot {
@@ -134,6 +135,9 @@ export default function Chat() {
   const modelList = aiProxyModels;
   const activeRouteModel = modelList.find(m => m.id === model);
   const selectedModelUsesZaiRoute = isZaiChatModel(activeRouteModel);
+  const selectedModelUsesVellyRoute = isVellyChatModel(activeRouteModel);
+  const usesBackendRoute = selectedModelUsesZaiRoute || selectedModelUsesVellyRoute;
+  const routeConnected = selectedModelUsesVellyRoute || proxyRunning;
   const chatApiUrl = resolveChatCompletionsUrl(activeRouteModel, proxyPort);
   const chatProvider = selectedModelUsesZaiRoute
     ? 'zai'
@@ -148,6 +152,7 @@ export default function Chat() {
     model,
     provider: chatProvider,
     apiKey: chatToken,
+    protocol: selectedModelUsesVellyRoute && activeRouteModel?.protocol === 'messages' ? 'messages' : 'chat',
   });
 
   // Reset error dismissed state when a new error appears
@@ -157,8 +162,11 @@ export default function Chat() {
     });
   }, [error]);
 
-  const fetchSetup = useCallback(async () => {
-    setSetupLoading(true);
+  const setupFetching = useRef(false);
+  const fetchSetup = useCallback(async (background = false) => {
+    if (setupFetching.current) return;
+    setupFetching.current = true;
+    if (!background) setSetupLoading(true);
     setSetupError(null);
 
     try {
@@ -205,10 +213,11 @@ export default function Chat() {
       setAiProxyModels(
         availableModels.map(m => ({
           id: m.id,
-          name: m.id.startsWith('kiro-') ? `[kiro] ${m.id.replace('kiro-', '')}` : m.id,
+          name: m.provider === 'velly' ? (m.name || m.id) : m.id.startsWith('kiro-') ? `[kiro] ${m.id.replace('kiro-', '')}` : m.id,
           provider: m.id.startsWith('kiro-') ? 'kiro' : (m.provider || m.ownedBy || 'Unknown'),
           ownedBy: m.ownedBy || m.provider || 'Unknown',
           source: (m.source as 'aiProxy' | 'freemodel') || 'aiProxy',
+          protocol: m.protocol,
         }))
       );
 
@@ -222,11 +231,14 @@ export default function Chat() {
       setCostEstimate(cost);
     } catch (err) {
       setSetupError(err instanceof Error ? err.message : 'Failed to load provider setup');
-      setAiProxyModels([]);
-      setRequestLogs([]);
-      setDailyStats(null);
-      setCostEstimate(null);
+      if (!background) {
+        setAiProxyModels([]);
+        setRequestLogs([]);
+        setDailyStats(null);
+        setCostEstimate(null);
+      }
     } finally {
+      setupFetching.current = false;
       setSetupLoading(false);
     }
   }, []);
@@ -234,9 +246,9 @@ export default function Chat() {
   const hasProviderSetup = setup.enabledProviderAccounts > 0 || setup.gatewayCredentials > 0 || setup.freemodelKey;
   const hasModels = modelList.length > 0;
 
-  const setupBlockReason = !selectedModelUsesZaiRoute && !proxyRunning
+  const setupBlockReason = !usesBackendRoute && !proxyRunning
     ? 'AI Proxy is not running. Start it in Settings to enable debug chat.'
-    : !selectedModelUsesZaiRoute && proxyMode === 'quota-only'
+    : !usesBackendRoute && proxyMode === 'quota-only'
       ? 'AI Proxy is in quota-only mode. Switch to Full mode to use debug chat.'
       : !hasProviderSetup
         ? 'Set up providers or API keys in AI Proxy to enable debug chat.'
@@ -256,9 +268,18 @@ export default function Chat() {
 
   // Fetch AI Proxy setup on mount
   useEffect(() => {
+    let disposed = false;
     queueMicrotask(() => {
-    fetchSetup();
+      if (!disposed) void fetchSetup();
     });
+    const refresh = () => { void fetchSetup(true); };
+    const timer = window.setInterval(refresh, 10000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
   }, [fetchSetup]);
 
   useEffect(() => {
@@ -398,7 +419,7 @@ export default function Chat() {
                   <h3 className="text-sm font-medium text-vsc-text">
                     {t('uiTexts.debugTitle')}
                   </h3>
-                  {!proxyRunning && (
+                  {!routeConnected && (
                     <span className="text-xs text-vsc-yellow flex items-center gap-1">
                       <AlertCircle size={12} />
                       {'AI Proxy not running (debug chat disabled)'}
@@ -553,7 +574,7 @@ export default function Chat() {
                 </div>
 
                 {/* AI Proxy info */}
-                {proxyRunning && (
+                {routeConnected && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <div className="block text-xs font-medium text-vsc-text-muted mb-1.5">
@@ -576,7 +597,7 @@ export default function Chat() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-vsc-text">{t('chat.modelsCount', { count: modelList.length })}</span>
                         <Button
-                          onClick={fetchSetup}
+                          onClick={() => { void fetchSetup(); }}
                           disabled={setupLoading}
                           variant="secondary"
                           size="xs"
@@ -614,7 +635,7 @@ export default function Chat() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs text-vsc-yellow">{setupBlockReason}</div>
                       <div className="flex items-center gap-2">
-                        {!proxyRunning && (
+                        {!routeConnected && (
                           <Button variant="secondary" size="xs" onClick={handleStartProxy}>
                             {t('chat.startProxy')}
                           </Button>
@@ -807,12 +828,12 @@ export default function Chat() {
             <div className="px-4 py-2 border-b border-white/5">
               <div className="max-w-4xl mx-auto flex items-center gap-3">
                 <StatusBadge
-                  status={proxyRunning ? 'active' : 'error'}
+                  status={routeConnected ? 'active' : 'error'}
                   withDot
-                  withPulse={proxyRunning}
+                  withPulse={routeConnected}
                   size="sm"
                 >
-                  {proxyRunning ? t('chat.statusConnected') : t('chat.statusDisconnected')}
+                  {routeConnected ? t('chat.statusConnected') : t('chat.statusDisconnected')}
                 </StatusBadge>
                 <span className="text-xs text-vsc-text-muted">{t('chat.model') || 'Model'}:</span>
                 <div className="relative">

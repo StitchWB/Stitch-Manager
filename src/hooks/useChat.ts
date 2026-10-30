@@ -10,6 +10,7 @@ interface UseChatOptions {
   apiKey?: string;
   maxTokens?: number;
   temperature?: number;
+  protocol?: 'chat' | 'messages';
 }
 
 interface UseChatReturn {
@@ -41,6 +42,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     apiKey,
     maxTokens = 4096,
     temperature = 1.0,
+    protocol = 'chat',
   } = options;
 
   // Individual selectors with stable references.
@@ -117,7 +119,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         const currentMessages = useChatStore.getState().messages();
         const apiMessages: Array<{ role: string; content: string | ContentBlock[] }> =
           currentMessages
-            .filter(msg => msg.id !== assistantMessageId)
+            .filter(msg => msg.id !== assistantMessageId && !(msg.role === 'assistant' && msg.debug?.error && !msg.content))
             .map(msg => ({
               role: msg.role,
               content: msg.content,
@@ -149,6 +151,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         if (effectiveApiKey) {
           headers.Authorization = `Bearer ${effectiveApiKey}`;
         }
+        if (protocol === 'messages') headers['anthropic-version'] = '2023-06-01';
 
         if (forceOverride.enabled) {
           if (forceOverride.provider.trim()) {
@@ -169,6 +172,18 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           temperature: activeProfile?.temperature ?? temperature,
           stream: true,
         };
+        if (protocol === 'messages') {
+          const system = apiMessages.filter(message => message.role === 'system')
+            .map(message => typeof message.content === 'string' ? message.content
+              : message.content.filter(block => block.type === 'text').map(block => block.text || '').join('\n'))
+            .join('\n\n');
+          if (system) requestBody.system = system;
+          requestBody.messages = apiMessages.filter(message => message.role !== 'system').map(message => ({
+            role: message.role,
+            content: typeof message.content === 'string' ? message.content : message.content.map(block =>
+              block.type === 'image' ? { type: 'image', source: { type: 'base64', media_type: block.source.mediaType, data: block.source.data } } : block),
+          }));
+        }
 
         if (provider) {
           requestBody.provider = provider;
@@ -179,14 +194,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             ? message.content.some(block => block.type === 'image')
             : false
         );
-        if (hasImageContent) {
+        if (hasImageContent && protocol !== 'messages') {
           requestBody.modalities = ['text', 'image'];
         }
 
         useChatStore.getState().setMessageDebug(assistantMessageId, {
           apiUrl: effectiveApiUrl,
           startedAt: Date.now(),
-          requestHeaders: headers,
+          requestHeaders: Object.fromEntries(Object.entries(headers).map(([name, value]) => [
+            name, /authorization|cookie|api.?key/i.test(name) ? '[redacted]' : value,
+          ])),
           requestBody,
           forceProvider: forceOverride.enabled ? forceOverride.provider || undefined : undefined,
           forceModelId: forceOverride.enabled ? forceOverride.modelId || undefined : undefined,
@@ -241,18 +258,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            break;
+            buffer += decoder.decode();
+            if (!buffer.trim()) break;
+            buffer += '\n';
+          } else {
+            buffer += decoder.decode(value, { stream: true });
           }
-
-          buffer += decoder.decode(value, { stream: true });
 
           // Process SSE events
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
+            if (line.startsWith('data:')) {
+              const data = line.slice(5).trim();
               if (data === '[DONE]') {
                 break;
               }
@@ -284,12 +303,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                   setMessageStreaming(assistantMessageId, false);
                 }
                 // Handle usage metadata in final chunk
-                if (event.usage || event['x-elapsed-ms'] != null) {
+                const usage = event.usage || event.message?.usage;
+                if (usage || event['x-elapsed-ms'] != null) {
                   const usagePatch: Record<string, unknown> = {};
-                  if (event.usage) {
-                    usagePatch.promptTokens = event.usage.prompt_tokens || event.usage.inputTokenCount || 0;
-                    usagePatch.completionTokens = event.usage.completion_tokens || event.usage.outputTokenCount || 0;
-                    usagePatch.totalTokens = event.usage.total_tokens || event.usage.totalTokenCount || 0;
+                  if (usage) {
+                    const previous = useChatStore.getState().messages().find(message => message.id === assistantMessageId)?.debug;
+                    const prompt = usage.prompt_tokens ?? usage.input_tokens ?? usage.inputTokenCount ?? previous?.promptTokens ?? 0;
+                    const completion = usage.completion_tokens ?? usage.output_tokens ?? usage.outputTokenCount ?? previous?.completionTokens ?? 0;
+                    usagePatch.promptTokens = prompt;
+                    usagePatch.completionTokens = completion;
+                    usagePatch.totalTokens = usage.total_tokens ?? usage.totalTokenCount ?? prompt + completion;
                   }
                   if (event['x-elapsed-ms'] != null) {
                     usagePatch.durationMs = event['x-elapsed-ms'];
@@ -300,12 +323,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                   useChatStore.getState().setMessageDebug(assistantMessageId, usagePatch as Partial<import('../stores/chat').ChatDebugInfo>);
                 }
                 // Handle error
-                else if (event.type === 'error') {
+                if (event.type === 'error') {
                   throw new Error(
         detailToMessage(event.error?.message, detailToMessage(event.error, 'Stream error')),
       );
                 }
-              } catch {
+              } catch (parseError) {
+                if (!(parseError instanceof SyntaxError)) throw parseError;
                 // Ignore parse errors for non-JSON lines
                 if (data.trim() && !data.startsWith('event:')) {
                   console.warn('Failed to parse SSE data:', data);
@@ -315,6 +339,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           }
         }
 
+        const completedMessage = useChatStore.getState().messages().find(message => message.id === assistantMessageId);
+        if (completedMessage && (typeof completedMessage.content === 'string'
+          ? !completedMessage.content.trim()
+          : !completedMessage.content.some(block => block.type === 'text' && block.text?.trim()))) {
+          throw new Error('Модель завершила поток без текста ответа');
+        }
         // Mark streaming as complete
         setMessageStreaming(assistantMessageId, false);
         const completedAt = Date.now();
@@ -347,11 +377,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 ?.startedAt || completedAt),
           });
 
-          // Remove the empty assistant message on error
-          const msg = useChatStore.getState().messages().find(m => m.id === assistantMessageId);
-          if (!msg?.content) {
-            removeMessage(assistantMessageId);
-          }
+          setMessageStreaming(assistantMessageId, false);
         }
       } finally {
         setLoading(false);
@@ -365,6 +391,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       apiKey,
       maxTokens,
       temperature,
+      protocol,
       isLoading,
       addMessage,
       appendToMessage,

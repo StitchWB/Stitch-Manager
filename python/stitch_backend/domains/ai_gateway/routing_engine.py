@@ -388,8 +388,21 @@ class RoutingEngine:
         endpoint_id: str,
         error: ClassifiedError | None,
         http_status: int | None,
+        upstream_model_id: str | None = None,
     ) -> None:
         """Record the outcome of a routed request — updates credential state and circuit breaker."""
+        if error is not None and error.is_model_specific:
+            if upstream_model_id is not None:
+                row = (await session.execute(select(CredentialModelAccess).where(
+                    CredentialModelAccess.credential_id == credential_id,
+                    CredentialModelAccess.upstream_model_id == upstream_model_id,
+                ))).scalar_one_or_none()
+                if row is not None:
+                    row.status = "temporarily_unavailable"
+                    row.last_error = error.category
+                    row.last_verified_at = _utcnow()
+                    await session.flush()
+            return
         await credential_state.transition_credential(
             session, credential_id, error, http_status,
         )

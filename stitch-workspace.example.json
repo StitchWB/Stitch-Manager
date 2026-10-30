@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "local": {
+      "appRoot": ".",
+      "apiPort": 25610,
+      "webPort": 5195,
+      "plugins": []
+    },
+    "service": {
+      "appRoot": ".",
+      "apiPort": 25611,
+      "webPort": 5196,
+      "plugins": ["../my-service-plugin"]
+    }
+  }
+}
