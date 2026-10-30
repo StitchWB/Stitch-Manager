@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ClipboardPaste, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { Button, Input, Modal, Select, Textarea } from '@/components/ui';
+import { Button, Checkbox, Input, Modal, Select, Textarea } from '@/components/ui';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import { bulkTestOpenCodeApi } from '@/lib/backend/modules/opencodeConfig';
-import { parseProviderEntries, looksLikeApiKey } from '@/lib/utils/parseProviderText';
+import { parseProviderEntriesWithMeta, looksLikeApiKey } from '@/lib/utils/parseProviderText';
+import { computeCredentialFingerprint } from '@/lib/utils/credentialFingerprint';
 import type { ParsedProviderEntry } from '@/lib/utils/parseProviderText';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
@@ -17,6 +18,8 @@ interface KeyResult {
   status: KeyStatus;
   error?: string;
 }
+
+type GroupTest = { status: 'testing' } | { status: 'done'; ok: number; invalid: number; badKeys: string[] };
 
 interface PasteKeysDialogProps {
   open: boolean;
@@ -110,6 +113,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
   const createEndpoint = useAiGatewayStore(state => state.createEndpoint);
   const createCredential = useAiGatewayStore(state => state.createCredential);
   const fetchEndpoints = useAiGatewayStore(state => state.fetchEndpoints);
+  const fetchCredentials = useAiGatewayStore(state => state.fetchCredentials);
   const endpoints = useAiGatewayStore(state => state.endpoints);
 
   const [text, setText] = useState('');
@@ -121,6 +125,9 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [batchEntries, setBatchEntries] = useState<ParsedProviderEntry[] | null>(null);
+  const [ignoredLabels, setIgnoredLabels] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [groupTests, setGroupTests] = useState<Record<string, GroupTest>>({});
 
   useEffect(() => {
     if (!open) return;
@@ -132,6 +139,9 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
       setBaseUrl(endpoint?.baseUrl ?? '');
       setAdapterType(endpoint?.adapterType ?? 'openai_compatible');
       setBatchEntries(null);
+      setIgnoredLabels([]);
+      setSelected({});
+      setGroupTests({});
     });
   }, [open, endpoint]);
 
@@ -140,6 +150,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     () => (batchEntries ? groupEntriesByBaseUrl(batchEntries) : []),
     [batchEntries],
   );
+  const selectedCount = batchGroups.filter(group => selected[group.baseUrl] !== false).length;
   const targetUrl = endpoint ? endpoint.baseUrl : baseUrl.trim();
 
   const canTest = keys.length > 0 && !testing && !saving && (endpoint !== null || baseUrl.trim() !== '');
@@ -159,9 +170,12 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     }
   }, []);
 
-  const applyParsedEntries = useCallback((entries: ParsedProviderEntry[]) => {
+  const applyParsedEntries = useCallback((entries: ParsedProviderEntry[], ignored: string[]) => {
+    setIgnoredLabels(ignored);
     if (entries.length > 1) {
       setBatchEntries(entries);
+      setSelected(Object.fromEntries(groupEntriesByBaseUrl(entries).map(group => [group.baseUrl, true])));
+      setGroupTests({});
       return;
     }
     if (entries.length === 1) {
@@ -177,9 +191,9 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
   const handleSmartPaste = useCallback(async () => {
     try {
       const clipboard = await navigator.clipboard.readText();
-      const entries = parseProviderEntries(clipboard);
+      const { entries, ignoredLabels: ignored } = parseProviderEntriesWithMeta(clipboard);
       if (entries.length > 0) {
-        applyParsedEntries(entries);
+        applyParsedEntries(entries, ignored);
         return;
       }
       setText(prev => (prev ? `${prev.trimEnd()}\n${clipboard.trim()}` : clipboard.trim()));
@@ -188,12 +202,45 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     }
   }, [applyParsedEntries]);
 
+  const handleTestGroup = useCallback(async (groupBaseUrl: string, groupKeys: string[]) => {
+    setGroupTests(prev => ({ ...prev, [groupBaseUrl]: { status: 'testing' } }));
+    try {
+      const response = await bulkTestOpenCodeApi(groupBaseUrl, groupKeys, 10);
+      let ok = 0;
+      let invalid = 0;
+      const badKeys: string[] = [];
+      for (const result of response.results) {
+        if (result.status === 'ok' || result.status === 'rate_limited') {
+          ok += 1;
+        } else {
+          invalid += 1;
+          badKeys.push(result.key);
+        }
+      }
+      setGroupTests(prev => ({ ...prev, [groupBaseUrl]: { status: 'done', ok, invalid, badKeys } }));
+    } catch (error) {
+      setGroupTests(prev => {
+        const next = { ...prev };
+        delete next[groupBaseUrl];
+        return next;
+      });
+      toast.error(t('aiHub.pasteFirst.addFailed', { msg: error instanceof Error ? error.message : String(error) }));
+    }
+  }, []);
+
   const handleBatchAdd = useCallback(async () => {
     if (!batchEntries || batchEntries.length === 0) return;
     setSaving(true);
     try {
       let added = 0;
+      let skipped = 0;
       for (const group of groupEntriesByBaseUrl(batchEntries)) {
+        if (selected[group.baseUrl] === false) continue;
+        const groupTest = groupTests[group.baseUrl];
+        const keysToAdd =
+          groupTest?.status === 'done'
+            ? group.keys.filter(key => !groupTest.badKeys.includes(key))
+            : group.keys;
         const normalized = normalizeBaseUrl(group.baseUrl);
         const existing = endpoints.find(item => normalizeBaseUrl(item.baseUrl) === normalized);
         const preset = presetForBaseUrl(group.baseUrl);
@@ -203,20 +250,35 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           adapterType: preset?.adapterType ?? 'openai_compatible',
           enabled: true,
         });
-        for (const key of group.keys) {
+        const known = new Set<string>();
+        if (existing) {
+          await fetchCredentials(existing.id);
+          for (const credential of useAiGatewayStore.getState().credentials) {
+            if (credential.providerEndpointId === existing.id) known.add(credential.fingerprint);
+          }
+        }
+        for (const key of keysToAdd) {
+          if (known.has(await computeCredentialFingerprint(target.id, key))) {
+            skipped += 1;
+            continue;
+          }
           await createCredential({ providerEndpointId: target.id, authType: 'api_key', secret: key });
           added += 1;
         }
       }
       await fetchEndpoints();
-      toast.success(t('aiHub.pasteFirst.addedToast', { count: added }));
+      toast.success(
+        skipped > 0
+          ? t('aiHub.pasteFirst.addedToastSkipped', { count: added, skipped })
+          : t('aiHub.pasteFirst.addedToast', { count: added }),
+      );
       onClose();
     } catch (error) {
       toast.error(t('aiHub.pasteFirst.addFailed', { msg: error instanceof Error ? error.message : String(error) }));
     } finally {
       setSaving(false);
     }
-  }, [batchEntries, endpoints, createEndpoint, createCredential, fetchEndpoints, onClose]);
+  }, [batchEntries, selected, groupTests, endpoints, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose]);
 
   const handleTest = useCallback(async () => {
     if (!canTest) return;
@@ -252,6 +314,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     setSaving(true);
     try {
       let target = endpoint;
+      const targetExisted = target !== null;
       if (!target) {
         const trimmedName = name.trim();
         const trimmedUrl = baseUrl.trim();
@@ -262,20 +325,43 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
         target = await createEndpoint({ name: trimmedName, baseUrl: trimmedUrl, adapterType, enabled: true });
       }
       if (!target) return;
+      const targetId = target.id;
 
-      for (const key of accepted) {
-        await createCredential({ providerEndpointId: target.id, authType: 'api_key', secret: key });
+      const fresh: string[] = [];
+      let skipped = 0;
+      if (targetExisted) {
+        await fetchCredentials(targetId);
+        const known = new Set(
+          useAiGatewayStore
+            .getState()
+            .credentials.filter(credential => credential.providerEndpointId === targetId)
+            .map(credential => credential.fingerprint),
+        );
+        for (const key of accepted) {
+          if (known.has(await computeCredentialFingerprint(targetId, key))) skipped += 1;
+          else fresh.push(key);
+        }
+      } else {
+        fresh.push(...accepted);
+      }
+
+      for (const key of fresh) {
+        await createCredential({ providerEndpointId: targetId, authType: 'api_key', secret: key });
       }
       await fetchEndpoints();
-      toast.success(t('aiHub.pasteFirst.addedToast', { count: accepted.length }));
+      toast.success(
+        skipped > 0
+          ? t('aiHub.pasteFirst.addedToastSkipped', { count: fresh.length, skipped })
+          : t('aiHub.pasteFirst.addedToast', { count: fresh.length }),
+      );
       onClose();
-      onAdded?.(target.id);
+      onAdded?.(targetId);
     } catch (error) {
       toast.error(t('aiHub.pasteFirst.addFailed', { msg: error instanceof Error ? error.message : String(error) }));
     } finally {
       setSaving(false);
     }
-  }, [keys, results, endpoint, name, baseUrl, adapterType, createEndpoint, createCredential, fetchEndpoints, onClose, onAdded]);
+  }, [keys, results, endpoint, name, baseUrl, adapterType, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose, onAdded]);
 
   const statusTone = (status: KeyStatus): string => {
     if (status === 'ok') return 'text-emerald-300';
@@ -301,17 +387,29 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
       footer={
         batchEntries ? (
           <div className="flex items-center justify-between gap-3">
-            <Button variant="ghost" size="sm" onClick={() => setBatchEntries(null)} disabled={saving}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setBatchEntries(null);
+                setIgnoredLabels([]);
+                setSelected({});
+                setGroupTests({});
+              }}
+              disabled={saving}
+            >
               {t('aiHub.pasteFirst.batchBack')}
             </Button>
             <Button
               variant="primary"
               size="sm"
               onClick={() => void handleBatchAdd()}
-              disabled={batchGroups.length === 0 || saving}
+              disabled={selectedCount === 0 || saving}
             >
               {saving ? <Loader2 size={13} className="animate-spin" /> : null}
-              {t('aiHub.pasteFirst.batchAddAll', { count: batchGroups.length })}
+              {selectedCount === batchGroups.length
+                ? t('aiHub.pasteFirst.batchAddAll', { count: batchGroups.length })
+                : t('aiHub.pasteFirst.batchAddSelected', { count: selectedCount })}
             </Button>
           </div>
         ) : (
@@ -342,8 +440,16 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
             {batchGroups.map(group => {
               const preset = presetForBaseUrl(group.baseUrl);
               const label = preset?.label ?? hostFromUrl(group.baseUrl);
+              const groupTest = groupTests[group.baseUrl];
               return (
                 <div key={group.baseUrl} className="flex items-center gap-2 text-xs">
+                  <Checkbox
+                    className="shrink-0 px-0 py-0"
+                    checked={selected[group.baseUrl] !== false}
+                    onChange={event =>
+                      setSelected(prev => ({ ...prev, [group.baseUrl]: event.target.checked }))
+                    }
+                  />
                   <span className="min-w-0 flex-1 truncate">
                     <span className="font-medium text-slate-200">{label}</span>
                     {preset && (
@@ -358,10 +464,32 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
                       {t('aiHub.pasteFirst.batchModels', { count: group.models.length })}
                     </span>
                   )}
+                  {groupTest?.status === 'done' && (
+                    <span
+                      className={cn('shrink-0', groupTest.invalid > 0 ? 'text-amber-300' : 'text-emerald-300')}
+                    >
+                      {t('aiHub.pasteFirst.batchTestSummary', { ok: groupTest.ok, invalid: groupTest.invalid })}
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="shrink-0"
+                    disabled={saving || groupTest?.status === 'testing'}
+                    onClick={() => void handleTestGroup(group.baseUrl, group.keys)}
+                  >
+                    {groupTest?.status === 'testing' ? <Loader2 size={12} className="animate-spin" /> : null}
+                    {t('aiHub.pasteFirst.test')}
+                  </Button>
                 </div>
               );
             })}
           </div>
+          {ignoredLabels.length > 0 && (
+            <p className="text-xs text-slate-500">
+              {t('aiHub.pasteFirst.batchIgnored', { labels: ignoredLabels.join(', ') })}
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -437,10 +565,10 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           onChange={event => setText(event.target.value)}
           onPaste={event => {
             const pasted = event.clipboardData.getData('text');
-            const entries = parseProviderEntries(pasted);
+            const { entries, ignoredLabels: ignored } = parseProviderEntriesWithMeta(pasted);
             if (entries.length > 0) {
               event.preventDefault();
-              applyParsedEntries(entries);
+              applyParsedEntries(entries, ignored);
             }
           }}
           placeholder={t('aiHub.pasteFirst.emptyHint')}

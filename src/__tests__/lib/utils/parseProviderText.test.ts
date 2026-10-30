@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 
-import { parseProviderEntries, looksLikeApiKey } from '@/lib/utils/parseProviderText';
+import { parseProviderEntries, parseProviderEntriesWithMeta, looksLikeApiKey } from '@/lib/utils/parseProviderText';
 
 const TELEGRAM_POST = `[11.10.2026 9:28] ICHINOKATA: 🌐 Base URL: https://api.groq.com/openai/v1
 
@@ -187,5 +187,18 @@ describe('check-report format', () => {
     expect(allKeys).not.toContain('https://api.deepseek.com');
     expect(allKeys).not.toContain('✅ ·');
     expect(allKeys).not.toContain('DASHSCOPE WORKING');
+  });
+});
+
+describe('parseProviderEntriesWithMeta', () => {
+  it('reports the dropped captcha labels with the captured case, in first-seen order', () => {
+    const { entries, ignoredLabels } = parseProviderEntriesWithMeta(CHECK_REPORT);
+
+    expect(ignoredLabels).toEqual(['ANTICAPTCHA', 'TWOCAPTCHA']);
+    expect(entries).toEqual(parseProviderEntries(CHECK_REPORT));
+  });
+
+  it('reports nothing ignored for a plain provider paste', () => {
+    expect(parseProviderEntriesWithMeta(TELEGRAM_POST).ignoredLabels).toEqual([]);
   });
 });

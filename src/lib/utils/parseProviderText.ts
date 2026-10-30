@@ -46,6 +46,7 @@ export function looksLikeApiKey(line: string): boolean {
 
 interface ReportGroup {
   label: string;
+  displayLabel: string;
   baseUrl: string | null;
   keys: string[];
 }
@@ -60,7 +61,12 @@ function parseReportGroups(text: string): ReportGroup[] {
     if (!line) continue;
     const label = REPORT_WORKING_LABEL.exec(line) ?? REPORT_PROVIDER_LABEL.exec(line);
     if (label) {
-      const group: ReportGroup = { label: label[1].toLowerCase(), baseUrl: null, keys: buffer.splice(0) };
+      const group: ReportGroup = {
+        label: label[1].toLowerCase(),
+        displayLabel: label[1],
+        baseUrl: null,
+        keys: buffer.splice(0),
+      };
       groups.push(group);
       current = group;
       attachMode = true;
@@ -79,10 +85,15 @@ function parseReportGroups(text: string): ReportGroup[] {
   return groups;
 }
 
-function appendReportEntries(entries: ParsedProviderEntry[], text: string): void {
+function appendReportEntries(entries: ParsedProviderEntry[], ignoredLabels: string[], text: string): void {
   for (const group of parseReportGroups(text)) {
     if (group.keys.length === 0) continue;
-    if (NON_INFERENCE_LABELS.has(group.label)) continue;
+    if (NON_INFERENCE_LABELS.has(group.label)) {
+      if (!ignoredLabels.some(seen => seen.toLowerCase() === group.label)) {
+        ignoredLabels.push(group.displayLabel);
+      }
+      continue;
+    }
     const baseUrl = REPORT_BASE_URLS[group.label] ?? group.baseUrl;
     if (!baseUrl) continue;
     const keys = [...new Set(group.keys)];
@@ -125,7 +136,10 @@ function extractModels(entryText: string): string[] {
   return models;
 }
 
-export function parseProviderEntries(text: string): ParsedProviderEntry[] {
+export function parseProviderEntriesWithMeta(text: string): {
+  entries: ParsedProviderEntry[];
+  ignoredLabels: string[];
+} {
   const matches = [...text.matchAll(BASE_URL_PATTERN)];
   const entries: ParsedProviderEntry[] = [];
   for (let i = 0; i < matches.length; i += 1) {
@@ -143,6 +157,11 @@ export function parseProviderEntries(text: string): ParsedProviderEntry[] {
       models: extractModels(entryText),
     });
   }
-  appendReportEntries(entries, text);
-  return entries;
+  const ignoredLabels: string[] = [];
+  appendReportEntries(entries, ignoredLabels, text);
+  return { entries, ignoredLabels };
+}
+
+export function parseProviderEntries(text: string): ParsedProviderEntry[] {
+  return parseProviderEntriesWithMeta(text).entries;
 }
