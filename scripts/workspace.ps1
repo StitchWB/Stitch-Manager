@@ -32,7 +32,12 @@ if ($Action -eq 'Restart') {
 }
 
 New-Item -ItemType Directory -Path $plan.State -Force | Out-Null
-$lock = [IO.File]::Open((Join-Path $plan.State 'instance.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+try {
+    $lock = [IO.File]::Open((Join-Path $plan.State 'instance.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+} catch [IO.IOException] {
+    [Console]::Error.WriteLine("Workspace '$Profile' is already running. Stop it first: dev.ps1 -Action Stop -Profile $Profile")
+    exit 1
+}
 $previous = @{}
 try {
     Assert-WorkspacePortsFree $plan
