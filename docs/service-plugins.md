@@ -428,7 +428,7 @@ that need them stay `core_page`.
 | Kind | Purpose | Key fields |
 |------|---------|------------|
 | `heading` | Section heading. | `text`, `level?` (1-6). |
-| `section` | Group of nodes with an optional title. | `title?`, `nodes: UiNode[]`. |
+| `section` | Group of nodes with an optional title. | `title?`, `nodes: UiNode[]`, `collapsible?: boolean`, `defaultOpen?: boolean`. Collapsible sections use native disclosure and start closed unless `defaultOpen` is true. |
 | `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`, `placeholder?` (text/select hint; plain string or i18n key, resolved like `label`), `source?` + `valueKey?` (toggle only, v2.1: readonly switch bound to a fetched boolean - see below). |
 | `table` | Data table with optional per-row actions. | `id`, `columns: [{key, label}]`, `source: {command, params?, refreshMs?}`, `rowsKey?`, `rowActions?` (per-row action buttons; see below), `empty?` (v2.1 i18n key shown when the source returns no rows). `source.command` must be a readonly command returning rows. |
 | `button` | Action button. | `id`, `label`, `command`, `params?`, `paramsFrom?` (param key → field `id` binding), `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`, `confirm?` (v2.1 prompt string; see below), `refreshOnSuccess?` (v2.1 node ids refetched after success). |

@@ -121,7 +121,7 @@ class LiteLLMExecutor:
                 messages=payload.messages or [],
                 stream=payload.stream,
                 tools=payload.tools,
-                response_format=cast("Any", payload).response_format,
+                response_format=getattr(payload, "response_format", None),
             )
 
             async def _route(session):
@@ -201,6 +201,7 @@ class LiteLLMExecutor:
 
     async def chat(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
+        last_error: HTTPException | None = None
 
         # Try AI Gateway routing first
         routing_results = await self._try_ai_gateway_route(payload, pool=pool)
@@ -215,6 +216,10 @@ class LiteLLMExecutor:
                 try:
                     result = await self._invoke_via_gateway(payload, routing_result, config, pool=pool)
                 except Exception as e:
+                    last_error = e if isinstance(e, HTTPException) else HTTPException(
+                        status_code=502,
+                        detail={"error": {"message": _sanitize_error(e, secret=routing_result.secret)}},
+                    )
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
@@ -222,6 +227,8 @@ class LiteLLMExecutor:
                     continue
                 return result
 
+        if last_error is not None:
+            raise last_error
         raise HTTPException(
             status_code=503,
             detail={"error": {"message": f"No route available for model: {payload.model}"}},
@@ -241,6 +248,7 @@ class LiteLLMExecutor:
 
     async def messages(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
+        last_error: HTTPException | None = None
 
         # Try AI Gateway routing first
         routing_results = await self._try_ai_gateway_route(payload, pool=pool)
@@ -255,6 +263,10 @@ class LiteLLMExecutor:
                 try:
                     result = await self._invoke_via_gateway_messages(payload, routing_result, config, pool=pool)
                 except Exception as e:
+                    last_error = e if isinstance(e, HTTPException) else HTTPException(
+                        status_code=502,
+                        detail={"error": {"message": _sanitize_error(e, secret=routing_result.secret)}},
+                    )
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
@@ -262,6 +274,8 @@ class LiteLLMExecutor:
                     continue
                 return result
 
+        if last_error is not None:
+            raise last_error
         raise HTTPException(
             status_code=503,
             detail={"error": {"message": f"No route available for model: {payload.model}"}},
@@ -281,6 +295,7 @@ class LiteLLMExecutor:
 
     async def responses(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
+        last_error: HTTPException | None = None
 
         # Try AI Gateway routing first
         routing_results = await self._try_ai_gateway_route(payload, pool=pool)
@@ -295,6 +310,10 @@ class LiteLLMExecutor:
                 try:
                     result = await self._invoke_via_gateway_responses(payload, routing_result, config, pool=pool)
                 except Exception as e:
+                    last_error = e if isinstance(e, HTTPException) else HTTPException(
+                        status_code=502,
+                        detail={"error": {"message": _sanitize_error(e, secret=routing_result.secret)}},
+                    )
                     logger.warning(
                         "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                         payload.model, routing_result.credential.id[:8], e,
@@ -302,6 +321,8 @@ class LiteLLMExecutor:
                     continue
                 return result
 
+        if last_error is not None:
+            raise last_error
         raise HTTPException(
             status_code=503,
             detail={"error": {"message": f"No route available for model: {payload.model}"}},
@@ -391,6 +412,7 @@ class LiteLLMExecutor:
                         session,
                         credential_id=routing_result.credential.id,
                         endpoint_id=routing_result.endpoint.id,
+                        upstream_model_id=routing_result.upstream_model.id,
                         error=routing_result.adapter.classify_error(captured),
                         http_status=None,
                     )

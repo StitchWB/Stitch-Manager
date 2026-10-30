@@ -252,7 +252,7 @@ export async function providerAuthFlowStatus(
 /**
  * Get available models from AI proxy management API
  */
-export async function getAvailableModels(): Promise<ModelInfo[]> {
+export async function getAvailableModels(): Promise<(ModelInfo & { name?: string; protocol?: string })[]> {
   try {
     return await safeInvoke('get_available_models');
   } catch (error) {
@@ -263,7 +263,7 @@ export async function getAvailableModels(): Promise<ModelInfo[]> {
   }
 }
 
-export async function getAvailableModelsSafe(): Promise<ModelInfo[]> {
+export async function getAvailableModelsSafe(): Promise<(ModelInfo & { name?: string; protocol?: string })[]> {
   if (_inBackoff()) return [];
   try {
     return await getAvailableModels();

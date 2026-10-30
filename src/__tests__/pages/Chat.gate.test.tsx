@@ -6,6 +6,7 @@ import * as aiProxyModule from '../../lib/backend/modules/aiProxy';
 import * as aiGatewayModule from '../../lib/backend/modules/aiGateway';
 import * as apiKeysModule from '../../lib/backend/modules/apiKeys';
 import { fetchProxyStatusNow } from '../../stores/aiProxy';
+import { useChatStore } from '../../stores/chat';
 
 jest.mock('../../components/layout/Header', () => ({
   __esModule: true,
@@ -89,6 +90,21 @@ async function openSettings() {
 }
 
 describe('Chat provider-setup gate', () => {
+  it('shows the inspector for a failed request even when no assistant text was received', async () => {
+    gateway.listCredentials.mockResolvedValue([gatewayCredential] as any);
+    renderChat();
+    let id = '';
+    await act(async () => {
+      id = useChatStore.getState().addMessage({ role: 'assistant', content: '', isStreaming: false });
+      useChatStore.getState().setMessageDebug(id, {
+        apiUrl: '/v1/chat/completions', startedAt: Date.now(), requestHeaders: {}, requestBody: {},
+        responseStatus: 503, error: 'Fixture route failed',
+      });
+    });
+    expect(await screen.findByRole('button', { name: /Inspector/ })).toBeTruthy();
+    await act(async () => useChatStore.getState().removeMessage(id));
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -146,5 +162,30 @@ describe('Chat provider-setup gate', () => {
     await openSettings();
 
     expect(await screen.findByText(NO_PROVIDER_REASON)).toBeTruthy();
+  });
+
+  it('discovers models after the bridge starts without remounting the chat', async () => {
+    gateway.listCredentials.mockResolvedValue([gatewayCredential] as any);
+    proxy.getAvailableModelsSafe.mockResolvedValueOnce([]).mockResolvedValue([
+      { id: 'velly/test/sonnet', name: 'Velly · Sonnet', provider: 'velly', ownedBy: 'velly', source: 'aiProxy' },
+    ] as any);
+    renderChat();
+    await waitFor(() => expect(proxy.getAvailableModelsSafe).toHaveBeenCalledTimes(1));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(await screen.findByRole('button', { name: 'Velly · Sonnet • AI Proxy' })).toBeTruthy();
+  });
+
+  it('does not block Velly on the legacy proxy being stopped', async () => {
+    gateway.listCredentials.mockResolvedValue([gatewayCredential] as any);
+    (fetchProxyStatusNow as jest.Mock).mockResolvedValue({ running: false });
+    proxy.getAvailableModelsSafe.mockResolvedValue([
+      { id: 'velly/test/sonnet', name: 'Velly · Sonnet', provider: 'velly', ownedBy: 'velly', source: 'aiProxy', protocol: 'messages' },
+    ] as any);
+    renderChat();
+    await openSettings();
+    await screen.findByRole('button', { name: 'Velly · Sonnet • AI Proxy' });
+    expect(screen.queryByText(PROXY_DOWN_REASON)).toBeNull();
+    expect(screen.getByText('/v1/messages')).toBeTruthy();
+    expect(screen.queryByText('AI Proxy not running (debug chat disabled)')).toBeNull();
   });
 });

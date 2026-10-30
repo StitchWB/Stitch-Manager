@@ -93,6 +93,8 @@ async def _credential_to_account(
     if endpoint is not None:
         # Reverse-derive provider from endpoint name (best-effort).
         provider = endpoint.name.lower().replace(" ", "_")
+        if (endpoint.discovery_policy or {}).get("plugin_id") == "stitch-velly":
+            provider = "velly"
 
     # name = label (plain string); un-migrated rows fall back to old JSON-in-label.
     name = credential.label or ""

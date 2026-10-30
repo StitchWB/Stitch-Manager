@@ -59,6 +59,8 @@ class ClassifiedError:
     connection refused, 5xx) rather than just this one credential (e.g. a
     401/429 scoped to a single key)."""
 
+    is_model_specific: bool = False
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ProviderAdapter protocol

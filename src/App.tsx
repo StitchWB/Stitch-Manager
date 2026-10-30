@@ -54,6 +54,7 @@ import TelegramLogin from './components/auth/TelegramLogin';
 const AutoReg = lazy(() => import('./pages/AutoReg'));
 const AiProvidersPage = lazy(() => import('./pages/AiProvidersPage'));
 const AiRoutingPage = lazy(() => import('./pages/AiRoutingPage'));
+const VellyPage = lazy(() => import('./pages/VellyPage'));
 const AiMonitorPage = lazy(() => import('./pages/AiMonitorPage'));
 const AiOverview = lazy(() => import('./pages/AiOverview'));
 const AiGroupsPage = lazy(() => import('./pages/AiGroupsPage'));
@@ -608,7 +609,9 @@ function App() {
               <Route path="/ai/devbox" element={<Devbox />} />
               <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
               <Route path="/ai/chat" element={<Chat />} />
+              <Route path="/ai/plugin/stitch-velly" element={<Navigate to="/ai/velly" replace />} />
               <Route path="/ai/plugin/:id" element={<PluginPageHost />} />
+              <Route path="/ai/velly" element={<VellyPage />} />
               <Route path="/ai/providers" element={<AiProvidersPage />} />
               <Route path="/ai/routing" element={<AiRoutingPage />} />
               <Route path="/ai/monitor" element={<AiMonitorPage />} />

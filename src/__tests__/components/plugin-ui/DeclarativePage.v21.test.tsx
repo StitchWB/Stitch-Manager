@@ -151,6 +151,17 @@ function countCalls(cmd: string): number {
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 describe('DeclarativePage v2.1 renderer feedback', () => {
+  it('keeps optional settings collapsed until the user opens them', () => {
+    const schema = { nodes: [{ kind: 'section', title: 'Settings', collapsible: true, nodes: [
+      { kind: 'field', field: 'text', id: 'profile', label: 'Profile' },
+    ] }] } as unknown as PluginPageSchema;
+    const { container } = render(<DeclarativePage pluginId="fixture" schema={schema} />);
+    const details = container.querySelector('details');
+    expect(details?.open).toBe(false);
+    fireEvent.click(screen.getByText('Settings'));
+    expect(details?.open).toBe(true);
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     (safeInvoke as jest.Mock).mockResolvedValue(null);

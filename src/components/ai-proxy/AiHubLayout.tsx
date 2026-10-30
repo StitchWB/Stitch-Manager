@@ -44,7 +44,8 @@ type AiTabId =
   | 'monitor'
   | 'chat'
   | 'antigravity'
-  | 'devbox';
+  | 'devbox'
+  | 'velly';
 
 interface AiTab {
   id: string;
@@ -111,6 +112,7 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/api-keys')) return 'providers';
   if (pathname.startsWith('/ai/antigravity')) return 'antigravity';
   if (pathname.startsWith('/ai/devbox')) return 'devbox';
+  if (pathname.startsWith('/ai/velly')) return 'velly';
   return 'providers';
 }
 
@@ -120,6 +122,7 @@ function getLabel(label: string): string {
 
 export function currentRailLabel(pathname: string): string {
   const id = activeTab(pathname);
+  if (id === 'velly') return 'Velly';
   for (const group of AI_TAB_GROUPS) {
     const tab = group.tabs.find(tab => tab.id === id);
     if (tab) return getLabel(tab.label);

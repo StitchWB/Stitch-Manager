@@ -259,9 +259,8 @@ npm install                                    # Frontend dependencies
 pip install -r python/requirements-dev.txt    # Python dev dependencies
 # Note: use 'uv pip install' instead of 'pip install' for 10x faster installation
 
-# Development mode (auto-installs missing Python deps)
-.\start-dev.ps1
-# Optional: .\start-dev.ps1 -SeedFromHub <hub-path> [-ForceSeed] -WebRoot <other-frontend>
+# Development mode (workspace launcher; configure stitch-workspace.local.json first - see docs/DEVELOPMENT.md)
+pwsh -File .\dev.ps1
 
 # Production mode
 .\start.ps1
@@ -291,9 +290,8 @@ npm install                                    # Frontend dependencies
 pip install -r python/requirements-dev.txt    # Python dev dependencies
 # Note: use 'uv pip install' instead of 'pip install' for 10x faster installation
 
-# Development mode (auto-installs missing Python deps)
-.\start-dev.ps1
-# Optional: .\start-dev.ps1 -SeedFromHub <hub-path> [-ForceSeed] -WebRoot <other-frontend>
+# Development mode (workspace launcher; configure stitch-workspace.local.json first - see docs/DEVELOPMENT.md)
+pwsh -File .\dev.ps1
 
 # Production mode
 .\start.ps1
@@ -539,9 +537,8 @@ npm install                                    # Frontend dependencies
 pip install -r python/requirements-dev.txt    # Python dev dependencies
 # Note: use 'uv pip install' instead of 'pip install' for 10x faster installation
 
-# Development mode (auto-installs missing Python deps)
-.\start-dev.ps1
-# Optional: .\start-dev.ps1 -SeedFromHub <hub-path> [-ForceSeed] -WebRoot <other-frontend>
+# Development mode (workspace launcher; configure stitch-workspace.local.json first - see docs/DEVELOPMENT.md)
+pwsh -File .\dev.ps1
 
 # Production mode
 .\start.ps1

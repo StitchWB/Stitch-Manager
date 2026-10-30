@@ -15,7 +15,10 @@ This subpackage has NO dependency on ``schemas.py``/``service.py``/
 """
 
 # Importing this module registers openai_compatible, anthropic, gemini.
-from stitch_backend.domains.ai_gateway.adapters import configurable  # noqa: F401
+from stitch_backend.domains.ai_gateway.adapters import (
+    configurable,  # noqa: F401
+    velly,  # noqa: F401
+)
 from stitch_backend.domains.ai_gateway.adapters.base import (
     ClassifiedError,
     ProbeResult,

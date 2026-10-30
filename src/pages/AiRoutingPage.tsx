@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import Header from '../components/layout/Header';
 import { IdeConfigWizard } from '../components/ai-proxy/IdeConfigWizard';
+import { VellyConnectionCard } from '../components/ai-proxy/VellyConnectionCard';
 import { AiProxyControlsSection } from '../components/ai-proxy/sections/AiProxyControlsSection';
 import { UserProxyCard } from '../components/ai-proxy/UserProxyCard';
 import { RotationSettingsPanel } from '../components/ai-proxy/sections/RotationSettingsPanel';
@@ -145,6 +146,7 @@ export default function AiRoutingPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 space-y-3 overflow-auto p-3 md:p-4">
           <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3">
+            {routingTab === 'board' && <VellyConnectionCard />}
             {routingTab === 'board' && (
               <RoutingGraphBoard
                 accounts={accounts}

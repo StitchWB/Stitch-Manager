@@ -38,6 +38,12 @@ def _required_messages(payload: GatewayRequest) -> list[dict[str, JsonValue]]:
     return payload.messages
 
 
+def _adapter_options(payload: GatewayRequest) -> dict[str, Any]:
+    return payload.model_dump(mode="json", exclude_none=True, exclude={
+        "model", "provider", "messages", "input", "stream", "base_url", "secret", "default_headers",
+    })
+
+
 async def invoke_via_gateway(
     executor: LiteLLMExecutor,
     payload: GatewayRequest,
@@ -77,6 +83,7 @@ async def invoke_via_gateway(
             messages=messages,
             stream=payload.stream,
             default_headers=routing_result.default_headers,
+            **_adapter_options(payload),
         )
 
         latency = time.time() - start_time
@@ -116,6 +123,7 @@ async def invoke_via_gateway(
                     session,
                     credential_id=routing_result.credential.id,
                     endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
                     error=None,
                     http_status=200,
                 )
@@ -164,6 +172,7 @@ async def invoke_via_gateway(
                     session,
                     credential_id=routing_result.credential.id,
                     endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
                     error=routing_result.adapter.classify_error(exc),
                     http_status=None,
                 )
@@ -205,13 +214,15 @@ async def invoke_via_gateway_messages(
     start_time = time.time()
 
     try:
-        response = await routing_result.adapter.invoke(
+        invoke = getattr(routing_result.adapter, "invoke_messages", routing_result.adapter.invoke)
+        response = await invoke(
             base_url=routing_result.endpoint.base_url,
             secret=routing_result.secret,
             model=routing_result.upstream_model.upstream_model_id,
             messages=messages,
             stream=payload.stream,
             default_headers=routing_result.default_headers,
+            **_adapter_options(payload),
         )
 
         latency = time.time() - start_time
@@ -251,6 +262,7 @@ async def invoke_via_gateway_messages(
                     session,
                     credential_id=routing_result.credential.id,
                     endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
                     error=None,
                     http_status=200,
                 )
@@ -301,6 +313,7 @@ async def invoke_via_gateway_messages(
                     session,
                     credential_id=routing_result.credential.id,
                     endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
                     error=routing_result.adapter.classify_error(exc),
                     http_status=None,
                 )
@@ -356,6 +369,7 @@ async def invoke_via_gateway_responses(
             input=input_data,
             stream=payload.stream,
             default_headers=routing_result.default_headers,
+            **_adapter_options(payload),
         )
 
         latency = time.time() - start_time
@@ -395,6 +409,7 @@ async def invoke_via_gateway_responses(
                     session,
                     credential_id=routing_result.credential.id,
                     endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
                     error=None,
                     http_status=200,
                 )
@@ -445,6 +460,7 @@ async def invoke_via_gateway_responses(
                     session,
                     credential_id=routing_result.credential.id,
                     endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
                     error=routing_result.adapter.classify_error(exc),
                     http_status=None,
                 )

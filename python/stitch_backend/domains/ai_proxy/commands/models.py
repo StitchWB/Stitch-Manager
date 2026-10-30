@@ -27,6 +27,18 @@ _CACHE_TTL = 300  # seconds
 
 @register_command("get_available_models", readonly=True)
 async def cmd_get_available_models(params: dict) -> list:
+    result = await _get_provider_models(params)
+    from stitch_backend.config import get_settings
+    from stitch_backend.database import run_in_read_session
+    from stitch_backend.domains.ai_gateway.velly_bridge import list_velly_models
+
+    if not get_settings().desktop_mode:
+        return result
+    models = await run_in_read_session(list_velly_models)
+    return [row for row in result if row.get("provider") != "velly"] + models
+
+
+async def _get_provider_models(params: dict) -> list:
     """Return models from actually connected providers via real API calls.
 
     Session discipline: the DB session is held ONLY for the short preload

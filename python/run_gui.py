@@ -10,7 +10,8 @@ Usage::
 
 By default this launcher starts the backend on port 25584.  In dev mode the
 webview loads the Vite dev-server URL.  ``--external-backend`` makes the
-launcher use an existing backend instead, which is used by start-dev.ps1.
+launcher use an existing backend instead, which is used by the dev workspace
+launcher (dev.ps1).
 """
 
 from __future__ import annotations

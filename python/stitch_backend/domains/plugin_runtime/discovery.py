@@ -235,6 +235,11 @@ async def _start_one(
         )
         child_env.update(opencode_child_env())
 
+    if manifest.id == "stitch-velly":
+        from stitch_backend.domains.plugin_runtime.velly_sidecar import velly_child_env
+
+        child_env.update(velly_child_env())
+
     host_driver = host_driver_eligible(manifest.capabilities, source)
     if host_driver:
         from stitch_backend.domains.plugin_distribution.entitlements import (
@@ -270,6 +275,14 @@ async def _start_one(
             manifest.id,
         )
         return False
+    # one RPC reader owns the reused sidecar's stdout pipe; a second host attach races it
+    existing = get_host(manifest.id)
+    if existing is not None and existing is not host and existing.rpc.is_alive:
+        logger.info(
+            "Service plugin %s already running (pid=%s) — reusing host",
+            manifest.id, existing.status().get("pid"),
+        )
+        return True
     result = await host.start()
     if result.get("status") != "running":
         logger.warning(

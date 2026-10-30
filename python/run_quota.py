@@ -10,15 +10,19 @@ Usage:
 Called from backend (AccountStatusService::check_kiro_status).
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoreg.services.quota_service import QuotaInfo, UsageInfo
 
 # Ensure autoreg package is on sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'autoreg'))
-
-from autoreg.services.quota_service import QuotaInfo, QuotaService, UsageInfo
 
 
 def quota_info_to_dict(info: QuotaInfo | None) -> dict:
@@ -84,6 +88,8 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        from autoreg.services.quota_service import QuotaService
+
         service = QuotaService()
 
         if args.token:
