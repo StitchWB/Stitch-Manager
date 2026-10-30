@@ -26,6 +26,7 @@ export const ProviderId = {
   CODEBUFF: 'codebuff',
   DAHL: 'dahl',
   GITCLEAN: 'gitclean',
+  GNAME_EUCC: 'gname_eucc',
   GROK: 'grok',
   HAZE: 'haze',
   HONEN: 'honen',
@@ -45,6 +46,7 @@ export const ProviderId = {
   TYPE: 'type',
   VANI: 'vani',
   VETTA: 'vetta',
+  WISPBYTE: 'wispbyte',
 } as const;
 
 export type ProviderId = (typeof ProviderId)[keyof typeof ProviderId];
@@ -264,6 +266,14 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     isAiProxy: false,
     minEngineApi: 1,
   },
+  [ProviderId.GNAME_EUCC]: {
+    id: ProviderId.GNAME_EUCC,
+    displayName: 'Gname EUCC',
+    category: 'cloud',
+    hasAutoreg: true,
+    isAiProxy: false,
+    minEngineApi: 1,
+  },
   [ProviderId.GROK]: {
     id: ProviderId.GROK,
     displayName: 'Grok (xAI)',
@@ -414,6 +424,14 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     category: 'ai',
     hasAutoreg: true,
     isAiProxy: true,
+    minEngineApi: 1,
+  },
+  [ProviderId.WISPBYTE]: {
+    id: ProviderId.WISPBYTE,
+    displayName: 'Wispbyte',
+    category: 'cloud',
+    hasAutoreg: true,
+    isAiProxy: false,
     minEngineApi: 1,
   },
 };

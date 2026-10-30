@@ -22,9 +22,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.ai_gateway.adapters.base import (
@@ -33,6 +34,7 @@ from stitch_backend.domains.ai_gateway.adapters.base import (
 )
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
+    CredentialModelAccess,
     _utcnow,
 )
 from stitch_backend.domains.ai_gateway.service import (
@@ -58,6 +60,9 @@ _PROBE_STATES = (
     "degraded",
     "unknown",
 )
+
+# у non-velly кред метку temporarily_unavailable не пересчитывает никто — это односторонняя дверь
+_MODEL_MARK_TTL_SECONDS = 600
 
 
 class ProbeWorker:
@@ -124,6 +129,8 @@ class ProbeWorker:
         """
         start = time.monotonic()
 
+        await cls._expire_stale_model_marks()
+
         # 1. Load probe targets (read-only).
         targets = await cls._load_probe_targets()
         if not targets:
@@ -153,6 +160,27 @@ class ProbeWorker:
 
         elapsed = time.monotonic() - start
         logger.info("ProbeWorker: pass complete in %.1fs", elapsed)
+
+    @classmethod
+    async def _expire_stale_model_marks(cls) -> None:
+        """Reset ``temporarily_unavailable`` access marks older than the TTL."""
+
+        async def _op(session: AsyncSession) -> None:
+            cutoff = _utcnow() - timedelta(seconds=_MODEL_MARK_TTL_SECONDS)
+            await session.execute(
+                update(CredentialModelAccess)
+                .where(
+                    CredentialModelAccess.status == "temporarily_unavailable",
+                    CredentialModelAccess.last_verified_at < cutoff,
+                )
+                .values(status="available")
+            )
+            await session.flush()
+
+        try:
+            await run_in_session(_op)
+        except Exception:
+            logger.exception("ProbeWorker: failed to expire stale model marks")
 
     @classmethod
     async def _load_probe_targets(cls) -> list[dict[str, Any]]:

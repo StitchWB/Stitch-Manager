@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 
-import { parseProviderEntries } from '@/lib/utils/parseProviderText';
+import { parseProviderEntries, looksLikeApiKey } from '@/lib/utils/parseProviderText';
 
 const TELEGRAM_POST = `[11.10.2026 9:28] ICHINOKATA: 🌐 Base URL: https://api.groq.com/openai/v1
 
@@ -109,5 +109,83 @@ describe('parseProviderEntries', () => {
     );
 
     expect(entries[0].keys).toEqual(['sk-abcdefghijklmnop1234567890']);
+  });
+});
+
+const CHECK_REPORT = `[29.10.2026 8:13] X: 📊 Отчёт: 10
+DASHSCOPE (отвечают): 8 · балансовых: 2 · Σ $98.35
+ANTICAPTCHA $91.80 WORKING
+0f1e2d3c4b5a697886756454342415141
+DASHSCOPE WORKING
+sk-11111111111111111111111111111111
+sk-ws-AAAA.BBBB.CCCC.DDDD.EEEE.FFFF
+TWOCAPTCHA $6.55 WORKING
+1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7
+🔑 Чек API — deepseek
+sk-22222222222222222222222222222222
+· Провайдер: deepseek
+Основной эндпоинт:
+✅ ·
+https://api.deepseek.com
+✅ чат работает · 3 проб · api.deepseek.com
+✅ deepseek-v4-pro — 200 · 1.8с`;
+
+describe('looksLikeApiKey', () => {
+  it('accepts whole-line key shapes', () => {
+    for (const line of [
+      'sk-test-key-123',
+      'sk-abcdefghijklmnop1234567890',
+      'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6',
+      'sk-ws-H.EHXEDRR.pnSb.MEQCIAQh',
+    ]) {
+      expect(looksLikeApiKey(line)).toBe(true);
+    }
+  });
+
+  it('rejects model names, URLs and report noise lines', () => {
+    for (const line of [
+      'deepseek-v4-pro',
+      'https://api.deepseek.com',
+      '✅ ·',
+      '[29.10.2026 8:13] x: 10',
+      'DASHSCOPE WORKING',
+    ]) {
+      expect(looksLikeApiKey(line)).toBe(false);
+    }
+  });
+});
+
+describe('check-report format', () => {
+  it('yields one entry per inference provider with the resolved canonical base URLs', () => {
+    const entries = parseProviderEntries(CHECK_REPORT);
+
+    expect(entries.map(entry => entry.baseUrl)).toEqual([
+      'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      'https://api.deepseek.com/v1',
+    ]);
+    expect(entries.every(entry => entry.name === null)).toBe(true);
+    expect(entries.every(entry => entry.models.length === 0)).toBe(true);
+  });
+
+  it('collects the WORKING-list keys and the key preceding the provider label', () => {
+    const entries = parseProviderEntries(CHECK_REPORT);
+
+    expect(entries[0].keys).toEqual([
+      'sk-11111111111111111111111111111111',
+      'sk-ws-AAAA.BBBB.CCCC.DDDD.EEEE.FFFF',
+    ]);
+    expect(entries[1].keys).toEqual(['sk-22222222222222222222222222222222']);
+  });
+
+  it('drops captcha-service groups and never turns noise lines into keys', () => {
+    const allKeys = parseProviderEntries(CHECK_REPORT).flatMap(entry => entry.keys);
+
+    expect(allKeys).toHaveLength(3);
+    expect(allKeys).not.toContain('0f1e2d3c4b5a697886756454342415141');
+    expect(allKeys).not.toContain('1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7');
+    expect(allKeys).not.toContain('deepseek-v4-pro');
+    expect(allKeys).not.toContain('https://api.deepseek.com');
+    expect(allKeys).not.toContain('✅ ·');
+    expect(allKeys).not.toContain('DASHSCOPE WORKING');
   });
 });

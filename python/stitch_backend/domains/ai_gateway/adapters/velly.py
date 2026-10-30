@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import httpx
+
 from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError, register_adapter
 from stitch_backend.domains.ai_gateway.adapters.configurable import ConfigurableAdapter
 
@@ -63,10 +65,32 @@ class VellyAdapter(ConfigurableAdapter):
         result = super().classify_error(exc, http_status=status, response_headers=response_headers)
         if type(exc).__name__ in {"APIConnectionError", "Timeout", "APITimeoutError"}:
             return ClassifiedError(category="transport_error", is_endpoint_wide=True)
+        # velly-ошибки по-русски: «подписк/тариф» — аккаунт целиком, «подключение упало» — весь апстрим
+        body = _error_body_text(exc)
+        if status == 403 and ("подписк" in body or "тариф" in body):
+            return ClassifiedError(
+                category="quota_exhausted",
+                retry_after_seconds=result.retry_after_seconds,
+            )
+        if status == 503 and "подключение упало" in body:
+            return ClassifiedError(
+                category="server_error",
+                retry_after_seconds=result.retry_after_seconds,
+                is_endpoint_wide=True,
+            )
         if result.category in {"server_error", "model_not_found", "model_access_denied", "client_error"} or status in (403, 429):
             result.is_model_specific = True
             result.is_endpoint_wide = False
         return result
+
+
+def _error_body_text(exc: BaseException) -> str:
+    try:
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.text.lower()
+        return str(exc).lower()
+    except Exception:
+        return ""
 
 
 for _protocol in ("messages", "responses", "chat"):

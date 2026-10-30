@@ -22,7 +22,8 @@ Transition rules:
         → rate_limited  (set next_retry_at from retry_after_seconds if known)
 
     quota_exhausted
-        → quota_exhausted  (set quota_reset_at from retry_after_seconds if known)
+        → quota_exhausted  (set quota_reset_at + next_retry_at from
+          retry_after_seconds if known, else a 15-minute default)
 
     server_error | transport_error
         → degraded  (increment consecutive_failures, exponential backoff
@@ -36,6 +37,8 @@ Transition rules:
         → disabled  (terminal — no automatic recovery; only
           :func:`disable_credential` sets this, and once set,
           :func:`transition_credential` refuses to move it)
+
+    2xx success also clears quota_reset_at alongside next_retry_at.
 
 ``cooldown`` is a valid state in the vocabulary but is not set by any automatic
 transition here — it is reserved for a future manual/operational cooldown
@@ -68,6 +71,9 @@ _VALID_STATES = frozenset({
 # jittered/decorrelated backoff if retry storms become a problem under load.
 _BACKOFF_BASE_SECONDS = 2
 _BACKOFF_CAP_SECONDS = 3600
+
+# без дефолта ProbeWorker перепробует квота-мёртвую креду каждый свой цикл (300с)
+_QUOTA_DEFAULT_RETRY = timedelta(seconds=900)
 
 
 def exponential_backoff(consecutive_failures: int) -> timedelta:
@@ -125,6 +131,7 @@ async def transition_credential(
         credential.last_success_at = now
         credential.status_reason = None
         credential.next_retry_at = None
+        credential.quota_reset_at = None
         credential.updated_at = now
         await session.flush()
         return
@@ -165,6 +172,9 @@ async def transition_credential(
         credential.status_reason = "Quota exhausted"
         if error.retry_after_seconds is not None:
             credential.quota_reset_at = now + timedelta(seconds=error.retry_after_seconds)
+        else:
+            credential.quota_reset_at = now + _QUOTA_DEFAULT_RETRY
+        credential.next_retry_at = credential.quota_reset_at
         credential.last_failure_at = now
     elif category in ("server_error", "transport_error"):
         credential.runtime_status = "degraded"

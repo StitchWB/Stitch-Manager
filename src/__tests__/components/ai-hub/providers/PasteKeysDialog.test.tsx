@@ -269,3 +269,123 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
     });
   });
 });
+
+const CHECK_REPORT_PASTE = `[29.10.2026 8:13] X: 📊 Отчёт: 10
+DASHSCOPE (отвечают): 8 · балансовых: 2 · Σ $98.35
+ANTICAPTCHA $91.80 WORKING
+0f1e2d3c4b5a697886756454342415141
+DASHSCOPE WORKING
+sk-11111111111111111111111111111111
+sk-ws-AAAA.BBBB.CCCC.DDDD.EEEE.FFFF
+TWOCAPTCHA $6.55 WORKING
+1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7
+🔑 Чек API — deepseek
+sk-22222222222222222222222222222222
+· Провайдер: deepseek
+Основной эндпоинт:
+✅ ·
+https://api.deepseek.com
+✅ чат работает · 3 проб · api.deepseek.com
+✅ deepseek-v4-pro — 200 · 1.8с`;
+
+const DEEPSEEK_REPORT_PASTE = `🔑 Чек API — deepseek
+sk-33333333333333333333333333333333
+· Провайдер: deepseek
+Основной эндпоинт:
+✅ ·
+https://api.deepseek.com
+✅ чат работает · 3 проб · api.deepseek.com`;
+
+const KEYLESS_REPORT_PASTE = `[29.10.2026 8:13] X: 📊 Отчёт: 10
+DASHSCOPE (отвечают): 8 · балансовых: 2 · Σ $98.35
+ANTICAPTCHA $91.80 WORKING
+DASHSCOPE WORKING
+TWOCAPTCHA $6.55 WORKING
+🔑 Чек API — deepseek
+· Провайдер: deepseek
+Основной эндпоинт:
+✅ ·
+https://api.deepseek.com
+✅ чат работает · 3 проб · api.deepseek.com
+✅ deepseek-v4-pro — 200 · 1.8с`;
+
+describe('PasteKeysDialog check-report paste', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockEndpoints.length = 0;
+    mockCreateCredential.mockResolvedValue({ id: 'cred-new' });
+    mockFetchEndpoints.mockResolvedValue(undefined);
+    mockCreateEndpoint.mockImplementation(async (params: { name: string; baseUrl: string; adapterType: string }) => ({
+      id: `ep-report-${mockCreateEndpoint.mock.calls.length}`,
+      name: params.name,
+      adapterType: params.adapterType,
+      baseUrl: params.baseUrl,
+      enabled: true,
+      circuitState: 'closed',
+      createdAt: '2026-01-01T00:00:00Z',
+    }));
+  });
+
+  it('imports a check-report blob as provider groups without captcha services', async () => {
+    const user = userEvent.setup();
+    await navigator.clipboard.writeText(CHECK_REPORT_PASTE);
+    const onClose = jest.fn();
+    renderDialog({ onClose });
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+
+    expect(await screen.findByText('aiHub.pasteFirst.batchTitle')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.batchAddAll' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockCreateEndpoint).toHaveBeenCalledTimes(2);
+    expect(mockCreateEndpoint).toHaveBeenNthCalledWith(1, {
+      name: 'dashscope.aliyuncs.com',
+      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      adapterType: 'openai_compatible',
+      enabled: true,
+    });
+    expect(mockCreateEndpoint).toHaveBeenNthCalledWith(2, {
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      adapterType: 'openai_compatible',
+      enabled: true,
+    });
+    expect(mockCreateCredential).toHaveBeenCalledTimes(3);
+    expect(mockCreateCredential.mock.calls.map(call => call[0].secret)).toEqual([
+      'sk-11111111111111111111111111111111',
+      'sk-ws-AAAA.BBBB.CCCC.DDDD.EEEE.FFFF',
+      'sk-22222222222222222222222222222222',
+    ]);
+  });
+
+  it('prefills the DeepSeek preset when a single-provider report is pasted into the textarea', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste(DEEPSEEK_REPORT_PASTE);
+
+    expect(
+      (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+    ).toBe('DeepSeek');
+    expect(
+      (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+    ).toBe('https://api.deepseek.com/v1');
+    expect((textarea as HTMLTextAreaElement).value).toBe('sk-33333333333333333333333333333333');
+  });
+
+  it('keeps a keyless report paste as raw text without key rows', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste(KEYLESS_REPORT_PASTE);
+
+    expect((textarea as HTMLTextAreaElement).value).toBe(KEYLESS_REPORT_PASTE);
+    expect(screen.queryByText(/aiHub\.providersPage\.keysShort/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' })).toBeDisabled();
+  });
+});

@@ -247,12 +247,12 @@ class ConfigurableAdapter:
             category = "auth_failed"
         elif status == 429:
             category = "rate_limited"
+        elif 500 <= status < 600:
+            category = "server_error"
         elif status == 404 and "model" in lowered_body:
             category = "model_not_found"
         elif status == 402 or "quota" in lowered_body or "insufficient" in lowered_body:
             category = "quota_exhausted"
-        elif 500 <= status < 600:
-            category = "server_error"
         elif status == 400:
             category = "client_error"
         else:

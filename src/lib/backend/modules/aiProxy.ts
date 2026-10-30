@@ -37,9 +37,6 @@ let _backoffUntil = 0;
 const _inBackoff = (): boolean => Date.now() < _backoffUntil;
 const _startBackoff = (): void => { _backoffUntil = Date.now() + 5000; };
 
-// A transient backend failure must serve the last good list, not an empty pool.
-let _lastGoodModels: (ModelInfo & { name?: string; protocol?: string })[] = [];
-
 export interface ProviderCapability {
   provider: string;
   supportsApiKeys: boolean;
@@ -267,11 +264,9 @@ export async function getAvailableModels(): Promise<(ModelInfo & { name?: string
 }
 
 export async function getAvailableModelsSafe(): Promise<(ModelInfo & { name?: string; protocol?: string })[]> {
-  if (_inBackoff()) return _lastGoodModels;
+  if (_inBackoff()) return [];
   try {
-    const models = await getAvailableModels();
-    _lastGoodModels = models;
-    return models;
+    return await getAvailableModels();
   } catch (error) {
     if (
       isIpcUnavailableError(error) ||
@@ -279,7 +274,7 @@ export async function getAvailableModelsSafe(): Promise<(ModelInfo & { name?: st
       isAiProxyBackendUnavailableError(error)
     ) {
       _startBackoff();
-      return _lastGoodModels;
+      return [];
     }
     throw error;
   }
