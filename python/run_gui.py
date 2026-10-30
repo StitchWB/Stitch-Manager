@@ -55,8 +55,8 @@ import uvicorn  # noqa: E402
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-API_PORT = 25584
-VITE_DEV_PORT = 5174
+API_PORT = int(os.environ.get("STITCH_API_PORT", "25584"))
+VITE_DEV_PORT = int(os.environ.get("STITCH_WEB_PORT", "5174"))
 HEALTH_URL = f"http://127.0.0.1:{API_PORT}/health"
 HEALTH_TIMEOUT = 20  # seconds
 WATCHDOG_INTERVAL = 5  # seconds between health checks

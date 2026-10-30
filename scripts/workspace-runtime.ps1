@@ -461,6 +461,9 @@ try {
 
     if (-not $NoDesktop) {
         Write-Host "[DESKTOP] Starting Stitch Manager window..." -ForegroundColor Blue
+        # run_gui.py resolves its health URL and webview target from these.
+        $env:STITCH_API_PORT = "$API_PORT"
+        $env:STITCH_WEB_PORT = "$VITE_PORT"
         $desktopProcess = Start-Process `
             -FilePath $desktopPythonCommand `
             -ArgumentList @("`"$(Join-Path $PSScriptRoot '../python/run_gui.py')`"", "--dev", "--external-backend") `
