@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 if (!('scrollIntoView' in HTMLElement.prototype)) {
@@ -574,5 +574,25 @@ describe('PasteKeysDialog ignored providers and credential dedup', () => {
       authType: 'api_key',
       secret: 'sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7',
     });
+  });
+
+  it('parses a bulk insert delivered only through onChange (webview paste without clipboardData)', async () => {
+    renderDialog();
+    await Promise.resolve();
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    fireEvent.change(textarea, {
+      target: { value: 'https://api.reformboss.com/v1\nsk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7' },
+    });
+
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+      ).toBe('https://api.reformboss.com/v1');
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+      ).toBe('api.reformboss.com');
+    });
+    expect((textarea as HTMLTextAreaElement).value).toBe('sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
   });
 });
