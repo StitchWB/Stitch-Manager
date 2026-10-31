@@ -25,7 +25,7 @@ interface PasteKeysDialogProps {
   open: boolean;
   endpoint: ProviderEndpoint | null;
   onClose: () => void;
-  onAdded?: (endpointId: string) => void;
+  onAdded?: (endpointIds: string[]) => void;
 }
 
 const ADAPTER_DEFAULT_URLS: Record<string, string> = {
@@ -247,6 +247,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     try {
       let added = 0;
       let skipped = 0;
+      const targetIds: string[] = [];
       for (const group of groupEntriesByBaseUrl(batchEntries)) {
         if (selected[group.baseUrl] === false) continue;
         const groupTest = groupTests[group.baseUrl];
@@ -270,6 +271,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
             if (credential.providerEndpointId === existing.id) known.add(credential.fingerprint);
           }
         }
+        let groupAdded = 0;
         for (const key of keysToAdd) {
           if (known.has(await computeCredentialFingerprint(target.id, key))) {
             skipped += 1;
@@ -277,7 +279,9 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           }
           await createCredential({ providerEndpointId: target.id, authType: 'api_key', secret: key });
           added += 1;
+          groupAdded += 1;
         }
+        if (groupAdded > 0) targetIds.push(target.id);
       }
       await fetchEndpoints();
       toast.success(
@@ -286,12 +290,13 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           : t('aiHub.pasteFirst.addedToast', { count: added }),
       );
       onClose();
+      if (targetIds.length > 0) onAdded?.(targetIds);
     } catch (error) {
       toast.error(t('aiHub.pasteFirst.addFailed', { msg: error instanceof Error ? error.message : String(error) }));
     } finally {
       setSaving(false);
     }
-  }, [batchEntries, selected, groupTests, endpoints, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose]);
+  }, [batchEntries, selected, groupTests, endpoints, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose, onAdded]);
 
   const handleTest = useCallback(async () => {
     if (!canTest) return;
@@ -365,7 +370,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           : t('aiHub.pasteFirst.addedToast', { count: fresh.length }),
       );
       onClose();
-      onAdded?.(targetId);
+      onAdded?.([targetId]);
     } catch (error) {
       toast.error(t('aiHub.pasteFirst.addFailed', { msg: error instanceof Error ? error.message : String(error) }));
     } finally {

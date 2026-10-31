@@ -562,6 +562,7 @@ export interface AiHubTranslations {
       modelsHint: string;
       modelsFound: string;
       modelsLater: string;
+  verifyLater: string;
       batchTitle: string;
       batchAddAll: string;
       batchAddSelected: string;

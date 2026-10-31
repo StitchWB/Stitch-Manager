@@ -564,6 +564,7 @@ export const aiHub: AiHubTranslations = {
       modelsHint: "Models are discovered automatically after the provider is added — refresh anytime from the Models tab.",
       modelsFound: "Discovered {count} model(s)",
       modelsLater: "Models will refresh automatically",
+    verifyLater: "Connection check failed — key statuses will update via the background probe",
       batchTitle: "Multiple providers detected",
       batchAddAll: "Add all ({count})",
       batchAddSelected: "Add selected ({count})",

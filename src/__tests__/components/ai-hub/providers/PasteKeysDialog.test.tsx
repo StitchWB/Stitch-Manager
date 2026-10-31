@@ -127,7 +127,7 @@ describe('PasteKeysDialog provider preset picker', () => {
     await user.type(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint'), 'sk-test-key-123');
     await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
 
-    await waitFor(() => expect(onAdded).toHaveBeenCalledWith('ep-new'));
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['ep-new']));
     expect(mockCreateEndpoint).toHaveBeenCalledWith({
       name: 'OpenAI',
       baseUrl: 'https://api.openai.com/v1',
@@ -158,7 +158,7 @@ describe('PasteKeysDialog provider preset picker', () => {
 
     await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
 
-    await waitFor(() => expect(onAdded).toHaveBeenCalledWith('ep-new'));
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['ep-new']));
     expect(mockCreateCredential).toHaveBeenCalledWith({
       providerEndpointId: 'ep-new',
       authType: 'api_key',
@@ -175,7 +175,7 @@ describe('PasteKeysDialog provider preset picker', () => {
     await user.type(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint'), 'sk-existing-456');
     await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
 
-    await waitFor(() => expect(onAdded).toHaveBeenCalledWith('ep-new'));
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['ep-new']));
     expect(mockCreateEndpoint).not.toHaveBeenCalled();
   });
 
@@ -246,7 +246,7 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
       [{ providerEndpointId: 'ep-batch-2', authType: 'api_key', secret: 'sk-222222222222222222222222' }],
     ]);
     expect(mockFetchEndpoints).toHaveBeenCalledTimes(1);
-    expect(onAdded).not.toHaveBeenCalled();
+    expect(onAdded).toHaveBeenCalledWith(['ep-batch-1', 'ep-batch-2']);
   });
 
   it('reuses an existing endpoint with the same base URL instead of creating a duplicate', async () => {
@@ -286,7 +286,8 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
     const user = userEvent.setup();
     await navigator.clipboard.writeText(MULTI_PROVIDER_PASTE);
     const onClose = jest.fn();
-    renderDialog({ onClose });
+    const onAdded = jest.fn();
+    renderDialog({ onClose, onAdded });
 
     await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
     expect(await screen.findByText('aiHub.pasteFirst.batchTitle')).toBeTruthy();
@@ -298,6 +299,7 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
     await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddSelected/ }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(onAdded).toHaveBeenCalledWith(['ep-batch-1']);
     expect(mockCreateEndpoint).toHaveBeenCalledTimes(1);
     expect(mockCreateEndpoint).toHaveBeenCalledWith({
       name: 'apihub.agnes-ai.com',
