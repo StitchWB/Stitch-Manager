@@ -543,4 +543,36 @@ describe('PasteKeysDialog ignored providers and credential dedup', () => {
       expect.stringContaining('aiHub.pasteFirst.addedToastSkipped'),
     );
   });
+
+  it('switches to new-provider mode when the pasted base URL differs from the scoped endpoint', async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      endpoint: { ...createdEndpoint, id: 'ep-velly', name: 'Velly Messages', baseUrl: 'http://127.0.0.1:38761/messages/v1' },
+    });
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('https://api.reformboss.com/v1\nsk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
+
+    expect(await screen.findByText(/aiHub\.pasteFirst\.mismatchHint/)).toBeTruthy();
+    const baseUrlInput = screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement;
+    expect(baseUrlInput.value).toBe('https://api.reformboss.com/v1');
+    expect((textarea as HTMLTextAreaElement).value).toBe('sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
+
+    await waitFor(() =>
+      expect(mockCreateEndpoint).toHaveBeenCalledWith({
+        name: 'api.reformboss.com',
+        baseUrl: 'https://api.reformboss.com/v1',
+        adapterType: 'openai_compatible',
+        enabled: true,
+      }),
+    );
+    expect(mockCreateCredential).toHaveBeenCalledWith({
+      providerEndpointId: 'ep-dedup-1',
+      authType: 'api_key',
+      secret: 'sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7',
+    });
+  });
 });

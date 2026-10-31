@@ -571,6 +571,7 @@ export interface AiHubTranslations {
       batchBack: string;
       batchIgnored: string;
       addedToastSkipped: string;
+    mismatchHint: string;
       mechanismHint: {
         oauth: string;
         web: string;

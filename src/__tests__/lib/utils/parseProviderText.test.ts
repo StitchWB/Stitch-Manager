@@ -110,6 +110,16 @@ describe('parseProviderEntries', () => {
 
     expect(entries[0].keys).toEqual(['sk-abcdefghijklmnop1234567890']);
   });
+
+  it('anchors a bare URL line followed by keys into one entry', () => {
+    const entries = parseProviderEntries(
+      'https://api.reformboss.com/v1\nsk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7',
+    );
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].baseUrl).toBe('https://api.reformboss.com/v1');
+    expect(entries[0].keys).toEqual(['sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7']);
+  });
 });
 
 const CHECK_REPORT = `[29.10.2026 8:13] X: 📊 Отчёт: 10

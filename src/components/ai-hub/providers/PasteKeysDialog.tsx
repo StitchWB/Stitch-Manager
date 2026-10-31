@@ -128,6 +128,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
   const [ignoredLabels, setIgnoredLabels] = useState<string[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [groupTests, setGroupTests] = useState<Record<string, GroupTest>>({});
+  const [forceNew, setForceNew] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -142,8 +143,11 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
       setIgnoredLabels([]);
       setSelected({});
       setGroupTests({});
+      setForceNew(false);
     });
   }, [open, endpoint]);
+
+  const scopedEndpoint = forceNew ? null : endpoint;
 
   const keys = useMemo(() => splitKeys(text), [text]);
   const batchGroups = useMemo(
@@ -151,9 +155,9 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     [batchEntries],
   );
   const selectedCount = batchGroups.filter(group => selected[group.baseUrl] !== false).length;
-  const targetUrl = endpoint ? endpoint.baseUrl : baseUrl.trim();
+  const targetUrl = scopedEndpoint ? scopedEndpoint.baseUrl : baseUrl.trim();
 
-  const canTest = keys.length > 0 && !testing && !saving && (endpoint !== null || baseUrl.trim() !== '');
+  const canTest = keys.length > 0 && !testing && !saving && (scopedEndpoint !== null || baseUrl.trim() !== '');
 
   const handlePresetChange = useCallback((id: string) => {
     setPresetId(id);
@@ -181,12 +185,21 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     if (entries.length === 1) {
       const entry = entries[0];
       const matched = presetForBaseUrl(entry.baseUrl);
+      if (endpoint && normalizeBaseUrl(entry.baseUrl) !== normalizeBaseUrl(endpoint.baseUrl)) {
+        setForceNew(true);
+        setPresetId(matched ? matched.id : CUSTOM_PRESET_ID);
+        setName(entry.name ?? (matched ? matched.label : hostFromUrl(entry.baseUrl)));
+        setBaseUrl(entry.baseUrl);
+        setAdapterType(matched ? matched.adapterType : 'openai_compatible');
+        if (entry.keys.length > 0) setText(entry.keys.join('\n'));
+        return;
+      }
       setPresetId(matched ? matched.id : CUSTOM_PRESET_ID);
       setName(entry.name ?? (matched ? matched.label : hostFromUrl(entry.baseUrl)));
       setBaseUrl(entry.baseUrl);
       if (entry.keys.length > 0) setText(entry.keys.join('\n'));
     }
-  }, []);
+  }, [endpoint]);
 
   const handleSmartPaste = useCallback(async () => {
     try {
@@ -313,7 +326,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
 
     setSaving(true);
     try {
-      let target = endpoint;
+      let target = scopedEndpoint;
       const targetExisted = target !== null;
       if (!target) {
         const trimmedName = name.trim();
@@ -361,7 +374,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     } finally {
       setSaving(false);
     }
-  }, [keys, results, endpoint, name, baseUrl, adapterType, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose, onAdded]);
+  }, [keys, results, scopedEndpoint, name, baseUrl, adapterType, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose, onAdded]);
 
   const statusTone = (status: KeyStatus): string => {
     if (status === 'ok') return 'text-emerald-300';
@@ -495,13 +508,18 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
         <div className="space-y-4">
           <p className="text-xs text-slate-500">{t('aiHub.pasteFirst.hint')}</p>
 
-        {endpoint ? (
+        {scopedEndpoint ? (
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <span className="text-slate-500">{t('aiHub.pasteFirst.providerLabel')}:</span>
-            <span className="font-medium text-slate-200">{endpoint.name}</span>
+            <span className="font-medium text-slate-200">{scopedEndpoint.name}</span>
           </div>
         ) : (
           <div className="space-y-3">
+            {forceNew && endpoint && (
+              <p className="text-xs text-amber-300">
+                {t('aiHub.pasteFirst.mismatchHint', { name: endpoint.name })}
+              </p>
+            )}
             <div>
               <label className="text-xs font-medium text-slate-300">{t('aiHub.pasteFirst.providerPresetLabel')}</label>
               <Select

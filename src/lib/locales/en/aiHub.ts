@@ -573,6 +573,7 @@ export const aiHub: AiHubTranslations = {
       batchBack: "Back",
       batchIgnored: "Ignored: {labels} - not inference providers, unused by AI Hub",
       addedToastSkipped: "Added {count} keys, {skipped} already present",
+      mismatchHint: "Pasted base URL differs from provider {name} - keys will be added as a new provider",
       mechanismHint: {
         oauth: "Paste accepts API keys only — add OAuth accounts via Add Account with browser sign-in.",
         web: "Paste accepts API keys only — web accounts are added through the browser session flow.",
