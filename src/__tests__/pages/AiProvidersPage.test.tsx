@@ -209,6 +209,16 @@ describe('AiProvidersPage (unified master-detail)', () => {
     expect(screen.getByText('https://api.openai.com/v1 · openai_compatible')).toBeTruthy();
   });
 
+  it('auto-discovers models when a provider with none is selected', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+
+    await waitFor(() => expect(gw.discoverModelsForEndpoint).toHaveBeenCalledWith('ep-openai'));
+  });
+
   it('switches the detail pane when another provider is selected', async () => {
     const user = userEvent.setup();
     renderPage();

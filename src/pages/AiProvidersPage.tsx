@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ClipboardPaste, Pencil, Plus, Server, Trash2, UserPlus, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -86,6 +86,7 @@ export default function AiProvidersPage() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [exposeModel, setExposeModel] = useState<UpstreamModel | null>(null);
+  const autoDiscovered = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     void fetchEndpoints();
@@ -262,20 +263,59 @@ export default function AiProvidersPage() {
   }, [fetchEndpoints, fetchCredentials, fetchUpstreamModels]);
 
   const handleKeysAdded = useCallback(
-    (endpointId: string) => {
-      setSelectedId(endpointId);
+    (endpointIds: string[]) => {
+      if (endpointIds.length === 0) return;
+      for (const endpointId of endpointIds) autoDiscovered.current.add(endpointId);
+      setSelectedId(endpointIds[0]);
       void (async () => {
         try {
-          const report = await discoverModelsForEndpoint(endpointId);
+          let modelsFound = 0;
+          for (const endpointId of endpointIds) {
+            const report = await discoverModelsForEndpoint(endpointId);
+            modelsFound += report.models_count;
+          }
           await fetchUpstreamModels();
-          toast.success(t('aiHub.pasteFirst.modelsFound', { count: report.models_count }));
+          toast.success(t('aiHub.pasteFirst.modelsFound', { count: modelsFound }));
         } catch {
           toast.info(t('aiHub.pasteFirst.modelsLater'));
         }
+        let verifyFailed = false;
+        try {
+          await fetchCredentials();
+          const untested = useAiGatewayStore
+            .getState()
+            .credentials.filter(
+              credential =>
+                endpointIds.includes(credential.providerEndpointId) &&
+                credential.runtimeStatus === 'unknown',
+            );
+          if (untested.length > 0) {
+            await runPool(untested.map(credential => credential.id), 8, async id => {
+              await testCredentialConnection(id);
+            });
+          }
+        } catch {
+          verifyFailed = true;
+        } finally {
+          await fetchCredentials();
+        }
+        if (verifyFailed) toast.info(t('aiHub.pasteFirst.verifyLater'));
       })();
     },
-    [fetchUpstreamModels]
+    [fetchCredentials, fetchUpstreamModels]
   );
+
+  useEffect(() => {
+    if (!selectedEndpoint || !selectedEndpoint.enabled) return;
+    if (selectedModels.length > 0 || discovering) return;
+    if (autoDiscovered.current.has(selectedEndpoint.id)) return;
+    autoDiscovered.current.add(selectedEndpoint.id);
+    setDiscovering(true);
+    discoverModelsForEndpoint(selectedEndpoint.id)
+      .then(() => fetchUpstreamModels(selectedEndpoint.id))
+      .catch(() => undefined)
+      .finally(() => setDiscovering(false));
+  }, [selectedEndpoint, selectedModels.length, discovering, fetchUpstreamModels]);
 
   const openAddManual = useCallback(() => setAddEndpointOpen(true), []);
 
