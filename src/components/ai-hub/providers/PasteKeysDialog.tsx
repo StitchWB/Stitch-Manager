@@ -580,7 +580,15 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
 
         <Textarea
           value={text}
-          onChange={event => setText(event.target.value)}
+          onChange={event => {
+            const next = event.target.value;
+            setText(next);
+            // WebView2 native paste inserts text without a usable clipboardData, so bulk inserts are parsed here too
+            if (next.length - text.length > 24) {
+              const parsed = parseProviderEntriesWithMeta(next);
+              if (parsed.entries.length > 0) applyParsedEntries(parsed.entries, parsed.ignoredLabels);
+            }
+          }}
           onPaste={event => {
             const pasted = event.clipboardData.getData('text');
             const { entries, ignoredLabels: ignored } = parseProviderEntriesWithMeta(pasted);
