@@ -121,7 +121,7 @@ export function AiProxySettings() {
     try {
       setLoading(true);
       setError(null);
-      const newStatus = await safeInvoke<ProxyStatus>('start_ai_proxy');
+      const newStatus = await safeInvoke<ProxyStatus>('start_kiro_proxy');
       setStatus(newStatus);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to start proxy');
@@ -134,7 +134,7 @@ export function AiProxySettings() {
     try {
       setLoading(true);
       setError(null);
-      const newStatus = await safeInvoke<ProxyStatus>('stop_ai_proxy');
+      const newStatus = await safeInvoke<ProxyStatus>('stop_kiro_proxy');
       setStatus(newStatus);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to stop proxy');
@@ -285,7 +285,7 @@ export function AiProxySettings() {
             // If switching to quota-only mode and proxy is running, stop it
             if (newMode === 'quota-only' && status?.running) {
               try {
-                const newStatus = await safeInvoke<ProxyStatus>('stop_ai_proxy');
+                const newStatus = await safeInvoke<ProxyStatus>('stop_kiro_proxy');
                 setStatus(newStatus);
               } catch (error) {
                 console.error('Failed to stop proxy:', error);

@@ -163,14 +163,14 @@ export type AiProxyAccountsExportFormat = 'json' | 'csv';
  * Start the AI Proxy server
  */
 export async function startAiProxy(): Promise<ProxyStatus> {
-  return safeInvoke<ProxyStatus>('start_ai_proxy');
+  return safeInvoke<ProxyStatus>('start_kiro_proxy');
 }
 
 /**
  * Stop the AI Proxy server
  */
 export async function stopAiProxy(): Promise<ProxyStatus> {
-  return safeInvoke<ProxyStatus>('stop_ai_proxy');
+  return safeInvoke<ProxyStatus>('stop_kiro_proxy');
 }
 
 /**
