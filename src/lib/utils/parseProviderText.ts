@@ -78,7 +78,18 @@ function parseReportGroups(text: string): ReportGroup[] {
       continue;
     }
     const url = REPORT_BARE_URL.exec(line);
-    if (url && current && current.baseUrl === null) current.baseUrl = url[1];
+    if (url) {
+      if (current && current.baseUrl === null) {
+        current.baseUrl = url[1];
+        attachMode = false;
+      } else {
+        const group: ReportGroup = { label: '', displayLabel: '', baseUrl: url[1], keys: buffer.splice(0) };
+        groups.push(group);
+        current = group;
+        attachMode = true;
+      }
+      continue;
+    }
     attachMode = false;
   }
   if (buffer.length > 0 && current) current.keys.push(...buffer);
