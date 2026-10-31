@@ -225,7 +225,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
       for (const result of response.results) {
         if (result.status === 'ok' || result.status === 'rate_limited') {
           ok += 1;
-        } else {
+        } else if (result.status === 'invalid') {
           invalid += 1;
           badKeys.push(result.key);
         }
@@ -315,10 +315,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
   }, [canTest, keys, targetUrl]);
 
   const handleAdd = useCallback(async () => {
-    const accepted = keys.filter(key => {
-      const status = results[key]?.status;
-      return status !== 'invalid' && status !== 'error';
-    });
+    const accepted = keys.filter(key => results[key]?.status !== 'invalid');
     if (accepted.length === 0) {
       toast.error(t('aiHub.pasteFirst.nothingToAdd'));
       return;

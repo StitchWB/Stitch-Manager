@@ -142,6 +142,30 @@ describe('PasteKeysDialog provider preset picker', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('adds a key whose probe errored on infrastructure failure', async () => {
+    const user = userEvent.setup();
+    jest.mocked(bulkTestOpenCodeApi).mockResolvedValue({
+      success: true,
+      results: [{ key: 'sk-probe-timeout-123', status: 'error' }],
+    });
+    const onAdded = jest.fn();
+    renderDialog({ onAdded });
+
+    await selectPreset(user, 'OpenAI');
+    await user.type(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint'), 'sk-probe-timeout-123');
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.test' }));
+    await waitFor(() => expect(bulkTestOpenCodeApi).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
+
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith('ep-new'));
+    expect(mockCreateCredential).toHaveBeenCalledWith({
+      providerEndpointId: 'ep-new',
+      authType: 'api_key',
+      secret: 'sk-probe-timeout-123',
+    });
+  });
+
   it('calls onAdded with the existing endpoint id when adding keys to a provider', async () => {
     const user = userEvent.setup();
     const onAdded = jest.fn();
