@@ -665,6 +665,8 @@ export interface AiHubTranslations {
       modelDisplay: string;
       modelSource: string;
       exposeModel: string;
+  exposeHint: string;
+  exposePublished: string;
       endpointSettings: string;
       nameLabel: string;
       saveLabel: string;

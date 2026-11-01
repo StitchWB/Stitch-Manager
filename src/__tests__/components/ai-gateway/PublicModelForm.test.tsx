@@ -5,6 +5,10 @@ jest.mock('@/lib/i18n', () => ({
   t: (key: string) => key,
 }));
 
+jest.mock('sonner', () => ({
+  toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
+}));
+
 jest.mock('@/components/ui', () => ({
   Button: ({ children, onClick, disabled, ...rest }: any) => (
     <button type="button" onClick={onClick} disabled={disabled} {...rest}>{children}</button>
@@ -47,6 +51,7 @@ jest.mock('@/stores/aiGateway', () => ({
   useAiGatewayStore: () => storeState,
 }));
 
+import { toast } from 'sonner';
 import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
 import type { PublicModel, UpstreamModel, ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
 
@@ -92,7 +97,8 @@ describe('PublicModelForm', () => {
   });
 
   it('creates the public model and one route target per prefilled row', async () => {
-    render(<PublicModelForm open onClose={jest.fn()} />);
+    const onCreated = jest.fn();
+    render(<PublicModelForm open onClose={jest.fn()} onCreated={onCreated} />);
 
     fireEvent.change(await screen.findByPlaceholderText('gpt-4o-mini'), {
       target: { value: 'my-model' },
@@ -117,6 +123,8 @@ describe('PublicModelForm', () => {
         enabled: true,
       }),
     );
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('my-model'));
+    expect(toast.success).toHaveBeenCalledWith('aiGateway.form.publicModelCreated');
   });
 
   it('prefills name and route from the expose prefill', async () => {

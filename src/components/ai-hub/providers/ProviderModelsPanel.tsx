@@ -23,12 +23,13 @@ export interface ProviderModelsPanelProps {
   discovering: boolean;
   onDiscover: () => void;
   onExposeModel?: (model: UpstreamModel) => void;
+  published?: Record<string, string>;
 }
 
 const RENDER_CAP = 500;
 
 export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Element {
-  const { models, loading, busy, discovering, onDiscover, onExposeModel } = props;
+  const { models, loading, busy, discovering, onDiscover, onExposeModel, published } = props;
   const visibleModels = models.slice(0, RENDER_CAP);
   const hiddenCount = models.length - visibleModels.length;
 
@@ -94,14 +95,26 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                   </TableCell>
                   {onExposeModel && (
                     <TableCell>
-                      <ButtonBase
-                        type="button"
-                        onClick={() => onExposeModel(model)}
-                        className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
-                      >
-                        <Globe size={12} className="shrink-0 text-indigo-300" />
-                        {t('aiHub.providersPage.exposeModel')}
-                      </ButtonBase>
+                      {published?.[model.id] ? (
+                        <Badge
+                          size="sm"
+                          variant="slate"
+                          title={`${t('aiHub.providersPage.exposePublished')}: ${published[model.id]}`}
+                        >
+                          <Globe size={12} className="shrink-0 text-indigo-300" />
+                          {published[model.id]}
+                        </Badge>
+                      ) : (
+                        <ButtonBase
+                          type="button"
+                          onClick={() => onExposeModel(model)}
+                          title={t('aiHub.providersPage.exposeHint')}
+                          className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
+                        >
+                          <Globe size={12} className="shrink-0 text-indigo-300" />
+                          {t('aiHub.providersPage.exposeModel')}
+                        </ButtonBase>
+                      )}
                     </TableCell>
                   )}
                 </TableRow>

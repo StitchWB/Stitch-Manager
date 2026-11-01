@@ -667,6 +667,8 @@ export const aiHub: AiHubTranslations = {
       modelDisplay: "Display",
       modelSource: "Source",
       exposeModel: "Make public",
+    exposeHint: "Expose the model through the proxy: clients call it by its public name",
+    exposePublished: "public",
       endpointSettings: "Provider settings",
       nameLabel: "Name",
       saveLabel: "Save",

@@ -7,7 +7,13 @@ import Header from '../components/layout/Header';
 import { Button, PageHeader, ButtonBase, EmptyState, StatusBadge, askConfirm } from '@/components/ui';
 import AccountModal from '@/components/ai-proxy/AccountModal';
 import { useAiGatewayStore } from '@/stores/aiGateway';
-import { discoverModelsForEndpoint, importOpencodeProviders, testCredentialConnection } from '@/lib/backend/modules/aiGateway';
+import {
+  discoverModelsForEndpoint,
+  importOpencodeProviders,
+  listPublicModels,
+  listRouteTargetsForPublicModel,
+  testCredentialConnection,
+} from '@/lib/backend/modules/aiGateway';
 import type { UpstreamModel } from '@/lib/backend/modules/aiGateway';
 import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
 import { getCustomProviders } from '@/lib/backend/modules/customProviders';
@@ -86,16 +92,34 @@ export default function AiProvidersPage() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [exposeModel, setExposeModel] = useState<UpstreamModel | null>(null);
+  const [published, setPublished] = useState<Record<string, string>>({});
   const autoDiscovered = useRef<Set<string>>(new Set());
+
+  const loadPublished = useCallback(async () => {
+    try {
+      const publicModels = await listPublicModels();
+      const targets = await Promise.all(
+        publicModels.map(publicModel => listRouteTargetsForPublicModel(publicModel.id)),
+      );
+      const map: Record<string, string> = {};
+      publicModels.forEach((publicModel, index) => {
+        for (const target of targets[index]) map[target.upstreamModelId] = publicModel.id;
+      });
+      setPublished(map);
+    } catch {
+      setPublished({});
+    }
+  }, []);
 
   useEffect(() => {
     void fetchEndpoints();
     void fetchCredentials();
     void fetchUpstreamModels();
+    void loadPublished();
     getCustomProviders()
       .then(list => setLegacyCount(list.length))
       .catch(() => setLegacyCount(0));
-  }, [fetchEndpoints, fetchCredentials, fetchUpstreamModels]);
+  }, [fetchEndpoints, fetchCredentials, fetchUpstreamModels, loadPublished]);
 
   const rosterItems = useMemo(
     () => endpoints.map(endpoint => buildRosterItem(endpoint, credentials, upstreamModels)),
@@ -525,6 +549,7 @@ export default function AiProvidersPage() {
                         discovering={discovering}
                         onDiscover={() => void handleDiscover()}
                         onExposeModel={setExposeModel}
+                        published={published}
                       />
                     )}
                     {tab === 'settings' && (
@@ -589,6 +614,7 @@ export default function AiProvidersPage() {
           open
           prefill={{ id: exposeModel.upstreamModelId, upstreamModelId: exposeModel.id }}
           onClose={() => setExposeModel(null)}
+          onCreated={() => void loadPublished()}
         />
       )}
     </div>
