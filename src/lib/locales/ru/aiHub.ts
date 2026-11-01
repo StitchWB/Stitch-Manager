@@ -575,6 +575,10 @@ export const aiHub: AiHubTranslations = {
       batchIgnored: "Игнорировано: {labels} — это не inference-провайдеры, AI Hub их не использует",
       addedToastSkipped: "Добавлено ключей: {count}, уже были: {skipped}",
       mismatchHint: "Base URL из вставки отличается от провайдера {name} — ключи будут добавлены как новый провайдер",
+      batchUrlLabel: "адрес для {label}",
+      batchUrlPlaceholder: "https://api.example.com/v1",
+      batchNoUrl: "Укажи адрес для: {labels}",
+      batchUrlMissing: "Не добавлено групп без адреса: {count}",
       mechanismHint: {
         oauth: "Вставка принимает только API-ключи — OAuth-аккаунты добавляются через «Добавить аккаунт» с входом в браузере.",
         web: "Вставка принимает только API-ключи — веб-аккаунты добавляются через сессию в браузере.",

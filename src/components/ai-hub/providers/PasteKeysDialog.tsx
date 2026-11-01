@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { Button, Checkbox, Input, Modal, Select, Textarea } from '@/components/ui';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import { bulkTestOpenCodeApi } from '@/lib/backend/modules/opencodeConfig';
-import { parseProviderEntriesWithMeta, looksLikeApiKey } from '@/lib/utils/parseProviderText';
+import { looksLikeApiKey } from '@/lib/utils/parseProviderText';
+import { parsePastedProviders, extractKeyTokens } from '@/lib/utils/parsePastedProviders';
 import { computeCredentialFingerprint } from '@/lib/utils/credentialFingerprint';
 import type { ParsedProviderEntry } from '@/lib/utils/parseProviderText';
 import { cn } from '@/lib/utils';
@@ -58,17 +59,22 @@ const CUSTOM_PRESET_ID = 'custom';
 function splitKeys(text: string): string[] {
   const seen = new Set<string>();
   const keys: string[] = [];
-  for (const raw of text.split(/[\n,;]+/)) {
-    const key = raw.trim();
-    if (!key || seen.has(key)) continue;
-    if (!looksLikeApiKey(key)) continue;
-    seen.add(key);
-    keys.push(key);
+  const push = (key: string) => {
+    const trimmed = key.replace(/[.,;:]+$/, '');
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    keys.push(trimmed);
+  };
+  for (const line of text.split('\n')) {
+    if (looksLikeApiKey(line.trim())) push(line.trim());
+    for (const key of extractKeyTokens(line)) push(key);
   }
   return keys;
 }
 
 interface ProviderGroup {
+  id: string;
+  name: string | null;
   baseUrl: string;
   keys: string[];
   models: string[];
@@ -94,7 +100,8 @@ function groupEntriesByBaseUrl(entries: ParsedProviderEntry[]): ProviderGroup[] 
   const groups = new Map<string, ProviderGroup>();
   for (const entry of entries) {
     const normalized = normalizeBaseUrl(entry.baseUrl);
-    const group = groups.get(normalized);
+    const id = normalized || `label:${(entry.name ?? '').toLowerCase()}`;
+    const group = groups.get(id);
     if (group) {
       for (const key of entry.keys) {
         if (!group.keys.includes(key)) group.keys.push(key);
@@ -103,10 +110,23 @@ function groupEntriesByBaseUrl(entries: ParsedProviderEntry[]): ProviderGroup[] 
         if (!group.models.includes(model)) group.models.push(model);
       }
     } else {
-      groups.set(normalized, { baseUrl: entry.baseUrl, keys: [...entry.keys], models: [...entry.models] });
+      groups.set(id, {
+        id,
+        name: entry.name,
+        baseUrl: entry.baseUrl,
+        keys: [...entry.keys],
+        models: [...entry.models],
+      });
     }
   }
   return [...groups.values()];
+}
+
+function groupTitle(group: ProviderGroup, url: string): string {
+  const preset = presetForBaseUrl(url);
+  if (preset) return preset.label;
+  if (url) return hostFromUrl(url);
+  return group.name ?? '';
 }
 
 export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysDialogProps) {
@@ -128,6 +148,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
   const [ignoredLabels, setIgnoredLabels] = useState<string[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [groupTests, setGroupTests] = useState<Record<string, GroupTest>>({});
+  const [groupUrls, setGroupUrls] = useState<Record<string, string>>({});
   const [forceNew, setForceNew] = useState(false);
 
   useEffect(() => {
@@ -143,6 +164,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
       setIgnoredLabels([]);
       setSelected({});
       setGroupTests({});
+      setGroupUrls({});
       setForceNew(false);
     });
   }, [open, endpoint]);
@@ -154,7 +176,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     () => (batchEntries ? groupEntriesByBaseUrl(batchEntries) : []),
     [batchEntries],
   );
-  const selectedCount = batchGroups.filter(group => selected[group.baseUrl] !== false).length;
+  const selectedCount = batchGroups.filter(group => selected[group.id] !== false).length;
   const targetUrl = scopedEndpoint ? scopedEndpoint.baseUrl : baseUrl.trim();
 
   const canTest = keys.length > 0 && !testing && !saving && (scopedEndpoint !== null || baseUrl.trim() !== '');
@@ -178,24 +200,31 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     setIgnoredLabels(ignored);
     if (entries.length > 1) {
       setBatchEntries(entries);
-      setSelected(Object.fromEntries(groupEntriesByBaseUrl(entries).map(group => [group.baseUrl, true])));
+      const groups = groupEntriesByBaseUrl(entries);
+      setSelected(Object.fromEntries(groups.map(group => [group.id, true])));
       setGroupTests({});
+      setGroupUrls(Object.fromEntries(groups.filter(group => !group.baseUrl).map(group => [group.id, ''])));
       return;
     }
     if (entries.length === 1) {
       const entry = entries[0];
       const matched = presetForBaseUrl(entry.baseUrl);
+      const entryName = matched
+        ? matched.label
+        : entry.baseUrl
+          ? hostFromUrl(entry.baseUrl)
+          : (entry.name ?? '');
       if (endpoint && normalizeBaseUrl(entry.baseUrl) !== normalizeBaseUrl(endpoint.baseUrl)) {
         setForceNew(true);
         setPresetId(matched ? matched.id : CUSTOM_PRESET_ID);
-        setName(entry.name ?? (matched ? matched.label : hostFromUrl(entry.baseUrl)));
+        setName(entryName);
         setBaseUrl(entry.baseUrl);
         setAdapterType(matched ? matched.adapterType : 'openai_compatible');
         if (entry.keys.length > 0) setText(entry.keys.join('\n'));
         return;
       }
       setPresetId(matched ? matched.id : CUSTOM_PRESET_ID);
-      setName(entry.name ?? (matched ? matched.label : hostFromUrl(entry.baseUrl)));
+      setName(entryName);
       setBaseUrl(entry.baseUrl);
       if (entry.keys.length > 0) setText(entry.keys.join('\n'));
     }
@@ -204,21 +233,25 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
   const handleSmartPaste = useCallback(async () => {
     try {
       const clipboard = await navigator.clipboard.readText();
-      const { entries, ignoredLabels: ignored } = parseProviderEntriesWithMeta(clipboard);
+      const { entries, ignoredLabels: ignored } = parsePastedProviders(clipboard);
       if (entries.length > 0) {
         applyParsedEntries(entries, ignored);
         return;
       }
-      setText(prev => (prev ? `${prev.trimEnd()}\n${clipboard.trim()}` : clipboard.trim()));
+      const recovered = splitKeys(clipboard);
+      const payload = recovered.length > 0 ? recovered.join('\n') : clipboard.trim();
+      setText(prev => (prev ? `${prev.trimEnd()}\n${payload}` : payload));
     } catch {
       toast.error(t('aiHub.pasteFirst.clipboardFailed'));
     }
   }, [applyParsedEntries]);
 
-  const handleTestGroup = useCallback(async (groupBaseUrl: string, groupKeys: string[]) => {
-    setGroupTests(prev => ({ ...prev, [groupBaseUrl]: { status: 'testing' } }));
+  const handleTestGroup = useCallback(async (group: ProviderGroup) => {
+    const url = (groupUrls[group.id] ?? group.baseUrl).trim();
+    if (!url) return;
+    setGroupTests(prev => ({ ...prev, [group.id]: { status: 'testing' } }));
     try {
-      const response = await bulkTestOpenCodeApi(groupBaseUrl, groupKeys, 10);
+      const response = await bulkTestOpenCodeApi(url, group.keys, 10);
       let ok = 0;
       let invalid = 0;
       const badKeys: string[] = [];
@@ -230,16 +263,16 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           badKeys.push(result.key);
         }
       }
-      setGroupTests(prev => ({ ...prev, [groupBaseUrl]: { status: 'done', ok, invalid, badKeys } }));
+      setGroupTests(prev => ({ ...prev, [group.id]: { status: 'done', ok, invalid, badKeys } }));
     } catch (error) {
       setGroupTests(prev => {
         const next = { ...prev };
-        delete next[groupBaseUrl];
+        delete next[group.id];
         return next;
       });
       toast.error(t('aiHub.pasteFirst.addFailed', { msg: error instanceof Error ? error.message : String(error) }));
     }
-  }, []);
+  }, [groupUrls]);
 
   const handleBatchAdd = useCallback(async () => {
     if (!batchEntries || batchEntries.length === 0) return;
@@ -247,20 +280,26 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     try {
       let added = 0;
       let skipped = 0;
+      let missingUrl = 0;
       const targetIds: string[] = [];
       for (const group of groupEntriesByBaseUrl(batchEntries)) {
-        if (selected[group.baseUrl] === false) continue;
-        const groupTest = groupTests[group.baseUrl];
+        if (selected[group.id] === false) continue;
+        const groupUrl = (groupUrls[group.id] ?? group.baseUrl).trim();
+        if (!groupUrl) {
+          missingUrl += 1;
+          continue;
+        }
+        const groupTest = groupTests[group.id];
         const keysToAdd =
           groupTest?.status === 'done'
             ? group.keys.filter(key => !groupTest.badKeys.includes(key))
             : group.keys;
-        const normalized = normalizeBaseUrl(group.baseUrl);
+        const normalized = normalizeBaseUrl(groupUrl);
         const existing = endpoints.find(item => normalizeBaseUrl(item.baseUrl) === normalized);
-        const preset = presetForBaseUrl(group.baseUrl);
+        const preset = presetForBaseUrl(groupUrl);
         const target = existing ?? await createEndpoint({
-          name: preset?.label ?? hostFromUrl(group.baseUrl),
-          baseUrl: group.baseUrl,
+          name: groupTitle(group, groupUrl),
+          baseUrl: groupUrl,
           adapterType: preset?.adapterType ?? 'openai_compatible',
           enabled: true,
         });
@@ -289,6 +328,9 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           ? t('aiHub.pasteFirst.addedToastSkipped', { count: added, skipped })
           : t('aiHub.pasteFirst.addedToast', { count: added }),
       );
+      if (missingUrl > 0) {
+        toast.error(t('aiHub.pasteFirst.batchUrlMissing', { count: missingUrl }));
+      }
       onClose();
       if (targetIds.length > 0) onAdded?.(targetIds);
     } catch (error) {
@@ -296,7 +338,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     } finally {
       setSaving(false);
     }
-  }, [batchEntries, selected, groupTests, endpoints, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose, onAdded]);
+  }, [batchEntries, selected, groupTests, groupUrls, endpoints, createEndpoint, createCredential, fetchCredentials, fetchEndpoints, onClose, onAdded]);
 
   const handleTest = useCallback(async () => {
     if (!canTest) return;
@@ -453,49 +495,62 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
           <p className="text-xs text-slate-500">{t('aiHub.pasteFirst.batchTitle')}</p>
           <div className="max-h-64 space-y-1 overflow-auto rounded-md border border-white/[0.06] bg-black/20 p-2">
             {batchGroups.map(group => {
-              const preset = presetForBaseUrl(group.baseUrl);
-              const label = preset?.label ?? hostFromUrl(group.baseUrl);
-              const groupTest = groupTests[group.baseUrl];
+              const groupUrl = (groupUrls[group.id] ?? group.baseUrl).trim();
+              const label = groupTitle(group, groupUrl);
+              const groupTest = groupTests[group.id];
               return (
-                <div key={group.baseUrl} className="flex items-center gap-2 text-xs">
-                  <Checkbox
-                    className="shrink-0 px-0 py-0"
-                    checked={selected[group.baseUrl] !== false}
-                    onChange={event =>
-                      setSelected(prev => ({ ...prev, [group.baseUrl]: event.target.checked }))
-                    }
-                  />
-                  <span className="min-w-0 flex-1 truncate">
-                    <span className="font-medium text-slate-200">{label}</span>
-                    {preset && (
-                      <span className="ml-2 text-slate-500">{hostFromUrl(group.baseUrl)}</span>
+                <div key={group.id} className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Checkbox
+                      className="shrink-0 px-0 py-0"
+                      checked={selected[group.id] !== false}
+                      onChange={event =>
+                        setSelected(prev => ({ ...prev, [group.id]: event.target.checked }))
+                      }
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium text-slate-200">{label}</span>
+                      {groupUrl && (
+                        <span className="ml-2 text-slate-500">{hostFromUrl(groupUrl)}</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-slate-400">
+                      {t('aiHub.pasteFirst.batchKeys', { count: group.keys.length })}
+                    </span>
+                    {group.models.length > 0 && (
+                      <span className="shrink-0 text-slate-500">
+                        {t('aiHub.pasteFirst.batchModels', { count: group.models.length })}
+                      </span>
                     )}
-                  </span>
-                  <span className="shrink-0 text-slate-400">
-                    {t('aiHub.pasteFirst.batchKeys', { count: group.keys.length })}
-                  </span>
-                  {group.models.length > 0 && (
-                    <span className="shrink-0 text-slate-500">
-                      {t('aiHub.pasteFirst.batchModels', { count: group.models.length })}
-                    </span>
-                  )}
-                  {groupTest?.status === 'done' && (
-                    <span
-                      className={cn('shrink-0', groupTest.invalid > 0 ? 'text-amber-300' : 'text-emerald-300')}
+                    {groupTest?.status === 'done' && (
+                      <span
+                        className={cn('shrink-0', groupTest.invalid > 0 ? 'text-amber-300' : 'text-emerald-300')}
+                      >
+                        {t('aiHub.pasteFirst.batchTestSummary', { ok: groupTest.ok, invalid: groupTest.invalid })}
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="shrink-0"
+                      disabled={saving || !groupUrl || groupTest?.status === 'testing'}
+                      onClick={() => void handleTestGroup(group)}
                     >
-                      {t('aiHub.pasteFirst.batchTestSummary', { ok: groupTest.ok, invalid: groupTest.invalid })}
-                    </span>
+                      {groupTest?.status === 'testing' ? <Loader2 size={12} className="animate-spin" /> : null}
+                      {t('aiHub.pasteFirst.test')}
+                    </Button>
+                  </div>
+                  {!group.baseUrl && (
+                    <Input
+                      aria-label={t('aiHub.pasteFirst.batchUrlLabel', { label })}
+                      value={groupUrls[group.id] ?? ''}
+                      onChange={event =>
+                        setGroupUrls(prev => ({ ...prev, [group.id]: event.target.value }))
+                      }
+                      placeholder={t('aiHub.pasteFirst.batchUrlPlaceholder')}
+                      className="ml-6"
+                    />
                   )}
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="shrink-0"
-                    disabled={saving || groupTest?.status === 'testing'}
-                    onClick={() => void handleTestGroup(group.baseUrl, group.keys)}
-                  >
-                    {groupTest?.status === 'testing' ? <Loader2 size={12} className="animate-spin" /> : null}
-                    {t('aiHub.pasteFirst.test')}
-                  </Button>
                 </div>
               );
             })}
@@ -587,13 +642,13 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
             setText(next);
             // WebView2 native paste inserts text without a usable clipboardData, so bulk inserts are parsed here too
             if (next.length - text.length > 24) {
-              const parsed = parseProviderEntriesWithMeta(next);
+              const parsed = parsePastedProviders(next);
               if (parsed.entries.length > 0) applyParsedEntries(parsed.entries, parsed.ignoredLabels);
             }
           }}
           onPaste={event => {
             const pasted = event.clipboardData.getData('text');
-            const { entries, ignoredLabels: ignored } = parseProviderEntriesWithMeta(pasted);
+            const { entries, ignoredLabels: ignored } = parsePastedProviders(pasted);
             if (entries.length > 0) {
               event.preventDefault();
               applyParsedEntries(entries, ignored);
