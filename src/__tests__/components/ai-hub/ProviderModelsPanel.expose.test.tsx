@@ -60,6 +60,24 @@ describe('ProviderModelsPanel expose action', () => {
     expect(onExposeModel).toHaveBeenCalledWith(model);
   });
 
+  it('shows the public name badge instead of the expose button when already published', () => {
+    const onExposeModel = jest.fn();
+    render(
+      <ProviderModelsPanel
+        models={[model]}
+        loading={false}
+        busy={false}
+        discovering={false}
+        onDiscover={jest.fn()}
+        onExposeModel={onExposeModel}
+        published={{ 'up-1': 'my-model' }}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'aiHub.providersPage.exposeModel' })).toBeNull();
+    expect(screen.getByText('my-model')).toBeTruthy();
+  });
+
   it('renders no expose action without the callback', () => {
     render(
       <ProviderModelsPanel

@@ -70,6 +70,7 @@ export const aiGateway: AiGatewayTranslations = {
     modelNameHint: "Example: gpt-4o-mini. Clients call the proxy using this name.",
     routes: "Routes",
     routesHint: "Where the proxy forwards requests for this model. Lower priority numbers are tried first.",
+    publicModelCreated: "Public model {id} created",
     addRoute: "Add route",
     advanced: "Advanced",
     selectEndpoint: "Select provider…",

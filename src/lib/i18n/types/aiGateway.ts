@@ -68,6 +68,7 @@ export interface AiGatewayTranslations {
     modelNameHint: string;
     routes: string;
     routesHint: string;
+  publicModelCreated: string;
     addRoute: string;
     advanced: string;
     selectEndpoint: string;

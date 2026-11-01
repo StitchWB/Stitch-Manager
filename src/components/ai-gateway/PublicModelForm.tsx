@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { t } from '@/lib/i18n';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import type { PublicModel } from '@/lib/backend/modules/aiGateway';
@@ -15,6 +16,7 @@ interface PublicModelFormProps {
   prefill?: PublicModelPrefill | null;
   open: boolean;
   onClose: () => void;
+  onCreated?: (publicModelId: string) => void;
 }
 
 interface RouteRow {
@@ -26,7 +28,7 @@ interface RouteRow {
 
 const emptyRow = (): RouteRow => ({ endpointId: '', upstreamModelId: '', priority: 100, weight: 1 });
 
-export function PublicModelForm({ model, prefill, open, onClose }: PublicModelFormProps) {
+export function PublicModelForm({ model, prefill, open, onClose, onCreated }: PublicModelFormProps) {
   const {
     createPublicModel,
     updatePublicModel,
@@ -96,6 +98,8 @@ export function PublicModelForm({ model, prefill, open, onClose }: PublicModelFo
             enabled: true,
           });
         }
+        toast.success(t('aiGateway.form.publicModelCreated', { id: created.id }));
+        onCreated?.(created.id);
       }
       onClose();
     } catch (e) {
