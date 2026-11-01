@@ -573,6 +573,10 @@ export interface AiHubTranslations {
       batchIgnored: string;
       addedToastSkipped: string;
     mismatchHint: string;
+      batchUrlLabel: string;
+      batchUrlPlaceholder: string;
+      batchNoUrl: string;
+      batchUrlMissing: string;
       mechanismHint: {
         oauth: string;
         web: string;
