@@ -56,10 +56,20 @@ Alongside tools the server exposes two resources and one prompt:
 - prompt `account_triage` — a read-only checklist for reviewing account
   health.
 
-### Account listings
+### Result size and secrets
 
-`list_accounts` / `get_accounts` default to `limit=100`, `includeSecrets=false`
-at the MCP boundary so a single call cannot dump every row's tokens. Pass
+Every list-returning tool accepts `limit` (0 = unbounded, the default),
+`offset`, and `fields` (projection) — except commands that paginate themselves
+(`list_accounts`/`get_accounts` keep their own `limit`/`offset`).
+
+Secret-looking fields are masked on the way out: any result field whose name
+ends in a secret word (password, passwd, secret, token, api key, key(s),
+cookie(s), credential(s), private key, blob) or names a service account,
+client secret, session data, or proxy list is replaced with `********`,
+recursively. Masking is by field name only.
+
+`list_accounts` / `get_accounts` additionally default to `limit=100`,
+`includeSecrets=false`, so a single call cannot dump every row's tokens. Pass
 `includeSecrets=true` (and a higher `limit`) to opt back in. The HTTP/UI path
 keeps its previous behaviour (all rows, secrets included).
 
