@@ -1,7 +1,9 @@
 """Stitch Manager MCP Server — stdio transport via FastMCP.
 
-Exposes ~64 core commands as typed MCP tools plus meta tools (list_commands, execute_any).
-Write commands route through the safety layer (kill-switch, dry-run, journal).
+Exposes core commands as typed MCP tools plus meta tools (list_mcp_commands,
+execute_any, get_backend_health, get_safety_status, read_critical_journal,
+get_mcp_doctor).  Write commands route through the safety layer
+(kill-switch, dry-run, journal).
 
 Start::
 
@@ -12,6 +14,7 @@ Start::
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -19,12 +22,14 @@ from fastmcp import FastMCP
 
 from stitch_backend.bootstrap import bootstrap
 from stitch_backend.core.command_registry import list_commands
-from stitch_backend.core.invoke import (
-    WRITE_COMMANDS,
-    invoke_command_safe,
-)
+from stitch_backend.core.invoke import WRITE_COMMANDS
 from stitch_backend.domains.mcp_bridge.service import ensure_write_allowed
-from stitch_backend.mcp_server.tools import register_all_tools
+from stitch_backend.mcp_server.tools import (
+    _as_structured,
+    _invoke_with_policy,
+    _mcp_caller,
+    register_all_tools,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,12 +101,24 @@ CORE_TOOLS = [
     "get_aws_accounts",
     "create_aws_account",
     "get_aws_accounts_stats",
-    # Usage (1)
-    "get_usage_stats",
+    # MCP bridge (1)
+    "mcp_get_server_info",
     # Settings (2)
     "get_settings",
     "update_settings",
 ]
+
+# Meta tools registered directly on the FastMCP app (not backed by commands).
+_META_TOOLS = (
+    "list_mcp_commands",
+    "execute_any",
+    "get_backend_health",
+    "get_safety_status",
+    "read_critical_journal",
+    "get_mcp_doctor",
+)
+
+_registered_core_tool_count = 0
 
 # ── Tool registration ──────────────────────────────────────────────────────────
 # Typed tools are registered by mcp_server/tools.py from command metadata.
@@ -121,14 +138,14 @@ async def list_mcp_commands(filter: str = "") -> list[str]:
 
 
 @mcp.tool
-async def execute_any(command_name: str, args: dict[str, Any] | None = None) -> Any:
+async def execute_any(command_name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
     """Invoke any registered backend command by name (escape hatch)."""
     if command_name in WRITE_COMMANDS:
         ensure_write_allowed(command_name)
-    result = await invoke_command_safe(command_name, args or {})
+    result = await _invoke_with_policy(command_name, {**(args or {}), **_mcp_caller()})
     if not result["ok"]:
         raise Exception(result["error"]["message"])
-    return result["data"]
+    return _as_structured(result["data"])
 
 
 @mcp.tool
@@ -137,7 +154,85 @@ async def get_backend_health() -> dict:
     return {
         "status": "ok",
         "commandsRegistered": len(list_commands()),
-        "mcpTools": len(CORE_TOOLS),
+        "coreToolsDeclared": len(CORE_TOOLS),
+        "coreToolsRegistered": _registered_core_tool_count,
+        "metaTools": len(_META_TOOLS),
+        "mcpTools": _registered_core_tool_count + len(_META_TOOLS),
+    }
+
+
+@mcp.tool
+async def get_safety_status() -> dict:
+    """Return the write-safety guard state (autonomy, dry-run, kill-switch)."""
+    from stitch_backend.domains.mcp_bridge.service import (
+        account_persist_allowed,
+        autonomy_enabled,
+        critical_journal_path,
+        dry_run_enabled,
+        kill_switch_path,
+    )
+
+    kill_switch = kill_switch_path()
+    return {
+        "callerRole": _mcp_caller()["_caller_role"],
+        "autonomyEnabled": autonomy_enabled(),
+        "dryRun": dry_run_enabled(),
+        "allowAccountPersist": account_persist_allowed(),
+        "killSwitchPath": str(kill_switch),
+        "killSwitchActive": kill_switch.exists(),
+        "criticalJournalPath": str(critical_journal_path()),
+    }
+
+
+@mcp.tool
+async def read_critical_journal(limit: int = 20) -> list[dict]:
+    """Return the most recent entries of the MCP critical-action journal."""
+    from stitch_backend.domains.mcp_bridge.service import critical_journal_path
+
+    path = critical_journal_path()
+    if not path.exists():
+        return []
+    bounded = max(1, min(limit, 500))
+    entries: list[dict] = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines()[-bounded:]:
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        try:
+            entries.append(json.loads(stripped))
+        except ValueError:
+            continue
+    return entries
+
+
+@mcp.tool
+async def get_mcp_doctor() -> dict:
+    """Diagnose the MCP surface: tool counts, drift and policy gaps."""
+    from stitch_backend.core.command_meta import get_all_command_meta
+
+    registered = set(list_commands())
+    missing = sorted(name for name in CORE_TOOLS if name not in registered)
+    meta = get_all_command_meta()
+    no_schema = sorted(
+        name for name in CORE_TOOLS if name in meta and meta[name].request_model is None
+    )
+    warnings: list[str] = []
+    if missing:
+        warnings.append(f"{len(missing)} CORE_TOOLS declared but not registered")
+    if _registered_core_tool_count != len(CORE_TOOLS):
+        warnings.append(
+            f"registered core tools {_registered_core_tool_count} != declared {len(CORE_TOOLS)}"
+        )
+    return {
+        "status": "warn" if warnings else "ok",
+        "callerRole": _mcp_caller()["_caller_role"],
+        "commandsRegistered": len(registered),
+        "coreToolsDeclared": len(CORE_TOOLS),
+        "coreToolsRegistered": _registered_core_tool_count,
+        "metaTools": len(_META_TOOLS),
+        "declaredButUnregistered": missing,
+        "toolsWithoutInputSchema": no_schema,
+        "warnings": warnings,
     }
 
 
@@ -146,8 +241,9 @@ async def get_backend_health() -> dict:
 
 def main() -> None:
     """Run the MCP server on stdio."""
+    global _registered_core_tool_count
     asyncio.run(bootstrap(log_to_stderr=True))
-    register_all_tools(mcp, core_only=True)
+    _registered_core_tool_count = register_all_tools(mcp, core_only=True)
     mcp.run(transport="stdio")
 
 
