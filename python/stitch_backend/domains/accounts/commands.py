@@ -75,6 +75,9 @@ async def cmd_list_accounts(db: AsyncSession, params: dict) -> list:
         show_archived=req.show_archived,
         owner_id=owner_id,
         caller_uid=owner_id,
+        limit=req.limit,
+        offset=req.offset,
+        include_secrets=req.include_secrets,
     )
 
 

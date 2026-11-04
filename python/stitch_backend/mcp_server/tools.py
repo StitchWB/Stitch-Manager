@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
 from typing import TYPE_CHECKING, Any, cast
 
 from fastmcp.tools import Tool
@@ -46,6 +47,29 @@ def _as_structured(data: Any) -> dict[str, Any]:
     return data if isinstance(data, dict) else {"result": data}
 
 
+def _mcp_caller() -> dict[str, Any]:
+    """Caller identity injected into every tool call.
+
+    The MCP server is a local stdio process with no request session, so it acts
+    with admin trust by default (same posture as the HTTP dispatcher in desktop
+    mode).  Override with ``STITCH_MCP_ROLE`` / ``STITCH_MCP_USER_ID``.
+    """
+    caller: dict[str, Any] = {
+        "_caller_role": os.getenv("STITCH_MCP_ROLE", "admin"),
+    }
+    user_id = os.getenv("STITCH_MCP_USER_ID")
+    if user_id:
+        caller["_caller_user_id"] = int(user_id) if user_id.isdigit() else user_id
+    return caller
+
+
+# Bounded, secret-free defaults for MCP listings (HTTP/UI keeps full rows).
+_MCP_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
+    "list_accounts": {"limit": 100, "includeSecrets": False},
+    "get_accounts": {"limit": 100, "includeSecrets": False},
+}
+
+
 def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     """Generate a tool function with typed parameters from Pydantic model.
 
@@ -62,7 +86,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     if meta.request_model is None:
         # No-arg command
         async def tool_fn() -> dict[str, Any]:
-            result = await invoke_command_safe(meta.name, {})
+            result = await invoke_command_safe(meta.name, _mcp_caller())
             if not result["ok"]:
                 raise Exception(result["error"]["message"])
             return _as_structured(result["data"])
@@ -74,6 +98,8 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     # Build parameter list from Pydantic model fields
     model_cls = meta.request_model
     fields = model_cls.model_fields
+
+    mcp_defaults = _MCP_PARAM_DEFAULTS.get(meta.name, {})
 
     params = []
     for field_name, field_info in fields.items():
@@ -92,7 +118,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
             params.append(inspect.Parameter(
                 param_name,
                 inspect.Parameter.KEYWORD_ONLY,
-                default=field_info.default,
+                default=mcp_defaults.get(param_name, field_info.default),
                 annotation=annotation,
             ))
 
@@ -100,7 +126,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
 
     # Build the actual function
     async def _tool_fn(**kwargs) -> dict[str, Any]:
-        result = await invoke_command_safe(meta.name, kwargs)
+        result = await invoke_command_safe(meta.name, {**kwargs, **_mcp_caller()})
         if not result["ok"]:
             raise Exception(result["error"]["message"])
         return _as_structured(result["data"])

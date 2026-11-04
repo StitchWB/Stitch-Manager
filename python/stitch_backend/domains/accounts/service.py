@@ -49,6 +49,9 @@ class AccountService:
         show_archived: bool = False,
         owner_id: int | None = None,
         caller_uid: int | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+        include_secrets: bool = True,
     ) -> list[AccountResponse]:
         return await listing.list_accounts(
             self,
@@ -58,6 +61,9 @@ class AccountService:
             show_archived,
             owner_id,
             caller_uid,
+            limit,
+            offset,
+            include_secrets,
         )
 
     async def get_account(self, account_id: str) -> Account:
