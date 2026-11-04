@@ -75,6 +75,12 @@ _PASSWORD_KEYS = {
     "imapPassword", "proxyPassword", "addyioApiToken", "gmailAppPassword",
     "icloudAppPassword", "localChatToken",
 }
+_PASSWORD_KEY_NORMS = {key.lower() for key in _PASSWORD_KEYS}
+
+
+def _is_password_key(key: str) -> bool:
+    """True for a password key in any casing or separator (imapPassword, imap_password)."""
+    return key.replace("_", "").replace("-", "").lower() in _PASSWORD_KEY_NORMS
 
 
 def _parse_value(key: str, raw: str | None) -> Any:
@@ -161,10 +167,9 @@ class SettingsService:
         for base_key, raw_value in user_overrides.items():
             data[base_key] = _parse_value(base_key, raw_value)
 
-        # Mask passwords
-        for pk in _PASSWORD_KEYS:
-            if pk in data and data[pk]:
-                data[pk] = PASSWORD_MASK
+        for key in list(data):
+            if _is_password_key(key) and data[key]:
+                data[key] = PASSWORD_MASK
 
         return data
 
@@ -182,8 +187,7 @@ class SettingsService:
         prefix = f"u{owner_id}:" if owner_id is not None else ""
 
         for key, value in settings.items():
-            # Skip masked passwords
-            if key in _PASSWORD_KEYS and value == PASSWORD_MASK:
+            if _is_password_key(key) and value == PASSWORD_MASK:
                 continue
 
             if key == FLEET_TARGETS_KEY:
