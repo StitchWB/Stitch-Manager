@@ -86,20 +86,23 @@ def test_handler_uses_params_detects_raw_handlers():
     assert _handler_uses_params(_plain) is False
 
 
-def test_core_tools_all_registered():
+def test_core_tools_register_under_bootstrap():
     code = (
-        "from stitch_backend.startup import import_command_modules;"
-        "import_command_modules();"
-        "from stitch_backend.core.command_registry import list_commands;"
+        "import asyncio;"
+        "from fastmcp import FastMCP;"
+        "from stitch_backend.bootstrap import bootstrap;"
         "from stitch_backend.mcp_server.server import CORE_TOOLS;"
-        "missing=[c for c in CORE_TOOLS if c not in set(list_commands())];"
-        "assert not missing, missing"
+        "from stitch_backend.mcp_server.tools import register_all_tools;"
+        "asyncio.run(bootstrap());"
+        "mcp=FastMCP('t');"
+        "n=register_all_tools(mcp, core_only=True);"
+        "assert n==len(CORE_TOOLS), (n, len(CORE_TOOLS))"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
