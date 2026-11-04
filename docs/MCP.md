@@ -45,6 +45,16 @@ passed.
 | `read_critical_journal` | Tail the critical-action journal (`limit`, max 500). |
 | `get_mcp_doctor` | Diagnose the surface: drift, schema coverage, warnings. |
 
+## Resources and prompts
+
+Alongside tools the server exposes two resources and one prompt:
+
+- resource `stitch://safety-status` — the write-guard state as JSON.
+- resource `stitch://accounts/overview` — account counts by provider and
+  status (secrets excluded).
+- prompt `account_triage` — a read-only checklist for reviewing account
+  health.
+
 ### Account listings
 
 `list_accounts` / `get_accounts` default to `limit=100`, `includeSecrets=false`
