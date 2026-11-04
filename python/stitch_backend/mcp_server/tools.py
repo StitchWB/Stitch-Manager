@@ -127,9 +127,21 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     """
 
     if meta.request_model is None:
-        # No-arg command
-        async def tool_fn() -> dict[str, Any]:
-            result = await _invoke_with_policy(meta.name, _mcp_caller())
+        if not meta.takes_params:
+            # No-arg command
+            async def _no_arg_fn() -> dict[str, Any]:
+                result = await _invoke_with_policy(meta.name, _mcp_caller())
+                if not result["ok"]:
+                    raise Exception(result["error"]["message"])
+                return _as_structured(result["data"])
+
+            _no_arg_fn.__name__ = meta.name
+            _no_arg_fn.__doc__ = meta.description
+            return _no_arg_fn
+
+        # Hand-built request (no model): args pass through as an open object.
+        async def tool_fn(args: dict[str, Any] | None = None) -> dict[str, Any]:
+            result = await _invoke_with_policy(meta.name, {**(args or {}), **_mcp_caller()})
             if not result["ok"]:
                 raise Exception(result["error"]["message"])
             return _as_structured(result["data"])

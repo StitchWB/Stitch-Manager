@@ -87,6 +87,10 @@ async def cmd_get_accounts(params: dict) -> list:
     return cast("list[Any]", await cmd_list_accounts(params))
 
 
+# Alias must share the list request model so MCP bounds and redacts it too.
+cast("Any", cmd_get_accounts)._request_model = ListAccountsRequest
+
+
 @command("add_account")
 async def cmd_add_account(db: AsyncSession, params: dict) -> Any:
     req = _parse(AddAccountRequest, params)

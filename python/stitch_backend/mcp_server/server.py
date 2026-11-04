@@ -207,15 +207,18 @@ async def read_critical_journal(limit: int = 20) -> list[dict]:
 
 @mcp.tool
 async def get_mcp_doctor() -> dict:
-    """Diagnose the MCP surface: tool counts, drift and policy gaps."""
+    """Diagnose the MCP surface: tool counts, drift and schema coverage."""
     from stitch_backend.core.command_meta import get_all_command_meta
 
     registered = set(list_commands())
     missing = sorted(name for name in CORE_TOOLS if name not in registered)
     meta = get_all_command_meta()
-    no_schema = sorted(
-        name for name in CORE_TOOLS if name in meta and meta[name].request_model is None
-    )
+    known = [name for name in CORE_TOOLS if name in meta]
+    typed = [n for n in known if meta[n].request_model is not None]
+    fallback = [n for n in known if meta[n].request_model is None and meta[n].takes_params]
+    no_args = [n for n in known if meta[n].request_model is None and not meta[n].takes_params]
+    no_meta = [name for name in CORE_TOOLS if name not in meta]
+
     warnings: list[str] = []
     if missing:
         warnings.append(f"{len(missing)} CORE_TOOLS declared but not registered")
@@ -223,6 +226,9 @@ async def get_mcp_doctor() -> dict:
         warnings.append(
             f"registered core tools {_registered_core_tool_count} != declared {len(CORE_TOOLS)}"
         )
+    if no_meta:
+        warnings.append(f"{len(no_meta)} CORE_TOOLS have no metadata")
+
     return {
         "status": "warn" if warnings else "ok",
         "callerRole": _mcp_caller()["_caller_role"],
@@ -231,7 +237,10 @@ async def get_mcp_doctor() -> dict:
         "coreToolsRegistered": _registered_core_tool_count,
         "metaTools": len(_META_TOOLS),
         "declaredButUnregistered": missing,
-        "toolsWithoutInputSchema": no_schema,
+        "toolsWithTypedSchema": len(typed),
+        "toolsWithArgsFallback": fallback,
+        "toolsNoArgs": len(no_args),
+        "toolsMissingMeta": no_meta,
         "warnings": warnings,
     }
 

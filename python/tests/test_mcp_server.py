@@ -66,6 +66,26 @@ async def test_policy_enforces_per_command_timeout():
     assert result["error"]["code"] == "timeout"
 
 
+def test_handler_uses_params_detects_raw_handlers():
+    from stitch_backend.core.command_meta import _handler_uses_params
+
+    def _consume(value):
+        return value
+
+    async def _via_get(params):
+        return params.get("accountId")
+
+    async def _via_helper(params):
+        return _consume(params)
+
+    async def _plain(params):
+        return 1
+
+    assert _handler_uses_params(_via_get) is True
+    assert _handler_uses_params(_via_helper) is True
+    assert _handler_uses_params(_plain) is False
+
+
 def test_core_tools_all_registered():
     code = (
         "from stitch_backend.startup import import_command_modules;"

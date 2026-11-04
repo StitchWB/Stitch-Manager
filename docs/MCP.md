@@ -28,7 +28,11 @@ Two groups are registered.
 accounts (15), registration (10), scenarios (8), flows (5), proxy (5),
 turnstile solver (3), replenishment (3), AWS (3), MCP bridge (1), settings (2).
 Parameters are generated from each command's Pydantic request model
-(camelCase aliases preserved); a tool with no request model takes no arguments.
+(camelCase aliases preserved); a truly no-arg command takes no arguments.
+Commands whose handler builds its request by hand (no Pydantic model, e.g.
+`validate_account`, scenario and flow handlers) expose a single optional
+`args` object instead, so any argument the command documents can still be
+passed.
 
 **Meta tools:**
 
@@ -39,7 +43,7 @@ Parameters are generated from each command's Pydantic request model
 | `get_backend_health` | Command count, declared vs registered tool counts. |
 | `get_safety_status` | Write-guard state: autonomy, dry-run, kill-switch, journal path. |
 | `read_critical_journal` | Tail the critical-action journal (`limit`, max 500). |
-| `get_mcp_doctor` | Diagnose the surface: drift, tools without an input schema, warnings. |
+| `get_mcp_doctor` | Diagnose the surface: drift, schema coverage, warnings. |
 
 ### Account listings
 
@@ -100,4 +104,5 @@ Use the interpreter that has the package installed (the project venv, or
 `stitch-mcp` on `PATH`). A configuration change takes effect in a new session.
 
 If something looks off, call `get_mcp_doctor` first: it reports declared-but-
-unregistered tools and tools whose input schema could not be derived.
+unregistered tools, how many tools have a typed schema vs the open `args`
+fallback, and any warnings.
