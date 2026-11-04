@@ -86,6 +86,37 @@ def test_handler_uses_params_detects_raw_handlers():
     assert _handler_uses_params(_plain) is False
 
 
+def test_redact_secrets_masks_by_key_name():
+    from stitch_backend.mcp_server.tools import _is_secret_key, _redact_secrets
+
+    assert _is_secret_key("imap_password") is True
+    assert _is_secret_key("imapPassword") is True
+    assert _is_secret_key("localChatToken") is True
+    assert _is_secret_key("google_sheets_service_account_json") is True
+    assert _is_secret_key("proxy_list") is True
+    assert _is_secret_key("token_refresh_enabled") is False
+    assert _is_secret_key("password_length") is False
+    assert _is_secret_key("theme") is False
+
+    redacted = _redact_secrets(
+        {"imap_password": "raw", "theme": "dark", "rows": [{"apiKey": "k", "id": 1}]}
+    )
+    assert redacted["imap_password"] == "********"
+    assert redacted["theme"] == "dark"
+    assert redacted["rows"][0]["apiKey"] == "********"
+    assert redacted["rows"][0]["id"] == 1
+
+
+def test_apply_list_policy_bounds_and_projects():
+    from stitch_backend.mcp_server.tools import _apply_list_policy
+
+    rows = [{"id": i, "name": f"n{i}"} for i in range(5)]
+    assert _apply_list_policy(rows, limit=2, offset=0, fields=None) == rows[:2]
+    assert _apply_list_policy(rows, limit=0, offset=3, fields=None) == rows[3:]
+    assert _apply_list_policy(rows, limit=0, offset=0, fields=["id"]) == [{"id": i} for i in range(5)]
+    assert _apply_list_policy({"a": 1}, limit=1, offset=0, fields=None) == {"a": 1}
+
+
 def test_core_tools_register_under_bootstrap():
     code = (
         "import asyncio;"

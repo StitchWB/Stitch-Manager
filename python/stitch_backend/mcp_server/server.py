@@ -28,6 +28,7 @@ from stitch_backend.mcp_server.tools import (
     _as_structured,
     _invoke_with_policy,
     _mcp_caller,
+    _redact_secrets,
     register_all_tools,
 )
 
@@ -152,7 +153,7 @@ async def execute_any(command_name: str, args: dict[str, Any] | None = None) -> 
     result = await _invoke_with_policy(command_name, {**(args or {}), **_mcp_caller()})
     if not result["ok"]:
         raise Exception(result["error"]["message"])
-    return _as_structured(result["data"])
+    return _as_structured(_redact_secrets(result["data"]))
 
 
 @mcp.tool
