@@ -11,13 +11,14 @@ Usage:
     from stitch_backend.mcp_server.tools import register_all_tools
 
     mcp = FastMCP("Stitch Manager")
-    register_all_tools(mcp, core_only=True)  # 64 core tools
+    register_all_tools(mcp, core_only=True)  # core commands only
     # or
-    register_all_tools(mcp, core_only=False)  # all 400+ tools
+    register_all_tools(mcp, core_only=False)  # every registered command
 """
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 import os
@@ -29,6 +30,9 @@ from mcp.types import ToolAnnotations
 from stitch_backend.core.command_meta import (
     CommandMeta,
     get_all_command_meta,
+)
+from stitch_backend.core.command_registry import (
+    get_command_meta as _get_registry_meta,
 )
 from stitch_backend.core.invoke import (
     invoke_command_safe,
@@ -69,6 +73,45 @@ _MCP_PARAM_DEFAULTS: dict[str, dict[str, Any]] = {
     "get_accounts": {"limit": 100, "includeSecrets": False},
 }
 
+# Must match api/cmd_dispatcher.DEFAULT_COMMAND_TIMEOUT for HTTP/MCP parity.
+_DEFAULT_COMMAND_TIMEOUT: float = 25.0
+
+
+async def _invoke_with_policy(name: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Run a command under the same policy the HTTP dispatcher enforces.
+
+    The MCP server calls handlers directly, bypassing ``cmd_dispatcher`` — which
+    is the only place that applies ``CommandMeta.admin_only`` and per-command
+    ``timeout``.  Mirroring them here keeps the two surfaces equivalent.
+    """
+    policy = _get_registry_meta(name)
+
+    if policy.admin_only and args.get("_caller_role") != "admin":
+        return {
+            "ok": False,
+            "error": {
+                "code": "permission_denied",
+                "message": f"Command '{name}' requires admin role",
+                "details": {},
+            },
+        }
+
+    if policy.timeout == -1:
+        return await invoke_command_safe(name, args)
+
+    timeout = _DEFAULT_COMMAND_TIMEOUT if policy.timeout is None else policy.timeout
+    try:
+        return await asyncio.wait_for(invoke_command_safe(name, args), timeout=timeout)
+    except TimeoutError:
+        return {
+            "ok": False,
+            "error": {
+                "code": "timeout",
+                "message": f"Command '{name}' timed out after {timeout}s",
+                "details": {},
+            },
+        }
+
 
 def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     """Generate a tool function with typed parameters from Pydantic model.
@@ -86,7 +129,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     if meta.request_model is None:
         # No-arg command
         async def tool_fn() -> dict[str, Any]:
-            result = await invoke_command_safe(meta.name, _mcp_caller())
+            result = await _invoke_with_policy(meta.name, _mcp_caller())
             if not result["ok"]:
                 raise Exception(result["error"]["message"])
             return _as_structured(result["data"])
@@ -126,7 +169,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
 
     # Build the actual function
     async def _tool_fn(**kwargs) -> dict[str, Any]:
-        result = await invoke_command_safe(meta.name, {**kwargs, **_mcp_caller()})
+        result = await _invoke_with_policy(meta.name, {**kwargs, **_mcp_caller()})
         if not result["ok"]:
             raise Exception(result["error"]["message"])
         return _as_structured(result["data"])
@@ -166,8 +209,8 @@ def register_all_tools(mcp: FastMCP, core_only: bool = True) -> int:
 
     Args:
         mcp: FastMCP instance
-        core_only: If True, only register CORE_TOOLS (64 commands).
-                   If False, register all commands (400+).
+        core_only: If True, only register CORE_TOOLS; if False, register
+                   every registered command.
 
     Returns:
         Number of tools registered
