@@ -27,7 +27,7 @@ Two groups are registered.
 **Core tools** — one typed tool per core command (`server.py:CORE_TOOLS`):
 accounts (15), registration (10), scenarios (8), flows (5), proxy (5),
 turnstile solver (3), replenishment (3), AWS (3), MCP bridge (1), AI gateway
-models & credential health (6), settings (2).
+models, credential health & endpoint probe (7), settings (2).
 Parameters are generated from each command's input schema. When a command has
 a Pydantic request model its fields are used (camelCase aliases preserved).
 When the handler reads `params` by hand the schema is derived from those reads

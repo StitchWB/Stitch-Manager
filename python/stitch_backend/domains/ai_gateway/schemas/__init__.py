@@ -40,6 +40,9 @@ from stitch_backend.domains.ai_gateway.schemas.model_access import (
     CredentialModelAccessUpsertRequest,
     ListCredentialModelAccessRequest,
 )
+from stitch_backend.domains.ai_gateway.schemas.probe import (
+    ProbeEndpointRequest,
+)
 from stitch_backend.domains.ai_gateway.schemas.proxy_keys import (
     ProxyKeyCreatedResponse,
     ProxyKeyCreateRequest,
@@ -85,6 +88,7 @@ __all__ = [
     "ListPublicModelsRequest",
     "ListRouteTargetsForPublicModelRequest",
     "ListUpstreamModelsRequest",
+    "ProbeEndpointRequest",
     "ProviderEndpointCreateRequest",
     "ProviderEndpointIdRequest",
     "ProviderEndpointResponse",
