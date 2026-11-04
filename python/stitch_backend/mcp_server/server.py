@@ -245,6 +245,52 @@ async def get_mcp_doctor() -> dict:
     }
 
 
+# ── Resources & prompts ─────────────────────────────────────────────────────────
+
+
+@mcp.resource("stitch://safety-status")
+async def safety_status_resource() -> str:
+    """Write-safety guard state as JSON."""
+    return json.dumps(await get_safety_status(), indent=2)
+
+
+@mcp.resource("stitch://accounts/overview")
+async def accounts_overview_resource() -> str:
+    """Account counts by provider and status, secrets excluded."""
+    result = await _invoke_with_policy(
+        "list_accounts", {"limit": 1000, "includeSecrets": False, **_mcp_caller()}
+    )
+    if not result["ok"]:
+        return json.dumps({"error": result["error"]["message"]})
+    rows = result["data"] if isinstance(result["data"], list) else []
+    by_provider: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+    for row in rows:
+        provider = str(row.get("provider", "unknown"))
+        status = str(row.get("status", "unknown"))
+        by_provider[provider] = by_provider.get(provider, 0) + 1
+        by_status[status] = by_status.get(status, 0) + 1
+    return json.dumps(
+        {"total": len(rows), "byProvider": by_provider, "byStatus": by_status},
+        indent=2,
+    )
+
+
+@mcp.prompt
+def account_triage() -> str:
+    """Guide an agent through a read-only account health review."""
+    return (
+        "Review the account inventory without changing anything:\n"
+        "1. Call get_mcp_doctor and report any warnings.\n"
+        "2. Read the stitch://accounts/overview resource for the provider and\n"
+        "   status breakdown.\n"
+        "3. Call list_accounts (bounded, secrets omitted) and flag rows that are\n"
+        "   not active or look stale; use get_account_quota on the suspicious ids.\n"
+        "4. Summarise findings and propose which accounts to refresh and why.\n"
+        "Ask for confirmation before running any write command."
+    )
+
+
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 
