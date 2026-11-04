@@ -15,6 +15,22 @@ if TYPE_CHECKING:
     from stitch_backend.domains.accounts.service import AccountService
 
 
+_SECRET_FIELDS = (
+    "token",
+    "refresh_token",
+    "api_key",
+    "cookies",
+    "session_data",
+    "registration_password",
+)
+
+
+def _redact_secrets(resp: AccountResponse) -> AccountResponse:
+    for field in _SECRET_FIELDS:
+        setattr(resp, field, None)
+    return resp
+
+
 async def list_accounts(
     self: AccountService,
     provider: str | None = None,
@@ -23,6 +39,9 @@ async def list_accounts(
     show_archived: bool = False,
     owner_id: int | None = None,
     caller_uid: int | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+    include_secrets: bool = True,
 ) -> list[AccountResponse]:
     """Unified listing: supports provider filter and archive visibility.
 
@@ -85,11 +104,20 @@ async def list_accounts(
             or_(Account.owner_id.is_(None), Account.owner_id == owner_id)
         )
 
+    if offset:
+        stmt = stmt.offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+
     result = await self._db.execute(stmt)
     accounts = result.scalars().all()
 
     if caller_uid is None or not accounts:
-        return [_to_response(a, caller_uid=caller_uid) for a in accounts]
+        early = [_to_response(a, caller_uid=caller_uid) for a in accounts]
+        if not include_secrets:
+            for resp in early:
+                _redact_secrets(resp)
+        return early
 
     # Only groups where the caller is a member are included, to avoid leaking group existence.
     from stitch_backend.domains.groups.service import (
@@ -119,4 +147,7 @@ async def list_accounts(
                 group_names=[gname for _, gname in filtered if gname is not None],
             )
         )
+    if not include_secrets:
+        for resp in responses:
+            _redact_secrets(resp)
     return responses

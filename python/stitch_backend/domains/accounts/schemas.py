@@ -204,6 +204,9 @@ class ListAccountsRequest(BaseModel):
     provider_type: str | None = Field(None, alias="providerType")
     provider_subtype: str | None = Field(None, alias="providerSubtype")
     show_archived: bool = Field(False, alias="showArchived")
+    limit: int | None = None
+    offset: int = 0
+    include_secrets: bool = Field(True, alias="includeSecrets")
 
 
 class AddAccountRequest(BaseModel):
