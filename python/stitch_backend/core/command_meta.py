@@ -306,14 +306,14 @@ def _derive_param_specs(tree: ast.Module | None) -> tuple[list[_ParamSpec], str 
             else:
                 specs.setdefault(key, _ParamSpec(key, Any, False, None))
         elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == "params":
-            key = node.slice
+            subscript = node.slice
             if (
-                isinstance(key, ast.Constant)
-                and isinstance(key.value, str)
-                and _is_exposable_key(key.value)
-                and key.value not in aliases
+                isinstance(subscript, ast.Constant)
+                and isinstance(subscript.value, str)
+                and _is_exposable_key(subscript.value)
+                and subscript.value not in aliases
             ):
-                specs.setdefault(key.value, _ParamSpec(key.value, Any, True, None))
+                specs.setdefault(subscript.value, _ParamSpec(subscript.value, Any, True, None))
 
     return list(specs.values()), open_key
 
