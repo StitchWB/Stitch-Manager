@@ -41,6 +41,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _as_structured(data: Any) -> dict[str, Any]:
+    """Keep FastMCP structured output an object; wrap lists, scalars and None."""
+    return data if isinstance(data, dict) else {"result": data}
+
+
 def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     """Generate a tool function with typed parameters from Pydantic model.
 
@@ -60,7 +65,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
             result = await invoke_command_safe(meta.name, {})
             if not result["ok"]:
                 raise Exception(result["error"]["message"])
-            return cast("dict[str, Any]", result["data"])
+            return _as_structured(result["data"])
 
         tool_fn.__name__ = meta.name
         tool_fn.__doc__ = meta.description
@@ -98,7 +103,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
         result = await invoke_command_safe(meta.name, kwargs)
         if not result["ok"]:
             raise Exception(result["error"]["message"])
-        return cast("dict[str, Any]", result["data"])
+        return _as_structured(result["data"])
 
     _tool_fn.__name__ = meta.name
     _tool_fn.__doc__ = meta.description
