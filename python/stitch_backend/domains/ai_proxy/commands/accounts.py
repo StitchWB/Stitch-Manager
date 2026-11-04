@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 @register_command("get_ai_proxy_accounts", readonly=True)
 async def cmd_get_ai_proxy_accounts(params: dict) -> list:
+    """List AI-proxy accounts (optionally filtered by provider)."""
     from stitch_backend.domains.ai_proxy.legacy_accounts_api import list_accounts
 
     owner_id = _alias_owner_id(params)
@@ -38,6 +39,7 @@ async def cmd_get_ai_proxy_accounts(params: dict) -> list:
 
 @command("create_ai_proxy_account")
 async def cmd_create_ai_proxy_account(db: AsyncSession, params: dict) -> int:
+    """Create an AI-proxy account entry."""
     from stitch_backend.domains.ai_proxy.legacy_accounts_api import create_account
     account = params.get("account", params)
     owner_id = _alias_owner_id(params)

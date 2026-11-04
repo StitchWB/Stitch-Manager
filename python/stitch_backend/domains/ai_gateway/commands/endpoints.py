@@ -47,6 +47,7 @@ async def cmd_create_provider_endpoint(db: AsyncSession, params: dict) -> Any:
 
 @command("list_provider_endpoints", readonly=True)
 async def cmd_list_provider_endpoints(db: AsyncSession, params: dict) -> Any:
+    """List configured provider endpoints (id, name, adapter, base URL)."""
     owner_id = _caller_uid(params)
 
     svc = ProviderEndpointService(db)

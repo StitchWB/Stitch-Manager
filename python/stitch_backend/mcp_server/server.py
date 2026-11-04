@@ -222,9 +222,11 @@ async def get_mcp_doctor() -> dict:
     missing = sorted(name for name in CORE_TOOLS if name not in registered)
     meta = get_all_command_meta()
     known = [name for name in CORE_TOOLS if name in meta]
-    typed = [n for n in known if meta[n].request_model is not None]
-    fallback = [n for n in known if meta[n].request_model is None and meta[n].takes_params]
-    no_args = [n for n in known if meta[n].request_model is None and not meta[n].takes_params]
+    typed = [n for n in known if meta[n].schema_source in ("model", "derived")]
+    derived = [n for n in known if meta[n].schema_source == "derived"]
+    fallback = [n for n in known if meta[n].schema_source in ("open", "unparsed")]
+    no_args = [n for n in known if meta[n].schema_source == "none"]
+    unparsed = [n for n in known if meta[n].schema_source == "unparsed"]
     no_meta = [name for name in CORE_TOOLS if name not in meta]
 
     warnings: list[str] = []
@@ -236,6 +238,8 @@ async def get_mcp_doctor() -> dict:
         )
     if no_meta:
         warnings.append(f"{len(no_meta)} CORE_TOOLS have no metadata")
+    if unparsed:
+        warnings.append(f"{len(unparsed)} CORE_TOOLS have unparsed source (open args fallback)")
 
     return {
         "status": "warn" if warnings else "ok",
@@ -246,6 +250,7 @@ async def get_mcp_doctor() -> dict:
         "metaTools": len(_META_TOOLS),
         "declaredButUnregistered": missing,
         "toolsWithTypedSchema": len(typed),
+        "toolsWithDerivedSchema": len(derived),
         "toolsWithArgsFallback": fallback,
         "toolsNoArgs": len(no_args),
         "toolsMissingMeta": no_meta,
