@@ -20,9 +20,11 @@ Usage:
 from __future__ import annotations
 
 import ast
+import importlib
 import inspect
 import logging
 import re
+import textwrap
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
@@ -51,6 +53,9 @@ class CommandMeta:
         category: Domain category (e.g., "accounts", "registration")
         description: One-line description from handler docstring
         is_write: True if command mutates state (in WRITE_COMMANDS)
+        takes_params: True if the handler reads its ``params`` dict even without a
+            request model (alias/raw handlers) — such commands still need an
+            input schema so callers can pass arguments.
     """
 
     name: str
@@ -59,6 +64,7 @@ class CommandMeta:
     category: str
     description: str
     is_write: bool
+    takes_params: bool
 
 
 # Global registry populated by build_command_meta()
@@ -130,18 +136,51 @@ def _extract_request_model(handler: Callable[..., Any]) -> type[BaseModel] | Non
     return None
 
 
-def _resolve_name(handler: Callable[..., Any], name: str) -> type[BaseModel] | None:
-    """Resolve a class name from the handler's module globals.
+def _handler_uses_params(handler: Callable[..., Any]) -> bool:
+    """True if the handler reads its ``params`` dict (even without a request model).
 
-    Looks up the name in the handler's module and checks if it's a Pydantic BaseModel.
+    Alias/raw handlers (``get_accounts``, ``validate_account``, scenario and
+    flow handlers) build their request by hand instead of ``_parse``-ing a
+    model, so request-model extraction alone would leave them schema-less and
+    uncallable with arguments.
+    """
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(handler)))
+    except (OSError, TypeError, SyntaxError):
+        return False
+
+    # The param binding is an ast.arg; a Name node means the body reads params.
+    return any(
+        isinstance(node, ast.Name) and node.id == "params" for node in ast.walk(tree)
+    )
+
+
+def _resolve_name(handler: Callable[..., Any], name: str) -> type[BaseModel] | None:
+    """Resolve a class name to a Pydantic model from the handler's scope.
+
+    Checks module globals first, then the handler's own ``from X import Name``
+    statements — handlers frequently import their request model in the body.
     """
     module = inspect.getmodule(handler)
-    if not module:
-        return None
-
-    cls = getattr(module, name, None)
+    cls = getattr(module, name, None) if module else None
     if cls and isinstance(cls, type) and issubclass(cls, BaseModel):
         return cls
+
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(handler)))
+    except (OSError, TypeError, SyntaxError):
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if any(alias.name == name for alias in node.names):
+                try:
+                    imported = importlib.import_module(node.module)
+                except ImportError:
+                    continue
+                local = getattr(imported, name, None)
+                if local and isinstance(local, type) and issubclass(local, BaseModel):
+                    return local
 
     return None
 
@@ -217,6 +256,7 @@ def build_command_meta() -> dict[str, CommandMeta]:
                 category=category,
                 description=description,
                 is_write=is_write,
+                takes_params=_handler_uses_params(handler),
             )
 
             if request_model:
