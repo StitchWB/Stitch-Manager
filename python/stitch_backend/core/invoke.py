@@ -66,6 +66,21 @@ WRITE_COMMANDS: set[str] = {
     "stop_replenishment",
     "create_aws_account",
     "update_settings",
+    "create_credential",
+    "update_credential",
+    "delete_credential",
+    "rotate_credential_secret",
+    "create_provider_endpoint",
+    "update_provider_endpoint",
+    "delete_provider_endpoint",
+    "create_public_model",
+    "update_public_model",
+    "delete_public_model",
+    "merge_public_models",
+    "create_upstream_model",
+    "update_upstream_model",
+    "delete_upstream_model",
+    "save_connection",
 }
 
 
