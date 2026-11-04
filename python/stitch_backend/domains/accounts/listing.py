@@ -113,11 +113,11 @@ async def list_accounts(
     accounts = result.scalars().all()
 
     if caller_uid is None or not accounts:
-        responses = [_to_response(a, caller_uid=caller_uid) for a in accounts]
+        early = [_to_response(a, caller_uid=caller_uid) for a in accounts]
         if not include_secrets:
-            for resp in responses:
+            for resp in early:
                 _redact_secrets(resp)
-        return responses
+        return early
 
     # Only groups where the caller is a member are included, to avoid leaking group existence.
     from stitch_backend.domains.groups.service import (
