@@ -28,12 +28,14 @@ Two groups are registered.
 accounts (15), registration (10), scenarios (8), flows (5), proxy (5),
 turnstile solver (3), replenishment (3), AWS (3), MCP bridge (1), AI gateway
 models & credential health (6), settings (2).
-Parameters are generated from each command's Pydantic request model
-(camelCase aliases preserved); a truly no-arg command takes no arguments.
-Commands whose handler builds its request by hand (no Pydantic model, e.g.
-`validate_account`, scenario and flow handlers) expose a single optional
-`args` object instead, so any argument the command documents can still be
-passed.
+Parameters are generated from each command's input schema. When a command has
+a Pydantic request model its fields are used (camelCase aliases preserved).
+When the handler reads `params` by hand the schema is derived from those reads
+(`params.get("x", default)` → typed optional, `params["x"]` → required); of an
+`a or b` alias pair only the first name is exposed. A handler that forwards its
+whole `params` elsewhere, or takes an open payload (`params.get("request",
+params)`), keeps a single optional `args` object; a command that reads no
+arguments takes none.
 
 **Meta tools:**
 
@@ -125,5 +127,6 @@ Use the interpreter that has the package installed (the project venv, or
 `stitch-mcp` on `PATH`). A configuration change takes effect in a new session.
 
 If something looks off, call `get_mcp_doctor` first: it reports declared-but-
-unregistered tools, how many tools have a typed schema vs the open `args`
-fallback, and any warnings.
+unregistered tools, the schema coverage (`toolsWithTypedSchema`,
+`toolsWithDerivedSchema`, `toolsWithArgsFallback`, `toolsNoArgs`) and any
+warnings.

@@ -28,7 +28,7 @@ import textwrap
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 
 from stitch_backend.core.command_registry import (
     get_command_handler,
@@ -49,13 +49,15 @@ class CommandMeta:
     Attributes:
         name: Command name (e.g., "add_account")
         handler: The async handler function
-        request_model: Pydantic model for request validation (None if no-arg command)
+        request_model: Pydantic model for request validation; for handlers that
+            read ``params`` by hand it is synthesized from those reads, so callers
+            still get a typed schema (None only for open/no-arg commands)
         category: Domain category (e.g., "accounts", "registration")
         description: One-line description from handler docstring
         is_write: True if command mutates state (in WRITE_COMMANDS)
-        takes_params: True if the handler reads its ``params`` dict even without a
-            request model (alias/raw handlers) — such commands still need an
-            input schema so callers can pass arguments.
+        schema_source: How the input schema was obtained — "model" (real model),
+            "derived" (synthesized from params reads), "open" (free-form args
+            payload), "none" (no parameters), "unparsed" (source unavailable)
     """
 
     name: str
@@ -64,14 +66,25 @@ class CommandMeta:
     category: str
     description: str
     is_write: bool
-    takes_params: bool
+    schema_source: str
 
 
 # Global registry populated by build_command_meta()
 _META_REGISTRY: dict[str, CommandMeta] = {}
 
 
-def _extract_request_model(handler: Callable[..., Any]) -> type[BaseModel] | None:
+def _parse_handler_source(handler: Callable[..., Any]) -> ast.Module | None:
+    """Parse a handler's source once for every AST-based extraction pass."""
+    try:
+        return ast.parse(textwrap.dedent(inspect.getsource(handler)))
+    except (OSError, TypeError, SyntaxError) as e:
+        logger.debug(f"Could not parse source for {getattr(handler, '__name__', handler)}: {e}")
+        return None
+
+
+def _extract_request_model(
+    handler: Callable[..., Any], tree: ast.Module | None = None
+) -> type[BaseModel] | None:
     """Extract Pydantic request model from handler source via AST analysis.
 
     Checks in order:
@@ -87,11 +100,9 @@ def _extract_request_model(handler: Callable[..., Any]) -> type[BaseModel] | Non
     if explicit is not None:
         return cast("type[BaseModel] | None", explicit)
 
-    try:
-        source = inspect.getsource(handler)
-        tree = ast.parse(source)
-    except (OSError, TypeError, SyntaxError) as e:
-        logger.debug(f"Could not get source for {handler.__name__}: {e}")
+    if tree is None:
+        tree = _parse_handler_source(handler)
+    if tree is None:
         return None
 
     # Pattern 1: _parse(ModelClass, params)
@@ -104,7 +115,7 @@ def _extract_request_model(handler: Callable[..., Any]) -> type[BaseModel] | Non
             and isinstance(node.args[0], ast.Name)
         ):
             model_name = node.args[0].id
-            model = _resolve_name(handler, model_name)
+            model = _resolve_name(handler, model_name, tree)
             if model:
                 return model
 
@@ -117,7 +128,7 @@ def _extract_request_model(handler: Callable[..., Any]) -> type[BaseModel] | Non
             and isinstance(node.func.value, ast.Name)
         ):
             model_name = node.func.value.id
-            model = _resolve_name(handler, model_name)
+            model = _resolve_name(handler, model_name, tree)
             if model:
                 return model
 
@@ -129,33 +140,199 @@ def _extract_request_model(handler: Callable[..., Any]) -> type[BaseModel] | Non
             and any(isinstance(kw, ast.keyword) and kw.arg is None for kw in node.keywords)
         ):
             model_name = node.func.id
-            model = _resolve_name(handler, model_name)
+            model = _resolve_name(handler, model_name, tree)
             if model:
                 return model
 
     return None
 
 
-def _handler_uses_params(handler: Callable[..., Any]) -> bool:
-    """True if the handler reads its ``params`` dict (even without a request model).
+@dataclass(frozen=True)
+class _ParamSpec:
+    """One input parameter derived from a handler's direct ``params`` reads."""
 
-    Alias/raw handlers (``get_accounts``, ``validate_account``, scenario and
-    flow handlers) build their request by hand instead of ``_parse``-ing a
-    model, so request-model extraction alone would leave them schema-less and
-    uncallable with arguments.
-    """
-    try:
-        tree = ast.parse(textwrap.dedent(inspect.getsource(handler)))
-    except (OSError, TypeError, SyntaxError):
-        return False
+    name: str
+    annotation: Any
+    required: bool
+    default: Any
 
-    # The param binding is an ast.arg; a Name node means the body reads params.
-    return any(
-        isinstance(node, ast.Name) and node.id == "params" for node in ast.walk(tree)
+
+_PYDANTIC_RESERVED = frozenset({"copy", "dict", "json", "schema", "validate", "construct"})
+
+
+def _is_exposable_key(key: str) -> bool:
+    """False for keys that must not become params: caller identity and pydantic internals."""
+    return (
+        key.isidentifier()
+        and not key.startswith("_")
+        and not key.startswith("model_")
+        and key not in _PYDANTIC_RESERVED
     )
 
 
-def _resolve_name(handler: Callable[..., Any], name: str) -> type[BaseModel] | None:
+def _literal_type(node: ast.AST) -> Any:
+    """Map a literal AST node to a type (bool before int — bool subclasses int)."""
+    if isinstance(node, ast.Constant):
+        value = node.value
+        if isinstance(value, bool):
+            return bool
+        if isinstance(value, int):
+            return int
+        if isinstance(value, float):
+            return float
+        if isinstance(value, str):
+            return str
+    if isinstance(node, ast.List):
+        return list[Any]
+    if isinstance(node, ast.Dict):
+        return dict[str, Any]
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Constant):
+        value = node.operand.value
+        if isinstance(value, int):
+            return int
+        if isinstance(value, float):
+            return float
+    return Any
+
+
+def _literal_value(node: ast.AST) -> Any:
+    """Default value for a derived param, or None when the literal is not representable."""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.List):
+        return []
+    if isinstance(node, ast.Dict):
+        return {}
+    return None
+
+
+def _param_get_key(node: ast.AST) -> str | None:
+    """The string key of a ``params.get("key", ...)`` call, else None."""
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "params"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    ):
+        return node.args[0].value
+    return None
+
+
+def _alias_keys(tree: ast.Module | None) -> set[str]:
+    """Keys that are alternative spellings of an earlier key.
+
+    Covers ``params.get("a") or params.get("b")`` and
+    ``params.get("a", params.get("b"))`` — only the primary key is exposed.
+    """
+    if tree is None:
+        return set()
+
+    aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
+            keys = [key for key in (_param_get_key(value) for value in node.values) if key is not None]
+            if len(keys) >= 2:
+                aliases.update(keys[1:])
+        elif isinstance(node, ast.Call) and _param_get_key(node) and len(node.args) >= 2:
+            inner = _param_get_key(node.args[1])
+            if inner is not None:
+                aliases.add(inner)
+    return aliases
+
+
+def _params_forwarded(tree: ast.Module | None) -> bool:
+    """True when the handler passes its whole ``params`` to something else.
+
+    Such a handler reads keys we cannot enumerate from the AST, so it must keep the
+    open ``args`` payload instead of being mistaken for a no-arg command.
+    """
+    if tree is None:
+        return False
+
+    bases: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == "get"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "params"
+        ):
+            bases.add(id(node.value))
+        elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == "params":
+            bases.add(id(node.value))
+
+    return any(
+        isinstance(node, ast.Name) and node.id == "params" and id(node) not in bases
+        for node in ast.walk(tree)
+    )
+
+
+def _derive_param_specs(tree: ast.Module | None) -> tuple[list[_ParamSpec], str | None]:
+    """Derive input params from a handler's own ``params`` reads.
+
+    Returns ``(specs, open_key)``. ``open_key`` is set when the handler forwards an
+    untyped payload (``params.get("request", params)``) whose shape is not closed
+    by the AST. ``_caller_*``, alias and other reserved keys are never exposed.
+    """
+    if tree is None:
+        return [], None
+
+    aliases = _alias_keys(tree)
+    specs: dict[str, _ParamSpec] = {}
+    open_key: str | None = None
+
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "params"
+        ):
+            if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
+                continue
+            key = node.args[0].value
+            if not _is_exposable_key(key) or key in aliases:
+                continue
+            if len(node.args) >= 2 and isinstance(node.args[1], ast.Name) and node.args[1].id == "params":
+                open_key = key
+                continue
+            if len(node.args) >= 2:
+                specs.setdefault(key, _ParamSpec(key, _literal_type(node.args[1]), False, _literal_value(node.args[1])))
+            else:
+                specs.setdefault(key, _ParamSpec(key, Any, False, None))
+        elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == "params":
+            subscript = node.slice
+            if (
+                isinstance(subscript, ast.Constant)
+                and isinstance(subscript.value, str)
+                and _is_exposable_key(subscript.value)
+                and subscript.value not in aliases
+            ):
+                specs.setdefault(subscript.value, _ParamSpec(subscript.value, Any, True, None))
+
+    return list(specs.values()), open_key
+
+
+def _synthesize_model(name: str, specs: list[_ParamSpec]) -> type[BaseModel] | None:
+    """Build a Pydantic model from derived specs so the MCP builder keeps one path."""
+    fields: dict[str, Any] = {
+        spec.name: (spec.annotation, ... if spec.required else spec.default) for spec in specs
+    }
+    try:
+        return create_model(f"{name}_params", **fields)
+    except (TypeError, ValueError) as e:
+        logger.debug(f"Could not synthesize params model for '{name}': {e}")
+        return None
+
+
+def _resolve_name(
+    handler: Callable[..., Any], name: str, tree: ast.Module | None = None
+) -> type[BaseModel] | None:
     """Resolve a class name to a Pydantic model from the handler's scope.
 
     Checks module globals first, then the handler's own ``from X import Name``
@@ -166,9 +343,9 @@ def _resolve_name(handler: Callable[..., Any], name: str) -> type[BaseModel] | N
     if cls and isinstance(cls, type) and issubclass(cls, BaseModel):
         return cls
 
-    try:
-        tree = ast.parse(textwrap.dedent(inspect.getsource(handler)))
-    except (OSError, TypeError, SyntaxError):
+    if tree is None:
+        tree = _parse_handler_source(handler)
+    if tree is None:
         return None
 
     for node in ast.walk(tree):
@@ -243,8 +420,24 @@ def build_command_meta() -> dict[str, CommandMeta]:
     for name in commands:
         try:
             handler = get_command_handler(name)
+            tree = _parse_handler_source(handler)
 
-            request_model = _extract_request_model(handler)
+            request_model = _extract_request_model(handler, tree)
+            schema_source = "model"
+            if request_model is None:
+                specs, open_key = _derive_param_specs(tree)
+                if open_key is not None:
+                    schema_source = "open"
+                elif specs:
+                    request_model = _synthesize_model(name, specs)
+                    schema_source = "derived" if request_model is not None else "open"
+                elif _params_forwarded(tree):
+                    schema_source = "open"
+                elif tree is None:
+                    schema_source = "unparsed"
+                else:
+                    schema_source = "none"
+
             category = _infer_category(handler)
             description = _extract_description(handler)
             is_write = name in WRITE_COMMANDS
@@ -256,13 +449,10 @@ def build_command_meta() -> dict[str, CommandMeta]:
                 category=category,
                 description=description,
                 is_write=is_write,
-                takes_params=_handler_uses_params(handler),
+                schema_source=schema_source,
             )
 
-            if request_model:
-                logger.debug(f"  {name}: {request_model.__name__} ({category})")
-            else:
-                logger.debug(f"  {name}: no-arg ({category})")
+            logger.debug(f"  {name}: {schema_source} ({category})")
 
         except Exception as e:
             logger.warning(f"Failed to extract metadata for '{name}': {e}")

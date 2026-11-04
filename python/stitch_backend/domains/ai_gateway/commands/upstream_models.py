@@ -65,6 +65,7 @@ async def cmd_create_upstream_model(db: AsyncSession, params: dict) -> Any:
 
 @command("list_upstream_models", readonly=True)
 async def cmd_list_upstream_models(db: AsyncSession, params: dict) -> Any:
+    """List upstream models discovered for a provider endpoint."""
     req = ListUpstreamModelsRequest.model_validate(params)
 
     svc = UpstreamModelService(db)

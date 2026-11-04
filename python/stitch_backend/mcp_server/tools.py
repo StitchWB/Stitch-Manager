@@ -182,14 +182,14 @@ def _finalize(data: Any, *, limit: int, offset: int, fields: list[str] | None) -
 def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
     """Generate a tool function with typed parameters from Pydantic model.
 
-    For commands with a request_model:
+    For commands with a request_model (real or AST-derived from ``params`` reads):
     - Each Pydantic field becomes a keyword-only parameter
     - Required fields have no default
     - Optional fields have their Pydantic default
     - Type annotations come from Pydantic field types
 
-    For no-arg commands (request_model=None):
-    - Function takes no parameters
+    For open commands (schema_source "open"/"unparsed") a single free-form
+    ``args`` mapping is accepted.  No-arg commands take no parameters.
 
     Every list-returning tool also accepts ``limit`` (0 = unbounded), ``offset``
     and ``fields``, unless the command already declares ``limit`` and paginates
@@ -211,7 +211,7 @@ def _build_tool_function(meta: CommandMeta) -> Callable[..., Any]:
         ),
     )
 
-    if meta.request_model is None and not meta.takes_params:
+    if meta.request_model is None and meta.schema_source not in ("open", "unparsed"):
         async def _no_arg_fn(
             limit: int = 0, offset: int = 0, fields: list[str] | None = None
         ) -> dict[str, Any]:

@@ -27,6 +27,7 @@ _CACHE_TTL = 300  # seconds
 
 @register_command("get_available_models", readonly=True)
 async def cmd_get_available_models(params: dict) -> list:
+    """List the models this app exposes through the AI gateway."""
     result = await _get_provider_models(params)
     from stitch_backend.config import get_settings
     from stitch_backend.database import run_in_read_session

@@ -64,6 +64,7 @@ def _parse(model_cls, params: dict):
 
 @command("list_accounts", readonly=True)
 async def cmd_list_accounts(db: AsyncSession, params: dict) -> list:
+    """List accounts, optionally filtered by provider, type or subtype."""
     req = _parse(ListAccountsRequest, params)
     owner_id = params.get("_caller_user_id")
 
@@ -93,6 +94,7 @@ cast("Any", cmd_get_accounts)._request_model = ListAccountsRequest
 
 @command("add_account")
 async def cmd_add_account(db: AsyncSession, params: dict) -> Any:
+    """Create a new account for a provider."""
     req = _parse(AddAccountRequest, params)
     owner_id = params.get("_caller_user_id")
 
@@ -102,6 +104,7 @@ async def cmd_add_account(db: AsyncSession, params: dict) -> Any:
 
 @command("delete_account")
 async def cmd_delete_account(db: AsyncSession, params: dict) -> dict:
+    """Delete an account by id."""
     req = _parse(DeleteAccountRequest, params)
     caller_uid = params.get("_caller_user_id")
 
@@ -113,6 +116,7 @@ async def cmd_delete_account(db: AsyncSession, params: dict) -> dict:
 
 @command("update_account_token")
 async def cmd_update_account_token(db: AsyncSession, params: dict) -> Any:
+    """Replace an account's token and refresh token."""
     req = _parse(UpdateAccountTokenRequest, params)
     caller_uid = params.get("_caller_user_id")
 
@@ -124,6 +128,7 @@ async def cmd_update_account_token(db: AsyncSession, params: dict) -> Any:
 
 @command("update_account_notes_tags")
 async def cmd_update_account_notes_tags(db: AsyncSession, params: dict) -> Any:
+    """Update an account's notes and tags."""
     req = _parse(UpdateAccountNotesTagsRequest, params)
     caller_uid = params.get("_caller_user_id")
 
@@ -146,6 +151,7 @@ async def cmd_update_account_metadata(db: AsyncSession, params: dict) -> Any:
 
 @command("set_account_proxy")
 async def cmd_set_account_proxy(db: AsyncSession, params: dict) -> Any:
+    """Attach or clear an account's proxy (proxyId, null clears)."""
     req = _parse(SetAccountProxyRequest, params)
     caller_uid = params.get("_caller_user_id")
 
@@ -307,6 +313,7 @@ async def cmd_get_account_quota(db: AsyncSession, params: dict) -> dict:
 
 @command("archive_account")
 async def cmd_archive_account(db: AsyncSession, params: dict) -> Any:
+    """Archive or unarchive an account."""
     req = _parse(ArchiveAccountRequest, params)
     caller_uid = params.get("_caller_user_id")
 
@@ -348,6 +355,7 @@ async def cmd_bulk_delete_accounts(params: dict) -> dict:
 
 @register_command("bulk_export_accounts", readonly=True)
 async def cmd_bulk_export_accounts(params: dict) -> list:
+    """Export full account rows (secrets included) by provider or id list."""
     await ensure_permission(params, "action.export_accounts")
     req = _parse(BulkExportRequest, params)
     owner_id = params.get("_caller_user_id")

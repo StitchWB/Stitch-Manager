@@ -10,6 +10,7 @@ from stitch_backend.domains.settings.service import SettingsService
 
 @register_command("get_settings", readonly=True)
 async def cmd_get_settings(params: dict) -> dict:
+    """Return all application settings (secret fields masked)."""
     await ensure_permission(params, "section.settings")
     owner_id = params.get("_caller_user_id")
 
@@ -22,6 +23,7 @@ async def cmd_get_settings(params: dict) -> dict:
 
 @register_command("update_settings")
 async def cmd_update_settings(params: dict) -> dict:
+    """Update application settings from a key/value object."""
     await ensure_permission(params, "section.settings")
     settings = params.get("settings", params)
     owner_id = params.get("_caller_user_id")

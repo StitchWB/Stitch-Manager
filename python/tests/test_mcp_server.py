@@ -66,24 +66,45 @@ async def test_policy_enforces_per_command_timeout():
     assert result["error"]["code"] == "timeout"
 
 
-def test_handler_uses_params_detects_raw_handlers():
-    from stitch_backend.core.command_meta import _handler_uses_params
+def test_derive_param_specs_from_params_reads():
+    import ast
 
-    def _consume(value):
-        return value
+    from stitch_backend.core.command_meta import _derive_param_specs, _synthesize_model
 
-    async def _via_get(params):
-        return params.get("accountId")
+    tree = ast.parse(
+        "async def h(params):\n"
+        '    a = params.get("accountId")\n'
+        '    b = params.get("provider", "kiro")\n'
+        '    c = params.get("limit", 50)\n'
+        '    d = params["requiredKey"]\n'
+        '    e = params.get("_caller_role")\n'
+        "    return a, b, c, d, e\n"
+    )
+    specs, open_key = _derive_param_specs(tree)
+    by_name = {s.name: s for s in specs}
+    assert open_key is None
+    assert set(by_name) == {"accountId", "provider", "limit", "requiredKey"}
+    assert by_name["provider"].annotation is str
+    assert by_name["provider"].required is False
+    assert by_name["limit"].annotation is int
+    assert by_name["requiredKey"].required is True
 
-    async def _via_helper(params):
-        return _consume(params)
+    model = _synthesize_model("h", specs)
+    assert model is not None
+    assert set(model.model_fields) == {"accountId", "provider", "limit", "requiredKey"}
+    assert model.model_fields["requiredKey"].is_required() is True
+    assert not any(name.startswith("_") for name in model.model_fields)
 
-    async def _plain(params):
-        return 1
 
-    assert _handler_uses_params(_via_get) is True
-    assert _handler_uses_params(_via_helper) is True
-    assert _handler_uses_params(_plain) is False
+def test_derive_param_specs_detects_open_payload():
+    import ast
+
+    from stitch_backend.core.command_meta import _derive_param_specs
+
+    tree = ast.parse('async def h(params):\n    return params.get("settings", params)\n')
+    specs, open_key = _derive_param_specs(tree)
+    assert open_key == "settings"
+    assert specs == []
 
 
 def test_redact_secrets_masks_by_key_name():
@@ -122,12 +143,18 @@ def test_core_tools_register_under_bootstrap():
         "import asyncio;"
         "from fastmcp import FastMCP;"
         "from stitch_backend.bootstrap import bootstrap;"
+        "from stitch_backend.core.command_registry import list_commands;"
+        "from stitch_backend.core.command_meta import get_all_command_meta;"
         "from stitch_backend.mcp_server.server import CORE_TOOLS;"
         "from stitch_backend.mcp_server.tools import register_all_tools;"
         "asyncio.run(bootstrap());"
         "mcp=FastMCP('t');"
         "n=register_all_tools(mcp, core_only=True);"
-        "assert n==len(CORE_TOOLS), (n, len(CORE_TOOLS))"
+        "present=[c for c in CORE_TOOLS if c in set(list_commands())];"
+        "assert n==len(present), (n, len(present));"
+        "meta=get_all_command_meta();"
+        "bad=[c for c in present if meta[c].schema_source=='unparsed'];"
+        "assert not bad, bad"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
