@@ -21,17 +21,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-async def bootstrap() -> None:
+async def bootstrap(*, log_to_stderr: bool = False) -> None:
     """Initialise the Stitch backend for standalone use (no HTTP server).
 
-    Idempotent — safe to call multiple times.
+    Idempotent — safe to call multiple times.  With ``log_to_stderr`` all log
+    records go to stderr, keeping stdout free for a protocol channel such as
+    the MCP stdio transport.
     """
     from stitch_backend.config import get_settings
 
     settings = get_settings()
 
     # ── Logging ──────────────────────────────────────────────────────────────
-    _configure_logging(settings.log_level)
+    _configure_logging(settings.log_level, log_to_stderr=log_to_stderr)
 
     try:
         from stitch_backend.version import __version__
@@ -187,27 +189,38 @@ async def bootstrap() -> None:
 # ── Internal ──────────────────────────────────────────────────────────────────
 
 
-def _configure_logging(level: str) -> None:
-    """Configure logging to write INFO to stdout, ERROR/WARNING to stderr."""
+def _configure_logging(level: str, *, log_to_stderr: bool = False) -> None:
+    """Configure logging. INFO goes to stdout, ERROR/WARNING to stderr.
+
+    With ``log_to_stderr`` every record goes to stderr instead, keeping stdout
+    free for callers that use it as a data channel (MCP stdio transport).
+    """
     import sys
-
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setLevel(logging.DEBUG)
-    stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
-
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setLevel(logging.WARNING)
 
     formatter = logging.Formatter(
         "%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
         datefmt="%H:%M:%S",
     )
-    stdout_handler.setFormatter(formatter)
-    stderr_handler.setFormatter(formatter)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
-    root_logger.addHandler(stdout_handler)
-    root_logger.addHandler(stderr_handler)
+
+    if log_to_stderr:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(formatter)
+        root_logger.addHandler(handler)
+    else:
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(logging.DEBUG)
+        stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
+        stdout_handler.setFormatter(formatter)
+
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setLevel(logging.WARNING)
+        stderr_handler.setFormatter(formatter)
+
+        root_logger.addHandler(stdout_handler)
+        root_logger.addHandler(stderr_handler)
 
     logging.getLogger("stitch_backend.core.command_registry").setLevel(logging.ERROR)

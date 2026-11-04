@@ -146,7 +146,7 @@ async def get_backend_health() -> dict:
 
 def main() -> None:
     """Run the MCP server on stdio."""
-    asyncio.run(bootstrap())
+    asyncio.run(bootstrap(log_to_stderr=True))
     register_all_tools(mcp, core_only=True)
     mcp.run(transport="stdio")
 
