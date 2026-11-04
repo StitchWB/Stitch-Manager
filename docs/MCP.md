@@ -26,7 +26,8 @@ Two groups are registered.
 
 **Core tools** — one typed tool per core command (`server.py:CORE_TOOLS`):
 accounts (15), registration (10), scenarios (8), flows (5), proxy (5),
-turnstile solver (3), replenishment (3), AWS (3), MCP bridge (1), settings (2).
+turnstile solver (3), replenishment (3), AWS (3), MCP bridge (1), AI gateway
+models & credential health (6), settings (2).
 Parameters are generated from each command's Pydantic request model
 (camelCase aliases preserved); a truly no-arg command takes no arguments.
 Commands whose handler builds its request by hand (no Pydantic model, e.g.
