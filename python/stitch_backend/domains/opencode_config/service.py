@@ -263,3 +263,24 @@ def normalize_omo(snapshot: Snapshot) -> dict[str, Any]:
         "categories": categories,
         "runtimeFallback": section.get("runtime_fallback"),
     }
+
+
+def _provider_entry(snapshot: Snapshot, provider_id: str) -> dict[str, Any]:
+    providers = snapshot.data.get("provider")
+    entry = providers.get(provider_id) if isinstance(providers, dict) else None
+    return entry if isinstance(entry, dict) else {}
+
+
+def resolve_provider_endpoint(
+    snapshot: Snapshot, provider_id: str
+) -> tuple[str | None, str | None]:
+    """Return ``(baseURL, apiKey)`` for a provider in the opencode config."""
+    options = _provider_entry(snapshot, provider_id).get("options")
+    options = options if isinstance(options, dict) else {}
+    return options.get("baseURL"), options.get("apiKey")
+
+
+def provider_model_ids(snapshot: Snapshot, provider_id: str) -> list[str]:
+    """Return the configured model ids of a provider (empty when absent)."""
+    models = _provider_entry(snapshot, provider_id).get("models")
+    return list(models.keys()) if isinstance(models, dict) else []
