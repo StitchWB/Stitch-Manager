@@ -112,13 +112,14 @@ CORE_TOOLS = [
     "list_credentials",
     "test_credential_connection",
     "get_available_models",
-    # opencode config (6)
+    # opencode config (7)
     "opencode_config_get",
     "opencode_provider_upsert",
     "opencode_agent_assign",
     "opencode_models_report",
     "provider_balance",
     "opencode_models_reconcile",
+    "opencode_config_restore",
     # Settings (2)
     "get_settings",
     "update_settings",
