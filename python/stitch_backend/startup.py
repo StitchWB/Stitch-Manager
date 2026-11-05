@@ -232,6 +232,7 @@ def import_command_modules() -> None:
     import stitch_backend.domains.logging.commands  # noqa: F401
     import stitch_backend.domains.mcp_bridge.commands  # noqa: F401
     import stitch_backend.domains.oauth.commands  # noqa: F401
+    import stitch_backend.domains.opencode_config.commands  # noqa: F401
     import stitch_backend.domains.outlook_mailbox_pool.commands  # noqa: F401
     import stitch_backend.domains.patcher.commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.commands  # noqa: F401
