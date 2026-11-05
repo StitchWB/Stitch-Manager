@@ -51,6 +51,9 @@ from stitch_backend.domains.ai_gateway.commands.opencode_import import (
 from stitch_backend.domains.ai_gateway.commands.probe import (
     cmd_probe_endpoint,
 )
+from stitch_backend.domains.ai_gateway.commands.probe_models import (
+    cmd_probe_endpoint_models,
+)
 from stitch_backend.domains.ai_gateway.commands.proxy_keys import (
     cmd_proxy_keys_create,
     cmd_proxy_keys_list,
@@ -106,6 +109,7 @@ __all__ = [
     "cmd_list_route_targets_for_public_model",
     "cmd_list_upstream_models",
     "cmd_probe_endpoint",
+    "cmd_probe_endpoint_models",
     "cmd_proxy_keys_create",
     "cmd_proxy_keys_list",
     "cmd_proxy_keys_revoke",
