@@ -104,11 +104,12 @@ CORE_TOOLS = [
     "get_aws_accounts_stats",
     # MCP bridge (1)
     "mcp_get_server_info",
-    # AI gateway — models & credential health (8)
+    # AI gateway — models & credential health (9)
     "list_provider_endpoints",
     "discover_models_for_endpoint",
     "probe_endpoint",
     "probe_endpoint_models",
+    "refresh_endpoint_models",
     "list_upstream_models",
     "list_credentials",
     "test_credential_connection",

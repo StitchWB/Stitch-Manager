@@ -36,3 +36,13 @@ class ProbeEndpointModelsRequest(BaseModel):
         if not (self.credential_id or self.endpoint_id or self.base_url):
             raise ValueError("one of credentialId, endpointId or baseUrl is required")
         return self
+
+
+class RefreshEndpointModelsRequest(ProbeEndpointModelsRequest):
+    """Request body for ``refresh_endpoint_models``.
+
+    Same target/tuning fields as the read-only probe; the sweep result is also
+    persisted into the catalog (``UpstreamModel`` + ``CredentialModelAccess``).
+    Persistence needs a resolved endpoint and credential, so a raw ``baseUrl``
+    only works together with ``endpointId``/``credentialId``.
+    """

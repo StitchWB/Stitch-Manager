@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from stitch_backend.core.command_decorator import command
 from stitch_backend.domains.ai_gateway.adapters.base import get_adapter
 from stitch_backend.domains.ai_gateway.schemas.probe_models import (
     ProbeEndpointModelsRequest,
+    RefreshEndpointModelsRequest,
 )
 from stitch_backend.domains.ai_gateway.service import (
+    CredentialModelAccessService,
     CredentialService,
     ProviderEndpointService,
     UpstreamModelService,
@@ -31,6 +34,7 @@ VISION_PROBE_PROMPT = "What color is this image? Reply with one word."
 VISION_PROBE_ANSWER = "red"
 DEFAULT_PROBE_PROMPT = "ping"
 TEXT_CAP = 300
+DENIED_REASONS = frozenset({"model_not_found", "model_access_denied"})
 
 
 def _extract_text(data: Any) -> str | None:
@@ -249,20 +253,27 @@ async def _resolve_models(
     return models
 
 
-@command(
-    "probe_endpoint_models",
-    readonly=True,
-    request=ProbeEndpointModelsRequest,
-    timeout=-1,
-)
-async def cmd_probe_endpoint_models(
+def _access_status(reason: str) -> str:
+    if reason == "ok":
+        return "available"
+    if reason in DENIED_REASONS:
+        return "denied"
+    return "temporarily_unavailable"
+
+
+def _capabilities(row: dict[str, Any], now: str) -> dict[str, Any]:
+    caps: dict[str, Any] = {"source": "probe", "verified_at": now}
+    if row.get("multimodalOk") is not None:
+        caps["supports_vision"] = bool(row["multimodalOk"])
+    return caps
+
+
+async def _sweep(
     db: AsyncSession, req: ProbeEndpointModelsRequest
-) -> dict:
-    """Probe every (or filtered) model of an endpoint in a single parallel sweep."""
+) -> tuple[dict[str, Any] | None, list[str], list[str], list[dict[str, Any]]]:
     target = await _resolve_target(db, req)
     if target is None:
-        return {"ok": False, "error": "target not found or has no usable credential"}
-
+        return None, [], [], []
     catalog = await _resolve_models(db, req, target)
     selected = catalog[: req.limit] if req.limit > 0 else list(catalog)
     rows = await probe_models(
@@ -278,6 +289,22 @@ async def cmd_probe_endpoint_models(
         include_multimodal=req.include_multimodal,
         budget=req.budget_seconds,
     )
+    return target, catalog, selected, rows
+
+
+@command(
+    "probe_endpoint_models",
+    readonly=True,
+    request=ProbeEndpointModelsRequest,
+    timeout=-1,
+)
+async def cmd_probe_endpoint_models(
+    db: AsyncSession, req: ProbeEndpointModelsRequest
+) -> dict:
+    """Probe every (or filtered) model of an endpoint in a single parallel sweep."""
+    target, catalog, selected, rows = await _sweep(db, req)
+    if target is None:
+        return {"ok": False, "error": "target not found or has no usable credential"}
     return {
         "ok": True,
         "endpointId": target["endpoint_id"],
@@ -286,4 +313,74 @@ async def cmd_probe_endpoint_models(
         "probedCount": sum(1 for row in rows if row["ok"]),
         "truncated": len(catalog) > len(selected),
         "models": rows,
+    }
+
+
+async def _persist_refresh(
+    db: AsyncSession,
+    target: dict[str, Any],
+    rows: list[dict[str, Any]],
+    *,
+    now: str,
+) -> dict[str, Any]:
+    endpoint_id = target["endpoint_id"]
+    credential_id = target["credential_id"]
+    if not endpoint_id or not credential_id:
+        return {"persisted": False}
+
+    model_svc = UpstreamModelService(db)
+    access_svc = CredentialModelAccessService(db)
+    existing = {m.upstream_model_id: m for m in await model_svc.list_models(endpoint_id)}
+    prior_status = {
+        a.upstream_model_id: a.status
+        for a in await access_svc.list_access(credential_id=credential_id)
+    }
+
+    changes: list[dict[str, str]] = []
+    for row in rows:
+        current = existing.get(row["model"])
+        capabilities = dict(current.capabilities or {}) if current else {}
+        capabilities.update(_capabilities(row, now))
+        upstream = await model_svc.upsert_model(
+            endpoint_id,
+            row["model"],
+            discovery_source="probe",
+            capabilities=capabilities,
+        )
+        status = _access_status(row["reason"])
+        await access_svc.upsert_access(
+            credential_id,
+            upstream.id,
+            status=status,
+            last_error=None if row["ok"] else row["reason"],
+        )
+        previous = prior_status.get(upstream.id)
+        if previous is not None and previous != status:
+            changes.append({"model": row["model"], "from": previous, "to": status})
+
+    await db.flush()
+    return {"persisted": True, "statusChanges": changes}
+
+
+@command("refresh_endpoint_models", request=RefreshEndpointModelsRequest, timeout=-1)
+async def cmd_refresh_endpoint_models(
+    db: AsyncSession, req: RefreshEndpointModelsRequest
+) -> dict:
+    """Probe an endpoint's models and persist health + capabilities into the catalog."""
+    target, catalog, selected, rows = await _sweep(db, req)
+    if target is None:
+        return {"ok": False, "error": "target not found or has no usable credential"}
+
+    persisted = await _persist_refresh(
+        db, target, rows, now=datetime.now(UTC).isoformat()
+    )
+    return {
+        "ok": True,
+        "endpointId": target["endpoint_id"],
+        "credentialId": target["credential_id"],
+        "catalogCount": len(catalog),
+        "probedCount": sum(1 for row in rows if row["ok"]),
+        "truncated": len(catalog) > len(selected),
+        "models": rows,
+        **persisted,
     }

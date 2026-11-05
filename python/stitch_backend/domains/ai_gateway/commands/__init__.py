@@ -53,6 +53,7 @@ from stitch_backend.domains.ai_gateway.commands.probe import (
 )
 from stitch_backend.domains.ai_gateway.commands.probe_models import (
     cmd_probe_endpoint_models,
+    cmd_refresh_endpoint_models,
 )
 from stitch_backend.domains.ai_gateway.commands.proxy_keys import (
     cmd_proxy_keys_create,
@@ -113,6 +114,7 @@ __all__ = [
     "cmd_proxy_keys_create",
     "cmd_proxy_keys_list",
     "cmd_proxy_keys_revoke",
+    "cmd_refresh_endpoint_models",
     "cmd_rotate_credential_secret",
     "cmd_test_credential_connection",
     "cmd_update_credential",

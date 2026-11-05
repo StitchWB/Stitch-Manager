@@ -45,6 +45,7 @@ from stitch_backend.domains.ai_gateway.schemas.probe import (
 )
 from stitch_backend.domains.ai_gateway.schemas.probe_models import (
     ProbeEndpointModelsRequest,
+    RefreshEndpointModelsRequest,
 )
 from stitch_backend.domains.ai_gateway.schemas.proxy_keys import (
     ProxyKeyCreatedResponse,
@@ -107,6 +108,7 @@ __all__ = [
     "PublicModelIdRequest",
     "PublicModelResponse",
     "PublicModelUpdateRequest",
+    "RefreshEndpointModelsRequest",
     "RotateCredentialSecretRequest",
     "RouteTargetCreateRequest",
     "RouteTargetIdRequest",
