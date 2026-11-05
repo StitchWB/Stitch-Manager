@@ -81,6 +81,9 @@ WRITE_COMMANDS: set[str] = {
     "update_upstream_model",
     "delete_upstream_model",
     "save_connection",
+    "opencode_provider_upsert",
+    "opencode_agent_assign",
+    "opencode_models_reconcile",
 }
 
 
