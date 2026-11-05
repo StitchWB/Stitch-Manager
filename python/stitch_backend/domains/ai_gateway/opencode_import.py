@@ -50,6 +50,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _AUTH_JSON_PATH = Path.home() / ".local" / "share" / "opencode" / "auth.json"
+_OPENCODE_JSON_PATH = Path.home() / ".config" / "opencode" / "opencode.json"
 
 _ENV_REF_RE = re.compile(r"^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$")
 
@@ -163,6 +164,25 @@ async def read_opencode_auth(path: Path | None = None) -> dict:
         data = json.loads(raw)
         return data if isinstance(data, dict) else {}
     except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+async def read_opencode_config(path: str | Path | None = None) -> dict:
+    """Read OpenCode's ``opencode.json`` provider config directly.
+
+    Path precedence: explicit ``path`` → ``OPENCODE_CONFIG`` env → default
+    ``~/.config/opencode/opencode.json``.  Returns ``{}`` when missing or
+    malformed, so a caller can raise a single friendly error instead of
+    depending on the ``stitch-opencode`` plugin host being up.
+    """
+    env_path = os.environ.get("OPENCODE_CONFIG")
+    resolved = Path(path) if path else (Path(env_path) if env_path else _OPENCODE_JSON_PATH)
+    try:
+        async with aiofiles.open(resolved, encoding="utf-8-sig") as f:
+            raw = await f.read()
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {}
 
 
