@@ -284,3 +284,54 @@ def provider_model_ids(snapshot: Snapshot, provider_id: str) -> list[str]:
     """Return the configured model ids of a provider (empty when absent)."""
     models = _provider_entry(snapshot, provider_id).get("models")
     return list(models.keys()) if isinstance(models, dict) else []
+
+
+def restore_from_backup(
+    path: str | Path, backup_path: str | Path, *, expected_sha256: str | None
+) -> dict[str, Any]:
+    """Copy a backup over the live config, keeping a safety copy of the current file."""
+    resolved = Path(path)
+    backup = Path(backup_path)
+    if not backup.exists():
+        return {"ok": False, "error": "backup not found", "path": str(resolved)}
+
+    raw = backup.read_bytes()
+    is_jsonc = resolved.suffix.lower() == ".jsonc" or backup.suffix.lower() == ".jsonc"
+    text = raw.decode("utf-8-sig")
+    parsed = parse_jsonc(text) if is_jsonc else json.loads(text)
+    if not isinstance(parsed, dict):
+        return {"ok": False, "error": "backup root is not a JSON object", "path": str(resolved)}
+
+    if resolved.exists():
+        if expected_sha256 is not None:
+            current = hashlib.sha256(resolved.read_bytes()).hexdigest()
+            if current != expected_sha256:
+                return {"ok": False, "error": "conflict", "path": str(resolved)}
+        safety = _backup_path(resolved)
+        safety.write_bytes(resolved.read_bytes())
+        safety_path: str | None = str(safety)
+    elif expected_sha256 is not None:
+        return {"ok": False, "error": "conflict", "path": str(resolved)}
+    else:
+        safety_path = None
+
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(resolved.parent), prefix=f"{resolved.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(raw)
+        os.replace(tmp_name, resolved)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+    return {
+        "ok": True,
+        "path": str(resolved),
+        "restoredFrom": str(backup),
+        "safetyBackupPath": safety_path,
+    }

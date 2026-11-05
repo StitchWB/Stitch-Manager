@@ -84,6 +84,7 @@ WRITE_COMMANDS: set[str] = {
     "opencode_provider_upsert",
     "opencode_agent_assign",
     "opencode_models_reconcile",
+    "opencode_config_restore",
 }
 
 

@@ -32,7 +32,12 @@ class OpenCodeProviderUpsertRequest(BaseModel):
 
 
 class OpenCodeAgentAssignRequest(BaseModel):
-    """Request body for ``opencode_agent_assign``."""
+    """Request body for ``opencode_agent_assign``.
+
+    ``kind=category`` targets the OMO ``categories`` map (which has no ``models``
+    array). ``style`` picks the OMO entry shape: ``auto`` keeps an existing
+    ``models`` array and otherwise writes ``model``/``fallback_models``.
+    """
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -40,8 +45,20 @@ class OpenCodeAgentAssignRequest(BaseModel):
     model: str
     fallback_models: list[str] | None = Field(None, alias="fallbackModels")
     target: Literal["auto", "opencode", "omo"] = "auto"
+    kind: Literal["agent", "category"] = "agent"
+    style: Literal["auto", "model", "models"] = "auto"
     opencode_path: str | None = Field(None, alias="opencodePath")
     omo_path: str | None = Field(None, alias="omoPath")
+
+
+class OpenCodeConfigRestoreRequest(BaseModel):
+    """Request body for ``opencode_config_restore``."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    path: str
+    backup_path: str = Field(alias="backupPath")
+    expected_sha256: str | None = Field(None, alias="expectedSha256")
 
 
 class OpenCodeModelsReportRequest(BaseModel):

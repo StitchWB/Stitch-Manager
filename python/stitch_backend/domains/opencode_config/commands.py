@@ -11,6 +11,7 @@ from stitch_backend.domains.opencode_config import probe as probe_layer
 from stitch_backend.domains.opencode_config.schemas import (
     OpenCodeAgentAssignRequest,
     OpenCodeConfigGetRequest,
+    OpenCodeConfigRestoreRequest,
     OpenCodeModelsReconcileRequest,
     OpenCodeModelsReportRequest,
     OpenCodeProviderUpsertRequest,
@@ -26,6 +27,7 @@ from stitch_backend.domains.opencode_config.service import (
     provider_model_ids,
     read_snapshot,
     resolve_provider_endpoint,
+    restore_from_backup,
     write_config,
 )
 
@@ -95,24 +97,41 @@ async def cmd_opencode_provider_upsert(params: dict) -> dict:
 
 @register_command("opencode_agent_assign")
 async def cmd_opencode_agent_assign(params: dict) -> dict:
-    """Set an agent's model in the store that wins for that agent."""
+    """Set an agent's or category's model in the store that wins for it."""
     try:
         req = OpenCodeAgentAssignRequest.model_validate(params)
         target = req.target
         if target == "auto":
-            target = "omo" if req.agent in BUILTIN_AGENTS else "opencode"
+            if req.kind == "category":
+                target = "omo"
+            else:
+                target = "omo" if req.agent in BUILTIN_AGENTS else "opencode"
+        if req.kind == "category" and target == "opencode":
+            return {"ok": False, "error": "categories live in OMO only"}
+
+        applied_style: str | None = None
         if target == "omo":
             path = req.omo_path or default_omo_path()
             snapshot = read_snapshot(path)
             data = dict(snapshot.data)
             section = dict(data.get(OMO_SECTION) or {})
-            agents = dict(section.get("agents") or {})
-            entry = dict(agents.get(req.agent) or {})
-            entry["model"] = req.model
-            if req.fallback_models is not None:
-                entry["fallback_models"] = req.fallback_models
-            agents[req.agent] = entry
-            section["agents"] = agents
+            container = "categories" if req.kind == "category" else "agents"
+            entries = dict(section.get(container) or {})
+            entry = dict(entries.get(req.agent) or {})
+            applied_style = "model" if req.kind == "category" else req.style
+            if applied_style == "auto":
+                applied_style = "models" if "models" in entry else "model"
+            if applied_style == "models":
+                entry["models"] = [req.model, *(req.fallback_models or [])]
+                entry.pop("model", None)
+                entry.pop("fallback_models", None)
+            else:
+                entry["model"] = req.model
+                if req.fallback_models is not None:
+                    entry["fallback_models"] = req.fallback_models
+                entry.pop("models", None)
+            entries[req.agent] = entry
+            section[container] = entries
             data[OMO_SECTION] = section
         else:
             path = req.opencode_path or default_opencode_path()
@@ -129,12 +148,26 @@ async def cmd_opencode_agent_assign(params: dict) -> dict:
         return {
             "ok": True,
             "agent": req.agent,
+            "kind": req.kind,
             "target": target,
+            "style": applied_style,
             "model": req.model,
             "path": result["path"],
             "backupPath": result["backupPath"],
             "commentsMayBeDropped": result["commentsMayBeDropped"],
         }
+    except Exception as exc:
+        return {"ok": False, "error": _error(exc)}
+
+
+@register_command("opencode_config_restore")
+async def cmd_opencode_config_restore(params: dict) -> dict:
+    """Restore a config file from a backup, keeping a safety copy of the current one."""
+    try:
+        req = OpenCodeConfigRestoreRequest.model_validate(params)
+        return restore_from_backup(
+            req.path, req.backup_path, expected_sha256=req.expected_sha256
+        )
     except Exception as exc:
         return {"ok": False, "error": _error(exc)}
 
