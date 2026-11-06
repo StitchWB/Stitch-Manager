@@ -1,7 +1,8 @@
 import type { Account, DashboardStats, KiroPatchConfig, PatchResult, Provider } from './generated';
+import type { ProviderId } from '../constants/providerIds';
 
 // Re-export generated Provider type for backward compatibility
-export type ProviderName = Provider;
+export type ProviderName = Provider | ProviderId;
 
 export type Theme = 'dark' | 'light' | 'system';
 

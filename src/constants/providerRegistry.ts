@@ -1,4 +1,10 @@
-import { PROVIDER_META, isValidProviderId, type ProviderMeta } from './providerIds';
+import {
+  ALL_PROVIDER_IDS,
+  PROVIDER_META,
+  isValidProviderId,
+  type ProviderId,
+  type ProviderMeta,
+} from './providerIds';
 
 export type ProviderBadgeColors = {
   bg: string;
@@ -6,34 +12,18 @@ export type ProviderBadgeColors = {
   border: string;
 };
 
-/**
- * Provider registry used across UI surfaces.
- *
- * Notes:
- * - `accounts.matchProviders` lists raw `Account.provider` values that should match this UI provider.
- * - `aiProxy` marks providers shown in AI Proxy UI.
- */
-export type ProviderRegistryId =
-  | 'kiro'
-  | 'windsurf'
-  | 'trae'
-  | 'github'
-  | 'aws'
-  | 'openai'
-  | 'claude'
-  | 'anthropic'
-  | 'gemini'
-  | 'antigravity'
-  | 'fireworks'
-  | 'zai'
-  | 'freemodel'
-  | 'custom'
-  | 'qoder'
-  | 'v0_app'
-  | 'web-gemini'
-  | 'web-deepseek'
-  | 'web-qwen'
-  | 'web-notebooklm';
+const UI_ONLY_PROVIDER_IDS = [
+  'freemodel',
+  'custom',
+  'web-gemini',
+  'web-deepseek',
+  'web-qwen',
+  'web-notebooklm',
+] as const;
+
+type UiOnlyProviderId = (typeof UI_ONLY_PROVIDER_IDS)[number];
+
+export type ProviderRegistryId = ProviderId | UiOnlyProviderId;
 
 export type ProviderRegistryEntry = {
   id: ProviderRegistryId;
@@ -50,12 +40,17 @@ export type ProviderRegistryEntry = {
 type ProviderUIEntry = {
   badge: ProviderBadgeColors;
   matchProviders?: readonly string[];
-  // label/aiProxy only for ids missing from the Python registry (freemodel/custom/web-*).
   label?: string;
   aiProxy?: boolean;
 };
 
-const PROVIDER_UI: Record<ProviderRegistryId, ProviderUIEntry> = {
+const DEFAULT_BADGE: ProviderBadgeColors = {
+  bg: 'bg-slate-500/10',
+  text: 'text-slate-400',
+  border: 'border-slate-500/20',
+};
+
+const PROVIDER_UI: Partial<Record<ProviderRegistryId, ProviderUIEntry>> = {
   kiro: {
     badge: {
       bg: 'bg-indigo-500/10',
@@ -86,7 +81,6 @@ const PROVIDER_UI: Record<ProviderRegistryId, ProviderUIEntry> = {
       text: 'text-amber-400',
       border: 'border-amber-500/20',
     },
-    // Historically stored as aws_builder_id in Account.provider
     matchProviders: ['aws_builder_id', 'aws'],
   },
   github: {
@@ -227,34 +221,26 @@ const PROVIDER_UI: Record<ProviderRegistryId, ProviderUIEntry> = {
 function buildEntry(id: ProviderRegistryId): ProviderRegistryEntry {
   const ui = PROVIDER_UI[id];
   const meta: ProviderMeta | undefined = isValidProviderId(id) ? PROVIDER_META[id] : undefined;
-  const aiProxy = meta ? meta.isAiProxy : (ui.aiProxy ?? false);
+  const aiProxy = meta ? meta.isAiProxy : (ui?.aiProxy ?? false);
   return {
     id,
-    label: meta?.displayName ?? ui.label ?? id,
-    badge: ui.badge,
-    ...(ui.matchProviders ? { accounts: { matchProviders: ui.matchProviders } } : {}),
+    label: meta?.displayName ?? ui?.label ?? id,
+    badge: ui?.badge ?? DEFAULT_BADGE,
+    ...(ui?.matchProviders ? { accounts: { matchProviders: ui.matchProviders } } : {}),
     ...(aiProxy ? { aiProxy: { enabled: true } } : {}),
   };
 }
 
+const REGISTRY_IDS: ProviderRegistryId[] = [...ALL_PROVIDER_IDS, ...UI_ONLY_PROVIDER_IDS];
+
 export const PROVIDER_REGISTRY = Object.fromEntries(
-  (Object.keys(PROVIDER_UI) as ProviderRegistryId[]).map(id => [id, buildEntry(id)])
+  REGISTRY_IDS.map(id => [id, buildEntry(id)])
 ) as Record<ProviderRegistryId, ProviderRegistryEntry>;
 
-export const ACCOUNT_PROVIDER_FILTER_IDS = [
-  'kiro',
-  'windsurf',
-  'trae',
-  'aws',
-  'github',
-  'openai',
-  'qoder',
-  'v0_app',
-  'web-gemini',
-  'web-deepseek',
-  'web-qwen',
-  'web-notebooklm',
-] as const;
+export const ACCOUNT_PROVIDER_FILTER_IDS: readonly ProviderRegistryId[] = [
+  ...ALL_PROVIDER_IDS,
+  ...UI_ONLY_PROVIDER_IDS,
+];
 
 export type AccountProviderFilterId = (typeof ACCOUNT_PROVIDER_FILTER_IDS)[number];
 
