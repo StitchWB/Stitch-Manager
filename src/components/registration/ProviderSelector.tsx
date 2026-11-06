@@ -73,7 +73,7 @@ export function ProviderSelector({
       </ButtonBase>
 
       {isExpanded && (
-        <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.015] p-2 animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.015] p-2 max-h-[min(60vh,420px)] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="grid grid-cols-3 gap-1.5">
             {providers.map(provider => {
               const isActive = activeProvider === provider.id;

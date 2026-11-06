@@ -1,5 +1,5 @@
 import type { ProviderName } from '../types/ui';
-import { PROVIDER_META, isValidProviderId, type ProviderMeta } from './providerIds';
+import { ALL_PROVIDER_IDS, PROVIDER_META, isValidProviderId, type ProviderMeta } from './providerIds';
 
 export interface ProviderConfig {
   id: ProviderName;
@@ -167,8 +167,25 @@ const PROVIDER_UI = {
   },
 } satisfies Record<string, ProviderUIDecoration>;
 
-export const PROVIDERS: ProviderConfig[] = (Object.keys(PROVIDER_UI) as (keyof typeof PROVIDER_UI)[]).map(id => {
-  const ui: ProviderUIDecoration = PROVIDER_UI[id];
+const CURATED_UI: Record<string, ProviderUIDecoration> = PROVIDER_UI;
+
+function defaultDecoration(id: string): ProviderUIDecoration {
+  return {
+    icon: id.slice(0, 2).toUpperCase(),
+    color: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+    gradient: 'from-slate-500/20 to-zinc-500/20 text-slate-400',
+    hexColor: '#64748b',
+  };
+}
+
+const UI_ONLY_PROVIDER_IDS = (Object.keys(PROVIDER_UI) as (keyof typeof PROVIDER_UI)[]).filter(
+  id => !isValidProviderId(id)
+);
+
+const PROVIDER_IDS: ProviderName[] = [...ALL_PROVIDER_IDS, ...UI_ONLY_PROVIDER_IDS];
+
+export const PROVIDERS: ProviderConfig[] = PROVIDER_IDS.map(id => {
+  const ui: ProviderUIDecoration = CURATED_UI[id] ?? defaultDecoration(id);
   const meta: ProviderMeta | undefined = isValidProviderId(id) ? PROVIDER_META[id] : undefined;
   return {
     id,

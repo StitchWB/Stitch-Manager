@@ -47,6 +47,7 @@ export const ProviderId = {
   VANI: 'vani',
   VETTA: 'vetta',
   WISPBYTE: 'wispbyte',
+  ZCODE: 'zcode',
 } as const;
 
 export type ProviderId = (typeof ProviderId)[keyof typeof ProviderId];
@@ -432,6 +433,14 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     category: 'cloud',
     hasAutoreg: true,
     isAiProxy: false,
+    minEngineApi: 1,
+  },
+  [ProviderId.ZCODE]: {
+    id: ProviderId.ZCODE,
+    displayName: 'ZCode',
+    category: 'ai',
+    hasAutoreg: true,
+    isAiProxy: true,
     minEngineApi: 1,
   },
 };
