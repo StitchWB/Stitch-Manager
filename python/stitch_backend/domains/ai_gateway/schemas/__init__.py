@@ -40,6 +40,9 @@ from stitch_backend.domains.ai_gateway.schemas.model_access import (
     CredentialModelAccessUpsertRequest,
     ListCredentialModelAccessRequest,
 )
+from stitch_backend.domains.ai_gateway.schemas.model_health import (
+    ListModelHealthRequest,
+)
 from stitch_backend.domains.ai_gateway.schemas.probe import (
     ProbeEndpointRequest,
 )
@@ -89,6 +92,7 @@ __all__ = [
     "GatewaySetInstanceSharedRequest",
     "ListCredentialModelAccessRequest",
     "ListCredentialsRequest",
+    "ListModelHealthRequest",
     "ListPublicModelsRequest",
     "ListRouteTargetsForPublicModelRequest",
     "ListUpstreamModelsRequest",
