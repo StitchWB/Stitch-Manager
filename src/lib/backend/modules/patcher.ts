@@ -7,11 +7,9 @@
  * - Applying/removing patches
  * - Backup management
  * - IDE verification
- * - Trae-specific patching (storage, extension, workbench)
  */
 
 import type { DetectedIDE, PatchStatus, PatchResult } from '../../../types/ui';
-import type { BackupInfo } from '../../../types/generated';
 import { safeInvoke } from '../core';
 
 // ============================================
@@ -42,6 +40,13 @@ export interface UIBackupInfo {
   path: string;
   size: number;
   isValid: boolean;
+}
+
+interface BackendBackupInfo {
+  id: string;
+  path: string;
+  size: number;
+  createdAt: string;
 }
 
 // ============================================
@@ -95,20 +100,19 @@ export async function unpatchIDE(params: UnpatchIDEParams): Promise<PatchResult>
  * List all backups
  */
 export async function listBackups(params?: { ideId?: string }): Promise<UIBackupInfo[]> {
-  const rustBackups = await safeInvoke<BackupInfo[]>('list_backups', {
+  const backups = await safeInvoke<BackendBackupInfo[]>('list_backups', {
     ideType: params?.ideId || 'kiro',
   });
 
-  // Convert Rust BackupInfo to UI BackupInfo
-  return rustBackups.map(backup => ({
-    id: backup.path, // Use path as ID
+  return backups.map(backup => ({
+    id: backup.id,
     ideId: params?.ideId || 'kiro',
     ideName: params?.ideId || 'Kiro',
     ideVersion: 'unknown',
     createdAt: backup.createdAt,
     path: backup.path,
-    size: backup.fileSize,
-    isValid: true, // Assume valid if returned by Rust
+    size: backup.size,
+    isValid: true,
   }));
 }
 
@@ -126,38 +130,6 @@ export async function restoreBackup(params: RestoreBackupParams): Promise<PatchR
  */
 export async function deleteBackup(params: { backupId: string }): Promise<void> {
   return safeInvoke<void>('delete_backup', { backupId: params.backupId });
-}
-
-// ============================================
-// Trae Storage Patch
-// ============================================
-
-/**
- * Check if Trae storage is patched (Pro enabled)
- */
-export async function isTraePatched(): Promise<boolean> {
-  return safeInvoke<boolean>('is_trae_patched');
-}
-
-/**
- * Patch all Trae files (storage + extension + workbench)
- */
-export async function patchTraeFull(): Promise<PatchResult> {
-  return safeInvoke<PatchResult>('patch_trae_full');
-}
-
-/**
- * Check if Trae extension.js is patched
- */
-export async function isTraeExtensionPatched(): Promise<boolean> {
-  return safeInvoke<boolean>('is_trae_extension_patched');
-}
-
-/**
- * Check if Trae workbench is patched
- */
-export async function isTraeWorkbenchPatched(): Promise<boolean> {
-  return safeInvoke<boolean>('is_trae_workbench_patched');
 }
 
 // ============================================

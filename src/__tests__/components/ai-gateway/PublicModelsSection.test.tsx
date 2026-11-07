@@ -19,6 +19,15 @@ jest.mock('@/components/ui', () => ({
       {action}
     </div>
   ),
+  Modal: ({ isOpen, children, footer }: any) => (
+    isOpen ? <div>{children}{footer}</div> : null
+  ),
+  Select: ({ children, value, onChange, ...rest }: any) => (
+    <select value={value} onChange={onChange} {...rest}>{children}</select>
+  ),
+  Input: ({ value, onChange, ...rest }: any) => (
+    <input value={value} onChange={onChange} {...rest} />
+  ),
   askConfirm: jest.fn(async () => true),
 }));
 
@@ -41,6 +50,8 @@ const storeState: any = {
   fetchEndpoints: jest.fn(async () => undefined),
   deletePublicModel: jest.fn(async () => undefined),
   deleteRouteTarget: jest.fn(async () => undefined),
+  mergePublicModels: jest.fn(async () => null),
+  unmergeRouteTarget: jest.fn(async () => null),
 };
 
 jest.mock('@/stores/aiGateway', () => ({
@@ -183,5 +194,49 @@ describe('PublicModelsSection', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'aiGateway.form.addRoute' }));
 
     expect(await screen.findByTestId('route-target-form')).toBeTruthy();
+  });
+
+  it('merges a public model into another via the merge dialog', async () => {
+    const second: PublicModel = { ...publicModel, id: 'qwen2.8', displayName: 'Qwen 2.8' };
+    storeState.publicModels = [publicModel, second];
+
+    render(<PublicModelsSection />);
+
+    const mergeButtons = await screen.findAllByRole('button', { name: 'aiGateway.list.mergeModel' });
+    fireEvent.click(mergeButtons[0]);
+
+    const confirmButtons = screen.getAllByRole('button', { name: 'aiGateway.list.mergeModel' });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() =>
+      expect(storeState.mergePublicModels).toHaveBeenCalledWith({
+        sourceId: 'gpt-4o-mini',
+        targetId: 'qwen2.8',
+      }),
+    );
+  });
+
+  it('splits a route target into its own public model', async () => {
+    storeState.publicModels = [publicModel];
+    storeState.upstreamModels = [upstream];
+    storeState.endpoints = [endpoint];
+    listTargets.mockResolvedValue([makeTarget({ id: 7 })]);
+
+    render(<PublicModelsSection />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /gpt-4o-mini/ }));
+    await screen.findByText('OpenAI / gpt-4o-mini-2024 (GPT-4o Mini (2024))');
+
+    fireEvent.click(screen.getByRole('button', { name: 'aiGateway.list.unmergeTarget' }));
+
+    const confirmButtons = screen.getAllByRole('button', { name: 'aiGateway.list.unmergeTarget' });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() =>
+      expect(storeState.unmergeRouteTarget).toHaveBeenCalledWith({
+        targetId: 7,
+        newPublicModelId: 'gpt-4o-mini-2024',
+      }),
+    );
   });
 });

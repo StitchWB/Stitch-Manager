@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import and_, select
 
@@ -34,8 +34,9 @@ if TYPE_CHECKING:
 async def cmd_discover_models_for_endpoint(db: AsyncSession, params: dict) -> dict:
     """On-demand model discovery for one endpoint.
 
-    Delegates to ``DiscoveryWorker._discover_endpoint`` with a fresh session,
-    then returns the total upstream model count for the endpoint.
+    Delegates to ``DiscoveryWorker._discover_endpoint`` on the request session
+    (it owns the single write connection), then returns the total upstream
+    model count for the endpoint.
     """
     req = ProviderEndpointIdRequest.model_validate(params)
     owner_id = _caller_uid(params)
@@ -51,7 +52,7 @@ async def cmd_discover_models_for_endpoint(db: AsyncSession, params: dict) -> di
     endpoint = result.scalar_one_or_none()
     if endpoint is None:
         return {"models_count": 0}
-    await cast("Any", DiscoveryWorker)._discover_endpoint(db, endpoint)
+    await DiscoveryWorker._discover_endpoint(db, endpoint)
     model_svc = UpstreamModelService(db)
     models = await model_svc.list_models(req.id)
     return {"models_count": len(models)}
@@ -84,8 +85,8 @@ async def cmd_test_credential_connection(db: AsyncSession, params: dict) -> dict
     if endpoint is None:
         return {"success": False, "error": "Endpoint not found"}
     cred_svc = CredentialService(db)
-    secret = await cred_svc.get_secret_for_invocation(req.id)
-    if not secret:
+    secret = await cred_svc.resolve_invocation_secret(credential)
+    if secret is None:
         return {"success": False, "error": "No secret available"}
     adapter = get_adapter(endpoint.adapter_type)
     probe = await adapter.probe_credential(

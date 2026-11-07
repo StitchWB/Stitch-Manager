@@ -24,6 +24,12 @@ In-process quota race (P2):
   - Cross-process (multi-worker) stays bounded by the DB pre-check
     (documented).
 
+Restart: ``_over_keys`` is in-process and empty after a restart, but the
+DB pre-check in ``routing_engine._over_quota_group_ids`` reconstructs
+over-quota state from committed ``group_usage_by_model`` rows, so
+quota-exhausted keys are not re-selected.  The flags only close the
+in-process TOCTOU race — they are not a second source of truth.
+
 Restart loss window: ≤10 s of usage data (the flush interval).  Usage
 accounting is best-effort telemetry; losing ≤10 s on restart is acceptable.
 

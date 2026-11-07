@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+from typing import TYPE_CHECKING
+
+from sqlalchemy import func, or_, select
 
 from stitch_backend.core.base_repository import BaseRepository
+from stitch_backend.domains.ai_gateway.model_identity import (
+    canonical_model_key,
+    is_valid_public_slug,
+    reconcile_contract,
+)
 from stitch_backend.domains.ai_gateway.models import (
+    Credential,
     CredentialModelAccess,
+    ProviderEndpoint,
     PublicModel,
     RouteTarget,
     UpstreamModel,
     _utcnow,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class UpstreamModelService(BaseRepository[UpstreamModel]):
@@ -54,6 +66,7 @@ class UpstreamModelService(BaseRepository[UpstreamModel]):
                 existing.display_name = display_name
             # ponytail: keep operator's enabled/disabled intent — discovery must not re-enable disabled models
             existing.discovery_source = discovery_source
+            existing.canonical_model_key = canonical_model_key(upstream_model_id)
             if capabilities is not None:
                 existing.capabilities = capabilities
             existing.last_discovered_at = _utcnow()
@@ -67,6 +80,7 @@ class UpstreamModelService(BaseRepository[UpstreamModel]):
             display_name=display_name,
             enabled=enabled,
             discovery_source=discovery_source,
+            canonical_model_key=canonical_model_key(upstream_model_id),
             capabilities=capabilities,
             last_discovered_at=_utcnow(),
             created_at=_utcnow(),
@@ -215,3 +229,108 @@ class RouteTargetService(BaseRepository[RouteTarget]):
             .order_by(RouteTarget.priority.asc(), RouteTarget.weight.desc()),
         )
         return list(result.scalars().all())
+
+
+class ModelIdentityService:
+    """Auto-group upstream models that share a canonical identity.
+
+    A canonical key exposed by two or more enabled endpoints becomes one
+    ``PublicModel`` (slug = the key) with one ``RouteTarget`` per upstream
+    model, so a request survives any single provider dying.  Idempotent:
+    re-running only adds missing targets and never re-prioritises existing
+    ones (operator edits win).
+    """
+
+    def __init__(self, db: AsyncSession) -> None:
+        self._db = db
+
+    async def auto_group(self) -> dict[str, int]:
+        rows = await self._load_groupable_models()
+        groups: dict[tuple[int | None, str], list[tuple[UpstreamModel, ProviderEndpoint]]] = {}
+        for upstream, endpoint in rows:
+            key = upstream.canonical_model_key or canonical_model_key(upstream.upstream_model_id)
+            if not key:
+                continue
+            groups.setdefault((endpoint.owner_id, key), []).append((upstream, endpoint))
+
+        created_models = 0
+        created_targets = 0
+        for (owner_id, key), members in groups.items():
+            if len({endpoint.id for _u, endpoint in members}) < 2:
+                continue
+            if not is_valid_public_slug(key):
+                continue
+
+            pub_svc = PublicModelService(self._db)
+            public = await pub_svc.get_by_pk(key)
+            if public is None:
+                public = await pub_svc.create_public_model(
+                    key,
+                    display_name=key,
+                    enabled=True,
+                    contract=reconcile_contract([u for u, _e in members]),
+                    owner_id=owner_id,
+                )
+                created_models += 1
+            elif public.owner_id != owner_id:
+                # Slug is globally unique; never fold another owner's endpoints into it.
+                continue
+            elif public.contract is None:
+                public.contract = reconcile_contract([u for u, _e in members])
+                public.updated_at = _utcnow()
+
+            weights = await self._healthy_cred_counts([u.id for u, _e in members])
+            target_svc = RouteTargetService(self._db)
+            existing = {
+                t.upstream_model_id
+                for t in await target_svc.list_targets_for_public_model(key)
+            }
+            ordered = sorted(members, key=lambda pair: (pair[1].name, pair[1].id))
+            for index, (upstream, _endpoint) in enumerate(ordered):
+                if upstream.id in existing:
+                    continue
+                await target_svc.create_target(
+                    key,
+                    upstream.id,
+                    priority=10 * (index + 1),
+                    weight=float(max(1, weights.get(upstream.id, 0))),
+                )
+                created_targets += 1
+
+        await self._db.flush()
+        return {
+            "public_models_created": created_models,
+            "route_targets_created": created_targets,
+        }
+
+    async def _load_groupable_models(self) -> list[tuple[UpstreamModel, ProviderEndpoint]]:
+        stmt = (
+            select(UpstreamModel, ProviderEndpoint)
+            .join(
+                ProviderEndpoint,
+                UpstreamModel.provider_endpoint_id == ProviderEndpoint.id,
+            )
+            .where(
+                UpstreamModel.enabled == True,  # noqa: E712
+                ProviderEndpoint.enabled == True,  # noqa: E712
+            )
+        )
+        result = await self._db.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
+
+    async def _healthy_cred_counts(self, upstream_ids: list[str]) -> dict[str, int]:
+        if not upstream_ids:
+            return {}
+        stmt = (
+            select(CredentialModelAccess.upstream_model_id, func.count())
+            .join(Credential, Credential.id == CredentialModelAccess.credential_id)
+            .where(
+                CredentialModelAccess.upstream_model_id.in_(upstream_ids),
+                CredentialModelAccess.status == "available",
+                Credential.enabled == True,  # noqa: E712
+                Credential.runtime_status.in_(("active", "unknown")),
+            )
+            .group_by(CredentialModelAccess.upstream_model_id)
+        )
+        result = await self._db.execute(stmt)
+        return {row[0]: int(row[1]) for row in result.all()}

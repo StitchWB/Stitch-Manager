@@ -107,6 +107,7 @@ class ProbeWorker:
 
     @classmethod
     async def _loop(cls) -> None:
+        await cls._warmup()
         while True:
             try:
                 await asyncio.sleep(cls._interval_seconds)
@@ -116,11 +117,21 @@ class ProbeWorker:
             except Exception:
                 logger.exception("ProbeWorker loop error — will retry")
 
+    @classmethod
+    async def _warmup(cls) -> None:
+        """Immediate probe pass on startup so the first client request has fresh metrics."""
+        try:
+            await cls._probe_all(include_active=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("ProbeWorker warmup error")
+
     # ── Core probe logic ─────────────────────────────────────────────────────
 
     @classmethod
-    async def _probe_all(cls) -> None:
-        """Probe all credentials in non-active states that are due for retry.
+    async def _probe_all(cls, *, include_active: bool = False) -> None:
+        """Probe credentials due for retry; ``include_active`` also probes live ones (warmup).
 
         Three-phase flow:
           1. READ session  — load credentials + endpoints + secrets, close.
@@ -132,7 +143,7 @@ class ProbeWorker:
         await cls._expire_stale_model_marks()
 
         # 1. Load probe targets (read-only).
-        targets = await cls._load_probe_targets()
+        targets = await cls._load_probe_targets(include_active=include_active)
         if not targets:
             logger.debug("ProbeWorker: no credentials to probe")
             return
@@ -183,17 +194,19 @@ class ProbeWorker:
             logger.exception("ProbeWorker: failed to expire stale model marks")
 
     @classmethod
-    async def _load_probe_targets(cls) -> list[dict[str, Any]]:
+    async def _load_probe_targets(cls, *, include_active: bool = False) -> list[dict[str, Any]]:
         """Load credentials due for retry + their endpoint + secret (read-only).
 
         Uses a READ session so the write pool is untouched.  All ORM data is
         extracted into plain dicts before the session closes.
         """
+        states = (*_PROBE_STATES, "active") if include_active else _PROBE_STATES
+
         async def _op(session: AsyncSession) -> list[dict[str, Any]]:
             now = _utcnow()
             result = await session.execute(
                 select(Credential).where(
-                    Credential.runtime_status.in_(_PROBE_STATES),
+                    Credential.runtime_status.in_(states),
                     or_(Credential.next_retry_at.is_(None), Credential.next_retry_at <= now),
                 ),
             )
@@ -213,8 +226,8 @@ class ProbeWorker:
                     )
                     continue
 
-                secret = await cred_svc.get_secret_for_invocation(cred.id)
-                if not secret:
+                secret = await cred_svc.resolve_invocation_secret(cred)
+                if secret is None:
                     logger.warning(
                         "ProbeWorker: no secret for credential %s", cred.id,
                     )
@@ -222,6 +235,7 @@ class ProbeWorker:
 
                 targets.append({
                     "credential_id": cred.id,
+                    "endpoint_id": endpoint.id,
                     "adapter_type": endpoint.adapter_type,
                     "base_url": endpoint.base_url,
                     "default_headers": endpoint.default_headers,
@@ -248,8 +262,10 @@ class ProbeWorker:
         if probe.success:
             return {
                 "credential_id": target["credential_id"],
+                "endpoint_id": target["endpoint_id"],
                 "success": True,
                 "http_status": probe.http_status,
+                "latency_ms": probe.latency_ms,
                 "classified": None,
             }
 
@@ -269,8 +285,10 @@ class ProbeWorker:
 
         return {
             "credential_id": target["credential_id"],
+            "endpoint_id": target["endpoint_id"],
             "success": False,
             "http_status": probe.http_status,
+            "latency_ms": probe.latency_ms,
             "classified": classified,
         }
 
@@ -281,11 +299,20 @@ class ProbeWorker:
 
         async def _op(session: AsyncSession) -> None:
             for result in results:
+                classified: ClassifiedError | None = result["classified"]
+                credential_state.record_outcome(
+                    credential_id=result["credential_id"],
+                    endpoint_id=result["endpoint_id"],
+                    ok=result["success"],
+                    latency_ms=result["latency_ms"],
+                    error_kind=credential_state.classify_error_kind(
+                        classified, result["http_status"],
+                    ),
+                )
                 # ponytail: per-credential savepoint so one failure doesn't
                 # discard earlier credentials' successful transitions.
                 try:
                     async with session.begin_nested():
-                        classified: ClassifiedError | None = result["classified"]
                         await credential_state.transition_credential(
                             session, result["credential_id"],
                             error=classified,

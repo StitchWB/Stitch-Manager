@@ -47,6 +47,12 @@ WEB_SESSION_HARVEST_CONFIG: dict[str, dict[str, Any]] = {
         # WAF session continuity. No required-cookie gate.
         "required_cookies": (),
     },
+    "zcode": {
+        "login_url": "https://chat.z.ai/auth",
+        "cookie_domains": ("z.ai",),
+        # ZCode auth is in localStorage['token'] — no required-cookie gate
+        "required_cookies": (),
+    },
 }
 
 
@@ -243,11 +249,19 @@ async def capture_web_cookies(
         }
 
     jar = build_cookie_jar(provider_cookies)
+    local_storage: dict[str, Any] = {}
+    try:
+        from stitch_backend.domains.browser.inject import read_local_storage
+
+        local_storage = await read_local_storage(port)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("localStorage capture failed (non-fatal): %s", exc)
     session_data = _merge_session_data(
         str(row["session_data"] or "{}"),
         {
             "state": "harvest_ready",
             "cookiesJson": json.dumps(provider_cookies),
+            "localStorage": json.dumps(local_storage),
         },
     )
     await _update_account_fields(

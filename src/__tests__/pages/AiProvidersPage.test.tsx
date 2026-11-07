@@ -1,12 +1,21 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { toast } from 'sonner';
 import AiProvidersPage from '../../pages/AiProvidersPage';
 import * as aiGatewayModule from '../../lib/backend/modules/aiGateway';
 import * as customProvidersModule from '../../lib/backend/modules/customProviders';
 import { useAiGatewayStore } from '../../stores/aiGateway';
 import { useServicePlugins } from '@/hooks/useServicePlugins';
+
+jest.mock('sonner', () => ({
+  toast: {
+    success: jest.fn(),
+    error: jest.fn(),
+    info: jest.fn(),
+  },
+}));
 
 jest.mock('@/hooks/useServicePlugins', () => ({
   useServicePlugins: jest.fn(() => []),
@@ -66,6 +75,7 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
   listCredentials: jest.fn(async () => []),
   listUpstreamModels: jest.fn(async () => []),
   createProviderEndpoint: jest.fn(),
+  saveConnection: jest.fn(),
   updateProviderEndpoint: jest.fn(),
   deleteProviderEndpoint: jest.fn(),
   createCredential: jest.fn(),
@@ -172,7 +182,7 @@ describe('AiProvidersPage (unified master-detail)', () => {
 
     await screen.findByText('OpenAI');
 
-    expect(screen.getAllByRole('button', { name: 'Paste keys' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Add connection' }).length).toBeGreaterThan(0);
     expect(screen.getByPlaceholderText('Search providers…')).toBeTruthy();
     expect(screen.getByTestId('proxy-status-bar')).toBeTruthy();
     expect(screen.getByText('DeepSeek CN')).toBeTruthy();
@@ -185,7 +195,7 @@ describe('AiProvidersPage (unified master-detail)', () => {
 
     expect(await screen.findByText('Fleet overview')).toBeTruthy();
     expect(screen.queryByText('Select a provider')).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Paste keys' }).length).toBeGreaterThan(1);
+    expect(screen.getAllByRole('button', { name: 'Add connection' }).length).toBeGreaterThan(1);
   });
 
   it('shows provider and key counts in the roster footer', async () => {
@@ -217,6 +227,160 @@ describe('AiProvidersPage (unified master-detail)', () => {
     await user.click(screen.getByText('OpenAI'));
 
     await waitFor(() => expect(gw.discoverModelsForEndpoint).toHaveBeenCalledWith('ep-openai'));
+  });
+
+  it('reports rejected keys instead of a success toast', async () => {
+    const user = userEvent.setup();
+    gw.testCredentialConnection.mockResolvedValueOnce({ success: false, error: '401 unauthorized' } as never);
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(screen.getByRole('checkbox', { name: 'Select all' }));
+    await user.click(screen.getByRole('button', { name: 'Test selected' }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Tested 0 of 1 keys: some were rejected');
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('shows a discovery error with a retry action in the models panel', async () => {
+    const user = userEvent.setup();
+    gw.discoverModelsForEndpoint
+      .mockRejectedValueOnce(new Error('HTTP 502') as never)
+      .mockRejectedValueOnce(new Error('HTTP 502') as never);
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(screen.getByRole('button', { name: 'Models' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Model discovery failed');
+    expect(alert.textContent).toContain('HTTP 502');
+
+    gw.discoverModelsForEndpoint.mockClear();
+    await user.click(within(alert).getByRole('button', { name: 'Discover models' }));
+    await waitFor(() => expect(gw.discoverModelsForEndpoint).toHaveBeenCalledWith('ep-openai'));
+  });
+
+  it('opens the Add connection dialog unscoped even when a provider is selected', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+
+    await user.click(screen.getAllByRole('button', { name: 'Add connection' })[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Add connection')).toBeTruthy();
+    expect(within(dialog).queryByPlaceholderText('Search providers…')).toBeNull();
+    expect(within(dialog).getAllByRole('combobox').length).toBeGreaterThan(0);
+  });
+
+  it('opens the scoped Add keys dialog from the keys table', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+
+    await user.click(await screen.findByRole('button', { name: 'Add keys' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Add keys')).toBeTruthy();
+    expect(within(dialog).getByText('OpenAI')).toBeTruthy();
+    expect(within(dialog).queryAllByRole('combobox')).toHaveLength(0);
+  });
+
+  it('leaves saved keys unverified without automatic probes', async () => {
+    const user = userEvent.setup();
+    gw.saveConnection.mockResolvedValue({
+      endpoint: endpointOpenAi,
+      endpointCreated: false,
+      credentials: [
+        {
+          id: 'cred-2',
+          providerEndpointId: 'ep-openai',
+          authType: 'api_key',
+          fingerprint: 'fingerprint2',
+          enabled: true,
+          runtimeStatus: 'unknown',
+          consecutiveFailures: 0,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      credentialsCreated: 1,
+      credentialsExisting: 0,
+    } as never);
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getAllByRole('button', { name: 'Add connection' })[0]);
+
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getAllByRole('combobox')[0]);
+    await user.click(await screen.findByRole('option', { name: 'OpenAI' }));
+    await user.type(
+      within(dialog).getByPlaceholderText('Paste an API key to add an account'),
+      'sk-saved-key-1234567890',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(gw.saveConnection).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('Untested')).toBeTruthy());
+    expect(toast.success).toHaveBeenCalledWith('Added 1 key(s) — not verified yet');
+    expect(gw.discoverModelsForEndpoint).not.toHaveBeenCalled();
+    expect(gw.testCredentialConnection).not.toHaveBeenCalled();
+  });
+
+  it('adds a model id manually from the models panel', async () => {
+    const user = userEvent.setup();
+    gw.createUpstreamModel.mockResolvedValue({
+      id: 'um-1',
+      providerEndpointId: 'ep-openai',
+      upstreamModelId: 'gpt-4o',
+      displayName: null,
+      enabled: true,
+      discoverySource: 'manual',
+      createdAt: '2026-01-01T00:00:00Z',
+    } as never);
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(screen.getByRole('button', { name: 'Models' }));
+
+    await user.type(
+      screen.getByPlaceholderText('model id, e.g. gpt-4o'),
+      'gpt-4o',
+    );
+    await user.click(screen.getByRole('button', { name: 'Add model' }));
+
+    await waitFor(() =>
+      expect(gw.createUpstreamModel).toHaveBeenCalledWith({
+        providerEndpointId: 'ep-openai',
+        upstreamModelId: 'gpt-4o',
+        discoverySource: 'manual',
+      }),
+    );
+    expect(toast.success).toHaveBeenCalledWith('Model added');
+  });
+
+  it('flags a placeholder .invalid address without rewriting it', async () => {
+    const user = userEvent.setup();
+    gw.listProviderEndpoints.mockResolvedValue([
+      { ...endpointOpenAi, baseUrl: 'https://placeholder.invalid/v1' },
+    ] as never);
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+
+    expect(await screen.findByText(/Placeholder address \(\.invalid\)/)).toBeTruthy();
+    expect(screen.getByText('https://placeholder.invalid/v1 · openai_compatible')).toBeTruthy();
   });
 
   it('switches the detail pane when another provider is selected', async () => {

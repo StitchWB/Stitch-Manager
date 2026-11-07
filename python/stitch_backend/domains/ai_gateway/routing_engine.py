@@ -26,13 +26,14 @@ filtering happens in memory (no per-target DB query).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, false, or_, select
 from sqlalchemy.orm import aliased
 
+from stitch_backend.core.event_bus import Event, event_bus
 from stitch_backend.domains.ai_gateway import circuit_breaker, credential_state
 from stitch_backend.domains.ai_gateway.adapters.base import (
     ClassifiedError,
@@ -143,11 +144,121 @@ class QuotaExceededError(RoutingError):
         self.groups = groups or []
 
 
+class UpstreamFailureError(RoutingError):
+    """Raised when every candidate failed upstream.
+
+    Carries a provider-agnostic ``reason`` and HTTP ``status_code`` so the
+    gateway answers with a canonical envelope instead of leaking the raw
+    upstream error text of the last attempt.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str = "upstream_error",
+        status_code: int = 502,
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.status_code = status_code
+
+
+class ContextLengthExceededError(RoutingError):
+    """Raised when the request input exceeds the public model's context window.
+
+    A client-side error (HTTP 400): no target of this public model can serve
+    the request, so it must not be retried or fanned out to upstream.
+    """
+
+    status_code = 400
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        model: str,
+        requested_tokens: int,
+        max_tokens: int,
+    ) -> None:
+        super().__init__(message)
+        self.model = model
+        self.requested_tokens = requested_tokens
+        self.max_tokens = max_tokens
+
+
+_RESOLVE_CACHE_MAX_ENTRIES = 256
+
+# Generation counter, not a registry: each engine drops its cache when it sees a generation it did not populate.
+_resolve_cache_generation = 0
+
+
+def _invalidate_resolve_caches() -> None:
+    global _resolve_cache_generation
+    _resolve_cache_generation += 1
+
+
+@event_bus.on("credential.state_changed")
+@event_bus.on("endpoint.models_changed")
+async def _on_routing_state_changed(_event: Event) -> None:
+    _invalidate_resolve_caches()
+
+
+@dataclass
+class _CachedResolution:
+    """Resolved candidates for one (model, pool, requirements) key; results carry no secret."""
+
+    min_context: int | None
+    results: list[RoutingResult]
+
+
 # How many credentials (LRU-ordered) each route target contributes as
 # candidates.  >1 lets the executor fail over between keys of the SAME
 # upstream model within one request (e.g. a 429 on key A retries with
 # key B) instead of failing the whole request.
 MAX_CANDIDATES_PER_TARGET = 3
+
+# Predictive scoring: _MIN_HEALTH floors a fully-dead target so it sorts last, not to zero.
+_REFERENCE_LATENCY_MS = 1000.0
+_MIN_HEALTH = 0.05
+
+
+def _score(
+    weight: float,
+    cost_modifier: float,
+    snapshot: credential_state.MetricsSnapshot,
+) -> float:
+    """Dynamic candidate score: weight scaled by health and latency, divided by cost."""
+    health = max(snapshot.success_rate, _MIN_HEALTH) if snapshot.has_data else 1.0
+    latency = snapshot.p50_latency_ms if snapshot.p50_latency_ms > 0 else _REFERENCE_LATENCY_MS
+    latency_factor = max(latency, _REFERENCE_LATENCY_MS) / _REFERENCE_LATENCY_MS
+    cost = max(cost_modifier, 1e-6)
+    return weight * health / latency_factor / cost
+
+
+def _order_candidates(
+    candidates: list[tuple[RouteTarget, UpstreamModel]],
+    rotation_strategy: str | None,
+) -> list[tuple[RouteTarget, UpstreamModel]]:
+    """Order targets: user policy primary, dynamic score secondary.
+
+    ``rotation_strategy`` is the outer policy — the user's explicit ``priority``
+    tier stays the hard ordering, so the dynamic score only refines targets
+    that share a tier and never overrides the user's choice.  Only the
+    priority+LRU policy is implemented today (round-robin/random are out of
+    scope); every strategy maps to it.
+    """
+    return sorted(
+        candidates,
+        key=lambda pair: (
+            pair[0].priority,
+            -_score(
+                pair[0].weight,
+                pair[0].cost_modifier,
+                credential_state.metrics_store.snapshot(pair[1].provider_endpoint_id),
+            ),
+        ),
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -209,6 +320,29 @@ def _model_satisfies(capabilities: dict[str, Any] | None, requirements: dict[str
     return True
 
 
+def _estimate_text_tokens(text: str) -> int:
+    """Rough token estimate (ceil(bytes / 3.5)); overestimates, the safe direction for a hard gate."""
+    if not text:
+        return 0
+    byte_count = len(text.encode("utf-8"))
+    return max(1, int((byte_count + 3) // 3.5))
+
+
+def _estimate_input_tokens(messages: list[dict[str, Any]]) -> int:
+    total = 0
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, str):
+            total += _estimate_text_tokens(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict):
+                    text = part.get("text")
+                    if isinstance(text, str):
+                        total += _estimate_text_tokens(text)
+    return total
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Routing engine
 # ═══════════════════════════════════════════════════════════════════════════
@@ -217,11 +351,72 @@ def _model_satisfies(capabilities: dict[str, Any] | None, requirements: dict[str
 class RoutingEngine:
     """Capability-aware request router for the AI Gateway."""
 
+    def __init__(self) -> None:
+        self._resolve_cache: dict[tuple[Any, ...], _CachedResolution] = {}
+        self._resolve_cache_gen = _resolve_cache_generation
+
+    def _cache_lookup(self, key: tuple[Any, ...]) -> _CachedResolution | None:
+        if self._resolve_cache_gen != _resolve_cache_generation:
+            self._resolve_cache.clear()
+            self._resolve_cache_gen = _resolve_cache_generation
+        return self._resolve_cache.get(key)
+
+    def _cache_store(self, key: tuple[Any, ...], value: _CachedResolution) -> None:
+        if (
+            len(self._resolve_cache) >= _RESOLVE_CACHE_MAX_ENTRIES
+            and key not in self._resolve_cache
+        ):
+            self._resolve_cache.clear()
+        self._resolve_cache[key] = value
+
+    async def _resolve_from_cache(
+        self,
+        session: AsyncSession,
+        cached: _CachedResolution,
+        pool: PoolScope,
+        request: GatewayRequest,
+    ) -> list[RoutingResult] | None:
+        if cached.min_context is not None:
+            estimated = _estimate_input_tokens(request.messages)
+            if estimated > cached.min_context:
+                raise ContextLengthExceededError(
+                    f"Request input (~{estimated} tokens) exceeds the "
+                    f"{cached.min_context}-token context window of public model "
+                    f"{request.model!r}",
+                    model=request.model,
+                    requested_tokens=estimated,
+                    max_tokens=cached.min_context,
+                )
+        cred_svc = CredentialService(session)
+        now = _utcnow()
+        results: list[RoutingResult] = []
+        for cached_result in cached.results:
+            credential = cached_result.credential
+            if credential.next_retry_at is not None and credential.next_retry_at > now:
+                continue
+            secret = await cred_svc.resolve_invocation_secret(credential)
+            if secret is None:
+                continue
+            results.append(replace(cached_result, secret=secret))
+        if not results:
+            return None
+        if pool.group_ids:
+            over_quota = await _over_quota_group_ids(session, pool, model=request.model)
+            if over_quota:
+                results = [
+                    r for r in results
+                    if r.group_id_hit is None or r.group_id_hit not in over_quota
+                ]
+                if not results:
+                    return None
+        return results
+
     async def route(
         self,
         session: AsyncSession,
         request: GatewayRequest,
         pool: PoolScope | None = None,
+        rotation_strategy: str | None = None,
     ) -> list[RoutingResult]:
         """Resolve a public model to a list of (endpoint, credential, upstream) candidates.
 
@@ -234,6 +429,9 @@ class RoutingEngine:
                 ``PoolScope(None, (), True)`` (desktop / auth-disabled) —
                 preserves the legacy behavior of routing over instance-shared
                 (NULL-owner) rows only.
+            rotation_strategy: The user's rotation policy (``priority``,
+                ``least-used``, ...).  It is the outer ordering; the dynamic
+                health/latency score only refines within it.
 
         Raises:
             RoutingError: if no valid route exists.
@@ -241,14 +439,35 @@ class RoutingEngine:
         if pool is None:
             pool = PoolScope(owner_user_id=None)
 
+        requirements = derive_requirements(request)
+        cache_key = (request.model, pool, tuple(sorted(requirements.items())))
+        cached = self._cache_lookup(cache_key)
+        if cached is not None:
+            hit = await self._resolve_from_cache(session, cached, pool, request)
+            if hit is not None:
+                return hit
+
         # 1. Resolve public model.
         pub_svc = PublicModelService(session)
         public_model = await pub_svc.get_by_pk(request.model)
         if public_model is None or not public_model.enabled:
             raise RoutingError(f"Public model {request.model!r} not found or disabled")
 
-        # 2. Derive requirements.
-        requirements = derive_requirements(request)
+        # 1b. minContextTokens is the safe-min across targets; reject before any upstream call.
+        min_context: int | None = None
+        min_ctx = (public_model.contract or {}).get("minContextTokens")
+        if isinstance(min_ctx, int) and not isinstance(min_ctx, bool):
+            min_context = min_ctx
+            estimated = _estimate_input_tokens(request.messages)
+            if estimated > min_ctx:
+                raise ContextLengthExceededError(
+                    f"Request input (~{estimated} tokens) exceeds the "
+                    f"{min_ctx}-token context window of public model "
+                    f"{request.model!r}",
+                    model=request.model,
+                    requested_tokens=estimated,
+                    max_tokens=min_ctx,
+                )
 
         # 3. Get route targets (ordered by priority ASC, weight DESC).
         target_svc = RouteTargetService(session)
@@ -272,6 +491,8 @@ class RoutingEngine:
             raise RoutingError(
                 f"No route targets satisfy requirements {requirements} for {request.model!r}",
             )
+
+        candidates = _order_candidates(candidates, rotation_strategy)
 
         # 5. ONE prefetch: eligible credentials grouped by upstream_model_id.
         # The pool predicate (owner_id == uid OR owner_id IS NULL OR
@@ -346,12 +567,18 @@ class RoutingEngine:
             # credential so the executor can fail over key→key within a
             # single request.
             eligible.sort(
-                key=lambda pair: pair[0].last_success_at
-                or datetime.min.replace(tzinfo=UTC),
+                key=lambda pair: (
+                    pair[0].last_success_at or datetime.min.replace(tzinfo=UTC),
+                    -_score(
+                        1.0,
+                        1.0,
+                        credential_state.metrics_store.snapshot(pair[0].id),
+                    ),
+                ),
             )
             for cred, group_id_hit in eligible[:MAX_CANDIDATES_PER_TARGET]:
-                secret = await cred_svc.get_secret_for_invocation(cred.id)
-                if not secret:
+                secret = await cred_svc.resolve_invocation_secret(cred)
+                if secret is None:
                     continue
 
                 # Attribution: log caller uid, credential_id, owner_id, group_id_hit.
@@ -379,6 +606,13 @@ class RoutingEngine:
                 )
             raise RoutingError(f"No eligible credentials found for {request.model!r}")
 
+        self._cache_store(
+            cache_key,
+            _CachedResolution(
+                min_context=min_context,
+                results=[replace(r, secret="") for r in results],
+            ),
+        )
         return results
 
     async def record_result(
@@ -389,8 +623,16 @@ class RoutingEngine:
         error: ClassifiedError | None,
         http_status: int | None,
         upstream_model_id: str | None = None,
+        latency_ms: float | None = None,
     ) -> None:
         """Record the outcome of a routed request — updates credential state and circuit breaker."""
+        credential_state.record_outcome(
+            credential_id=credential_id,
+            endpoint_id=endpoint_id,
+            ok=error is None,
+            latency_ms=latency_ms,
+            error_kind=credential_state.classify_error_kind(error, http_status),
+        )
         if error is not None and error.is_model_specific:
             if upstream_model_id is not None:
                 row = (await session.execute(select(CredentialModelAccess).where(

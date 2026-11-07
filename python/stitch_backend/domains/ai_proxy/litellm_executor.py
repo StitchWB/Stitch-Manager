@@ -1,26 +1,31 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from fastapi import HTTPException
 from sqlalchemy import exc as sqlalchemy_exc
 
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway import circuit_breaker
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
-from stitch_backend.domains.ai_gateway.routing_engine import GatewayRequest as AIGatewayRequest
 from stitch_backend.domains.ai_gateway.routing_engine import (
+    ContextLengthExceededError,
     PoolScope,
     QuotaExceededError,
     RoutingEngine,
     RoutingError,
+    UpstreamFailureError,
 )
+from stitch_backend.domains.ai_gateway.routing_engine import GatewayRequest as AIGatewayRequest
 from stitch_backend.domains.ai_gateway.usage_tracker import record_usage as _record_group_usage
 from stitch_backend.domains.ai_proxy.compression.service import get_compression_service
 from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
 from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
+from stitch_backend.domains.ai_proxy.litellm_errors import is_managed_routing_error
 from stitch_backend.domains.ai_proxy.litellm_invoke_pipeline import (
     invoke_via_gateway,
     invoke_via_gateway_messages,
@@ -33,10 +38,15 @@ from stitch_backend.domains.ai_proxy.litellm_public_models import (
     auto_create_public_models_from_config,
 )
 from stitch_backend.domains.ai_proxy.litellm_streaming import (
+    prime_stream,
     stream_anthropic_response,
     stream_anthropic_response_buffered,
     stream_openai_response,
     stream_openai_response_buffered,
+)
+from stitch_backend.domains.ai_proxy.request_trace import (
+    RequestTrace,
+    get_request_trace_store,
 )
 
 if TYPE_CHECKING:
@@ -46,6 +56,7 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
     from starlette.responses import Response
 
+    from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
     from stitch_backend.domains.ai_proxy.litellm_gateway import (
         GatewayRequest,
         JsonObject,
@@ -62,6 +73,43 @@ __all__ = [
     "_public_models_auto_created",
     "auto_create_public_models_from_config",
 ]
+
+
+_STATUS_BY_CATEGORY: dict[str, int] = {
+    "quota_exhausted": 429,
+    "rate_limited": 429,
+    "auth_failed": 502,
+    "model_not_found": 404,
+    "model_access_denied": 403,
+    "client_error": 400,
+    "server_error": 502,
+    "transport_error": 503,
+}
+
+_FAILURE_MESSAGES: dict[str, str] = {
+    "quota_exhausted": "All providers for model '{model}' are out of quota. Retry later.",
+    "rate_limited": "All providers for model '{model}' are rate-limited. Retry shortly.",
+    "auth_failed": "All providers for model '{model}' rejected authentication.",
+    "model_not_found": "Model '{model}' is not available on any configured provider.",
+    "model_access_denied": "No configured provider grants access to model '{model}'.",
+    "client_error": "Every provider rejected the request for model '{model}'.",
+    "server_error": "All providers for model '{model}' are temporarily unavailable.",
+    "transport_error": "All providers for model '{model}' are unreachable.",
+}
+
+
+def _status_for_category(category: str) -> int:
+    return _STATUS_BY_CATEGORY.get(category, 502)
+
+
+def _canonical_failure_message(model: str, category: str) -> str:
+    template = _FAILURE_MESSAGES.get(category, "No provider could serve model '{model}'.")
+    return template.format(model=model)
+
+
+def _is_client_error(exc: HTTPException) -> bool:
+    status = exc.status_code
+    return 400 <= status < 500 and status != 429
 
 
 class CompletionRouter(Protocol):
@@ -150,17 +198,10 @@ class LiteLLMExecutor:
             return cast("list[Any] | None", routing_results)
         except QuotaExceededError as e:
             logger.info("Group quota exceeded for %s: %s", payload.model, e)
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "error": {
-                        "type": "quota_exceeded",
-                        "message": str(e),
-                        "groups": e.groups,
-                    }
-                },
-            ) from e
+            raise
         except RoutingError as e:
+            if is_managed_routing_error(e):
+                raise
             logger.debug("AI Gateway route unavailable for %s: %s", payload.model, e)
             return None
         except Exception as e:
@@ -180,6 +221,182 @@ class LiteLLMExecutor:
         async def _check(session):
             return await circuit_breaker.is_endpoint_available(session, endpoint_id)
         return await run_in_session(_check)
+
+    def _record_request_trace(
+        self,
+        *,
+        model: str | None,
+        routing_result: Any | None,
+        latency_ms: float,
+        failover_count: int,
+        status: str,
+    ) -> None:
+        if routing_result is None:
+            return
+        endpoint = routing_result.endpoint
+        get_request_trace_store().record(
+            RequestTrace(
+                model=model or "",
+                target=getattr(endpoint, "name", None) or endpoint.id,
+                credential_id=routing_result.credential.id,
+                latency_ms=latency_ms,
+                failover_count=failover_count,
+                status=status,
+                timestamp=time.time(),
+            )
+        )
+
+    def _model_chain(self, primary: str) -> list[str]:
+        """Ordered models to attempt: the requested one, then the fallback chain."""
+        from stitch_backend.config import get_settings
+
+        settings = get_settings()
+        if not getattr(settings, "ai_gateway_fallback_enabled", False):
+            return [primary]
+        raw = getattr(settings, "ai_gateway_fallback_models", "") or ""
+        chain = [m.strip() for m in raw.split(",") if m.strip()]
+        return [primary, *(m for m in chain if m != primary)]
+
+    async def _emit_failover_event(
+        self,
+        *,
+        requested: str,
+        served: str,
+        routing_result: Any,
+        failover_count: int,
+        used_fallback: bool,
+    ) -> None:
+        if failover_count == 0 and not used_fallback:
+            return
+        try:
+            await event_bus.emit(
+                "gateway.request.failover",
+                {
+                    "requested_model": requested,
+                    "served_model": served,
+                    "target": getattr(routing_result.endpoint, "name", None)
+                    or routing_result.endpoint.id,
+                    "credential_id": routing_result.credential.id[:8],
+                    "attempts": failover_count,
+                    "used_fallback": used_fallback,
+                },
+            )
+        except Exception:
+            logger.debug("Failed to emit failover event", exc_info=True)
+
+    def _final_error(
+        self,
+        model: str,
+        last_classified: ClassifiedError | None,
+        last_routing_error: RoutingError | None,
+    ) -> RoutingError:
+        if last_classified is not None:
+            return UpstreamFailureError(
+                _canonical_failure_message(model, last_classified.category),
+                reason=last_classified.category,
+                status_code=_status_for_category(last_classified.category),
+            )
+        if last_routing_error is not None:
+            return last_routing_error
+        return UpstreamFailureError(
+            f"No route available for model: {model}",
+            reason="no_route",
+            status_code=503,
+        )
+
+    async def _run_failover(
+        self,
+        payload: GatewayRequest,
+        config: BackgroundManagerConfig,
+        invoke: Callable[[Any], Awaitable[JsonObject | Response]],
+        pool: PoolScope | None = None,
+    ) -> JsonObject | Response:
+        """Walk candidate models and credentials until one succeeds.
+
+        On total failure raises a canonical :class:`RoutingError` (never a raw
+        upstream error), so the HTTP layer answers with one stable envelope.
+        """
+        requested_model = payload.model or ""
+        start_time = time.time()
+        failed_attempts = 0
+        last_attempted: Any | None = None
+        last_classified: ClassifiedError | None = None
+        last_routing_error: RoutingError | None = None
+        served_model = requested_model
+
+        for model_index, model in enumerate(self._model_chain(requested_model)):
+            route_payload = (
+                payload
+                if model == requested_model
+                else payload.model_copy(update={"model": model})
+            )
+            try:
+                routing_results = await self._try_ai_gateway_route(route_payload, pool=pool)
+            except (QuotaExceededError, ContextLengthExceededError):
+                raise
+            except RoutingError as exc:
+                last_routing_error = exc
+                continue
+            if routing_results is None:
+                continue
+
+            for routing_result in routing_results:
+                if not await self._is_endpoint_available(routing_result.endpoint.id):
+                    logger.debug(
+                        "Skipping candidate on endpoint %s — circuit open",
+                        routing_result.endpoint.id,
+                    )
+                    continue
+                last_attempted = routing_result
+                try:
+                    result = await invoke(routing_result)
+                except HTTPException as e:
+                    if _is_client_error(e):
+                        raise
+                    failed_attempts += 1
+                    last_classified = routing_result.adapter.classify_error(
+                        e, http_status=e.status_code,
+                    )
+                    logger.warning(
+                        "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
+                        model, routing_result.credential.id[:8],
+                        _sanitize_error(e, secret=routing_result.secret),
+                    )
+                    continue
+                except Exception as e:
+                    failed_attempts += 1
+                    last_classified = routing_result.adapter.classify_error(e)
+                    logger.warning(
+                        "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
+                        model, routing_result.credential.id[:8],
+                        _sanitize_error(e, secret=routing_result.secret),
+                    )
+                    continue
+                served_model = model
+                self._record_request_trace(
+                    model=model,
+                    routing_result=routing_result,
+                    latency_ms=(time.time() - start_time) * 1000.0,
+                    failover_count=failed_attempts,
+                    status="success",
+                )
+                await self._emit_failover_event(
+                    requested=requested_model,
+                    served=served_model,
+                    routing_result=routing_result,
+                    failover_count=failed_attempts,
+                    used_fallback=model_index > 0,
+                )
+                return result
+
+        self._record_request_trace(
+            model=served_model,
+            routing_result=last_attempted,
+            latency_ms=(time.time() - start_time) * 1000.0,
+            failover_count=failed_attempts,
+            status="error",
+        )
+        raise self._final_error(requested_model, last_classified, last_routing_error)
 
     def _sync_pipeline_config(self, config: BackgroundManagerConfig) -> tuple:
         """Sync HoloNe and Compression middleware config. Returns (holone_service, compression_service)."""
@@ -201,37 +418,11 @@ class LiteLLMExecutor:
 
     async def chat(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
-        last_error: HTTPException | None = None
-
-        # Try AI Gateway routing first
-        routing_results = await self._try_ai_gateway_route(payload, pool=pool)
-        if routing_results is not None:
-            for routing_result in routing_results:
-                if not await self._is_endpoint_available(routing_result.endpoint.id):
-                    logger.debug(
-                        "Skipping candidate on endpoint %s — circuit open",
-                        routing_result.endpoint.id,
-                    )
-                    continue
-                try:
-                    result = await self._invoke_via_gateway(payload, routing_result, config, pool=pool)
-                except Exception as e:
-                    last_error = e if isinstance(e, HTTPException) else HTTPException(
-                        status_code=502,
-                        detail={"error": {"message": _sanitize_error(e, secret=routing_result.secret)}},
-                    )
-                    logger.warning(
-                        "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
-                        payload.model, routing_result.credential.id[:8], e,
-                    )
-                    continue
-                return result
-
-        if last_error is not None:
-            raise last_error
-        raise HTTPException(
-            status_code=503,
-            detail={"error": {"message": f"No route available for model: {payload.model}"}},
+        return await self._run_failover(
+            payload,
+            config,
+            lambda routing_result: self._invoke_via_gateway(payload, routing_result, config, pool=pool),
+            pool=pool,
         )
 
     async def _invoke_via_gateway(
@@ -248,37 +439,11 @@ class LiteLLMExecutor:
 
     async def messages(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
-        last_error: HTTPException | None = None
-
-        # Try AI Gateway routing first
-        routing_results = await self._try_ai_gateway_route(payload, pool=pool)
-        if routing_results is not None:
-            for routing_result in routing_results:
-                if not await self._is_endpoint_available(routing_result.endpoint.id):
-                    logger.debug(
-                        "Skipping candidate on endpoint %s — circuit open",
-                        routing_result.endpoint.id,
-                    )
-                    continue
-                try:
-                    result = await self._invoke_via_gateway_messages(payload, routing_result, config, pool=pool)
-                except Exception as e:
-                    last_error = e if isinstance(e, HTTPException) else HTTPException(
-                        status_code=502,
-                        detail={"error": {"message": _sanitize_error(e, secret=routing_result.secret)}},
-                    )
-                    logger.warning(
-                        "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
-                        payload.model, routing_result.credential.id[:8], e,
-                    )
-                    continue
-                return result
-
-        if last_error is not None:
-            raise last_error
-        raise HTTPException(
-            status_code=503,
-            detail={"error": {"message": f"No route available for model: {payload.model}"}},
+        return await self._run_failover(
+            payload,
+            config,
+            lambda routing_result: self._invoke_via_gateway_messages(payload, routing_result, config, pool=pool),
+            pool=pool,
         )
 
     async def _invoke_via_gateway_messages(
@@ -295,37 +460,11 @@ class LiteLLMExecutor:
 
     async def responses(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
-        last_error: HTTPException | None = None
-
-        # Try AI Gateway routing first
-        routing_results = await self._try_ai_gateway_route(payload, pool=pool)
-        if routing_results is not None:
-            for routing_result in routing_results:
-                if not await self._is_endpoint_available(routing_result.endpoint.id):
-                    logger.debug(
-                        "Skipping candidate on endpoint %s — circuit open",
-                        routing_result.endpoint.id,
-                    )
-                    continue
-                try:
-                    result = await self._invoke_via_gateway_responses(payload, routing_result, config, pool=pool)
-                except Exception as e:
-                    last_error = e if isinstance(e, HTTPException) else HTTPException(
-                        status_code=502,
-                        detail={"error": {"message": _sanitize_error(e, secret=routing_result.secret)}},
-                    )
-                    logger.warning(
-                        "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
-                        payload.model, routing_result.credential.id[:8], e,
-                    )
-                    continue
-                return result
-
-        if last_error is not None:
-            raise last_error
-        raise HTTPException(
-            status_code=503,
-            detail={"error": {"message": f"No route available for model: {payload.model}"}},
+        return await self._run_failover(
+            payload,
+            config,
+            lambda routing_result: self._invoke_via_gateway_responses(payload, routing_result, config, pool=pool),
+            pool=pool,
         )
 
     async def _invoke_via_gateway_responses(
@@ -394,12 +533,18 @@ class LiteLLMExecutor:
 
         Pass-through streaming cannot retry after bytes were sent, so the
         only correct response to a mid-flight upstream error is to record
-        it (cooldown/circuit breaker) and propagate.
+        it (cooldown/circuit breaker) and propagate.  A failure before the
+        first line is left to the invoke pipeline, which can still fail
+        over to the next candidate.
         """
+        started = False
         try:
             async for line in stream:
+                started = True
                 yield line
         except Exception as exc:
+            if not started:
+                raise
             captured = exc  # capture for closure — PEP 3110 deletes `exc` after except block
             logger.warning(
                 "Upstream stream failed mid-flight (credential=%s): %s",
@@ -430,16 +575,18 @@ class LiteLLMExecutor:
     ) -> StreamingResponse:
         """OpenAI-shaped SSE pass-through.
 
-        Upstream adapters yield raw SSE lines (``data: {...}``).  Default
-        path streams them to the client as they arrive (real TTFB) while
-        extracting token usage from chunk payloads.  When HoloNe stream
+        The first upstream chunk is pulled before the client-facing
+        StreamingResponse is built, so a pre-first-chunk upstream failure
+        raises here and the candidate loop can fail over.  After the first
+        chunk the stream is pass-through (real TTFB); when HoloNe stream
         inspection is enabled the stream is buffered first — redaction
         cannot happen after bytes were sent.  ``on_complete`` fires with
         the total token count (``None`` when unknown) after the upstream
         stream ends.
         """
+        primed = await prime_stream(response)
         return await stream_openai_response(
-            response,
+            primed,
             holone_service=get_holone_service(),
             client_has_tools=client_has_tools,
             on_complete=on_complete,
@@ -453,8 +600,9 @@ class LiteLLMExecutor:
         on_complete: Callable[[int | None], Awaitable[None]] | None,
     ) -> StreamingResponse:
         """Buffered variant for HoloNe-enabled runs: collect, inspect/redact, emit."""
+        primed = await prime_stream(response)
         return await stream_openai_response_buffered(
-            response,
+            primed,
             holone_service=get_holone_service(),
             client_has_tools=client_has_tools,
             on_complete=on_complete,
@@ -468,8 +616,9 @@ class LiteLLMExecutor:
         on_complete: Callable[[int | None], Awaitable[None]] | None = None,
     ) -> StreamingResponse:
         """Anthropic-shaped SSE pass-through (same contract as OpenAI)."""
+        primed = await prime_stream(response)
         return await stream_anthropic_response(
-            response,
+            primed,
             holone_service=get_holone_service(),
             client_has_tools=client_has_tools,
             on_complete=on_complete,
@@ -483,8 +632,9 @@ class LiteLLMExecutor:
         on_complete: Callable[[int | None], Awaitable[None]] | None,
     ) -> StreamingResponse:
         """Buffered Anthropic variant for HoloNe-enabled runs."""
+        primed = await prime_stream(response)
         return await stream_anthropic_response_buffered(
-            response,
+            primed,
             holone_service=get_holone_service(),
             client_has_tools=client_has_tools,
             on_complete=on_complete,

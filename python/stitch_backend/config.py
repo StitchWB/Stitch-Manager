@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     litellm_gateway_enabled: bool = True
     litellm_gateway_local_api_key: str | None = None
     litellm_gateway_model_prefix: str = "/v1"
+    # Cross-model chain tried when the requested public model has no live route.
+    ai_gateway_fallback_enabled: bool = False
+    ai_gateway_fallback_models: str = ""
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     # Restricted to known dev origins. "*" with allow_credentials=True lets any

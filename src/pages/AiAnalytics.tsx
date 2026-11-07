@@ -26,22 +26,22 @@ import {
   getModelUsage,
   getRequestHistorySafe,
   getWeeklyStats,
+  type RequestTrace,
 } from '../lib/backend/modules/aiProxy';
 import type {
   DailyStats,
   DailyStatsPoint,
   ModelUsage,
-  RequestLog,
 } from '../types/generated';
 import { t } from '../lib/i18n';
 import { formatDateTime } from '../lib/utils';
 
 type StatusKind = 'success' | 'client' | 'server' | 'unknown';
 
-function classifyStatus(status: number): StatusKind {
-  if (status >= 200 && status < 300) return 'success';
-  if (status >= 400 && status < 500) return 'client';
-  if (status >= 500 && status < 600) return 'server';
+function classifyStatus(status: string): StatusKind {
+  const normalized = (status || '').toLowerCase();
+  if (normalized === 'success' || normalized === 'ok') return 'success';
+  if (normalized === 'error' || normalized === 'failed') return 'server';
   return 'unknown';
 }
 
@@ -90,7 +90,7 @@ export default function AiAnalytics() {
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
   const [weeklyStats, setWeeklyStats] = useState<DailyStatsPoint[]>([]);
   const [modelUsage, setModelUsage] = useState<ModelUsage[]>([]);
-  const [recentRequests, setRecentRequests] = useState<RequestLog[]>([]);
+  const [recentRequests, setRecentRequests] = useState<RequestTrace[]>([]);
   // costEstimate is loaded for completeness even though it's not displayed
   // in the four primary metric tiles — keep it cached so future blocks can use it.
   const [, setCostEstimate] = useState<number | null>(null);
@@ -296,23 +296,31 @@ export default function AiAnalytics() {
                       const kind = classifyStatus(req.status);
                       return (
                         <div
-                          key={req.id ?? `${req.createdAt}-${req.model}`}
+                          key={`${req.timestamp}-${req.model}-${req.credential_id}`}
                           className="flex items-center justify-between gap-3 text-xs py-1.5 border-b border-white/[0.04] last:border-b-0"
                         >
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             <span className="text-slate-500 tabular-nums whitespace-nowrap shrink-0">
-                              {formatTimestamp(req.createdAt)}
+                              {formatTimestamp(req.timestamp)}
                             </span>
                             <span className="truncate text-slate-200 font-mono">
                               {req.model || '-'}
                             </span>
+                            {req.target ? (
+                              <span className="truncate text-slate-500">{req.target}</span>
+                            ) : null}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
+                            {req.failover_count > 0 ? (
+                              <StatusBadge size="sm" status="warning">
+                                {t('aiHub.failover.badge', { count: req.failover_count })}
+                              </StatusBadge>
+                            ) : null}
                             <StatusBadge size="sm" {...statusBadgeProps(kind)}>
                               {req.status || '—'}
                             </StatusBadge>
                             <span className="text-slate-500 tabular-nums whitespace-nowrap min-w-[3rem] text-right">
-                              {formatDuration(req.durationMs)}
+                              {formatDuration(req.latency_ms)}
                             </span>
                           </div>
                         </div>

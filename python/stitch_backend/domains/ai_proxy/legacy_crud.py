@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import or_, select
 
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialSecret,
@@ -21,6 +22,7 @@ from stitch_backend.domains.ai_proxy.legacy_convert import (
     _get_or_create_endpoint,
 )
 from stitch_backend.domains.ai_proxy.legacy_mapping import (
+    _ANTHROPIC_API_PROVIDERS,
     _decode_old_label,
     _display_name,
     _encode_metadata,
@@ -77,6 +79,12 @@ async def create_account(
         # legacy accounts may exist without a secret — keep an empty placeholder.
         secret = ""
         auth_type = "api_key"
+    elif provider in _ANTHROPIC_API_PROVIDERS and auth_type != "api_key":
+        raise StitchError(
+            f"Provider {provider!r} maps to the Anthropic API, which accepts "
+            "API keys only — OAuth/session tokens cannot be saved as "
+            "Anthropic credentials"
+        )
 
     endpoint = await _get_or_create_endpoint(
         session,

@@ -317,6 +317,26 @@ export async function updateAccountMetadata(params: UpdateAccountMetadataParams)
 // Browser Session Management
 // ============================================
 
+export type BrowserEngineId = 'cloakbrowser' | 'shardbrowser';
+
+/**
+ * Set the per-account browser engine (takes effect on the next browser open).
+ */
+export async function setAccountBrowserEngine(params: {
+  accountId: number | string;
+  engine: BrowserEngineId;
+  shardProfileId?: string | null;
+}): Promise<{ success: boolean; accountId: string; browserEngine: string }> {
+  return safeInvoke<{ success: boolean; accountId: string; browserEngine: string }>(
+    'set_account_browser_engine',
+    {
+      accountId: params.accountId,
+      engine: params.engine,
+      shardProfileId: params.shardProfileId ?? undefined,
+    }
+  );
+}
+
 // ============================================
 // Proxy Binding
 // ============================================

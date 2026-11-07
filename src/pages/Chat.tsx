@@ -30,6 +30,7 @@ import {
   getProviderCapabilities,
   getProviderModelMappings,
   getRequestHistorySafe,
+  type RequestTrace,
   getDailyStatsSafe,
   getCostEstimateSafe,
   getLocalChatToken,
@@ -103,9 +104,7 @@ export default function Chat() {
 
   const [aiProxyModels, setAiProxyModels] = useState<ChatModelInfo[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [requestLogs, setRequestLogs] = useState<Array<import('../types/generated').RequestLog>>(
-    []
-  );
+  const [requestLogs, setRequestLogs] = useState<RequestTrace[]>([]);
   const [dailyStats, setDailyStats] = useState<import('../types/generated').DailyStats | null>(
     null
   );

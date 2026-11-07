@@ -68,6 +68,8 @@ from stitch_backend.domains.ai_gateway.commands.public_models import (
     cmd_delete_public_model,
     cmd_get_public_model,
     cmd_list_public_models,
+    cmd_merge_public_models,
+    cmd_unmerge_route_target,
     cmd_update_public_model,
 )
 from stitch_backend.domains.ai_gateway.commands.route_targets import (
@@ -76,6 +78,10 @@ from stitch_backend.domains.ai_gateway.commands.route_targets import (
     cmd_get_route_target,
     cmd_list_route_targets_for_public_model,
     cmd_update_route_target,
+)
+from stitch_backend.domains.ai_gateway.commands.save_connection import (
+    cmd_get_adapter_capabilities,
+    cmd_save_connection,
 )
 from stitch_backend.domains.ai_gateway.commands.upstream_models import (
     cmd_create_upstream_model,
@@ -100,6 +106,7 @@ __all__ = [
     "cmd_discover_models_for_endpoint",
     "cmd_gateway_claim_legacy",
     "cmd_gateway_set_instance_shared",
+    "cmd_get_adapter_capabilities",
     "cmd_get_credential",
     "cmd_get_provider_endpoint",
     "cmd_get_public_model",
@@ -113,6 +120,7 @@ __all__ = [
     "cmd_list_public_models",
     "cmd_list_route_targets_for_public_model",
     "cmd_list_upstream_models",
+    "cmd_merge_public_models",
     "cmd_probe_endpoint",
     "cmd_probe_endpoint_models",
     "cmd_proxy_keys_create",
@@ -120,7 +128,9 @@ __all__ = [
     "cmd_proxy_keys_revoke",
     "cmd_refresh_endpoint_models",
     "cmd_rotate_credential_secret",
+    "cmd_save_connection",
     "cmd_test_credential_connection",
+    "cmd_unmerge_route_target",
     "cmd_update_credential",
     "cmd_update_provider_endpoint",
     "cmd_update_public_model",

@@ -117,6 +117,14 @@ export interface AiGatewayTranslations {
     deletePublicModelConfirm: string;
     deleteRouteTargetConfirm: string;
     noRoutes: string;
+    mergeModel: string;
+    mergeModelTitle: string;
+    mergeModelHint: string;
+    mergeInto: string;
+    unmergeTarget: string;
+    unmergeTargetTitle: string;
+    unmergeTargetHint: string;
+    unmergeNewModelId: string;
   };
   paste: {
     button: string;

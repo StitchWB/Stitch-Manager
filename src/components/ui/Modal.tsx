@@ -19,6 +19,7 @@ export interface ModalProps {
   showCloseButton?: boolean;
   stickyFooter?: boolean;
   className?: string;
+  overlayClassName?: string;
 }
 
 const sizeClasses = {
@@ -43,6 +44,7 @@ export function Modal({
   showCloseButton = true,
   stickyFooter = false,
   className = '',
+  overlayClassName = '',
 }: ModalProps) {
   const modalRef = useFocusTrap(isOpen);
 
@@ -69,7 +71,7 @@ export function Modal({
 
   // portal escapes ancestor backdrop-filter/transform, which would otherwise trap this fixed overlay in their stacking context
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className={cn('fixed inset-0 z-50 flex items-center justify-center p-4', overlayClassName)}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"

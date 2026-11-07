@@ -8,10 +8,11 @@ import {
   restoreAiProxyIdeConfig,
   getAvailableModels,
   startAiProxy,
-  getProxySettings,
   autoImportAiProxyAuthFiles,
   type AuthImportResult,
 } from '../../lib/backend/modules/aiProxy';
+import { useLocalChatToken } from '../../hooks/useLocalChatToken';
+import { proxyKeysList } from '../../lib/backend/modules/aiGateway';
 import { fetchProxyStatusNow } from '../../stores/aiProxy';
 import {
   DEFAULT_PROVIDER_PROFILE_KEY,
@@ -75,19 +76,20 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [autoImportInProgress, setAutoImportInProgress] = useState(false);
   const [autoImportResult, setAutoImportResult] = useState<AuthImportResult | null>(null);
+  const localToken = useLocalChatToken();
 
   const detectIDEs = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [detected, status, proxySettings] = await Promise.all([
+      const [detected, status, proxyKeys] = await Promise.all([
         detectAiProxyIdes(),
         fetchProxyStatusNow(),
-        getProxySettings(),
+        proxyKeysList(),
       ]);
       setIdes(detected);
       setProxyRunning(status?.running ?? false);
-      setManualEndpoint(`http://127.0.0.1:${proxySettings.proxyPort}/v1`);
+      setManualEndpoint(proxyKeys.baseUrl);
       setStep('select');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('aiHub.wizard.errors.detectFailed'));
@@ -368,7 +370,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
   const copyManualSetup = async () => {
     try {
       const provider = getProviderProfile(providerKey);
-      const payload = buildManualEnvPayload(manualEndpoint, provider.key);
+      const payload = buildManualEnvPayload(manualEndpoint, provider.key, localToken);
       await navigator.clipboard.writeText(payload);
       setCopyStatus(t('aiHub.wizard.manual.copied'));
       setTimeout(() => setCopyStatus(null), 2000);
@@ -666,7 +668,7 @@ export function IdeConfigWizard({ isOpen, onClose }: IdeConfigWizardProps) {
                 <p className="text-xs text-vsc-text-muted mb-2">{t('aiHub.wizard.manual.hint')}</p>
                 <div className="text-xs font-mono text-vsc-text bg-vsc-input border border-vsc-border rounded p-2 space-y-1">
                   <div>{t('aiHub.wizard.manual.openaiBaseUrl')}={manualEndpoint}</div>
-                  <div>{t('aiHub.wizard.manual.openaiApiKey')}={getProviderProfile(providerKey).defaultApiKey}</div>
+                  <div>{t('aiHub.wizard.manual.openaiApiKey')}={localToken || '—'}</div>
                 </div>
                 {copyStatus && <p className="text-2xs text-vsc-text-muted mt-2">{copyStatus}</p>}
               </div>

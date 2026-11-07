@@ -1,10 +1,12 @@
-import { Boxes, Globe, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { Boxes, Globe, Loader2, Plus, RefreshCw, TriangleAlert } from 'lucide-react';
 import type { UpstreamModel } from '@/lib/backend/modules/aiGateway';
 import {
   Badge,
   Button,
   ButtonBase,
   EmptyState,
+  Input,
   SkeletonLoader,
   Table,
   TableBody,
@@ -21,7 +23,9 @@ export interface ProviderModelsPanelProps {
   loading: boolean;
   busy: boolean;
   discovering: boolean;
+  error?: string | null;
   onDiscover: () => void;
+  onAddModel?: (modelId: string) => Promise<boolean>;
   onExposeModel?: (model: UpstreamModel) => void;
   published?: Record<string, string>;
 }
@@ -29,9 +33,22 @@ export interface ProviderModelsPanelProps {
 const RENDER_CAP = 500;
 
 export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Element {
-  const { models, loading, busy, discovering, onDiscover, onExposeModel, published } = props;
+  const { models, loading, busy, discovering, error, onDiscover, onAddModel, onExposeModel, published } = props;
+  const [modelIdInput, setModelIdInput] = useState('');
+  const [addingModel, setAddingModel] = useState(false);
   const visibleModels = models.slice(0, RENDER_CAP);
   const hiddenCount = models.length - visibleModels.length;
+
+  const handleAddModel = async () => {
+    const modelId = modelIdInput.trim();
+    if (!modelId || addingModel || !onAddModel) return;
+    setAddingModel(true);
+    try {
+      if (await onAddModel(modelId)) setModelIdInput('');
+    } finally {
+      setAddingModel(false);
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -52,6 +69,59 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
           {discovering ? t('aiHub.providersPage.discovering') : t('aiHub.providersPage.discover')}
         </Button>
       </div>
+
+      {onAddModel && (
+        <form
+          className="flex shrink-0 items-center gap-2 pb-2"
+          onSubmit={event => {
+            event.preventDefault();
+            void handleAddModel();
+          }}
+        >
+          <Input
+            aria-label={t('aiHub.providersPage.addModelPlaceholder')}
+            value={modelIdInput}
+            onChange={event => setModelIdInput(event.target.value)}
+            placeholder={t('aiHub.providersPage.addModelPlaceholder')}
+            className="w-56"
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            size="xs"
+            leftIcon={addingModel ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+            disabled={modelIdInput.trim() === '' || addingModel || busy}
+          >
+            {t('aiHub.providersPage.addModelAction')}
+          </Button>
+        </form>
+      )}
+
+      {error && (
+        <div
+          role="alert"
+          className="mb-2 flex shrink-0 items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-300"
+        >
+          <TriangleAlert size={14} className="shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="font-semibold">{t('aiHub.providersPage.discoveryFailed')}. </span>
+            <span className="break-words">{error}</span>
+            <span className="mt-1 block text-slate-400">
+              {t('aiHub.providersPage.discoveryFailedHint')}
+            </span>
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            leftIcon={<RefreshCw size={12} />}
+            onClick={onDiscover}
+            disabled={busy || discovering}
+          >
+            {t('aiHub.providersPage.discover')}
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <SkeletonLoader variant="table-row" count={3} />

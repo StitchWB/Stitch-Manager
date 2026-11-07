@@ -6,6 +6,7 @@ import { t } from '../lib/i18n';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import type { AccountRelationEdge, RelationType } from '../lib/accounts/relations';
 import type { AccountsTableVisibleColumns } from '../stores/uiPreferences';
+import type { BrowserEngineId } from '@/lib/browser/engines';
 import { useUIPreferencesStore } from '../stores/uiPreferences';
 import { AccountRow } from './accounts/AccountRow';
 import { AccountInspectorPanel } from '@/components/ui';
@@ -49,6 +50,8 @@ export interface AccountsTableProps {
   onClaim?: (accountId: number) => Promise<void>;
   onShareToGroup?: (accountId: number) => void;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
+  shardAvailable?: boolean;
+  onSetBrowserEngine?: (accountId: number, engine: BrowserEngineId) => Promise<void>;
   selectedProvider?: string | null;
 }
 
@@ -81,6 +84,8 @@ export default function AccountsTable({
   onClaim,
   onShareToGroup,
   onRelationEdgeClick,
+  shardAvailable = false,
+  onSetBrowserEngine,
 }: AccountsTableProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [inspectedAccountId, setInspectedAccountId] = useState<number | null>(null);
@@ -396,6 +401,8 @@ onCaptureWebCookies={onCaptureWebCookies}
                 onClaim={onClaim}
                 onShareToGroup={onShareToGroup}
                 onRelationEdgeClick={onRelationEdgeClick}
+                shardAvailable={shardAvailable}
+                onSetBrowserEngine={onSetBrowserEngine}
               />
             ))}
           </TableBody>

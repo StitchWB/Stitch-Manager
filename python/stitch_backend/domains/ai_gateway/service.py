@@ -26,6 +26,7 @@ from stitch_backend.domains.ai_gateway.credential_service import (
 from stitch_backend.domains.ai_gateway.endpoint_service import ProviderEndpointService
 from stitch_backend.domains.ai_gateway.model_catalog_service import (
     CredentialModelAccessService,
+    ModelIdentityService,
     PublicModelService,
     RouteTargetService,
     UpstreamModelService,
@@ -43,6 +44,7 @@ from stitch_backend.domains.ai_gateway.proxy_key_service import (
 __all__ = [
     "CredentialModelAccessService",
     "CredentialService",
+    "ModelIdentityService",
     "ProviderEndpointService",
     "PublicModelService",
     "RouteTargetService",

@@ -11,6 +11,7 @@ import {
   setProviderModelMappings,
   testProviderConnection,
   getRequestHistory,
+  type RequestTrace,
   startAiProxy,
   stopAiProxy,
   getProxySettings,
@@ -24,9 +25,10 @@ import {
   type ProviderCapability,
   type ProviderModelMapping,
 } from '@/lib/backend/modules/aiProxy';
-import type { AiProxyAccount, AuthFile, ProxySettings, ProxyStatus } from '../../types/generated';
+import type { AiProxyAccount, AuthFile, ProxySettings } from '../../types/generated';
 import type { ConnectionStateMap, HistorySummary } from '../../components/ai-proxy/sections/types';
-import { useAiProxyStore, refreshProxyStatus } from '../../stores/aiProxy';
+import { useAiProxyStore, refreshProxyStatus, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
+import { startCatalogEvents, stopCatalogEvents } from '../../stores/aiGateway';
 import { t } from '../../lib/i18n';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { createLogger } from '../../lib/observability/logger';
@@ -54,7 +56,7 @@ export function useAiProvidersController(page?: AiHubPage) {
   );
   const [providerCapabilities, setProviderCapabilities] = useState<ProviderCapability[]>([]);
   const [modelMappings, setModelMappings] = useState<ProviderModelMapping[]>([]);
-  const [proxyStatus, setProxyStatus] = useState<ProxyStatus | null>(null);
+  const proxyStatus = useAiProxyStore(state => state.status);
   const [proxySettings, setProxySettings] = useState<ProxySettings | null>(null);
   const [proxyDraft, setProxyDraft] = useState<ProxySettings | null>(null);
   const [proxyBusy, setProxyBusy] = useState(false);
@@ -63,7 +65,8 @@ export function useAiProvidersController(page?: AiHubPage) {
   const [authScan, setAuthScan] = useState<AuthFile[] | null>(null);
   const [authScanLoading, setAuthScanLoading] = useState(false);
   const [connectionState, setConnectionState] = useState<ConnectionStateMap>({});
-  const [historySummary, setHistorySummary] = useState<HistorySummary>({ total: 0, errors: 0 });
+  const [historySummary, setHistorySummary] = useState<HistorySummary>({ total: 0, errors: 0, failovers: 0 });
+  const [recentFailovers, setRecentFailovers] = useState<RequestTrace[]>([]);
   const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
   const [exportIncludeSecrets, setExportIncludeSecrets] = useState(false);
   const [exportPayload, setExportPayload] = useState('');
@@ -120,8 +123,10 @@ export function useAiProvidersController(page?: AiHubPage) {
       const rows = await getRequestHistory(20, 0);
       setHistorySummary({
         total: rows.length,
-        errors: rows.filter(r => r.status >= 400).length,
+        errors: rows.filter(r => r.status === 'error').length,
+        failovers: rows.filter(r => r.failover_count > 0).length,
       });
+      setRecentFailovers(rows.filter(r => r.failover_count > 0));
     } catch {
       // non-blocking
     }
@@ -157,7 +162,7 @@ export function useAiProvidersController(page?: AiHubPage) {
     try {
       setProxyError(null);
       const [status, settings] = await Promise.all([refreshProxyStatus(), getProxySettings()]);
-      if (status) setProxyStatus(status);
+      if (status) useAiProxyStore.getState().setStatus(status);
       setProxySettings(settings);
       setProxyDraft(settings);
     } catch (e) {
@@ -213,7 +218,7 @@ export function useAiProvidersController(page?: AiHubPage) {
     setProxyError(null);
     try {
       const next = proxyStatus?.running ? await stopAiProxy() : await startAiProxy();
-      setProxyStatus(next);
+      useAiProxyStore.getState().setStatus(next);
       await refreshProxyInfo();
       appToast.success(
         proxyStatus?.running ? t('aiHub.proxy.toasts.stopped') : t('aiHub.proxy.toasts.started')
@@ -660,6 +665,15 @@ export function useAiProvidersController(page?: AiHubPage) {
   }, [authScan, fetchAccounts]);
 
   useEffect(() => {
+    startProxyStatusPolling();
+    startCatalogEvents();
+    return () => {
+      stopProxyStatusPolling();
+      stopCatalogEvents();
+    };
+  }, []);
+
+  useEffect(() => {
     queueMicrotask(() => {
       const fetchAll = page === undefined;
       void fetchAccounts();
@@ -706,6 +720,7 @@ export function useAiProvidersController(page?: AiHubPage) {
     authScanLoading,
     connectionState,
     historySummary,
+    recentFailovers,
     exportFormat,
     setExportFormat,
     exportIncludeSecrets,

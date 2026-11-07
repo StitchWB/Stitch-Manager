@@ -50,12 +50,14 @@ async def holone_config_update(body: HoloneConfigUpdate):
     service.config.mode = body.mode
 
     from stitch_backend.database import run_in_session
-    from stitch_backend.domains.settings.service import SettingsService
+    from stitch_backend.domains.background_manager.store import load_config, save_config
 
     async def _persist(session):
-        await SettingsService(session).update(
-            {"holone_enabled": body.enabled, "holone_mode": body.mode}
+        config = await load_config(session)
+        updated = config.model_copy(
+            update={"holone_enabled": body.enabled, "holone_mode": body.mode}
         )
+        await save_config(session, updated)
 
     await run_in_session(_persist)
 

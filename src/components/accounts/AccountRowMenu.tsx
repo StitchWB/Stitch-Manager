@@ -4,6 +4,8 @@ import { ButtonBase } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import type { Account } from '@/types/generated';
+import { EngineToggle } from '@/components/profiles/EngineToggle';
+import { normalizeBrowserEngine, type BrowserEngineId } from '@/lib/browser/engines';
 import { getRefMeta } from './AccountRefCell';
 
 function isAutoRefreshEnabled(account: Account): boolean {
@@ -46,6 +48,8 @@ interface AccountRowMenuProps {
   onShowDetails: (account: Account) => void;
   onDelete: (accountId: number) => void;
   onCloseMenu: () => void;
+  shardAvailable: boolean;
+  onSetBrowserEngine?: (accountId: number, engine: BrowserEngineId) => Promise<void>;
 }
 
 export function AccountRowMenu({
@@ -74,6 +78,8 @@ export function AccountRowMenu({
   onShowDetails,
   onDelete,
   onCloseMenu,
+  shardAvailable,
+  onSetBrowserEngine,
 }: AccountRowMenuProps) {
   const autoRefreshEnabled = isAutoRefreshEnabled(account);
   const refMeta = getRefMeta(account);
@@ -292,6 +298,26 @@ export function AccountRowMenu({
         <Info size={12} />
         {t('common.more')}
       </ButtonBase>
+
+      {onSetBrowserEngine ? (
+        <>
+          <div className="my-1 h-px bg-white/10" />
+          <div className="px-2.5 py-1.5">
+            <div className="mb-1.5 text-[10px] uppercase tracking-wide text-slate-500">
+              {t('accounts.profileEngineLabel')}
+            </div>
+            <EngineToggle
+              value={normalizeBrowserEngine(account.browserEngine)}
+              onChange={(engine) => {
+                void onSetBrowserEngine(account.id, engine);
+              }}
+              shardAvailable={shardAvailable}
+              size="sm"
+              shortLabels
+            />
+          </div>
+        </>
+      ) : null}
 
       <div className="my-1 h-px bg-white/10" />
 

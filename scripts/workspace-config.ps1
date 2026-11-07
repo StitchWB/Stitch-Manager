@@ -83,3 +83,29 @@ function Assert-WorkspacePortsFree($Plan) {
         try { $listener.Start() } finally { $listener.Stop() }
     }
 }
+
+function Invoke-CommandContractGate($Plan) {
+    # Prevents FE safeInvoke() drift against the active backend checkout.
+    $gate = Join-Path $PSScriptRoot 'check_command_contract.py'
+    if (-not (Test-Path -LiteralPath $gate -PathType Leaf)) {
+        throw "Contract gate missing: $gate"
+    }
+    $frontendSrc = Join-Path $Plan.AppRoot 'src'
+    if (-not (Test-Path -LiteralPath $frontendSrc -PathType Container)) {
+        throw "Frontend src missing: $frontendSrc"
+    }
+    $backendPython = Join-Path $Plan.BackendRoot 'python'
+    $pluginDirs = @($Plan.Plugins | ForEach-Object { $_.Root })
+    $args = @(
+        $gate,
+        '--frontend-src', $frontendSrc,
+        '--backend-python', $backendPython,
+        '--runtime'
+    )
+    foreach ($dir in $pluginDirs) { if ($dir) { $args += @('--plugins-dir', $dir) } }
+    Write-Host "Contract gate : comparing $($Plan.AppRoot)/src against $($Plan.BackendRoot)/python"
+    & $Plan.Python @args
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Frontend/backend command contract gate failed. See missing commands above; add the missing @register_command/@command decorator (or plugin manifest entry), then retry. See scripts/check_command_contract.py for details.'
+    }
+}

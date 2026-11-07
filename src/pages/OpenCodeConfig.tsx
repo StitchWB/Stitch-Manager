@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bot, Package, Save, Server, Settings, Sliders, TestTube } from 'lucide-react';
+import { Bot, Cable, Package, Save, Server, Settings, Sliders, TestTube } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AgentsSection } from '@/components/opencode/AgentsSection';
@@ -21,6 +21,7 @@ import {
   type OpenCodeConfig,
   type ProviderConfig,
 } from '@/lib/backend/modules/opencodeConfig';
+import { configureAiProxyIdeForProvider } from '@/lib/backend/modules/aiProxy';
 
 type ConfigTab = 'providers' | 'agents' | 'general' | 'models' | 'tester';
 
@@ -47,6 +48,10 @@ export default function OpenCodeConfig() {
           unsaved: 'Есть несохранённые изменения',
           save: 'Сохранить конфигурацию',
           loading: 'Загрузка конфигурации…',
+          connectToStitch: 'Подключить к Stitch',
+          connectHint: 'Добавит провайдера Stitch в opencode.json и направит клиент на локальный шлюз.',
+          connected: 'Stitch добавлен в конфигурацию OpenCode',
+          connectFailed: 'Не удалось подключить OpenCode к Stitch',
         }
       : {
           eyebrow: 'AI Hub / Connections / OpenCode',
@@ -56,6 +61,10 @@ export default function OpenCodeConfig() {
           unsaved: 'Unsaved changes',
           save: 'Save configuration',
           loading: 'Loading configuration…',
+          connectToStitch: 'Connect to Stitch',
+          connectHint: 'Adds a Stitch provider to opencode.json pointing at the local gateway.',
+          connected: 'Stitch added to the OpenCode configuration',
+          connectFailed: 'Could not connect OpenCode to Stitch',
         };
   const tabOptions = useMemo(
     () =>
@@ -81,6 +90,7 @@ export default function OpenCodeConfig() {
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   const currentSnapshot = useMemo(
     () => JSON.stringify({ config, ohMyConfig }),
@@ -147,6 +157,20 @@ export default function OpenCodeConfig() {
     }
   }, [config, ohMyConfig]);
 
+  const handleConnectToStitch = useCallback(async () => {
+    try {
+      setConnecting(true);
+      await configureAiProxyIdeForProvider('opencode', '', 'stitch');
+      await loadConfig();
+      toast.success(copy.connected);
+    } catch (error) {
+      toast.error(copy.connectFailed);
+      console.error(error);
+    } finally {
+      setConnecting(false);
+    }
+  }, [loadConfig, copy.connected, copy.connectFailed]);
+
   const updateConfig = useCallback((updater: (value: OpenCodeConfig) => OpenCodeConfig) => {
     setConfig(previous => updater(previous));
   }, []);
@@ -179,7 +203,9 @@ export default function OpenCodeConfig() {
         npm: '@ai-sdk/openai-compatible',
         name: providerName,
         options: { baseURL: baseUrl, apiKey },
-        models: Object.fromEntries(models.map(id => [id, { name: id }])),
+        models: Object.fromEntries(
+        models.map(id => [id, { name: id, limit: { context: 128000, output: 8192 } }])
+      ),
       };
       setConfig(previous => ({
         ...previous,
@@ -192,6 +218,17 @@ export default function OpenCodeConfig() {
 
   const pageActions = (
     <div className="flex items-center gap-2">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => void handleConnectToStitch()}
+        disabled={saving || connecting}
+        isLoading={connecting}
+        leftIcon={<Cable size={14} />}
+        title={copy.connectHint}
+      >
+        {copy.connectToStitch}
+      </Button>
       {isDirty ? (
         <StatusBadge status="warning" size="sm" withDot>
           {copy.unsaved}

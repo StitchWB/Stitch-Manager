@@ -224,7 +224,7 @@ async def confirm_account_profile_session(db: AsyncSession, account_id: int) -> 
     session_json["lastLoginAt"] = now
     session_data = json.dumps(session_json)
 
-    profile_path = account.get("browser_profile_path", "")
+    profile_path = account.get("profile_path", "")
     cookies = account.get("cookies", "{}")
     await _save_browser_session(db, account_id, profile_path, cookies, session_data)
 
@@ -253,7 +253,7 @@ async def clear_account_profile_session(db: AsyncSession, account_id: int) -> No
 
     now = _now_sqlite()
     await db.execute(
-        text("UPDATE accounts SET browser_profile_path='', cookies='', session_data='', updated_at=:now WHERE id=:id"),
+        text("UPDATE accounts SET profile_path='', cookies='', session_data='', updated_at=:now WHERE id=:id"),
         {"now": now, "id": account_id},
     )
     await db.flush()
@@ -303,7 +303,7 @@ async def _save_browser_session(
     now = _now_sqlite()
     await db.execute(
         text(
-            "UPDATE accounts SET browser_profile_path=:pp, cookies=:c, "
+            "UPDATE accounts SET profile_path=:pp, cookies=:c, "
             "session_data=:sd, updated_at=:now WHERE id=:id"
         ),
         {"pp": profile_path, "c": cookies, "sd": session_data, "now": now, "id": account_id},

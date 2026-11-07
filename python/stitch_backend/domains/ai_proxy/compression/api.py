@@ -85,21 +85,23 @@ async def compression_config_update(body: CompressionConfigUpdate):
     service.config.auto_trigger_threshold = body.auto_trigger_threshold
 
     from stitch_backend.database import run_in_session
-    from stitch_backend.domains.settings.service import SettingsService
+    from stitch_backend.domains.background_manager.store import load_config, save_config
 
     async def _persist(session):
-        await SettingsService(session).update(
-            {
-                "compressionEnabled": body.enabled,
-                "rtkEnabled": body.rtk_enabled,
-                "cavemanEnabled": body.caveman_enabled,
-                "cavemanLevel": body.caveman_level,
-                "inputCompressionEnabled": body.input_compression_enabled,
-                "outputCompressionEnabled": body.output_compression_enabled,
-                "preserveSystemPrompt": body.preserve_system_prompt,
-                "autoTriggerThreshold": body.auto_trigger_threshold,
+        config = await load_config(session)
+        updated = config.model_copy(
+            update={
+                "compression_enabled": body.enabled,
+                "rtk_enabled": body.rtk_enabled,
+                "caveman_enabled": body.caveman_enabled,
+                "caveman_level": body.caveman_level,
+                "input_compression_enabled": body.input_compression_enabled,
+                "output_compression_enabled": body.output_compression_enabled,
+                "preserve_system_prompt": body.preserve_system_prompt,
+                "auto_trigger_threshold": body.auto_trigger_threshold,
             }
         )
+        await save_config(session, updated)
 
     await run_in_session(_persist)
 

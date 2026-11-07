@@ -8,4 +8,5 @@ export type ConnectionStateMap = Record<number, ConnectionStateEntry>;
 export interface HistorySummary {
   total: number;
   errors: number;
+  failovers: number;
 }

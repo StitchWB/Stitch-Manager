@@ -68,6 +68,29 @@ class ListPublicModelsRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 
+class MergePublicModelsRequest(BaseModel):
+    """Request body for ``merge_public_models`` — fold ``source_id`` into ``target_id``."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    source_id: str = Field(alias="sourceId")
+    target_id: str = Field(alias="targetId")
+
+
+class UnmergeRouteTargetRequest(BaseModel):
+    """Request body for ``unmerge_route_target`` — split one target into its own public model."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    target_id: int = Field(alias="targetId")
+    new_public_model_id: str = Field(alias="newPublicModelId", max_length=200)
+
+    @field_validator("new_public_model_id")
+    @classmethod
+    def validate_new_public_model_id(cls, v: str) -> str:
+        return PublicModelCreateRequest.validate_id(v)
+
+
 class PublicModelResponse(BaseModel):
     """Wire DTO for :class:`PublicModel`."""
 

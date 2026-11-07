@@ -27,7 +27,11 @@ import httpx
 from sqlalchemy import select
 
 from stitch_backend.database import run_in_read_session, run_in_session
-from stitch_backend.domains.ai_gateway.adapters.base import ProbeResult, get_adapter
+from stitch_backend.domains.ai_gateway.adapters.base import (
+    ProbeResult,
+    get_adapter,
+    get_adapter_capabilities,
+)
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.models import UpstreamModel
 from stitch_backend.domains.ai_gateway.service import (
@@ -107,6 +111,9 @@ async def probe_credential(credential_id: str) -> None:
     if target is None:
         return
 
+    if not get_adapter_capabilities(target["adapter_type"]).supports_chat:
+        return
+
     result = await _run_chat_probe(target)
     await _persist_result(target, result)
 
@@ -148,8 +155,8 @@ async def _load_probe_target(
     if endpoint is None or not endpoint.enabled:
         return None
 
-    secret = await cred_svc.get_secret_for_invocation(credential_id)
-    if not secret:
+    secret = await cred_svc.resolve_invocation_secret(credential)
+    if secret is None:
         return None
 
     model_id = await _resolve_probe_model(db, endpoint.id)

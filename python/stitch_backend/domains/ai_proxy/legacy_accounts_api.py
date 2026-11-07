@@ -55,7 +55,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import bindparam, select
 
 from stitch_backend.domains.ai_gateway.models import Credential
 from stitch_backend.domains.ai_proxy.legacy_authz import (
@@ -255,9 +255,11 @@ async def run_final_conversion(session: Any) -> dict[str, Any]:
        path — ``_ensure_table`` is kept for this path per task spec).
     2. Convert each row via :func:`create_account` (this module's create path,
        which dedupes by fingerprint via ``CredentialService.create_credential``).
-    3. On success: ``DELETE FROM ai_proxy_accounts`` — the table stays
-       empty/inert, NEVER dropped (user data safety).
-    4. On failure: warn + keep rows + set ``_conversion_failed`` flag so a
+    3. Delete ONLY the converted rows — rows rejected by ``create_account``
+       (e.g. claude OAuth/session secrets, unsupported on the Anthropic API)
+       stay in the legacy table so no account is silently lost. The table
+       itself is never dropped (user data safety).
+    4. On failure: warn + keep rows + set the ``_conversion_failed`` flag so a
        future boot can retry. Aliases keep working over gateway tables.
 
     Returns a counts dict.
@@ -309,18 +311,23 @@ async def run_final_conversion(session: Any) -> dict[str, Any]:
                 converted_ids,
             )
 
-        # Delete the rows on success — table stays empty/inert, never dropped.
-        await session.execute(_text("DELETE FROM ai_proxy_accounts"))
+        # Delete only converted rows — rejected ones (claude OAuth/session) stay in the legacy table.
+        if converted_ids:
+            await session.execute(
+                _text("DELETE FROM ai_proxy_accounts WHERE id IN :ids").bindparams(
+                    bindparam("ids", converted_ids, expanding=True)
+                )
+            )
         _conversion_failed = False
         logger.info(
             "Final legacy conversion complete: %d legacy rows → %d gateway "
-            "credentials, rows deleted (table kept inert)",
-            legacy_count, converted,
+            "credentials, %d rows deleted (table kept inert)",
+            legacy_count, converted, len(converted_ids),
         )
         return {
             "legacy_rows": legacy_count,
             "converted": converted,
-            "deleted": legacy_count,
+            "deleted": len(converted_ids),
         }
     except Exception as exc:
         _conversion_failed = True

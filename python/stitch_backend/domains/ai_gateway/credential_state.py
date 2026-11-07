@@ -48,9 +48,13 @@ operation.  It is included in ``_VALID_STATES`` for validation only.
 from __future__ import annotations
 
 import logging
+import time
+from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.ai_gateway.models import _utcnow
 from stitch_backend.domains.ai_gateway.service import CredentialService
 
@@ -74,6 +78,133 @@ _BACKOFF_CAP_SECONDS = 3600
 
 # без дефолта ProbeWorker перепробует квота-мёртвую креду каждый свой цикл (300с)
 _QUOTA_DEFAULT_RETRY = timedelta(seconds=900)
+
+# Rolling health/latency window; in-memory only — predictive scoring rebuilds from live traffic after a boot.
+_METRICS_WINDOW_SECONDS = 300.0
+_METRICS_MAXLEN = 200
+
+
+@dataclass(frozen=True)
+class Outcome:
+    ts: float
+    ok: bool
+    latency_ms: float | None
+    error_kind: str | None
+
+
+@dataclass(frozen=True)
+class MetricsSnapshot:
+    count: int
+    success_rate: float
+    p50_latency_ms: float
+    p95_latency_ms: float
+    rate_limited_count: int
+    server_error_count: int
+
+    @property
+    def has_data(self) -> bool:
+        return self.count > 0
+
+
+def _percentile(sorted_values: list[float], p: float) -> float:
+    if not sorted_values:
+        return 0.0
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (p / 100.0) * (len(sorted_values) - 1)
+    lo = int(rank)
+    hi = min(lo + 1, len(sorted_values) - 1)
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (rank - lo)
+
+
+class RollingMetrics:
+    """Bounded in-memory ring buffer of recent outcomes, keyed by credential/endpoint id."""
+
+    def __init__(
+        self,
+        *,
+        window_seconds: float = _METRICS_WINDOW_SECONDS,
+        maxlen: int = _METRICS_MAXLEN,
+    ) -> None:
+        self._window_seconds = window_seconds
+        self._maxlen = maxlen
+        self._buf: dict[str, deque[Outcome]] = defaultdict(lambda: deque(maxlen=maxlen))
+
+    def record(
+        self,
+        key: str,
+        *,
+        ok: bool,
+        latency_ms: float | None,
+        error_kind: str | None = None,
+        now: float | None = None,
+    ) -> None:
+        ts = time.monotonic() if now is None else now
+        self._buf[key].append(
+            Outcome(ts=ts, ok=ok, latency_ms=latency_ms, error_kind=error_kind),
+        )
+
+    def _recent(self, key: str, now: float) -> list[Outcome]:
+        cutoff = now - self._window_seconds
+        return [o for o in self._buf.get(key, ()) if o.ts >= cutoff]
+
+    def snapshot(self, key: str, *, now: float | None = None) -> MetricsSnapshot:
+        now = time.monotonic() if now is None else now
+        recent = self._recent(key, now)
+        if not recent:
+            return MetricsSnapshot(0, 1.0, 0.0, 0.0, 0, 0)
+        latencies = sorted(o.latency_ms for o in recent if o.latency_ms is not None)
+        successes = sum(1 for o in recent if o.ok)
+        return MetricsSnapshot(
+            count=len(recent),
+            success_rate=successes / len(recent),
+            p50_latency_ms=_percentile(latencies, 50),
+            p95_latency_ms=_percentile(latencies, 95),
+            rate_limited_count=sum(1 for o in recent if o.error_kind == "rate_limited"),
+            server_error_count=sum(1 for o in recent if o.error_kind == "server_error"),
+        )
+
+    def reset(self) -> None:
+        self._buf.clear()
+
+
+metrics_store = RollingMetrics()
+
+
+def classify_error_kind(
+    error: ClassifiedError | None,
+    http_status: int | None,
+) -> str | None:
+    """Coarse outcome kind for the rolling window; ``None`` means success."""
+    if error is not None:
+        return error.category
+    if http_status is None or 200 <= http_status < 300:
+        return None
+    if http_status == 429:
+        return "rate_limited"
+    if 500 <= http_status < 600:
+        return "server_error"
+    return "other"
+
+
+def record_outcome(
+    *,
+    credential_id: str,
+    endpoint_id: str,
+    ok: bool,
+    latency_ms: float | None,
+    error_kind: str | None = None,
+) -> None:
+    """Record one outcome against both the credential and its endpoint."""
+    metrics_store.record(credential_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
+    metrics_store.record(endpoint_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
+
+
+async def _emit_state_changed(credential_id: str, runtime_status: str) -> None:
+    await event_bus.emit(
+        "credential.state_changed",
+        {"credential_id": credential_id, "runtime_status": runtime_status},
+    )
 
 
 def exponential_backoff(consecutive_failures: int) -> timedelta:
@@ -122,6 +253,7 @@ async def transition_credential(
     if credential.runtime_status == "disabled":
         return
 
+    previous_status = credential.runtime_status
     now = _utcnow()
 
     # ── Success / recovery ───────────────────────────────────────────────
@@ -134,6 +266,8 @@ async def transition_credential(
         credential.quota_reset_at = None
         credential.updated_at = now
         await session.flush()
+        if previous_status != "active":
+            await _emit_state_changed(credential_id, "active")
         return
 
     if error is None:
@@ -194,6 +328,8 @@ async def transition_credential(
 
     credential.updated_at = now
     await session.flush()
+    if previous_status != credential.runtime_status:
+        await _emit_state_changed(credential_id, credential.runtime_status)
 
 
 async def disable_credential(
@@ -217,3 +353,4 @@ async def disable_credential(
     credential.status_reason = reason
     credential.updated_at = _utcnow()
     await session.flush()
+    await _emit_state_changed(credential_id, "disabled")

@@ -1,3 +1,4 @@
+import { looksLikeApiKey } from './parseProviderText';
 import type { ParsedProviderEntry } from './parseProviderText';
 
 export interface ParsedPaste {
@@ -202,6 +203,7 @@ export function parsePastedProviders(text: string): ParsedPaste {
     anchor = false;
 
     const keys = [...extractKeyTokens(line), ...extractLabeledKeys(line)];
+    if (keys.length === 0 && !modelsMode && looksLikeApiKey(line)) keys.push(line);
     const url = extractUrl(line);
     const label = extractLabel(line, keys, url);
 

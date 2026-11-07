@@ -5,7 +5,7 @@ export const PROVIDER_PROFILES = [
     key: 'stitch',
     label: 'AI Proxy (ProxyStitch)',
     description: 'Recommended provider profile for Stitch AI Proxy',
-    defaultApiKey: 'proxystitch-local',
+    defaultApiKey: '',
   },
   {
     key: 'freemodel-claude',

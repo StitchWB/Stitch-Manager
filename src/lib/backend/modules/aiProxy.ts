@@ -392,12 +392,21 @@ export async function getModelUsage(): Promise<
 /**
  * Get request history with pagination
  */
+export interface RequestTrace {
+  model: string;
+  target: string;
+  credential_id: string;
+  latency_ms: number;
+  failover_count: number;
+  status: string;
+  timestamp: number;
+}
+
 export async function getRequestHistory(
   limit: number,
   offset: number
-): Promise<Array<import('../../../types/generated').RequestLog>> {
-  type RequestLog = import('../../../types/generated').RequestLog;
-  const result = await safeInvoke<RequestLog[] | { items?: RequestLog[] }>(
+): Promise<RequestTrace[]> {
+  const result = await safeInvoke<RequestTrace[] | { items?: RequestTrace[] }>(
     'get_request_history',
     { limit, offset }
   );
@@ -408,7 +417,7 @@ export async function getRequestHistory(
 export async function getRequestHistorySafe(
   limit: number,
   offset: number
-): Promise<Array<import('../../../types/generated').RequestLog>> {
+): Promise<RequestTrace[]> {
   if (_inBackoff()) return [];
   try {
     return await getRequestHistory(limit, offset);

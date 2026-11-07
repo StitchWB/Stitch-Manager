@@ -106,6 +106,7 @@ async def launch_account_browser(
     engine: str | None = None,
     shard_profile_id: str | None = None,
     cdp_port: int | None = None,
+    session_json: str | None = None,
 ) -> LaunchResult:
     """Launch the account's browser with a persistent profile.
 
@@ -135,6 +136,9 @@ async def launch_account_browser(
 
     profile = Path(profile_path) if profile_path else _profile_dir_for_account(account_id, email)
 
+    if session_json and cdp_port is None:
+        cdp_port = _pick_free_port()
+
     defaults = PROVIDER_DEFAULTS.get(provider.lower())
     url = extra_url or (defaults.browser_url if defaults else None) or "https://google.com"
 
@@ -143,7 +147,7 @@ async def launch_account_browser(
         f"--user-data-dir={profile}",
         "--no-first-run",
         "--no-default-browser-check",
-        "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
     ]
     if headless:
         cmd.append("--headless=new")
@@ -176,6 +180,8 @@ async def launch_account_browser(
     # Optional cookie injection (best-effort, non-blocking)
     if cookies_json:
         asyncio.create_task(_inject_cookies(proc, cookies_json, profile))
+    if session_json and cdp_port:
+        asyncio.create_task(_apply_session(cdp_port, session_json, url))
 
     return LaunchResult(
         success=True,
@@ -384,6 +390,35 @@ async def _inject_cookies(proc: asyncio.subprocess.Process, cookies_json: str, p
     """
     # no-op: pre-launch injection now handles this
     pass
+
+
+def _pick_free_port() -> int:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+async def _apply_session(port: int, session_json: str, origin: str) -> None:
+    try:
+        data = json.loads(session_json)
+        if not isinstance(data, dict):
+            return
+        cookies = data.get("cookiesJson")
+        if isinstance(cookies, str):
+            cookies = json.loads(cookies)
+        local_storage = data.get("localStorage")
+        if isinstance(local_storage, str):
+            try:
+                local_storage = json.loads(local_storage)
+            except json.JSONDecodeError:
+                local_storage = {}
+        from stitch_backend.domains.browser.inject import inject_session
+
+        await inject_session(port, cookies, local_storage, origin)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Session injection failed (non-fatal): %s", exc)
 
 
 # ── Kill browser ───────────────────────────────────────────────────────────

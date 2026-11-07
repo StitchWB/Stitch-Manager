@@ -22,6 +22,7 @@ import { CommandPalette } from '@/components/ui/CommandPalette';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialogHost';
 import { AdminRoute } from './components/auth/AdminRoute';
 import { LEGACY_REDIRECTS, LegacyRedirectRoutes } from './components/ai-proxy/LegacyRedirects';
+import { startGatewayFailoverNotifications } from './lib/events/gatewayFailover';
 import { resolveRestoreRoute } from './lib/routing/restoreRoute';
 import { safeInvoke } from './lib/backend';
 import { isDesktopApp } from '@/lib/backend/core/url';
@@ -344,6 +345,8 @@ function App() {
       return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [theme]);
+
+  useEffect(() => startGatewayFailoverNotifications(), []);
 
   // Initialize auth state first. The app gate below waits for `authChecked`
   // before rendering either the loading splash, the setup page, the login

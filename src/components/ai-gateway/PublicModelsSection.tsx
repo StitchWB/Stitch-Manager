@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, ChevronRight, Globe, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, ChevronRight, Globe, Merge, Pencil, Plus, Split, Trash2 } from 'lucide-react';
 import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
 import { RouteTargetForm } from '@/components/ai-gateway/RouteTargetForm';
-import { Button, ButtonBase, EmptyState, askConfirm } from '@/components/ui';
+import { Button, ButtonBase, EmptyState, Input, Modal, Select, askConfirm } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useFormDialog } from '@/hooks/useFormDialog';
@@ -22,11 +22,18 @@ export function PublicModelsSection() {
     fetchEndpoints,
     deletePublicModel,
     deleteRouteTarget,
+    mergePublicModels,
+    unmergeRouteTarget,
   } = useAiGatewayStore();
 
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [targetsByModel, setTargetsByModel] = useState<Record<string, RouteTarget[]>>({});
   const [routeDialogModel, setRouteDialogModel] = useState<PublicModel | null>(null);
+  const [mergeSource, setMergeSource] = useState<PublicModel | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState('');
+  const [unmergeTarget, setUnmergeTarget] = useState<RouteTarget | null>(null);
+  const [unmergeSlug, setUnmergeSlug] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const publicModelDialog = useFormDialog<PublicModel>();
   const routeTargetDialog = useFormDialog<RouteTarget>();
@@ -96,6 +103,39 @@ export function PublicModelsSection() {
     if (!ok) return;
     await deleteRouteTarget(target.id);
     await reloadTargets(model.id);
+  };
+
+  const openMergeDialog = (model: PublicModel) => {
+    setMergeSource(model);
+    setMergeTargetId(publicModels.find(m => m.id !== model.id)?.id ?? '');
+  };
+
+  const handleMerge = async () => {
+    if (!mergeSource || !mergeTargetId) return;
+    setBusy(true);
+    try {
+      await mergePublicModels({ sourceId: mergeSource.id, targetId: mergeTargetId });
+      setMergeSource(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openUnmergeDialog = (target: RouteTarget) => {
+    const upstream = upstreamModels.find(m => m.id === target.upstreamModelId);
+    setUnmergeTarget(target);
+    setUnmergeSlug(upstream?.canonicalModelKey || upstream?.upstreamModelId || '');
+  };
+
+  const handleUnmerge = async () => {
+    if (!unmergeTarget || !unmergeSlug.trim()) return;
+    setBusy(true);
+    try {
+      await unmergeRouteTarget({ targetId: unmergeTarget.id, newPublicModelId: unmergeSlug.trim() });
+      setUnmergeTarget(null);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const resolveTargetLabel = (target: RouteTarget): string => {
@@ -185,6 +225,15 @@ export function PublicModelsSection() {
                   </ButtonBase>
                   <ButtonBase
                     type="button"
+                    aria-label={t('aiGateway.list.mergeModel')}
+                    disabled={publicModels.length < 2}
+                    onClick={() => openMergeDialog(model)}
+                    className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200 disabled:opacity-30"
+                  >
+                    <Merge size={13} />
+                  </ButtonBase>
+                  <ButtonBase
+                    type="button"
                     aria-label={t('common.edit')}
                     onClick={() => publicModelDialog.open(model)}
                     className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
@@ -233,6 +282,14 @@ export function PublicModelsSection() {
                             />
                             <ButtonBase
                               type="button"
+                              aria-label={t('aiGateway.list.unmergeTarget')}
+                              onClick={() => openUnmergeDialog(target)}
+                              className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
+                            >
+                              <Split size={12} />
+                            </ButtonBase>
+                            <ButtonBase
+                              type="button"
                               aria-label={t('common.delete')}
                               onClick={() => void handleDeleteTarget(model, target)}
                               className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
@@ -277,6 +334,58 @@ export function PublicModelsSection() {
           onClose={closeRouteDialog}
         />
       )}
+
+      <Modal
+        isOpen={mergeSource !== null}
+        onClose={() => setMergeSource(null)}
+        title={t('aiGateway.list.mergeModelTitle')}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setMergeSource(null)}>{t('common.cancel')}</Button>
+            <Button disabled={busy || !mergeTargetId} onClick={() => void handleMerge()}>
+              {t('aiGateway.list.mergeModel')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-slate-400">{t('aiGateway.list.mergeModelHint')}</p>
+          <div>
+            <label className="text-sm font-medium">{t('aiGateway.list.mergeInto')}</label>
+            <Select value={mergeTargetId} onChange={e => setMergeTargetId(e.target.value)}>
+              {publicModels
+                .filter(m => m.id !== mergeSource?.id)
+                .map(m => (
+                  <option key={m.id} value={m.id}>{m.id}</option>
+                ))}
+            </Select>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={unmergeTarget !== null}
+        onClose={() => setUnmergeTarget(null)}
+        title={t('aiGateway.list.unmergeTargetTitle')}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setUnmergeTarget(null)}>{t('common.cancel')}</Button>
+            <Button disabled={busy || !unmergeSlug.trim()} onClick={() => void handleUnmerge()}>
+              {t('aiGateway.list.unmergeTarget')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-slate-400">{t('aiGateway.list.unmergeTargetHint')}</p>
+          <div>
+            <label className="text-sm font-medium">{t('aiGateway.list.unmergeNewModelId')}</label>
+            <Input value={unmergeSlug} onChange={e => setUnmergeSlug(e.target.value)} />
+          </div>
+        </div>
+      </Modal>
     </section>
   );
 }

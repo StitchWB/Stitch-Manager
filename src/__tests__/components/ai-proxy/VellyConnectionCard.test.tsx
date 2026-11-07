@@ -33,11 +33,11 @@ describe('Velly Gateway connection', () => {
     expect(screen.queryByDisplayValue('local-install-test-secret')).toBeNull();
   });
 
-  it('does not advertise a Velly connection when no models have been registered', async () => {
+  it('shows an empty state when no models have been registered', async () => {
     models.mockResolvedValue([]);
-    const { container } = render(<MemoryRouter><VellyConnectionCard /></MemoryRouter>);
+    render(<MemoryRouter><VellyConnectionCard /></MemoryRouter>);
     await waitFor(() => expect(models).toHaveBeenCalled());
-    expect(container.textContent).toBe('');
+    expect(await screen.findByText('No Velly models found')).toBeTruthy();
     expect(token).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,9 @@ Legacy sources migrated in this pass:
 1. ``ai_proxy_accounts`` (via ``AiProxyAccountStore.get_accounts``) — one
    secret per account: ``apiKey`` > ``oauthToken`` > ``sessionToken``
    (first non-empty wins). Accounts with no usable secret are skipped.
+   claude/anthropic accounts whose picked secret is an OAuth/session
+   token are skipped too (``skipped_unsupported_auth``): those tokens
+   authenticate against claude.ai, never the Anthropic Messages API.
 2. ``ai_proxy_settings.<provider>_api_keys`` (via ``ApiKeysService.get_keys``)
    for every provider in ``PROVIDER_DB_KEYS`` — always ``auth_type="api_key"``.
 3. ``custom_providers_v1`` (via ``get_custom_providers``) plus each custom
@@ -69,6 +72,9 @@ logger = logging.getLogger(__name__)
 # accurate reflection of current behavior, not a simplification.
 _ADAPTER_TYPE = "openai_compatible"
 
+# Providers whose default endpoint is the Anthropic Messages API — only api_key secrets are valid there.
+_ANTHROPIC_API_PROVIDERS = frozenset({"claude", "anthropic"})
+
 
 async def migrate_legacy_credentials(session: AsyncSession) -> dict[str, Any]:
     """Backfill ``ai_gateway_provider_endpoints`` / ``credentials`` /
@@ -88,6 +94,8 @@ async def migrate_legacy_credentials(session: AsyncSession) -> dict[str, Any]:
             "endpoints_existing": 1,
             "credentials_created": 12,
             "credentials_existing_deduped": 2,
+            "skipped_unknown_base_url": 1,
+            "skipped_unsupported_auth": 1,
             "sources_scanned": {
                 "ai_proxy_accounts": 5,
                 "api_keys": 8,
@@ -100,6 +108,8 @@ async def migrate_legacy_credentials(session: AsyncSession) -> dict[str, Any]:
         "endpoints_existing": 0,
         "credentials_created": 0,
         "credentials_existing_deduped": 0,
+        "skipped_unknown_base_url": 0,
+        "skipped_unsupported_auth": 0,
         "sources_scanned": {
             "ai_proxy_accounts": 0,
             "api_keys": 0,
@@ -141,7 +151,15 @@ async def _migrate_ai_proxy_accounts(
         if not provider:
             continue
 
+        # Claude OAuth/session tokens only work against claude.ai, never the Anthropic Messages API.
+        if provider in _ANTHROPIC_API_PROVIDERS and auth_type != "api_key":
+            counters["skipped_unsupported_auth"] += 1
+            continue
+
         base_url = _default_base_url_for(provider)
+        if not base_url:
+            counters["skipped_unknown_base_url"] += 1
+            continue
         endpoint = await _get_or_create_endpoint(
             session,
             name=_display_name_for(provider),
@@ -198,6 +216,9 @@ async def _migrate_api_keys(
                 continue
 
             base_url = key_info.get("baseUrl") or _default_base_url_for(provider)
+            if not base_url:
+                counters["skipped_unknown_base_url"] += 1
+                continue
             endpoint = await _get_or_create_endpoint(
                 session,
                 name=_display_name_for(provider),
@@ -206,14 +227,14 @@ async def _migrate_api_keys(
             )
 
             await _create_credential_tracked(
-                session,
-                credential_service,
-                counters,
-                provider_endpoint_id=endpoint.id,
-                label=f"migrated from api_keys: {provider}",
-                auth_type="api_key",
-                secret=secret,
-            )
+            session,
+            credential_service,
+            counters,
+            provider_endpoint_id=endpoint.id,
+            label=f"migrated from api_keys: {provider}",
+            auth_type="api_key",
+            secret=secret,
+        )
 
     counters["sources_scanned"]["api_keys"] = scanned
 
@@ -248,6 +269,9 @@ async def _migrate_custom_providers(
             # Each key may have a different baseUrl — resolve per-key
             # to avoid collapsing distinct endpoints into one.
             base_url = key_info.get("baseUrl") or provider.base_url
+            if not base_url:
+                counters["skipped_unknown_base_url"] += 1
+                continue
             endpoint = await _get_or_create_endpoint(
                 session,
                 name=provider.name,
@@ -273,7 +297,7 @@ def _display_name_for(provider: str) -> str:
     return provider.replace("_", " ").strip().title() or provider
 
 
-# Not every PROVIDER_DB_KEYS provider is mapped; unmapped ones get the placeholder below.
+# Unmapped providers are SKIPPED — a fabricated placeholder URL can never route.
 _PROVIDER_BASE_URLS: dict[str, str] = {
     "openai": "https://api.openai.com",
     "antigravity": "https://api.openai.com",
@@ -281,19 +305,17 @@ _PROVIDER_BASE_URLS: dict[str, str] = {
     "dashscope": "https://dashscope.aliyuncs.com/compatible-mode",
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
     "anthropic": "https://api.anthropic.com",
+    "claude": "https://api.anthropic.com",
 }
 
 
-def _default_base_url_for(provider: str) -> str:
-    """Resolve a default base URL for a built-in provider.
+def _default_base_url_for(provider: str) -> str | None:
+    """Resolve the default base URL for a built-in provider.
 
-    Unknown providers get a clearly-a-placeholder URL so it's obvious in the
-    data that no real base URL was known at migration time.
+    Returns ``None`` for providers with no known URL — callers must skip
+    them rather than create a fabricated endpoint.
     """
-    url = _PROVIDER_BASE_URLS.get(provider)
-    if url:
-        return url
-    return f"https://unknown-base-url.invalid/{provider}"
+    return _PROVIDER_BASE_URLS.get(provider)
 
 
 async def _get_or_create_endpoint(

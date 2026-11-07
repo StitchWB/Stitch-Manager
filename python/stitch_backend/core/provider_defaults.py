@@ -46,4 +46,5 @@ PROVIDER_DEFAULTS: dict[str, ProviderDefaults] = {
     ),
     "trae": ProviderDefaults(browser_url="https://trae.sh/"),
     "windsurf": ProviderDefaults(browser_url="https://codeium.com/profile"),
+    "zcode": ProviderDefaults(browser_url="https://chat.z.ai/"),
 }

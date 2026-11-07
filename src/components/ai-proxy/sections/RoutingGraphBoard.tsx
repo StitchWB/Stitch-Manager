@@ -213,12 +213,12 @@ export function RoutingGraphBoard(props: RoutingGraphBoardProps) {
   const language = useAppStore(state => state.language);
   const isRu = language === 'ru';
   const running = Boolean(props.proxyStatus?.running);
-  const routingStrategy = (props.proxySettings?.routingStrategy || 'round-robin').replace(/-/g, ' ');
 
   const c = isRu
     ? {
         sources: 'Источники', avail: 'доступно', manage: 'Открыть',
-        rules: 'Правила', mappings: 'маппингов', def: 'По умолчанию', map: 'Маппинги', rot: 'Ротация', auto: 'Авто', on: 'вкл', off: 'выкл',
+        rules: 'Правила', rulesSubtitle: 'Приоритет · вес · LRU', failover: 'фейловер ×3', circuit: 'circuit breaker',
+        map: 'Маппинги', rot: 'Ротация',
         caveman: 'Caveman', comp: 'Компрессия', off2: 'Выкл', cfg: 'Настр.',
         proxy: 'AI Proxy', run: 'Работает', stop: 'Остановлен', set: 'Настр.', start: 'Старт', stop2: 'Стоп',
         holone: 'Holone', block: 'Блок', mon: 'Монитор', dis: 'Выкл', rules2: 'правил', find: 'находок', sec: 'Безоп.',
@@ -226,7 +226,8 @@ export function RoutingGraphBoard(props: RoutingGraphBoardProps) {
       }
     : {
         sources: 'Sources', avail: 'avail', manage: 'Open',
-        rules: 'Rules', mappings: 'mappings', def: 'Default', map: 'Mappings', rot: 'Rotation', auto: 'Auto', on: 'on', off: 'off',
+        rules: 'Rules', rulesSubtitle: 'Priority · weight · LRU', failover: 'failover ×3', circuit: 'circuit breaker',
+        map: 'Mappings', rot: 'Rotation',
         caveman: 'Caveman', comp: 'Compress', off2: 'Off', cfg: 'Config',
         proxy: 'AI Proxy', run: 'Running', stop: 'Stopped', set: 'Config', start: 'Start', stop2: 'Stop',
         holone: 'Holone', block: 'Block', mon: 'Monitor', dis: 'Off', rules2: 'rules', find: 'finds', sec: 'Security',
@@ -242,7 +243,6 @@ export function RoutingGraphBoard(props: RoutingGraphBoardProps) {
     return Array.from(grouped.values()).sort((a, b) => b.enabled - a.enabled);
   }, [props.accounts]);
   const enabledAccounts = sourceSummary.reduce((s, x) => s + x.enabled, 0);
-  const autoLabel = props.autoSwitchEnabled === null ? '?' : props.autoSwitchEnabled ? c.on : c.off;
 
   // 6 nodes, zigzag layout
   const nodes: StageNodeData[] = [
@@ -255,8 +255,8 @@ export function RoutingGraphBoard(props: RoutingGraphBoardProps) {
       actionLabel: c.manage, onAction: props.onOpenProviders,
     },
     {
-      label: c.rules, subtitle: routingStrategy,
-      detail: props.mappings.length > 0 ? `${props.mappings.length} ${c.mappings} · ${c.auto}:${autoLabel}` : `${c.def} · ${c.auto}:${autoLabel}`,
+      label: c.rules, subtitle: c.rulesSubtitle,
+      detail: `${c.failover} · ${c.circuit}`,
       icon: <Route size={16} />, color: 'violet', active: running,
       actionLabel: c.map, onAction: props.onOpenMappings,
       action2Label: c.rot, onAction2: props.onOpenRotation,

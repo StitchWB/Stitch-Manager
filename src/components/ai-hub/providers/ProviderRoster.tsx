@@ -23,7 +23,7 @@ export function ProviderRoster(props: ProviderRosterProps): JSX.Element {
   const totalKeys = allItems.reduce((sum, item) => sum + item.credentialCount, 0);
   const healthyCount = allItems.filter(item => item.health === 'healthy').length;
   const problemCount = allItems.filter(item => item.problemCount > 0).length;
-  const emptyCount = allItems.filter(item => item.health === 'empty').length;
+  const offCount = allItems.filter(item => item.health === 'off').length;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -48,7 +48,7 @@ export function ProviderRoster(props: ProviderRosterProps): JSX.Element {
                   description={t('aiHub.providersPage.rosterEmptyHint')}
                   action={
                     <Button variant="primary" size="sm" onClick={onAddProvider}>
-                      {t('aiHub.providersPage.addProvider')}
+                      {t('aiHub.providersPage.addConnection')}
                     </Button>
                   }
                 />
@@ -106,7 +106,7 @@ export function ProviderRoster(props: ProviderRosterProps): JSX.Element {
           </span>
           <span className="flex items-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-slate-600" />
-            {emptyCount} {t('aiHub.providersPage.roster.footerEmpty')}
+            {offCount} {t('aiHub.providersPage.roster.footerOff')}
           </span>
         </p>
       </div>

@@ -6,8 +6,11 @@ import type {
   CredentialModelAccess,
   PublicModel,
   RouteTarget,
+  SaveConnectionParams,
+  SaveConnectionResult,
 } from '@/lib/backend/modules/aiGateway';
 import * as api from '@/lib/backend/modules/aiGateway';
+import { listen, type UnlistenFn } from '@/lib/events';
 
 interface AiGatewayState {
   // Data
@@ -47,6 +50,7 @@ interface AiGatewayState {
   fetchRouteTargets: (publicModelId: string) => Promise<void>;
 
   createEndpoint: (params: Parameters<typeof api.createProviderEndpoint>[0]) => Promise<ProviderEndpoint>;
+  saveConnection: (params: SaveConnectionParams) => Promise<SaveConnectionResult>;
   updateEndpoint: (params: Parameters<typeof api.updateProviderEndpoint>[0]) => Promise<ProviderEndpoint | null>;
   deleteEndpoint: (id: string) => Promise<void>;
 
@@ -65,6 +69,8 @@ interface AiGatewayState {
   createPublicModel: (params: Parameters<typeof api.createPublicModel>[0]) => Promise<PublicModel>;
   updatePublicModel: (params: Parameters<typeof api.updatePublicModel>[0]) => Promise<PublicModel | null>;
   deletePublicModel: (id: string) => Promise<void>;
+  mergePublicModels: (params: Parameters<typeof api.mergePublicModels>[0]) => Promise<PublicModel | null>;
+  unmergeRouteTarget: (params: Parameters<typeof api.unmergeRouteTarget>[0]) => Promise<PublicModel | null>;
 
   createRouteTarget: (params: Parameters<typeof api.createRouteTarget>[0]) => Promise<RouteTarget>;
   updateRouteTarget: (params: Parameters<typeof api.updateRouteTarget>[0]) => Promise<RouteTarget | null>;
@@ -177,6 +183,20 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
     return endpoint;
   },
 
+  saveConnection: async (params) => {
+    const result = await api.saveConnection(params);
+    set(s => ({
+      endpoints: s.endpoints.some(e => e.id === result.endpoint.id)
+        ? s.endpoints.map(e => (e.id === result.endpoint.id ? result.endpoint : e))
+        : [...s.endpoints, result.endpoint],
+      credentials: [
+        ...s.credentials.filter(c => !result.credentials.some(next => next.id === c.id)),
+        ...result.credentials,
+      ],
+    }));
+    return result;
+  },
+
   updateEndpoint: async (params) => {
     const endpoint = await api.updateProviderEndpoint(params);
     if (endpoint) {
@@ -271,6 +291,24 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
     set(s => ({ publicModels: s.publicModels.filter(m => m.id !== id) }));
   },
 
+  mergePublicModels: async (params) => {
+    const target = await api.mergePublicModels(params);
+    set(s => ({ publicModels: s.publicModels.filter(m => m.id !== params.sourceId) }));
+    return target;
+  },
+
+  unmergeRouteTarget: async (params) => {
+    const created = await api.unmergeRouteTarget(params);
+    if (created) {
+      set(s => ({
+        publicModels: s.publicModels.some(m => m.id === created.id)
+          ? s.publicModels
+          : [...s.publicModels, created],
+      }));
+    }
+    return created;
+  },
+
   createRouteTarget: async (params) => {
     const target = await api.createRouteTarget(params);
     set(s => ({ routeTargets: [...s.routeTargets, target] }));
@@ -294,3 +332,37 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
     return await api.migrateLegacyData();
   },
 }));
+
+// Backend emits these after discovery / credential transitions; both invalidate the cached catalog.
+let catalogSubscribers = 0;
+let catalogUnlisten: Promise<UnlistenFn> | null = null;
+
+async function refreshCatalog(): Promise<void> {
+  const s = useAiGatewayStore.getState();
+  await Promise.all([
+    s.fetchEndpoints(),
+    s.fetchCredentials(),
+    s.fetchUpstreamModels(),
+    s.fetchPublicModels(),
+  ]);
+}
+
+/** Start catalog invalidation listeners. Call on mount of AI Hub surfaces. */
+export function startCatalogEvents(): void {
+  catalogSubscribers++;
+  if (catalogSubscribers === 1) {
+    catalogUnlisten = Promise.all([
+      listen('endpoint.models_changed', () => { void refreshCatalog(); }),
+      listen('credential.state_changed', () => { void refreshCatalog(); }),
+    ]).then((fns) => () => fns.forEach((fn) => fn()));
+  }
+}
+
+/** Stop catalog invalidation listeners. Call on unmount. */
+export function stopCatalogEvents(): void {
+  catalogSubscribers = Math.max(0, catalogSubscribers - 1);
+  if (catalogSubscribers === 0 && catalogUnlisten) {
+    catalogUnlisten.then((fn) => fn());
+    catalogUnlisten = null;
+  }
+}
