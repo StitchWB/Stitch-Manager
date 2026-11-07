@@ -331,6 +331,18 @@ try {
         Write-Host "      (warmup request failed - Vite will transform on demand)" -ForegroundColor DarkYellow
     }
 
+    # Module integrity gate (catches Vite serving 0-byte/stale modules before WebView boots).
+    $viteGate = Join-Path $PSScriptRoot 'check-vite-modules.mjs'
+    if (-not (Test-Path -LiteralPath $viteGate -PathType Leaf)) { throw "Vite gate missing: $viteGate" }
+    & {
+        Write-Host "[VITE-GATE] Verifying dev-server module integrity..." -ForegroundColor DarkCyan
+        & node $viteGate --base $VITE_URL --root (Join-Path $VITE_ROOT 'src') --retries 4
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Vite served one or more modules with an empty or broken body. This is the failure mode that crashed AddProviderMenu.tsx in the recent regression. Fix the offending file (touch it to retrigger Vite transform, or restore the missing export), then retry.'
+        }
+        Write-Host "      OK" -ForegroundColor Green
+    }
+
     if ($SeedFromHub) {
         Write-Host "[SEED] Resolving hub dev database..." -ForegroundColor DarkCyan
         $seedSource = $null

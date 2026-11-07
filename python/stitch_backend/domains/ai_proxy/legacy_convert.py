@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from sqlalchemy import select
 
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialSecret,
@@ -33,8 +34,19 @@ async def _get_or_create_endpoint(
     base_url: str | None = None,
     owner_id: int | None = None,
 ) -> ProviderEndpoint:
-    """Find or create a ProviderEndpoint for *provider* + *base_url*."""
+    """Find or create a ProviderEndpoint for *provider* + *base_url*.
+
+    Raises:
+        StitchError: when neither *base_url* nor a built-in default for
+            *provider* is known — an endpoint with a fabricated URL can
+            never route, so the caller must supply one explicitly.
+    """
     url = base_url or _default_base_url(provider)
+    if not url:
+        raise StitchError(
+            f"Provider {provider!r} has no known base URL — "
+            "pass baseUrl explicitly"
+        )
     name = _display_name(provider)
 
     result = await session.execute(

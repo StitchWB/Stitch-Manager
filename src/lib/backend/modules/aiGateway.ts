@@ -61,6 +61,7 @@ export interface UpstreamModel {
   displayName?: string | null;
   enabled: boolean;
   discoverySource: string;
+  canonicalModelKey?: string | null;
   lastDiscoveredAt?: string | null;
   capabilities?: Record<string, unknown> | null;
   createdAt: string;
@@ -138,6 +139,34 @@ export async function updateProviderEndpoint(params: {
 
 export async function deleteProviderEndpoint(id: string): Promise<{ success: boolean }> {
   return safeInvoke('delete_provider_endpoint', { id });
+}
+
+// Atomic endpoint+credentials save; with endpointId set only keys are added.
+export type SaveConnectionAuth = {
+  type: 'api_key' | 'none';
+  secrets?: string[];
+};
+
+export type SaveConnectionParams = {
+  endpointId?: string | null;
+  name?: string;
+  adapterType?: string;
+  baseUrl?: string;
+  enabled?: boolean;
+  defaultHeaders?: Record<string, string>;
+  auth: SaveConnectionAuth;
+};
+
+export interface SaveConnectionResult {
+  endpoint: ProviderEndpoint;
+  endpointCreated: boolean;
+  credentials: Credential[];
+  credentialsCreated: number;
+  credentialsExisting: number;
+}
+
+export async function saveConnection(params: SaveConnectionParams): Promise<SaveConnectionResult> {
+  return safeInvoke('save_connection', params, { noCache: true });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -276,6 +305,20 @@ export async function updatePublicModel(params: {
 
 export async function deletePublicModel(id: string): Promise<{ success: boolean }> {
   return safeInvoke('delete_public_model', { id });
+}
+
+export async function mergePublicModels(params: {
+  sourceId: string;
+  targetId: string;
+}): Promise<PublicModel | null> {
+  return safeInvoke('merge_public_models', params, { noCache: true });
+}
+
+export async function unmergeRouteTarget(params: {
+  targetId: number;
+  newPublicModelId: string;
+}): Promise<PublicModel | null> {
+  return safeInvoke('unmerge_route_target', params, { noCache: true });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

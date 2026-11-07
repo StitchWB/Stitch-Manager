@@ -90,6 +90,7 @@ class UpstreamModelResponse(BaseModel):
     display_name: str | None = Field(None, alias="displayName")
     enabled: bool
     discovery_source: str = Field(alias="discoverySource")
+    canonical_model_key: str | None = Field(None, alias="canonicalModelKey")
     last_discovered_at: datetime | None = Field(None, alias="lastDiscoveredAt")
     capabilities: dict[str, Any] | None = None
     created_at: datetime = Field(alias="createdAt")
@@ -104,6 +105,7 @@ class UpstreamModelResponse(BaseModel):
             display_name=obj.display_name,
             enabled=obj.enabled,
             discovery_source=obj.discovery_source,
+            canonical_model_key=obj.canonical_model_key,
             last_discovered_at=obj.last_discovered_at,
             capabilities=obj.capabilities,
             created_at=obj.created_at,

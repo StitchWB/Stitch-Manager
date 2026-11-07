@@ -128,6 +128,14 @@ class ProviderEndpoint(Base):
     circuit_retry_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), comment="Earliest time to probe half_open",
     )
+    circuit_failures: Mapped[list | None] = mapped_column(
+        JSON,
+        comment=(
+            "Recent failure timestamps (ISO-8601) inside the failure window; "
+            "durable mirror of the in-process window so a restart does not "
+            "reset the count toward opening the circuit"
+        ),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow,
@@ -182,7 +190,7 @@ class Credential(Base):
     )
     auth_type: Mapped[str] = mapped_column(
         String, nullable=False, default="api_key",
-        comment="api_key | oauth | session",
+        comment="api_key | oauth | session | none (marker credential, no secret row)",
     )
     fingerprint: Mapped[str] = mapped_column(
         String, nullable=False, unique=True,
@@ -297,6 +305,13 @@ class UpstreamModel(Base):
     discovery_source: Mapped[str] = mapped_column(
         String, default="manual",
         comment="manual | probe | litellm_catalog",
+    )
+    canonical_model_key: Mapped[str | None] = mapped_column(
+        String, index=True,
+        comment=(
+            "Provider-independent identity key (see model_identity.canonical_model_key); "
+            "upstream models sharing a key are grouped into one PublicModel"
+        ),
     )
     last_discovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

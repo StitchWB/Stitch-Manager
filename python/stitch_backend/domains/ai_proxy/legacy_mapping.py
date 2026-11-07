@@ -13,8 +13,12 @@ from stitch_backend.domains.ai_gateway.models import Credential
 
 _ADAPTER_MAP: dict[str, str] = {
     "anthropic": "anthropic",
+    "claude": "anthropic",
     "gemini": "gemini",
 }
+
+# Providers whose default endpoint is the Anthropic Messages API — only api_key secrets are valid there.
+_ANTHROPIC_API_PROVIDERS = frozenset({"claude", "anthropic"})
 
 # Default base URLs for built-in providers.
 _BASE_URL_MAP: dict[str, str] = {
@@ -24,6 +28,7 @@ _BASE_URL_MAP: dict[str, str] = {
     "dashscope": "https://dashscope.aliyuncs.com/compatible-mode",
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
     "anthropic": "https://api.anthropic.com",
+    "claude": "https://api.anthropic.com",
 }
 
 
@@ -31,8 +36,9 @@ def _adapter_type_for_provider(provider: str) -> str:
     return _ADAPTER_MAP.get(provider, "openai_compatible")
 
 
-def _default_base_url(provider: str) -> str:
-    return _BASE_URL_MAP.get(provider, f"https://unknown-base-url.invalid/{provider}")
+def _default_base_url(provider: str) -> str | None:
+    """``None`` for unknown providers — callers must not fabricate a URL."""
+    return _BASE_URL_MAP.get(provider)
 
 
 def _display_name(provider: str) -> str:

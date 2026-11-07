@@ -9,7 +9,7 @@
  * - modules/     - Feature-specific API modules
  *   - accounts   - Account CRUD, tokens, quotas, active accounts
  *   - registration - All registration flows (Cognito, Device Flow, Python automation)
- *   - patcher    - IDE detection, patching, backups, Trae-specific patches
+ *   - patcher    - IDE detection, patching, backups
  *   - settings   - App settings, Addy.io, IMAP, email counters
  *   - logs       - Log queries, management, statistics
  *   - aiProxy    - AI Proxy server and account management
@@ -207,10 +207,6 @@ export {
   listBackups,
   restoreBackup,
   deleteBackup,
-  isTraePatched,
-  patchTraeFull,
-  isTraeExtensionPatched,
-  isTraeWorkbenchPatched,
   type PatchIDEParams,
   type UnpatchIDEParams,
   type RestoreBackupParams,

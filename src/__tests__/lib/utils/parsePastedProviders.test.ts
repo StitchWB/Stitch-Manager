@@ -240,6 +240,34 @@ describe('parsePastedProviders', () => {
     expect(entries[0].baseUrl).toBe('');
     expect(entries[0].keys).toEqual(['sk-000102030405060708090a0b0c0d0e0f']);
   });
+
+  it('attaches a plain synthetic key line to the preceding URL', () => {
+    const { entries } = parsePastedProviders(
+      'https://api.reformboss.com/v1\nmr-live-SyntheticKeyForLocalCheck123',
+    );
+    expect(entries).toEqual([
+      {
+        name: null,
+        baseUrl: 'https://api.reformboss.com/v1',
+        keys: ['mr-live-SyntheticKeyForLocalCheck123'],
+        models: [],
+      },
+    ]);
+  });
+
+  it('does not extract multi-word prose as keys', () => {
+    const { entries } = parsePastedProviders(
+      'https://api.reformboss.com/v1\nthis is just prose about keys and tokens',
+    );
+    expect(entries).toEqual([]);
+  });
+
+  it('keeps a bare synthetic key as a key-only entry', () => {
+    const { entries } = parsePastedProviders('mr-live-SyntheticKeyForLocalCheck123');
+    expect(entries).toEqual([
+      { name: null, baseUrl: '', keys: ['mr-live-SyntheticKeyForLocalCheck123'], models: [] },
+    ]);
+  });
 });
 
 describe('extractKeyTokens', () => {

@@ -19,6 +19,7 @@ import type { AccountsTableVisibleColumns } from '@/stores/uiPreferences';
 import { getAccountStatusLabel } from '@/lib/accountStatus';
 import { t } from '@/lib/i18n';
 import type { AccountRelationEdge, RelationType } from '@/lib/accounts/relations';
+import type { BrowserEngineId } from '@/lib/browser/engines';
 import { useAccountRowData } from '@/hooks/useAccountRow';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { AccountRowMenu } from './AccountRowMenu';
@@ -64,6 +65,8 @@ interface AccountRowProps {
   onClaim?: (accountId: number) => Promise<void>;
   onShareToGroup?: (accountId: number) => void;
   onRelationEdgeClick?: (edgeType: RelationType, targetProvider: string) => void;
+  shardAvailable?: boolean;
+  onSetBrowserEngine?: (accountId: number, engine: BrowserEngineId) => Promise<void>;
 }
 
 export function AccountRow({
@@ -101,6 +104,8 @@ export function AccountRow({
   onClaim,
   onShareToGroup,
   onRelationEdgeClick,
+  shardAvailable = false,
+  onSetBrowserEngine,
 }: AccountRowProps) {
   const data = useAccountRowData(account, relationHints, relationEdges);
   const { copy } = useCopyToClipboard();
@@ -475,6 +480,8 @@ export function AccountRow({
             onShowDetails={onShowDetails}
             onDelete={onDelete}
             onCloseMenu={onCloseMenu}
+            shardAvailable={shardAvailable}
+            onSetBrowserEngine={onSetBrowserEngine}
           />
         </div>
       </TableCell>

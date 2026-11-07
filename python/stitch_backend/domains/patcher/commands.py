@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.exceptions import StitchError
 from stitch_backend.core.ttl_cache import TTLCache, TTLCacheDict
 from stitch_backend.domains.patcher.detector import detect_all_ides, detect_ide, get_config_dir
 
@@ -568,6 +569,25 @@ async def cmd_restore_backup(params: dict) -> dict[str, Any]:
     if result.get("success"):
         _invalidate_all_caches()
     return result
+
+
+@register_command("delete_backup", admin_only=True)
+async def cmd_delete_backup(params: dict) -> None:
+    backup_id = params.get("backupId", "")
+    if not isinstance(backup_id, str) or not re.fullmatch(
+        r"(kiro|windsurf|trae|cursor)_extension_[A-Za-z0-9_.-]+\.bak", backup_id,
+    ):
+        raise StitchError("Invalid backup ID")
+    ide_type = backup_id.split("_extension_", 1)[0]
+    backup_dir = _get_backup_dir(ide_type).resolve()
+    backup = backup_dir / backup_id
+    if backup.is_symlink() or backup.resolve().parent != backup_dir:
+        raise StitchError("Invalid backup path")
+    try:
+        await asyncio.to_thread(backup.unlink)
+    except FileNotFoundError as exc:
+        raise StitchError("Backup not found") from exc
+    _invalidate_ide_cache(ide_type)
 
 
 @register_command("launch_ide")

@@ -5,7 +5,7 @@ Ported from Rust ``commands/account/active.rs``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,13 +13,19 @@ if TYPE_CHECKING:
 from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 
+
+def _coerce_account_id(raw: Any) -> int | str:
+    s = str(raw).strip()
+    return int(s) if s.isdigit() else s
+
+
 # ── Status checks ─────────────────────────────────────────────────────────────
 
 @command("check_account_status")
 async def cmd_check_status(db: AsyncSession, params: dict) -> dict:
     """Check account status with auto-detection of provider."""
     from stitch_backend.domains.account_status import service
-    account_id = int(params.get("accountId", params.get("account_id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
 
     return await service.check_account_status(db, account_id)
 
@@ -38,7 +44,7 @@ async def cmd_check_windsurf(params: dict) -> dict:
 async def cmd_open_profile_session(db: AsyncSession, params: dict) -> None:
     """Open a profile session for an account."""
     from stitch_backend.domains.account_status import service
-    account_id = int(params.get("accountId", params.get("account_id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
 
     return await service.open_account_profile_session(db, account_id)
 
@@ -47,7 +53,7 @@ async def cmd_open_profile_session(db: AsyncSession, params: dict) -> None:
 async def cmd_confirm_profile_session(db: AsyncSession, params: dict) -> None:
     """Confirm manual login for a profile session."""
     from stitch_backend.domains.account_status import service
-    account_id = int(params.get("accountId", params.get("account_id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
 
     return await service.confirm_account_profile_session(db, account_id)
 
@@ -56,6 +62,6 @@ async def cmd_confirm_profile_session(db: AsyncSession, params: dict) -> None:
 async def cmd_clear_profile_session(db: AsyncSession, params: dict) -> None:
     """Clear profile session data for an account."""
     from stitch_backend.domains.account_status import service
-    account_id = int(params.get("accountId", params.get("account_id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
 
     return await service.clear_account_profile_session(db, account_id)

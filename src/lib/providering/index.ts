@@ -9,7 +9,8 @@ export { openAiLikeAdapter } from './adapters/openaiLike';
 import { getProviderProfile } from './profiles';
 import { openAiLikeAdapter } from './adapters/openaiLike';
 
-export function buildManualEnvPayload(endpoint: string, providerKey: string): string {
+export function buildManualEnvPayload(endpoint: string, providerKey: string, apiKey?: string): string {
   const profile = getProviderProfile(providerKey);
-  return openAiLikeAdapter.getManualEnvPayload({ endpoint, provider: profile });
+  const resolved = apiKey ? { ...profile, defaultApiKey: apiKey } : profile;
+  return openAiLikeAdapter.getManualEnvPayload({ endpoint, provider: resolved });
 }

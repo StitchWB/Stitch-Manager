@@ -8,9 +8,10 @@ import {
   GlassCard,
   KeyValueList,
   MetricStrip,
+  StatusBadge,
 } from '@/components/ui';
 import { useLogsStore } from '../../../stores/logs';
-import type { ProviderCapability } from '../../../lib/backend/modules/aiProxy';
+import type { ProviderCapability, RequestTrace } from '../../../lib/backend/modules/aiProxy';
 import type { ProxySettings, ProxyStatus } from '../../../types/generated';
 
 export interface MonitorOverviewProps {
@@ -18,7 +19,8 @@ export interface MonitorOverviewProps {
   proxySettings: ProxySettings | null;
   providerCapabilities: ProviderCapability[];
   availableModels: Array<{ id: string; provider: string }>;
-  historySummary: { total: number; errors: number };
+  historySummary: { total: number; errors: number; failovers: number };
+  recentFailovers: RequestTrace[];
   hasAccounts: boolean;
   accountReadiness?: {
     enabled: number;
@@ -37,6 +39,7 @@ export function MonitorOverview({
   providerCapabilities,
   availableModels,
   historySummary,
+  recentFailovers,
   hasAccounts,
   accountReadiness,
   onOpenAnalytics,
@@ -149,6 +152,13 @@ export function MonitorOverview({
         value: historySummary.errors,
         tone:
           historySummary.errors > 0 ? ('danger' as const) : ('success' as const),
+      },
+      {
+        id: 'failovers',
+        label: t('aiHub.failover.title'),
+        value: historySummary.failovers,
+        tone:
+          historySummary.failovers > 0 ? ('warning' as const) : ('success' as const),
       },
     ],
     [historySummary]
@@ -291,6 +301,30 @@ export function MonitorOverview({
           />
         )}
       </div>
+
+      <GlassCard className="p-4 md:p-5">
+        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+          {t('aiHub.failover.title')}
+        </div>
+        {recentFailovers.length === 0 ? (
+          <div className="text-xs text-slate-500">{t('aiHub.failover.none')}</div>
+        ) : (
+          <div className="space-y-1">
+            {recentFailovers.slice(0, 10).map(trace => (
+              <div
+                key={`${trace.timestamp}-${trace.model}-${trace.credential_id}`}
+                className="flex items-center justify-between gap-3 text-xs py-1 border-b border-white/[0.04] last:border-b-0"
+              >
+                <span className="truncate text-slate-200 font-mono">{trace.model}</span>
+                <span className="truncate text-slate-500 flex-1">{trace.target}</span>
+                <StatusBadge size="sm" status="warning">
+                  {t('aiHub.failover.badge', { count: trace.failover_count })}
+                </StatusBadge>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
     </div>
   );
 }

@@ -96,7 +96,27 @@ async def invoke_via_gateway(
             input_tokens = getattr(usage, "prompt_tokens", 0)
             output_tokens = getattr(usage, "completion_tokens", 0)
 
-        # Record metrics and cost (per-credential, per-endpoint granularity)
+        if payload.stream:
+            result = await executor._stream_response(
+                executor._guard_stream(response, routing_result),
+                client_has_tools=client_has_tools,
+                on_complete=lambda tokens: executor._record_group_usage_for(
+                    pool, routing_result, payload.model, tokens,
+                ),
+            )
+        else:
+            result = cast("Any", _json_object(response))
+            if holone_service.config.enabled:
+                result, findings, blocked = holone_service.inspect_response_openai(
+                    result, client_has_tools=client_has_tools
+                )
+                if findings:
+                    logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
+            await executor._record_group_usage_for(
+                pool, routing_result, payload.model, input_tokens + output_tokens,
+            )
+
+        # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
             key_id=routing_result.credential.id,
             provider=routing_result.endpoint.name,
@@ -131,25 +151,6 @@ async def invoke_via_gateway(
         except Exception:
             logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
-        if payload.stream:
-            result = await executor._stream_response(
-                executor._guard_stream(response, routing_result),
-                client_has_tools=client_has_tools,
-                on_complete=lambda tokens: executor._record_group_usage_for(
-                    pool, routing_result, payload.model, tokens,
-                ),
-            )
-        else:
-            result = cast("Any", _json_object(response))
-            if holone_service.config.enabled:
-                result, findings, blocked = holone_service.inspect_response_openai(
-                    result, client_has_tools=client_has_tools
-                )
-                if findings:
-                    logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-            await executor._record_group_usage_for(
-                pool, routing_result, payload.model, input_tokens + output_tokens,
-            )
         return result
 
     except Exception as e:
@@ -235,7 +236,29 @@ async def invoke_via_gateway_messages(
             input_tokens = getattr(usage, "input_tokens", 0)
             output_tokens = getattr(usage, "output_tokens", 0)
 
-        # Record metrics and cost (per-credential, per-endpoint granularity)
+        if payload.stream:
+            result = await executor._stream_anthropic_response(
+                executor._guard_stream(response, routing_result),
+                client_has_tools=client_has_tools,
+                on_complete=lambda tokens: executor._record_group_usage_for(
+                    pool, routing_result, payload.model, tokens,
+                ),
+            )
+        else:
+            result = cast("Any", _json_object(response))
+            if compression_service.config.enabled:
+                result = compression_service.compress_output(result)
+            if holone_service.config.enabled:
+                result, findings, blocked = holone_service.inspect_response_anthropic(
+                    result, client_has_tools=client_has_tools
+                )
+                if findings:
+                    logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
+            await executor._record_group_usage_for(
+                pool, routing_result, payload.model, input_tokens + output_tokens,
+            )
+
+        # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
             key_id=routing_result.credential.id,
             provider=routing_result.endpoint.name,
@@ -270,27 +293,6 @@ async def invoke_via_gateway_messages(
         except Exception:
             logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
-        if payload.stream:
-            result = await executor._stream_anthropic_response(
-                executor._guard_stream(response, routing_result),
-                client_has_tools=client_has_tools,
-                on_complete=lambda tokens: executor._record_group_usage_for(
-                    pool, routing_result, payload.model, tokens,
-                ),
-            )
-        else:
-            result = cast("Any", _json_object(response))
-            if compression_service.config.enabled:
-                result = compression_service.compress_output(result)
-            if holone_service.config.enabled:
-                result, findings, blocked = holone_service.inspect_response_anthropic(
-                    result, client_has_tools=client_has_tools
-                )
-                if findings:
-                    logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-            await executor._record_group_usage_for(
-                pool, routing_result, payload.model, input_tokens + output_tokens,
-            )
         return result
 
     except Exception as e:
@@ -382,7 +384,29 @@ async def invoke_via_gateway_responses(
             input_tokens = getattr(usage, "prompt_tokens", 0)
             output_tokens = getattr(usage, "completion_tokens", 0)
 
-        # Record metrics and cost (per-credential, per-endpoint granularity)
+        if payload.stream:
+            result = await executor._stream_response(
+                executor._guard_stream(response, routing_result),
+                client_has_tools=client_has_tools,
+                on_complete=lambda tokens: executor._record_group_usage_for(
+                    pool, routing_result, payload.model, tokens,
+                ),
+            )
+        else:
+            result = cast("Any", _json_object(response))
+            if compression_service.config.enabled:
+                result = compression_service.compress_output(result)
+            if holone_service.config.enabled:
+                result, findings, blocked = holone_service.inspect_response_responses(
+                    result, client_has_tools=client_has_tools
+                )
+                if findings:
+                    logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
+            await executor._record_group_usage_for(
+                pool, routing_result, payload.model, input_tokens + output_tokens,
+            )
+
+        # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
             key_id=routing_result.credential.id,
             provider=routing_result.endpoint.name,
@@ -417,27 +441,6 @@ async def invoke_via_gateway_responses(
         except Exception:
             logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
-        if payload.stream:
-            result = await executor._stream_response(
-                executor._guard_stream(response, routing_result),
-                client_has_tools=client_has_tools,
-                on_complete=lambda tokens: executor._record_group_usage_for(
-                    pool, routing_result, payload.model, tokens,
-                ),
-            )
-        else:
-            result = cast("Any", _json_object(response))
-            if compression_service.config.enabled:
-                result = compression_service.compress_output(result)
-            if holone_service.config.enabled:
-                result, findings, blocked = holone_service.inspect_response_responses(
-                    result, client_has_tools=client_has_tools
-                )
-                if findings:
-                    logger.info("HoloNe findings: %s (blocked=%s)", [f.rule_id for f in findings], blocked)
-            await executor._record_group_usage_for(
-                pool, routing_result, payload.model, input_tokens + output_tokens,
-            )
         return result
 
     except Exception as e:

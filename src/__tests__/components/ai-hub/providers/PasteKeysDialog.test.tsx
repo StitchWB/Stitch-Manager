@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 if (!('scrollIntoView' in HTMLElement.prototype)) {
@@ -22,21 +22,16 @@ jest.mock('@/lib/backend/modules/opencodeConfig', () => ({
   bulkTestOpenCodeApi: jest.fn(),
 }));
 
-const mockCreateEndpoint = jest.fn();
-const mockCreateCredential = jest.fn();
+const mockSaveConnection = jest.fn();
 const mockFetchEndpoints = jest.fn();
-const mockFetchCredentials = jest.fn();
 const mockEndpoints: ProviderEndpoint[] = [];
-const mockCredentials: Credential[] = [];
 
 jest.mock('@/stores/aiGateway', () => {
   const mockState = () => ({
     endpoints: mockEndpoints,
-    credentials: mockCredentials,
-    createEndpoint: mockCreateEndpoint,
-    createCredential: mockCreateCredential,
+    credentials: [],
+    saveConnection: mockSaveConnection,
     fetchEndpoints: mockFetchEndpoints,
-    fetchCredentials: mockFetchCredentials,
   });
   return {
     useAiGatewayStore: Object.assign(
@@ -49,8 +44,7 @@ jest.mock('@/stores/aiGateway', () => {
 import { toast } from 'sonner';
 import { PasteKeysDialog } from '@/components/ai-hub/providers/PasteKeysDialog';
 import { bulkTestOpenCodeApi } from '@/lib/backend/modules/opencodeConfig';
-import { computeCredentialFingerprint } from '@/lib/utils/credentialFingerprint';
-import type { Credential, ProviderEndpoint } from '@/lib/backend/modules/aiGateway';
+import type { Credential, ProviderEndpoint, SaveConnectionParams, SaveConnectionResult } from '@/lib/backend/modules/aiGateway';
 
 const createdEndpoint = {
   id: 'ep-new',
@@ -61,6 +55,17 @@ const createdEndpoint = {
   circuitState: 'closed',
   createdAt: '2026-01-01T00:00:00Z',
 } satisfies ProviderEndpoint;
+
+function saveResult(overrides?: Partial<SaveConnectionResult>): SaveConnectionResult {
+  return {
+    endpoint: createdEndpoint,
+    endpointCreated: true,
+    credentials: [{ id: 'cred-new' } as Credential],
+    credentialsCreated: 1,
+    credentialsExisting: 0,
+    ...overrides,
+  };
+}
 
 function renderDialog(props?: {
   endpoint?: ProviderEndpoint | null;
@@ -86,11 +91,9 @@ async function selectPreset(user: ReturnType<typeof userEvent.setup>, label: str
 describe('PasteKeysDialog provider preset picker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreateEndpoint.mockResolvedValue(createdEndpoint);
-    mockCreateCredential.mockResolvedValue({ id: 'cred-new' });
+    mockSaveConnection.mockResolvedValue(saveResult());
     mockFetchEndpoints.mockResolvedValue(undefined);
-    mockFetchCredentials.mockResolvedValue(undefined);
-    mockCredentials.length = 0;
+    mockEndpoints.length = 0;
   });
 
   it('prefills name, base URL and protocol when a preset is selected', async () => {
@@ -117,7 +120,88 @@ describe('PasteKeysDialog provider preset picker', () => {
     expect(baseUrlInput.value).toBe('');
   });
 
-  it('calls onAdded with the created endpoint id after a successful add', async () => {
+  it('updates the protocol from the pasted URL preset even when unscoped', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await selectPreset(user, 'Google Gemini');
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('https://api.openai.com/v1\nsk-openai-key-1234567890');
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('combobox')[1].textContent).toContain('aiGateway.form.optOpenai');
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+      ).toBe('https://api.openai.com/v1');
+    });
+
+    await selectPreset(user, 'OpenAI');
+    await user.click(textarea);
+    await user.paste('https://api.anthropic.com\nsk-ant-key-123456789012345');
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('combobox')[1].textContent).toContain('aiGateway.form.optAnthropic');
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+      ).toBe('Anthropic / Claude');
+    });
+  });
+
+  it('detects the protocol from a pasted provider URL with a path suffix', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await selectPreset(user, 'OpenAI');
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('https://api.anthropic.com/v1\nsk-ant-key-123456789012345');
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('combobox')[1].textContent).toContain('aiGateway.form.optAnthropic');
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+      ).toBe('Anthropic / Claude');
+    });
+  });
+
+  it('detects the protocol from a bulk insert delivered through onChange', async () => {
+    renderDialog();
+    await Promise.resolve();
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    fireEvent.change(textarea, {
+      target: { value: 'https://api.anthropic.com/v1\nsk-ant-key-123456789012345' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('combobox')[1].textContent).toContain('aiGateway.form.optAnthropic');
+    });
+  });
+
+  it('offers the key test only for OpenAI-compatible protocols', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await selectPreset(user, 'Anthropic / Claude');
+    expect(screen.queryByRole('button', { name: 'aiHub.pasteFirst.test' })).toBeNull();
+    expect(screen.getByText('aiHub.pasteFirst.testUnsupportedProtocol')).toBeTruthy();
+
+    await selectPreset(user, 'OpenAI');
+    expect(screen.getByRole('button', { name: 'aiHub.pasteFirst.test' })).toBeTruthy();
+    expect(screen.queryByText('aiHub.pasteFirst.testUnsupportedProtocol')).toBeNull();
+  });
+
+  it('hides the key test for a scoped endpoint with a non-OpenAI protocol', () => {
+    renderDialog({
+      endpoint: { ...createdEndpoint, adapterType: 'anthropic', baseUrl: 'https://api.anthropic.com' },
+    });
+
+    expect(screen.queryByRole('button', { name: 'aiHub.pasteFirst.test' })).toBeNull();
+    expect(screen.getByText('aiHub.pasteFirst.testUnsupportedProtocol')).toBeTruthy();
+  });
+
+  it('saves a new connection atomically through save_connection', async () => {
     const user = userEvent.setup();
     const onAdded = jest.fn();
     const onClose = jest.fn();
@@ -125,21 +209,45 @@ describe('PasteKeysDialog provider preset picker', () => {
 
     await selectPreset(user, 'OpenAI');
     await user.type(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint'), 'sk-test-key-123');
-    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
 
     await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['ep-new']));
-    expect(mockCreateEndpoint).toHaveBeenCalledWith({
+    expect(mockSaveConnection).toHaveBeenCalledTimes(1);
+    expect(mockSaveConnection).toHaveBeenCalledWith({
+      endpointId: null,
       name: 'OpenAI',
       baseUrl: 'https://api.openai.com/v1',
       adapterType: 'openai_compatible',
       enabled: true,
-    });
-    expect(mockCreateCredential).toHaveBeenCalledWith({
-      providerEndpointId: 'ep-new',
-      authType: 'api_key',
-      secret: 'sk-test-key-123',
+      auth: { type: 'api_key', secrets: ['sk-test-key-123'] },
     });
     expect(onClose).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith('aiHub.pasteFirst.addedToastUnverified 1');
+  });
+
+  it('saves without keys when auth is set to none', async () => {
+    const user = userEvent.setup();
+    const onAdded = jest.fn();
+    renderDialog({ onAdded });
+
+    await selectPreset(user, 'OpenAI');
+    const combos = screen.getAllByRole('combobox');
+    await user.click(combos[2]);
+    await user.click(await screen.findByRole('option', { name: 'aiHub.pasteFirst.authNone' }));
+
+    expect(screen.queryByPlaceholderText('aiHub.pasteFirst.emptyHint')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
+
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['ep-new']));
+    expect(mockSaveConnection).toHaveBeenCalledWith({
+      endpointId: null,
+      name: 'OpenAI',
+      baseUrl: 'https://api.openai.com/v1',
+      adapterType: 'openai_compatible',
+      enabled: true,
+      auth: { type: 'none' },
+    });
+    expect(toast.success).toHaveBeenCalledWith('aiHub.pasteFirst.savedToast');
   });
 
   it('adds a key whose probe errored on infrastructure failure', async () => {
@@ -156,27 +264,54 @@ describe('PasteKeysDialog provider preset picker', () => {
     await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.test' }));
     await waitFor(() => expect(bulkTestOpenCodeApi).toHaveBeenCalled());
 
-    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
 
     await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['ep-new']));
-    expect(mockCreateCredential).toHaveBeenCalledWith({
-      providerEndpointId: 'ep-new',
-      authType: 'api_key',
-      secret: 'sk-probe-timeout-123',
-    });
+    expect(mockSaveConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ auth: { type: 'api_key', secrets: ['sk-probe-timeout-123'] } }),
+    );
   });
 
-  it('calls onAdded with the existing endpoint id when adding keys to a provider', async () => {
+  it('sends only endpointId and secrets when adding keys to an existing provider', async () => {
     const user = userEvent.setup();
     const onAdded = jest.fn();
     renderDialog({ endpoint: createdEndpoint, onAdded });
 
     expect(screen.queryAllByRole('combobox')).toHaveLength(0);
     await user.type(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint'), 'sk-existing-456');
-    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
 
     await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['ep-new']));
-    expect(mockCreateEndpoint).not.toHaveBeenCalled();
+    expect(mockSaveConnection).toHaveBeenCalledTimes(1);
+    expect(mockSaveConnection).toHaveBeenCalledWith({
+      endpointId: 'ep-new',
+      auth: { type: 'api_key', secrets: ['sk-existing-456'] },
+    });
+  });
+
+  it('keeps the form open with input intact when the save fails', async () => {
+    const user = userEvent.setup();
+    mockSaveConnection.mockRejectedValueOnce(new Error('backend down'));
+    const onAdded = jest.fn();
+    const onClose = jest.fn();
+    renderDialog({ onClose, onAdded });
+
+    await selectPreset(user, 'OpenAI');
+    await user.type(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint'), 'sk-fail-key-123');
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('aiHub.pasteFirst.addFailed backend down'),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onAdded).not.toHaveBeenCalled();
+    expect(screen.getByText('aiHub.pasteFirst.addConnectionTitle')).toBeTruthy();
+    expect(
+      (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+    ).toBe('https://api.openai.com/v1');
+    expect(
+      (screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint') as HTMLTextAreaElement).value,
+    ).toBe('sk-fail-key-123');
   });
 
   it('shows the model discovery hint', () => {
@@ -199,22 +334,25 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockEndpoints.length = 0;
-    mockCredentials.length = 0;
-    mockCreateCredential.mockResolvedValue({ id: 'cred-new' });
     mockFetchEndpoints.mockResolvedValue(undefined);
-    mockFetchCredentials.mockResolvedValue(undefined);
-    mockCreateEndpoint.mockImplementation(async (params: { name: string; baseUrl: string; adapterType: string }) => ({
-      id: `ep-batch-${mockCreateEndpoint.mock.calls.length}`,
-      name: params.name,
-      adapterType: params.adapterType,
-      baseUrl: params.baseUrl,
-      enabled: true,
-      circuitState: 'closed',
-      createdAt: '2026-01-01T00:00:00Z',
+    mockSaveConnection.mockImplementation(async (params: SaveConnectionParams) => ({
+      endpoint: {
+        id: params.endpointId ?? `ep-batch-${mockSaveConnection.mock.calls.length}`,
+        name: params.name ?? 'Existing',
+        adapterType: params.adapterType ?? 'openai_compatible',
+        baseUrl: params.baseUrl ?? '',
+        enabled: true,
+        circuitState: 'closed',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      endpointCreated: !params.endpointId,
+      credentials: [],
+      credentialsCreated: params.auth.secrets?.length ?? 0,
+      credentialsExisting: 0,
     }));
   });
 
-  it('groups a multi-provider paste by base URL and creates endpoints with all keys', async () => {
+  it('groups a multi-provider paste by base URL and saves each group atomically', async () => {
     const user = userEvent.setup();
     await navigator.clipboard.writeText(MULTI_PROVIDER_PASTE);
     const onAdded = jest.fn();
@@ -227,24 +365,23 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
     await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(mockCreateEndpoint).toHaveBeenCalledTimes(2);
-    expect(mockCreateEndpoint).toHaveBeenNthCalledWith(1, {
+    expect(mockSaveConnection).toHaveBeenCalledTimes(2);
+    expect(mockSaveConnection).toHaveBeenNthCalledWith(1, {
+      endpointId: null,
       name: 'Groq',
       baseUrl: 'https://api.groq.com/openai/v1',
       adapterType: 'openai_compatible',
       enabled: true,
+      auth: { type: 'api_key', secrets: ['gsk_111111111111111111111111', 'gsk_333333333333333333333333'] },
     });
-    expect(mockCreateEndpoint).toHaveBeenNthCalledWith(2, {
+    expect(mockSaveConnection).toHaveBeenNthCalledWith(2, {
+      endpointId: null,
       name: 'apihub.agnes-ai.com',
       baseUrl: 'https://apihub.agnes-ai.com/v1',
       adapterType: 'openai_compatible',
       enabled: true,
+      auth: { type: 'api_key', secrets: ['sk-222222222222222222222222'] },
     });
-    expect(mockCreateCredential.mock.calls).toEqual([
-      [{ providerEndpointId: 'ep-batch-1', authType: 'api_key', secret: 'gsk_111111111111111111111111' }],
-      [{ providerEndpointId: 'ep-batch-1', authType: 'api_key', secret: 'gsk_333333333333333333333333' }],
-      [{ providerEndpointId: 'ep-batch-2', authType: 'api_key', secret: 'sk-222222222222222222222222' }],
-    ]);
     expect(mockFetchEndpoints).toHaveBeenCalledTimes(1);
     expect(onAdded).toHaveBeenCalledWith(['ep-batch-1', 'ep-batch-2']);
   });
@@ -260,12 +397,65 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
     await user.click(await screen.findByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(mockCreateEndpoint).toHaveBeenCalledTimes(1);
-    expect(mockCreateCredential.mock.calls.map(call => call[0].providerEndpointId)).toEqual([
-      'ep-existing',
-      'ep-existing',
-      'ep-batch-1',
-    ]);
+    expect(mockSaveConnection).toHaveBeenCalledTimes(2);
+    expect(mockSaveConnection.mock.calls.map(call => call[0].endpointId)).toEqual(['ep-existing', null]);
+  });
+
+  it('creates a separate endpoint when the existing one with the same URL uses a different protocol', async () => {
+    const user = userEvent.setup();
+    await navigator.clipboard.writeText(MULTI_PROVIDER_PASTE);
+    mockEndpoints.push({
+      ...createdEndpoint,
+      id: 'ep-groq-anthropic',
+      name: 'Groq Anthropic',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      adapterType: 'anthropic',
+    });
+    const onClose = jest.fn();
+    renderDialog({ onClose });
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+    await user.click(await screen.findByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockSaveConnection).toHaveBeenCalledTimes(2);
+    expect(mockSaveConnection.mock.calls.map(call => call[0].endpointId)).toEqual([null, null]);
+    expect(mockSaveConnection).toHaveBeenNthCalledWith(1, {
+      endpointId: null,
+      name: 'Groq',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      adapterType: 'openai_compatible',
+      enabled: true,
+      auth: { type: 'api_key', secrets: ['gsk_111111111111111111111111', 'gsk_333333333333333333333333'] },
+    });
+  });
+
+  it('offers the per-group test only for OpenAI-compatible groups', async () => {
+    const user = userEvent.setup();
+    await navigator.clipboard.writeText(
+      '🌐 Base URL: https://api.anthropic.com\n\n🔑 Ключ: sk-ant-11111111111111111111\n🌐 Base URL: https://api.groq.com/openai/v1\n\n🔑 Ключ: gsk_111111111111111111111111',
+    );
+    renderDialog();
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+    expect(await screen.findByText('aiHub.pasteFirst.batchTitle')).toBeTruthy();
+
+    const testButtons = screen.getAllByRole('button', { name: 'aiHub.pasteFirst.test' });
+    expect(testButtons).toHaveLength(1);
+  });
+
+  it('does not offer the per-group test for a non-exact Anthropic URL', async () => {
+    const user = userEvent.setup();
+    await navigator.clipboard.writeText(
+      'https://api.anthropic.com/v1\nsk-ant-11111111111111111111\nhttps://api.groq.com/openai/v1\n\ngsk_111111111111111111111111',
+    );
+    renderDialog();
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+    expect(await screen.findByText('aiHub.pasteFirst.batchTitle')).toBeTruthy();
+
+    const testButtons = screen.getAllByRole('button', { name: 'aiHub.pasteFirst.test' });
+    expect(testButtons).toHaveLength(1);
   });
 
   it('returns to the manual single-provider form from batch mode', async () => {
@@ -300,16 +490,15 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(onAdded).toHaveBeenCalledWith(['ep-batch-1']);
-    expect(mockCreateEndpoint).toHaveBeenCalledTimes(1);
-    expect(mockCreateEndpoint).toHaveBeenCalledWith({
+    expect(mockSaveConnection).toHaveBeenCalledTimes(1);
+    expect(mockSaveConnection).toHaveBeenCalledWith({
+      endpointId: null,
       name: 'apihub.agnes-ai.com',
       baseUrl: 'https://apihub.agnes-ai.com/v1',
       adapterType: 'openai_compatible',
       enabled: true,
+      auth: { type: 'api_key', secrets: ['sk-222222222222222222222222'] },
     });
-    expect(mockCreateCredential.mock.calls).toEqual([
-      [{ providerEndpointId: 'ep-batch-1', authType: 'api_key', secret: 'sk-222222222222222222222222' }],
-    ]);
   });
 
   it('excludes keys marked invalid by the per-group test from the batch add', async () => {
@@ -343,10 +532,96 @@ describe('PasteKeysDialog multi-provider batch paste', () => {
     await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(mockCreateCredential.mock.calls.map(call => call[0].secret)).toEqual([
-      'gsk_111111111111111111111111',
-      'sk-222222222222222222222222',
+    expect(mockSaveConnection.mock.calls.map(call => call[0].auth.secrets)).toEqual([
+      ['gsk_111111111111111111111111'],
+      ['sk-222222222222222222222222'],
     ]);
+  });
+
+  it('stays open when a group has no address and saves it after the address is filled', async () => {
+    const user = userEvent.setup();
+    await navigator.clipboard.writeText(
+      '🌐 Base URL: https://api.groq.com/openai/v1\n\n🔑 Ключ: gsk_111111111111111111111111\nUnknown Vendor WORKING\nsk-999999999999999999999999',
+    );
+    const onClose = jest.fn();
+    const onAdded = jest.fn();
+    renderDialog({ onClose, onAdded });
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+    expect(await screen.findByText('aiHub.pasteFirst.batchTitle')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
+
+    await waitFor(() => expect(mockSaveConnection).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await screen.findByText('aiHub.pasteFirst.batchGroupUrlMissing')).toBeTruthy();
+    expect(toast.error).toHaveBeenCalledWith('aiHub.pasteFirst.batchPartialFailed 1');
+
+    await user.type(
+      screen.getByPlaceholderText('aiHub.pasteFirst.batchUrlPlaceholder'),
+      'https://api.unknown-vendor.com/v1',
+    );
+    await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockSaveConnection).toHaveBeenCalledTimes(2);
+    expect(mockSaveConnection).toHaveBeenNthCalledWith(2, {
+      endpointId: null,
+      name: 'api.unknown-vendor.com',
+      baseUrl: 'https://api.unknown-vendor.com/v1',
+      adapterType: 'openai_compatible',
+      enabled: true,
+      auth: { type: 'api_key', secrets: ['sk-999999999999999999999999'] },
+    });
+    expect(onAdded).toHaveBeenCalledWith(['ep-batch-1', 'ep-batch-2']);
+  });
+
+  it('retries only the failed group after a partial failure without duplicating the saved one', async () => {
+    const user = userEvent.setup();
+    await navigator.clipboard.writeText(MULTI_PROVIDER_PASTE);
+    mockSaveConnection
+      .mockImplementationOnce(async () => {
+        throw new Error('save failed');
+      })
+      .mockImplementation(async (params: SaveConnectionParams) => ({
+        endpoint: {
+          id: params.endpointId ?? `ep-batch-${mockSaveConnection.mock.calls.length}`,
+          name: params.name ?? 'Existing',
+          adapterType: params.adapterType ?? 'openai_compatible',
+          baseUrl: params.baseUrl ?? '',
+          enabled: true,
+          circuitState: 'closed',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+        endpointCreated: !params.endpointId,
+        credentials: [],
+        credentialsCreated: params.auth.secrets?.length ?? 0,
+        credentialsExisting: 0,
+      }));
+    const onClose = jest.fn();
+    renderDialog({ onClose });
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.fromClipboard' }));
+    expect(await screen.findByText('aiHub.pasteFirst.batchTitle')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
+
+    await waitFor(() => expect(mockSaveConnection).toHaveBeenCalledTimes(2));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await screen.findByText('save failed')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockSaveConnection).toHaveBeenCalledTimes(3);
+    expect(mockSaveConnection).toHaveBeenNthCalledWith(3, {
+      endpointId: null,
+      name: 'Groq',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      adapterType: 'openai_compatible',
+      enabled: true,
+      auth: { type: 'api_key', secrets: ['gsk_111111111111111111111111', 'gsk_333333333333333333333333'] },
+    });
   });
 
   it('prefills the single form from a one-provider paste', async () => {
@@ -415,18 +690,21 @@ describe('PasteKeysDialog check-report paste', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockEndpoints.length = 0;
-    mockCredentials.length = 0;
-    mockCreateCredential.mockResolvedValue({ id: 'cred-new' });
     mockFetchEndpoints.mockResolvedValue(undefined);
-    mockFetchCredentials.mockResolvedValue(undefined);
-    mockCreateEndpoint.mockImplementation(async (params: { name: string; baseUrl: string; adapterType: string }) => ({
-      id: `ep-report-${mockCreateEndpoint.mock.calls.length}`,
-      name: params.name,
-      adapterType: params.adapterType,
-      baseUrl: params.baseUrl,
-      enabled: true,
-      circuitState: 'closed',
-      createdAt: '2026-01-01T00:00:00Z',
+    mockSaveConnection.mockImplementation(async (params: SaveConnectionParams) => ({
+      endpoint: {
+        id: params.endpointId ?? `ep-report-${mockSaveConnection.mock.calls.length}`,
+        name: params.name ?? 'Existing',
+        adapterType: params.adapterType ?? 'openai_compatible',
+        baseUrl: params.baseUrl ?? '',
+        enabled: true,
+        circuitState: 'closed',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      endpointCreated: !params.endpointId,
+      credentials: [],
+      credentialsCreated: params.auth.secrets?.length ?? 0,
+      credentialsExisting: 0,
     }));
   });
 
@@ -442,25 +720,26 @@ describe('PasteKeysDialog check-report paste', () => {
     await user.click(screen.getByRole('button', { name: /aiHub\.pasteFirst\.batchAddAll/ }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(mockCreateEndpoint).toHaveBeenCalledTimes(2);
-    expect(mockCreateEndpoint).toHaveBeenNthCalledWith(1, {
+    expect(mockSaveConnection).toHaveBeenCalledTimes(2);
+    expect(mockSaveConnection).toHaveBeenNthCalledWith(1, {
+      endpointId: null,
       name: 'dashscope.aliyuncs.com',
       baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       adapterType: 'openai_compatible',
       enabled: true,
+      auth: {
+        type: 'api_key',
+        secrets: ['sk-11111111111111111111111111111111', 'sk-ws-AAAA.BBBB.CCCC.DDDD.EEEE.FFFF'],
+      },
     });
-    expect(mockCreateEndpoint).toHaveBeenNthCalledWith(2, {
+    expect(mockSaveConnection).toHaveBeenNthCalledWith(2, {
+      endpointId: null,
       name: 'DeepSeek',
       baseUrl: 'https://api.deepseek.com/v1',
       adapterType: 'openai_compatible',
       enabled: true,
+      auth: { type: 'api_key', secrets: ['sk-22222222222222222222222222222222'] },
     });
-    expect(mockCreateCredential).toHaveBeenCalledTimes(3);
-    expect(mockCreateCredential.mock.calls.map(call => call[0].secret)).toEqual([
-      'sk-11111111111111111111111111111111',
-      'sk-ws-AAAA.BBBB.CCCC.DDDD.EEEE.FFFF',
-      'sk-22222222222222222222222222222222',
-    ]);
   });
 
   it('prefills the DeepSeek preset when a single-provider report is pasted into the textarea', async () => {
@@ -490,7 +769,7 @@ describe('PasteKeysDialog check-report paste', () => {
 
     expect((textarea as HTMLTextAreaElement).value).toBe(KEYLESS_REPORT_PASTE);
     expect(screen.queryByText(/aiHub\.providersPage\.keysShort/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' })).toBeDisabled();
   });
 });
 
@@ -498,19 +777,8 @@ describe('PasteKeysDialog ignored providers and credential dedup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockEndpoints.length = 0;
-    mockCredentials.length = 0;
-    mockCreateCredential.mockResolvedValue({ id: 'cred-new' });
     mockFetchEndpoints.mockResolvedValue(undefined);
-    mockFetchCredentials.mockResolvedValue(undefined);
-    mockCreateEndpoint.mockImplementation(async (params: { name: string; baseUrl: string; adapterType: string }) => ({
-      id: `ep-dedup-${mockCreateEndpoint.mock.calls.length}`,
-      name: params.name,
-      adapterType: params.adapterType,
-      baseUrl: params.baseUrl,
-      enabled: true,
-      circuitState: 'closed',
-      createdAt: '2026-01-01T00:00:00Z',
-    }));
+    mockSaveConnection.mockResolvedValue(saveResult());
   });
 
   it('shows the ignored captcha labels line in the batch view', async () => {
@@ -539,38 +807,29 @@ describe('PasteKeysDialog ignored providers and credential dedup', () => {
     expect(screen.queryByText(/aiHub\.pasteFirst\.batchIgnored/)).toBeNull();
   });
 
-  it('skips keys already stored on the target endpoint and toasts the honest counts', async () => {
+  it('toasts honest counts when the backend reports existing credentials', async () => {
     const user = userEvent.setup();
-    mockCredentials.push({
-      id: 'c1',
-      providerEndpointId: 'ep-existing',
-      authType: 'api_key',
-      fingerprint: await computeCredentialFingerprint('ep-existing', 'sk-dup-key-1234567890'),
-      enabled: true,
-      runtimeStatus: 'unknown',
-      consecutiveFailures: 0,
-      createdAt: '2026-01-01T00:00:00Z',
-    });
-    renderDialog({ endpoint: { ...createdEndpoint, id: 'ep-existing' } });
+    mockSaveConnection.mockResolvedValue(
+      saveResult({ credentialsCreated: 1, credentialsExisting: 1 }),
+    );
+    renderDialog({ endpoint: createdEndpoint });
 
     const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
     await user.click(textarea);
     await user.type(textarea, 'sk-dup-key-1234567890{Enter}sk-fresh-key-1234567890');
-    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
 
-    await waitFor(() => expect(mockCreateCredential).toHaveBeenCalledTimes(1));
-    expect(mockCreateCredential).toHaveBeenCalledWith({
-      providerEndpointId: 'ep-existing',
-      authType: 'api_key',
-      secret: 'sk-fresh-key-1234567890',
+    await waitFor(() => expect(mockSaveConnection).toHaveBeenCalledTimes(1));
+    expect(mockSaveConnection).toHaveBeenCalledWith({
+      endpointId: 'ep-new',
+      auth: { type: 'api_key', secrets: ['sk-dup-key-1234567890', 'sk-fresh-key-1234567890'] },
     });
-    expect(mockFetchCredentials).toHaveBeenCalledWith('ep-existing');
     expect(toast.success).toHaveBeenCalledWith(
       expect.stringContaining('aiHub.pasteFirst.addedToastSkipped'),
     );
   });
 
-  it('switches to new-provider mode when the pasted base URL differs from the scoped endpoint', async () => {
+  it('keeps scoped mode when the pasted URL differs and saves to the scoped provider', async () => {
     const user = userEvent.setup();
     renderDialog({
       endpoint: { ...createdEndpoint, id: 'ep-velly', name: 'Velly Messages', baseUrl: 'http://127.0.0.1:38761/messages/v1' },
@@ -581,24 +840,72 @@ describe('PasteKeysDialog ignored providers and credential dedup', () => {
     await user.paste('https://api.reformboss.com/v1\nsk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
 
     expect(await screen.findByText(/aiHub\.pasteFirst\.mismatchHint/)).toBeTruthy();
+    expect(screen.getByText('aiHub.pasteFirst.addKeysTitle')).toBeTruthy();
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+    expect((textarea as HTMLTextAreaElement).value).toBe('sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
+
+    await waitFor(() =>
+      expect(mockSaveConnection).toHaveBeenCalledWith({
+        endpointId: 'ep-velly',
+        auth: { type: 'api_key', secrets: ['sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7'] },
+      }),
+    );
+  });
+
+  it('switches to a new provider only through the explicit mismatch action', async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      endpoint: { ...createdEndpoint, id: 'ep-velly', name: 'Velly Messages', baseUrl: 'http://127.0.0.1:38761/messages/v1' },
+    });
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('https://api.reformboss.com/v1\nsk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
+
+    expect(await screen.findByText(/aiHub\.pasteFirst\.mismatchHint/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.mismatchNewAction' }));
+
+    expect(screen.queryByText(/aiHub\.pasteFirst\.mismatchHint/)).toBeNull();
+    expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0);
     const baseUrlInput = screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement;
     expect(baseUrlInput.value).toBe('https://api.reformboss.com/v1');
     expect((textarea as HTMLTextAreaElement).value).toBe('sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
 
-    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.add' }));
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
 
     await waitFor(() =>
-      expect(mockCreateEndpoint).toHaveBeenCalledWith({
+      expect(mockSaveConnection).toHaveBeenCalledWith({
+        endpointId: null,
         name: 'api.reformboss.com',
         baseUrl: 'https://api.reformboss.com/v1',
         adapterType: 'openai_compatible',
         enabled: true,
+        auth: { type: 'api_key', secrets: ['sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7'] },
       }),
     );
-    expect(mockCreateCredential).toHaveBeenCalledWith({
-      providerEndpointId: 'ep-dedup-1',
-      authType: 'api_key',
-      secret: 'sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7',
+  });
+
+  it('fills the new-connection form when a URL is pasted after the explicit switch', async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      endpoint: { ...createdEndpoint, id: 'ep-velly', name: 'Velly Messages', baseUrl: 'http://127.0.0.1:38761/messages/v1' },
+    });
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('https://api.reformboss.com/v1\nsk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.mismatchNewAction' }));
+
+    await user.click(textarea);
+    await user.paste('https://api.anthropic.com/v1\nsk-ant-key-123456789012345');
+
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+      ).toBe('https://api.anthropic.com/v1');
+      expect(screen.getAllByRole('combobox')[1].textContent).toContain('aiGateway.form.optAnthropic');
     });
   });
 
@@ -620,5 +927,135 @@ describe('PasteKeysDialog ignored providers and credential dedup', () => {
       ).toBe('api.reformboss.com');
     });
     expect((textarea as HTMLTextAreaElement).value).toBe('sk-c01de30a5583dd7a025b122c307c5c9d7de98860e6bba8b7');
+  });
+});
+
+describe('PasteKeysDialog unified key recognition', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSaveConnection.mockResolvedValue(saveResult());
+    mockFetchEndpoints.mockResolvedValue(undefined);
+    mockEndpoints.length = 0;
+  });
+
+  it('preserves pending keys when the same endpoint is refreshed', async () => {
+    const user = userEvent.setup();
+    const onClose = jest.fn();
+    const view = renderDialog({ endpoint: createdEndpoint, onClose });
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('mr-live-SyntheticPendingKey123');
+
+    await act(async () => {
+      view.rerender(<PasteKeysDialog open endpoint={{ ...createdEndpoint }} onClose={onClose} />);
+    });
+    expect(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint')).toHaveValue('mr-live-SyntheticPendingKey123');
+  });
+
+  it('blocks more than 200 keys without discarding the input', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await selectPreset(user, 'OpenAI');
+    const text = Array.from({ length: 201 }, (_, i) => `mr-live-SyntheticLimitKey${i}`).join('\n');
+
+    fireEvent.change(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint'), { target: { value: text } });
+
+    expect(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' })).toBeDisabled();
+    expect(screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint')).toHaveValue(text);
+    expect(screen.getByRole('alert')).toHaveTextContent('aiHub.pasteFirst.keyLimit');
+    expect(mockSaveConnection).not.toHaveBeenCalled();
+  });
+
+  it('associates a plain synthetic key with the preceding URL', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('https://api.reformboss.com/v1\nmr-live-SyntheticKeyForLocalCheck123');
+
+    expect(
+      (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+    ).toBe('https://api.reformboss.com/v1');
+    expect(
+      (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+    ).toBe('api.reformboss.com');
+    expect((textarea as HTMLTextAreaElement).value).toBe('mr-live-SyntheticKeyForLocalCheck123');
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
+
+    await waitFor(() =>
+      expect(mockSaveConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseUrl: 'https://api.reformboss.com/v1',
+          auth: { type: 'api_key', secrets: ['mr-live-SyntheticKeyForLocalCheck123'] },
+        }),
+      ),
+    );
+  });
+
+  it('keeps typed name and base URL when only keys are pasted', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.type(screen.getByLabelText('aiHub.providersPage.nameLabel'), 'My Relay');
+    await user.type(screen.getByLabelText('aiHub.providersPage.baseUrlLabel'), 'https://my.host/v1');
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('mr-live-SyntheticKeyForLocalCheck123');
+
+    expect(
+      (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+    ).toBe('My Relay');
+    expect(
+      (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+    ).toBe('https://my.host/v1');
+    expect((textarea as HTMLTextAreaElement).value).toBe('mr-live-SyntheticKeyForLocalCheck123');
+  });
+
+  it('does not force a new endpoint when only keys are pasted in scoped mode', async () => {
+    const user = userEvent.setup();
+    renderDialog({ endpoint: createdEndpoint });
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.click(textarea);
+    await user.paste('mr-live-SyntheticKeyForLocalCheck123');
+
+    expect(screen.queryByText(/aiHub\.pasteFirst\.mismatchHint/)).toBeNull();
+    expect(screen.getByText('aiHub.pasteFirst.addKeysTitle')).toBeTruthy();
+    expect((textarea as HTMLTextAreaElement).value).toBe('mr-live-SyntheticKeyForLocalCheck123');
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
+
+    await waitFor(() =>
+      expect(mockSaveConnection).toHaveBeenCalledWith({
+        endpointId: 'ep-new',
+        auth: { type: 'api_key', secrets: ['mr-live-SyntheticKeyForLocalCheck123'] },
+      }),
+    );
+  });
+
+  it('parses the textarea content through the explicit parse action', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.type(
+      textarea,
+      'https://api.reformboss.com/v1{Enter}mr-live-SyntheticKeyForLocalCheck123',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.parseAction' }));
+
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.baseUrlLabel') as HTMLInputElement).value,
+      ).toBe('https://api.reformboss.com/v1');
+      expect(
+        (screen.getByLabelText('aiHub.providersPage.nameLabel') as HTMLInputElement).value,
+      ).toBe('api.reformboss.com');
+    });
+    expect((textarea as HTMLTextAreaElement).value).toBe('mr-live-SyntheticKeyForLocalCheck123');
   });
 });

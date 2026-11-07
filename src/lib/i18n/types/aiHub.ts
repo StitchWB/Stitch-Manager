@@ -535,6 +535,8 @@ export interface AiHubTranslations {
     }
     pasteFirst: {
       title: string;
+      addConnectionTitle: string;
+      addKeysTitle: string;
       hint: string;
       keysLabel: string;
       providerLabel: string;
@@ -545,12 +547,30 @@ export interface AiHubTranslations {
       newProviderHint: string;
       test: string;
       add: string;
+      saveAction: string;
+      savedToast: string;
+      authLabel: string;
+      authApiKey: string;
+      authNone: string;
+      protocolNoteGemini: string;
+      advancedToggle: string;
+      headersLabel: string;
+      headersAdd: string;
+      headersRemove: string;
+      headerNameLabel: string;
+      headerValueLabel: string;
+    headersHint: string;
+    keyLimit: string;
+      parseAction: string;
+      parseNothingFound: string;
+      testUnsupportedProtocol: string;
       statusPending: string;
       statusOk: string;
       statusInvalid: string;
       statusError: string;
       noBaseUrl: string;
       addedToast: string;
+      addedToastUnverified: string;
       addFailed: string;
       nothingToAdd: string;
       pasteKey: string;
@@ -571,8 +591,12 @@ export interface AiHubTranslations {
       batchTestSummary: string;
       batchBack: string;
       batchIgnored: string;
+      batchGroupAdded: string;
+      batchGroupUrlMissing: string;
+      batchPartialFailed: string;
       addedToastSkipped: string;
     mismatchHint: string;
+    mismatchNewAction: string;
       batchUrlLabel: string;
       batchUrlPlaceholder: string;
       batchNoUrl: string;
@@ -604,9 +628,8 @@ export interface AiHubTranslations {
       health: {
         healthy: string;
         degraded: string;
-        down: string;
-        untested: string;
-        empty: string;
+        broken: string;
+        off: string;
       }
       overview: {
         title: string;
@@ -625,7 +648,7 @@ export interface AiHubTranslations {
         footerKeys: string;
         footerHealthy: string;
         footerProblems: string;
-        footerEmpty: string;
+        footerOff: string;
       }
       detail: {
         activeChip: string;
@@ -643,8 +666,12 @@ export interface AiHubTranslations {
       disabled: string;
       adapterLabel: string;
       baseUrlLabel: string;
+      addConnection: string;
       discover: string;
       discovering: string;
+      discoveryFailed: string;
+      discoveryFailedHint: string;
+      discoverySomeFailed: string;
       endpointModelsHint: string;
       edit: string;
       deleteEndpoint: string;
@@ -668,6 +695,10 @@ export interface AiHubTranslations {
       modelId: string;
       modelDisplay: string;
       modelSource: string;
+      addModelPlaceholder: string;
+      addModelAction: string;
+      modelAdded: string;
+      invalidAddressFlag: string;
       exposeModel: string;
   exposeHint: string;
   exposePublished: string;
@@ -741,7 +772,6 @@ export interface AiHubTranslations {
       holone: string;
       chat: string;
       connections: string;
-      integrations: string;
       monitor: string;
       notebooklm: string;
       opencode: string;
@@ -753,6 +783,12 @@ export interface AiHubTranslations {
       copySensitiveConfirm: string;
       serverOffline: string;
     }
+    failover: {
+      badge: string;
+      none: string;
+      title: string;
+      toast: string;
+    };
     wizard: {
       actions: {
         applyConfiguration: string;

@@ -14,12 +14,26 @@ async method signatures satisfies it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Shared result types
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+@dataclass
+class ModelMetadata:
+    """A discovered model id plus capability hints the provider exposed.
+
+    ``capabilities`` uses the canonical keys ``reconcile_contract`` reads
+    (``supports_vision``, ``supports_function_calling``, ``supports_streaming``,
+    ``max_input_tokens``).  An empty dict means the provider exposed nothing —
+    callers must not treat that as "no capabilities".
+    """
+
+    id: str
+    capabilities: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -33,6 +47,7 @@ class ProbeResult:
     success: bool
     latency_ms: float
     models: list[str] | None = None
+    model_metadata: list[ModelMetadata] | None = None
     http_status: int | None = None
     error: str | None = None
 
@@ -100,6 +115,20 @@ class ProviderAdapter(Protocol):
         """Return the model IDs this credential can see on this endpoint."""
         ...
 
+    async def list_models_detailed(
+        self,
+        *,
+        base_url: str,
+        secret: str,
+        default_headers: dict[str, str] | None = None,
+    ) -> list[ModelMetadata]:
+        """Return model IDs plus capability metadata where the provider exposes it.
+
+        Adapters whose wire protocol carries no per-model metadata may return
+        :class:`ModelMetadata` entries with empty ``capabilities``.
+        """
+        ...
+
     async def invoke(
         self,
         *,
@@ -148,6 +177,42 @@ class ProviderAdapter(Protocol):
     ) -> ClassifiedError:
         """Map a raised exception / HTTP status into a ``ClassifiedError``."""
         ...
+
+
+@dataclass(frozen=True)
+class AdapterCapabilities:
+    """What an adapter's wire protocol actually supports.
+
+    Defaults describe a ConfigurableAdapter-shaped OpenAI-compatible adapter;
+    registrations override per protocol. ``limitations`` are human-readable
+    strings the UI may show verbatim.
+    """
+
+    adapter_type: str
+    supports_none_auth: bool = False
+    supports_chat: bool = True
+    supports_responses: bool = False
+    supports_model_discovery: bool = True
+    limitations: tuple[str, ...] = ()
+
+
+_ADAPTER_CAPABILITIES: dict[str, AdapterCapabilities] = {}
+
+
+def register_adapter_capabilities(caps: AdapterCapabilities) -> None:
+    _ADAPTER_CAPABILITIES[caps.adapter_type] = caps
+
+
+def get_adapter_capabilities(adapter_type: str) -> AdapterCapabilities:
+    """Capabilities for *adapter_type*; conservative default when unregistered."""
+    return _ADAPTER_CAPABILITIES.get(
+        adapter_type, AdapterCapabilities(adapter_type=adapter_type),
+    )
+
+
+def list_adapter_capabilities() -> list[AdapterCapabilities]:
+    """One entry per registered adapter, in adapter registration order."""
+    return [get_adapter_capabilities(t) for t in _ADAPTERS]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

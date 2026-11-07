@@ -3,14 +3,20 @@ from __future__ import annotations
 import hmac
 import logging
 import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol, TypedDict
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 
 from stitch_backend.core.provider_defaults import PROVIDER_DEFAULTS
-from stitch_backend.domains.ai_gateway.routing_engine import PoolScope
+from stitch_backend.domains.ai_gateway.routing_engine import PoolScope, RoutingError
+from stitch_backend.domains.ai_proxy.litellm_errors import (
+    routing_error_response,
+    routing_error_status,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -168,7 +174,10 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        return await executor_factory().chat(payload, pool=pool)
+        try:
+            return await executor_factory().chat(payload, pool=pool)
+        except RoutingError as exc:
+            return await _routing_error_response(exc, payload.model)
 
     @router.post("/messages", response_model=None)
     async def messages(
@@ -180,7 +189,10 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        return await executor_factory().messages(payload, pool=pool)
+        try:
+            return await executor_factory().messages(payload, pool=pool)
+        except RoutingError as exc:
+            return await _routing_error_response(exc, payload.model)
 
     @router.post("/responses", response_model=None)
     async def responses(
@@ -192,7 +204,10 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        return await executor_factory().responses(payload, pool=pool)
+        try:
+            return await executor_factory().responses(payload, pool=pool)
+        except RoutingError as exc:
+            return await _routing_error_response(exc, payload.model)
 
     @router.get("/models")
     async def models(
@@ -224,6 +239,69 @@ async def _resolve_pool(
     return PoolScope(None)
 
 
+async def _routing_error_response(exc: RoutingError, model: str | None) -> JSONResponse:
+    retry_after: int | None = None
+    unavailable_models: list[str] | None = None
+    if routing_error_status(exc) == 429:
+        retry_after = await _earliest_recovery_seconds(model)
+        if model:
+            unavailable_models = [model]
+    return routing_error_response(
+        exc, retry_after=retry_after, unavailable_models=unavailable_models,
+    )
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+async def _earliest_recovery_seconds(model: str | None) -> int | None:
+    if not model:
+        return None
+    try:
+        from stitch_backend.database import get_db
+        from stitch_backend.domains.ai_gateway.models import (
+            Credential,
+            ProviderEndpoint,
+            RouteTarget,
+            UpstreamModel,
+            _utcnow,
+        )
+
+        async with get_db() as session:
+            endpoint_ids = list((await session.execute(
+                select(UpstreamModel.provider_endpoint_id)
+                .join(RouteTarget, RouteTarget.upstream_model_id == UpstreamModel.id)
+                .where(RouteTarget.public_model_id == model)
+            )).scalars().all())
+            if not endpoint_ids:
+                return None
+            now = _utcnow()
+            recovery: list[datetime] = []
+            cred_rows = (await session.execute(
+                select(Credential.next_retry_at, Credential.quota_reset_at)
+                .where(Credential.provider_endpoint_id.in_(endpoint_ids))
+            )).all()
+            for next_retry_at, quota_reset_at in cred_rows:
+                for ts in (next_retry_at, quota_reset_at):
+                    if ts is not None:
+                        recovery.append(_as_utc(ts))
+            circuit_rows = (await session.execute(
+                select(ProviderEndpoint.circuit_retry_at)
+                .where(ProviderEndpoint.id.in_(endpoint_ids))
+            )).scalars().all()
+            for ts in circuit_rows:
+                if ts is not None:
+                    recovery.append(_as_utc(ts))
+            future = [ts for ts in recovery if ts > now]
+            if not future:
+                return None
+            return max(1, int((min(future) - now).total_seconds()))
+    except Exception as e:
+        logger.debug("Could not derive Retry-After for %s: %s", model, e)
+        return None
+
+
 def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None:
     """Return the enabled gateway router; credentials stay server-side.
 
@@ -236,16 +314,13 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         return None
 
     import asyncio
-    import json
-
-    from sqlalchemy import text
 
     from stitch_backend.database import get_db
     from stitch_backend.domains.ai_proxy.litellm_executor import LiteLLMExecutor
     from stitch_backend.domains.ai_proxy.local_auth import get_cached_local_chat_token
-    from stitch_backend.domains.background_manager.schemas import (
-        BackgroundManagerConfig,
-        normalise_background_manager_config,
+    from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
+    from stitch_backend.domains.background_manager.store import (
+        load_config as load_config_from_store,
     )
 
     runtime_config = BackgroundManagerConfig.model_validate({})
@@ -263,18 +338,7 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
             if now < runtime_config_expires_at:
                 return runtime_config
             async with get_db() as session:
-                result = await session.execute(
-                    text("SELECT value FROM settings WHERE key = 'background_manager_config'")
-                )
-                row = result.first()
-            if not row or not row[0]:
-                runtime_config = BackgroundManagerConfig.model_validate({})
-            else:
-                try:
-                    value = json.loads(row[0])
-                except (json.JSONDecodeError, TypeError):
-                    value = None
-                runtime_config = normalise_background_manager_config(value)
+                runtime_config = await load_config_from_store(session)
             runtime_config_expires_at = time.monotonic() + 1.0
             return runtime_config
 

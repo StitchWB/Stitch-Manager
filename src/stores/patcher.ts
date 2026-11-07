@@ -15,10 +15,6 @@ import {
   listBackups,
   restoreBackup,
   deleteBackup,
-  patchTraeFull,
-  isTraePatched,
-  isTraeExtensionPatched,
-  isTraeWorkbenchPatched,
   startKiroProxy,
   stopKiroProxy,
   BackendError,
@@ -40,12 +36,6 @@ interface PatcherState {
   // Operation status
   operationInProgress: Record<string, 'patching' | 'unpatching' | 'restoring' | null>;
 
-  // Trae storage patch state
-  traePatched: boolean | null;
-  traeExtensionPatched: boolean | null;
-  traeWorkbenchPatched: boolean | null;
-  traePatchLoading: boolean;
-
   // Kiro proxy state
   kiroProxyRunning: boolean;
   kiroProxyLoading: boolean;
@@ -55,10 +45,6 @@ interface PatcherState {
   getAllPatchStatuses: () => Promise<void>;
   applyPatch: (ideId: string, createBackup?: boolean) => Promise<PatchResult>;
   removePatch: (ideId: string, restoreBackup?: boolean) => Promise<PatchResult>;
-
-  // Trae storage patch actions
-  checkTraePatched: () => Promise<boolean>;
-  patchTraeFull: () => Promise<PatchResult>;
 
   // Kiro proxy actions
   startKiroProxy: () => Promise<void>;
@@ -89,10 +75,6 @@ export const usePatcherStore = create<PatcherState>()(
         backupsLoading: false,
         error: null,
         operationInProgress: {},
-        traePatched: null,
-        traeExtensionPatched: null,
-        traeWorkbenchPatched: null,
-        traePatchLoading: false,
         kiroProxyRunning: false,
         kiroProxyLoading: false,
 
@@ -168,50 +150,6 @@ export const usePatcherStore = create<PatcherState>()(
           set(state => ({
             patchStatus: { ...state.patchStatus, ...newStatuses },
           }));
-        },
-
-        // ============================================
-        // Trae Storage Patch
-        // ============================================
-
-        checkTraePatched: async () => {
-          try {
-            const [storagePatched, extensionPatched, workbenchPatched] = await Promise.all([
-              isTraePatched().catch(() => null),
-              isTraeExtensionPatched().catch(() => null),
-              isTraeWorkbenchPatched().catch(() => null),
-            ]);
-            set({
-              traePatched: storagePatched,
-              traeExtensionPatched: extensionPatched,
-              traeWorkbenchPatched: workbenchPatched,
-            });
-            return storagePatched ?? false;
-          } catch {
-            // Trae not installed or storage not found
-            set({ traePatched: null, traeExtensionPatched: null, traeWorkbenchPatched: null });
-            return false;
-          }
-        },
-
-        patchTraeFull: async () => {
-          set({ traePatchLoading: true, error: null });
-          try {
-            const result = await patchTraeFull();
-            if (result.success) {
-              set({
-                traePatched: true,
-                traeExtensionPatched: true,
-                traeWorkbenchPatched: true,
-              });
-            }
-            set({ traePatchLoading: false });
-            return result;
-          } catch (error) {
-            const message = error instanceof BackendError ? error.message : String(error);
-            set({ error: message, traePatchLoading: false });
-            throw error;
-          }
         },
 
         startKiroProxy: async () => {

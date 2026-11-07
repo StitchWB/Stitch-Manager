@@ -202,6 +202,18 @@ class CredentialService(BaseRepository[Credential]):
         secret_row = result.scalar_one_or_none()
         return secret_row.secret_value if secret_row is not None else None
 
+    async def resolve_invocation_secret(self, credential: Credential) -> str | None:
+        """Secret to hand an adapter: ``""`` for auth_type ``none``, else raw.
+
+        A ``none`` credential is a marker with no ``CredentialSecret`` row —
+        the empty string tells adapters to omit auth material honestly.
+        ``None`` means a secret-bearing credential is missing its secret row
+        and must be skipped.
+        """
+        if credential.auth_type == "none":
+            return ""
+        return await self.get_secret_for_invocation(credential.id)
+
 
 def _secret_type_for_auth_type(auth_type: str) -> str:
     """Map ``Credential.auth_type`` to the matching ``CredentialSecret.secret_type``."""

@@ -241,6 +241,7 @@ def import_command_modules() -> None:
     import stitch_backend.domains.plugin_distribution.local_install_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.marketplace_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.override_commands  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.release_preview  # noqa: F401
     import stitch_backend.domains.plugin_distribution.source_commands  # noqa: F401
     import stitch_backend.domains.plugin_distribution.submission_commands  # noqa: F401
     import stitch_backend.domains.plugin_runtime.sandbox_commands  # noqa: F401
@@ -378,17 +379,14 @@ async def restore_holone_config() -> None:
     try:
         from stitch_backend.database import get_session_factory as _gsf_holone
         from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
+        from stitch_backend.domains.background_manager.store import load_config as _load_bm_config
 
         _factory = _gsf_holone()
         async with _factory() as _db:
-            from stitch_backend.domains.settings.service import SettingsService
-
-            _hs = await SettingsService(_db).get_all()
+            _config = await _load_bm_config(_db)
         _svc = get_holone_service()
-        if _hs.get("holone_enabled") is not None:
-            _svc.config.enabled = bool(_hs["holone_enabled"])
-        if _hs.get("holone_mode"):
-            _svc.config.mode = str(_hs["holone_mode"])
+        _svc.config.enabled = _config.holone_enabled
+        _svc.config.mode = _config.holone_mode
     except Exception as _exc:
         logger.warning("HoloNe config restore skipped: %s", _exc)
 
@@ -400,28 +398,20 @@ async def restore_compression_config() -> None:
         from stitch_backend.domains.ai_proxy.compression.service import (
             get_compression_service,
         )
+        from stitch_backend.domains.background_manager.store import load_config as _load_bm_config
 
         _factory = _gsf_comp()
         async with _factory() as _db:
-            from stitch_backend.domains.settings.service import SettingsService
-
-            _cs = await SettingsService(_db).get_all()
+            _config = await _load_bm_config(_db)
         _csvc = get_compression_service()
-        _flag_map = {
-            "compressionEnabled": "enabled",
-            "rtkEnabled": "rtk_enabled",
-            "cavemanEnabled": "caveman_enabled",
-            "inputCompressionEnabled": "input_compression_enabled",
-            "outputCompressionEnabled": "output_compression_enabled",
-            "preserveSystemPrompt": "preserve_system_prompt",
-        }
-        for _key, _attr in _flag_map.items():
-            if _cs.get(_key) is not None:
-                setattr(_csvc.config, _attr, bool(_cs[_key]))
-        if _cs.get("cavemanLevel"):
-            _csvc.config.caveman_level = str(_cs["cavemanLevel"])
-        if _cs.get("autoTriggerThreshold") is not None:
-            _csvc.config.auto_trigger_threshold = int(_cs["autoTriggerThreshold"])
+        _csvc.config.enabled = _config.compression_enabled
+        _csvc.config.rtk_enabled = _config.rtk_enabled
+        _csvc.config.caveman_enabled = _config.caveman_enabled
+        _csvc.config.caveman_level = _config.caveman_level
+        _csvc.config.input_compression_enabled = _config.input_compression_enabled
+        _csvc.config.output_compression_enabled = _config.output_compression_enabled
+        _csvc.config.preserve_system_prompt = _config.preserve_system_prompt
+        _csvc.config.auto_trigger_threshold = _config.auto_trigger_threshold
     except Exception as _exc:
         logger.warning("Compression config restore skipped: %s", _exc)
 
@@ -494,6 +484,12 @@ async def stop_gateway_workers() -> None:
         from stitch_backend.domains.ai_gateway.velly_bridge import VellyBridgeWorker
 
         await VellyBridgeWorker.stop()
+    except Exception:
+        pass
+    try:
+        from stitch_backend.domains.ai_gateway.adapters.configurable import aclose_http_client
+
+        await aclose_http_client()
     except Exception:
         pass
 

@@ -25,6 +25,7 @@ export default function AiMonitorPage() {
     providerCapabilities,
     availableModels,
     historySummary,
+    recentFailovers,
     filteredAccounts,
     accountReadiness,
     proxyBusy,
@@ -109,6 +110,7 @@ export default function AiMonitorPage() {
               providerCapabilities={providerCapabilities}
               availableModels={availableModels}
               historySummary={historySummary}
+              recentFailovers={recentFailovers}
               hasAccounts={filteredAccounts.length > 0}
               accountReadiness={accountReadiness}
               onOpenAnalytics={() => navigate('/ai/monitor?tab=analytics')}

@@ -1,4 +1,4 @@
-import { ChevronRight, ClipboardPaste, Download, Plus, Route } from 'lucide-react';
+import { ChevronRight, ClipboardPaste, Download, Route } from 'lucide-react';
 
 import { ButtonBase, MetricStrip, ProviderLogo } from '@/components/ui';
 import type { MetricSegment } from '@/components/ui';
@@ -11,8 +11,7 @@ import type { ProviderRosterItem } from './viewModel';
 export interface ProvidersOverviewProps {
   items: ProviderRosterItem[];
   onSelectProvider: (id: string) => void;
-  onPasteKeys: () => void;
-  onAddProvider: () => void;
+  onAddConnection: () => void;
   onImportOpencode: () => void;
   onOpenRouting: () => void;
 }
@@ -21,7 +20,7 @@ const ACTION_TILE =
   'flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-white/[0.05] hover:text-white';
 
 export function ProvidersOverview(props: ProvidersOverviewProps): JSX.Element {
-  const { items, onSelectProvider, onPasteKeys, onAddProvider, onImportOpencode, onOpenRouting } = props;
+  const { items, onSelectProvider, onAddConnection, onImportOpencode, onOpenRouting } = props;
 
   const totals = items.reduce(
     (acc, item) => ({
@@ -88,7 +87,10 @@ export function ProvidersOverview(props: ProvidersOverviewProps): JSX.Element {
                     <span className="shrink-0 text-[11px] tabular-nums text-red-300">
                       {item.problemCount} {t('aiHub.providersPage.failingShort')}
                     </span>
-                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', meta.dotClass)} />
+                    <span
+                      title={t(meta.labelKey)}
+                      className={cn('h-1.5 w-1.5 shrink-0 rounded-full', meta.dotClass)}
+                    />
                     <ChevronRight size={13} className="shrink-0 text-slate-600" />
                   </ButtonBase>
                 );
@@ -102,13 +104,9 @@ export function ProvidersOverview(props: ProvidersOverviewProps): JSX.Element {
             {t('aiHub.providersPage.overview.actions')}
           </h3>
           <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2">
-            <ButtonBase type="button" onClick={onPasteKeys} className={ACTION_TILE}>
+            <ButtonBase type="button" onClick={onAddConnection} className={ACTION_TILE}>
               <ClipboardPaste size={15} className="shrink-0 text-indigo-300" />
-              {t('aiHub.providersPage.pasteKeys')}
-            </ButtonBase>
-            <ButtonBase type="button" onClick={onAddProvider} className={ACTION_TILE}>
-              <Plus size={15} className="shrink-0 text-indigo-300" />
-              {t('aiHub.addProvider')}
+              {t('aiHub.providersPage.addConnection')}
             </ButtonBase>
             <ButtonBase type="button" onClick={onImportOpencode} className={ACTION_TILE}>
               <Download size={15} className="shrink-0 text-indigo-300" />

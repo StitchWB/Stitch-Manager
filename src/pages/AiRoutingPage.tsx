@@ -16,6 +16,7 @@ import { PublicModelsSection } from '../components/ai-gateway/PublicModelsSectio
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
 import { useAiHubCopy } from './hooks/useAiHubCopy';
 import { useRoutingBoardStatus } from './hooks/useRoutingBoardStatus';
+import { useLocalChatToken } from '../hooks/useLocalChatToken';
 import type { ProxySettings } from '../types/generated';
 import { ButtonBase, PageHeader } from '@/components/ui';
 import { t } from '../lib/i18n';
@@ -34,13 +35,12 @@ const ROUTING_TAB_LABELS: Record<RoutingTab, string> = {
   holone: 'aiHub.tabs.holone',
 };
 
-const CLIENT_API_KEY = 'proxystitch-local';
-
 export default function AiRoutingPage() {
   const navigate = useNavigate();
   const language = useAppStore(state => state.language);
   const [searchParams, setSearchParams] = useSearchParams();
   const [isIdeWizardOpen, setIsIdeWizardOpen] = useState(false);
+  const clientApiKey = useLocalChatToken();
   const controller = useAiProvidersController('routing');
   const boardStatus = useRoutingBoardStatus();
 
@@ -197,7 +197,7 @@ export default function AiRoutingPage() {
                   proxySaving={proxySaving}
                   proxyError={proxyError}
                   baseUrl={baseUrl}
-                  clientApiKey={CLIENT_API_KEY}
+                  clientApiKey={clientApiKey}
                   isProxyDraftDirty={isProxyDraftDirty}
                   maskKey={maskKey}
                   onSetProxyDraft={setProxyDraftWithUpdater}

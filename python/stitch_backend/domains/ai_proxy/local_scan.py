@@ -15,6 +15,34 @@ class DetectedIde:
     path: str
     version: str = ""
     configured: bool = False
+    config_path: str = ""
+    installed: bool = True
+
+
+def opencode_config_path() -> Path:
+    """Resolve ``opencode.json``; honours the host-injected config dir."""
+    injected = os.environ.get("STITCH_OPENCODE_CONFIG_DIR", "").strip()
+    base = Path(injected) if injected else Path.home() / ".config" / "opencode"
+    return base / "opencode.json"
+
+
+def ide_config_path(ide_id: str) -> Path | None:
+    if ide_id == "opencode":
+        return opencode_config_path()
+    appdata = os.environ.get("APPDATA", "")
+    app = {"cursor": "Cursor", "windsurf": "Windsurf", "trae": "Trae", "kiro": "Kiro"}.get(ide_id)
+    if app and appdata:
+        return Path(appdata) / app / "User" / "settings.json"
+    return None
+
+
+def _opencode_configured(path: Path) -> bool:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    provider = data.get("provider") if isinstance(data, dict) else None
+    return isinstance(provider, dict) and "stitch" in provider
 
 
 class IdeDetector:
@@ -40,6 +68,7 @@ class IdeDetector:
         ("opencode", "OpenCode", [
             os.path.expandvars(r"%USERPROFILE%\.opencode"),
             str(Path.home() / ".opencode"),
+            str(opencode_config_path().parent),
         ]),
     ]
 
@@ -49,10 +78,17 @@ class IdeDetector:
         for ide_id, display_name, candidates in cls._KNOWN_IDES:
             for path in candidates:
                 if Path(path).exists():
+                    config_path = ide_config_path(ide_id)
                     found.append(DetectedIde(
                         name=ide_id,
                         display_name=display_name,
                         path=path,
+                        config_path=str(config_path) if config_path else "",
+                        configured=(
+                            ide_id == "opencode"
+                            and config_path is not None
+                            and _opencode_configured(config_path)
+                        ),
                     ))
                     break
         return found

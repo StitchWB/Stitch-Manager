@@ -1,4 +1,9 @@
-import type { Credential, ProviderEndpoint, UpstreamModel } from '@/lib/backend/modules/aiGateway';
+import type {
+  Credential,
+  CredentialModelAccess,
+  ProviderEndpoint,
+  UpstreamModel,
+} from '@/lib/backend/modules/aiGateway';
 
 export interface CredStatusMeta {
   labelKey: string;
@@ -59,28 +64,60 @@ export function isProblemStatus(status: string): boolean {
   return CRED_PROBLEM.has(status);
 }
 
-export type ProviderHealth = 'healthy' | 'degraded' | 'down' | 'untested' | 'empty';
+export type ProviderHealth = 'healthy' | 'degraded' | 'broken' | 'off';
 
 export const HEALTH_META: Record<ProviderHealth, { dotClass: string; labelKey: string }> = {
   healthy: { dotClass: 'bg-emerald-400', labelKey: 'aiHub.providersPage.health.healthy' },
   degraded: { dotClass: 'bg-amber-400', labelKey: 'aiHub.providersPage.health.degraded' },
-  down: { dotClass: 'bg-red-400', labelKey: 'aiHub.providersPage.health.down' },
-  untested: { dotClass: 'bg-slate-500', labelKey: 'aiHub.providersPage.health.untested' },
-  empty: { dotClass: 'bg-slate-700', labelKey: 'aiHub.providersPage.health.empty' },
+  broken: { dotClass: 'bg-red-400', labelKey: 'aiHub.providersPage.health.broken' },
+  off: { dotClass: 'bg-slate-600', labelKey: 'aiHub.providersPage.health.off' },
 };
 
-export function deriveProviderHealth(credentials: Credential[]): ProviderHealth {
+const CRED_HEALTH: Record<string, ProviderHealth> = {
+  active: 'healthy',
+  unknown: 'degraded',
+  cooldown: 'degraded',
+  rate_limited: 'degraded',
+  quota_exhausted: 'degraded',
+  degraded: 'degraded',
+  auth_failed: 'broken',
+  disabled: 'off',
+};
+
+const MODEL_ACCESS_HEALTH: Record<string, ProviderHealth> = {
+  available: 'healthy',
+  unknown: 'degraded',
+  temporarily_unavailable: 'degraded',
+  denied: 'broken',
+};
+
+function aggregateHealth(levels: ProviderHealth[]): ProviderHealth {
+  if (levels.length === 0) return 'off';
+  const broken = levels.filter(level => level === 'broken').length;
+  const healthy = levels.filter(level => level === 'healthy').length;
+  if (broken === levels.length) return 'broken';
+  if (broken > 0 || healthy < levels.length) return 'degraded';
+  return 'healthy';
+}
+
+export function deriveProviderHealth(
+  credentials: Credential[],
+  endpoint?: Pick<ProviderEndpoint, 'circuitState'> | null,
+  modelAccess?: CredentialModelAccess[]
+): ProviderHealth {
+  if (endpoint?.circuitState === 'open') return 'broken';
+
   const enabled = credentials.filter(credential => credential.enabled);
-  if (credentials.length === 0) return 'empty';
-  if (enabled.length === 0) return 'down';
+  if (credentials.length === 0 || enabled.length === 0) return 'off';
 
-  const problems = enabled.filter(credential => isProblemStatus(credential.runtimeStatus)).length;
-  if (problems > 0) return problems === enabled.length ? 'down' : 'degraded';
+  const levels = enabled.map(credential => CRED_HEALTH[credential.runtimeStatus] ?? 'degraded');
+  if (modelAccess && modelAccess.length > 0) {
+    levels.push(...modelAccess.map(access => MODEL_ACCESS_HEALTH[access.status] ?? 'degraded'));
+  }
 
-  const active = enabled.filter(credential => credential.runtimeStatus === 'active').length;
-  if (active > 0) return 'healthy';
-
-  return 'untested';
+  const health = aggregateHealth(levels);
+  if (health === 'healthy' && endpoint?.circuitState === 'half_open') return 'degraded';
+  return health;
 }
 
 const LOGO_ALIASES: Array<[string, string]> = [
@@ -141,7 +178,7 @@ export function buildRosterItem(
       credential => credential.enabled && isProblemStatus(credential.runtimeStatus)
     ).length,
     modelCount: models.filter(model => model.providerEndpointId === endpoint.id).length,
-    health: deriveProviderHealth(forEndpoint),
+    health: deriveProviderHealth(forEndpoint, endpoint),
     logoKey: logoKeyFor(endpoint),
   };
 }

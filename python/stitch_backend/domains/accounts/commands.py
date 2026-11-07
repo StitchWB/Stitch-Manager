@@ -161,6 +161,26 @@ async def cmd_set_account_proxy(db: AsyncSession, params: dict) -> Any:
     )
 
 
+@command("set_account_browser_engine")
+async def cmd_set_account_browser_engine(db: AsyncSession, params: dict) -> dict:
+    """Set the per-account browser engine (``cloakbrowser`` | ``shardbrowser``)."""
+    from stitch_backend.core.exceptions import StitchError
+    from stitch_backend.domains.accounts.models import Account
+
+    account_id = str(params.get("accountId") or params.get("id") or "")
+    engine = str(params.get("engine") or "").strip().lower()
+    if engine not in ("cloakbrowser", "shardbrowser"):
+        raise StitchError(f"Unsupported browser engine: {engine!r}")
+    acc = await db.get(Account, account_id)
+    if acc is None:
+        raise StitchError(f"Account not found: {account_id}")
+    acc.browser_engine = engine
+    shard_profile_id = params.get("shardProfileId")
+    if shard_profile_id is not None:
+        acc.shard_profile_id = str(shard_profile_id) or None
+    return {"success": True, "accountId": account_id, "browserEngine": engine}
+
+
 @register_command("get_account_proxy", readonly=True)
 async def cmd_get_account_proxy(params: dict) -> dict:
     account_id = str(params.get("accountId") or params.get("id", ""))

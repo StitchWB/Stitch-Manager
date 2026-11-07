@@ -21,15 +21,15 @@ Transitions::
     half_open ──probe fails──▶  open
 
 The failure window (N failures in T seconds) is tracked in a module-level
-dict because ``ProviderEndpoint`` has no column for it and the task scope
-forbids modifying ``models.py``.
+dict (fast path) and mirrored to ``ProviderEndpoint.circuit_failures`` on
+every change; the column is authoritative across restart.
 """
 
 from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import update
@@ -52,25 +52,46 @@ FAILURE_WINDOW_SECONDS = 60
 COOLDOWN_SECONDS = 30
 """How long the circuit stays open before a half-open probe is allowed."""
 
-# In-process recent-failure tracking.
-# ponytail: module-level dict — does not persist across restarts and is
-# per-process. If the gateway runs as multiple workers or needs cross-restart
-# circuit state, add a ``circuit_failures`` JSON column to ProviderEndpoint
-# (or use a shared store like Redis) and replace this dict.
+# In-process fast path; ProviderEndpoint.circuit_failures is authoritative across restart.
 _recent_failures: dict[str, list[datetime]] = defaultdict(list)
 
 
-def _prune_old_failures(endpoint_id: str, now: datetime) -> list[datetime]:
-    """Drop failure timestamps older than the window. Returns the surviving list."""
+def _seed_window(endpoint: ProviderEndpoint) -> list[datetime]:
+    """Return the failure window for *endpoint*, seeding the in-memory cache
+    from the durable ``circuit_failures`` column on first access after a
+    restart."""
+    if endpoint.id in _recent_failures:
+        return _recent_failures[endpoint.id]
+    window: list[datetime] = []
+    for item in endpoint.circuit_failures or []:
+        try:
+            window.append(datetime.fromisoformat(item))
+        except (TypeError, ValueError):
+            continue
+    _recent_failures[endpoint.id] = window
+    return window
+
+
+def _prune(window: list[datetime], now: datetime) -> list[datetime]:
+    """Drop failure timestamps older than the window."""
     cutoff = now - timedelta(seconds=FAILURE_WINDOW_SECONDS)
-    surviving = [t for t in _recent_failures[endpoint_id] if t > cutoff]
-    _recent_failures[endpoint_id] = surviving
-    return surviving
+    return [t for t in window if t > cutoff]
+
+
+def _store(endpoint: ProviderEndpoint, window: list[datetime]) -> None:
+    """Mirror *window* into the in-memory cache and the durable column."""
+    _recent_failures[endpoint.id] = window
+    endpoint.circuit_failures = [t.isoformat() for t in window] or None
 
 
 def _reset_failure_tracker() -> None:
     """Clear all in-process failure tracking. Intended for tests."""
     _recent_failures.clear()
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """SQLite drops tzinfo on storage; re-attach UTC so comparisons hold."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 async def record_endpoint_result(
@@ -97,6 +118,7 @@ async def record_endpoint_result(
 
     now = _utcnow()
     state = endpoint.circuit_state
+    window = _seed_window(endpoint)
 
     # ── Success ──────────────────────────────────────────────────────────
     if success:
@@ -105,10 +127,11 @@ async def record_endpoint_result(
             endpoint.circuit_opened_at = None
             endpoint.circuit_retry_at = None
             endpoint.updated_at = now
-            _recent_failures.pop(endpoint_id, None)
+            _store(endpoint, [])
             await session.flush()
-        elif state == "closed":
-            _recent_failures.pop(endpoint_id, None)
+        elif state == "closed" and window:
+            _store(endpoint, [])
+            await session.flush()
         # open: a success shouldn't arrive (circuit rejects requests), ignore.
         return
 
@@ -119,25 +142,26 @@ async def record_endpoint_result(
         endpoint.circuit_opened_at = now
         endpoint.circuit_retry_at = now + timedelta(seconds=COOLDOWN_SECONDS)
         endpoint.updated_at = now
+        _store(endpoint, [])
         await session.flush()
         return
 
+    window = _prune([*window, now], now)
+
     if state == "open":
         # Already open — record the timestamp but don't extend cooldown.
-        _recent_failures[endpoint_id].append(now)
-        _prune_old_failures(endpoint_id, now)
+        _store(endpoint, window)
+        await session.flush()
         return
 
     # closed: track failure, maybe open.
-    _recent_failures[endpoint_id].append(now)
-    failures = _prune_old_failures(endpoint_id, now)
-
-    if len(failures) >= FAILURE_THRESHOLD:
+    if len(window) >= FAILURE_THRESHOLD:
         endpoint.circuit_state = "open"
         endpoint.circuit_opened_at = now
         endpoint.circuit_retry_at = now + timedelta(seconds=COOLDOWN_SECONDS)
         endpoint.updated_at = now
-        await session.flush()
+    _store(endpoint, window)
+    await session.flush()
 
 
 async def is_endpoint_available(
@@ -172,7 +196,7 @@ async def is_endpoint_available(
     if state == "open":
         if (
             endpoint.circuit_retry_at is not None
-            and now >= endpoint.circuit_retry_at
+            and now >= _as_utc(endpoint.circuit_retry_at)
         ):
             # Atomic CAS: only one caller wins the open→half_open transition.
             # If another session already transitioned it, rowcount == 0.

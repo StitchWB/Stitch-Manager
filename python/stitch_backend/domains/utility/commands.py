@@ -653,6 +653,15 @@ async def cmd_save_proxy_config(db: AsyncSession, params: dict) -> None:
     )
 
 
+def _strip_routing_strategy(payload: dict) -> dict:
+    """Drop the deprecated routingStrategy knob; rotation_strategy is authoritative."""
+    cleaned = {k: v for k, v in payload.items() if k != "routingStrategy"}
+    inner = cleaned.get("settings")
+    if isinstance(inner, dict):
+        cleaned["settings"] = {k: v for k, v in inner.items() if k != "routingStrategy"}
+    return cleaned
+
+
 @command("get_proxy_settings", readonly=True)
 async def cmd_get_proxy_settings(db: AsyncSession, params: dict) -> dict:
     """Return AI proxy settings from settings table."""
@@ -667,14 +676,15 @@ async def cmd_get_proxy_settings(db: AsyncSession, params: dict) -> dict:
     row = result.first()
     if row and row[0]:
         try:
-            return cast("dict[str, Any]", json.loads(row[0]))
+            data = json.loads(row[0])
+            if isinstance(data, dict):
+                return cast("dict[str, Any]", _strip_routing_strategy(data))
         except (json.JSONDecodeError, TypeError):
             pass
     return {
         "appMode": "disabled",
         "proxyPort": 0,
         "autoStart": False,
-        "routingStrategy": "round_robin",
         "managementKey": "",
     }
 
@@ -686,7 +696,7 @@ async def cmd_update_proxy_settings(db: AsyncSession, params: dict) -> None:
 
     from sqlalchemy import text
 
-    settings_json = json.dumps(params)
+    settings_json = json.dumps(_strip_routing_strategy(params))
 
     await db.execute(
         text(
@@ -722,27 +732,19 @@ async def cmd_clear_proxy_debug_logs(db: AsyncSession, params: dict) -> int:
     return await LoggingService(db).clear_logs()
 
 
-# =============================================================================
-# Request history (replaces stubs — backed by app_logs table)
-# =============================================================================
-
 @command("get_request_history", readonly=True)
 async def cmd_get_request_history(db: AsyncSession, params: dict) -> dict:
-    """Return AI proxy request history from app_logs."""
-    from stitch_backend.domains.logging.service import LoggingService
+    """Return per-request traces: model → target → credential → latency → failover."""
+    from stitch_backend.domains.ai_proxy.request_trace import get_request_trace_store
 
     limit = int(params.get("limit", 50))
-    result = await LoggingService(db).query_logs({
-        "sources": ["ai_proxy", "proxy"],
-        "limit": limit,
-    })
-    logs = result.get("logs", [])
-    return {"items": logs, "total": result.get("total", 0)}
+    items = get_request_trace_store().list(limit=limit)
+    return {"items": items, "total": len(items)}
 
 
 @command("clear_request_history")
-async def cmd_clear_request_history(db: AsyncSession, params: dict) -> None:
-    """Clear AI proxy request history."""
-    from stitch_backend.domains.logging.service import LoggingService
+async def cmd_clear_request_history(db: AsyncSession, params: dict) -> int:
+    """Clear the per-request trace buffer."""
+    from stitch_backend.domains.ai_proxy.request_trace import get_request_trace_store
 
-    await LoggingService(db).clear_logs()
+    return get_request_trace_store().clear()

@@ -15,7 +15,9 @@ import {
   checkAccountStatus,
   checkFireworksApiKey,
   updateAccountMetadata,
+  setAccountBrowserEngine,
 } from '@/lib/backend/modules/accounts';
+import type { BrowserEngineId } from '@/lib/browser/engines';
 import { authorizeKiroAccount } from '@/lib/backend';
 import { useAccountsStore } from '../stores/accounts';
 import { t } from '../lib/i18n';
@@ -234,6 +236,21 @@ export function useAccountsActions({
         tags: updates.tags,
       });
       await fetchAccounts();
+    },
+    [fetchAccounts]
+  );
+
+  const handleSetAccountBrowserEngine = useCallback(
+    async (accountId: number, engine: BrowserEngineId) => {
+      try {
+        await setAccountBrowserEngine({ accountId, engine });
+        await fetchAccounts();
+      } catch (error) {
+        console.error('[Accounts] Failed to set browser engine:', error);
+        toast.error(
+          `Failed to set browser engine: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     },
     [fetchAccounts]
   );
@@ -468,6 +485,7 @@ export function useAccountsActions({
     handleCaptureWebCookies,
     handleAuthorizeKiroAccount,
     handleUpdateAccount,
+    handleSetAccountBrowserEngine,
     handleExportCSV,
     handleImportAccounts,
     handleImportFromClipboard,

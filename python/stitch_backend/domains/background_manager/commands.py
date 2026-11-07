@@ -7,18 +7,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-import json
 from typing import cast
-
-from sqlalchemy import text
 
 from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_read_session
-from stitch_backend.domains.background_manager.schemas import (
-    BackgroundManagerConfig,
-    normalise_background_manager_config,
-)
+from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
+from stitch_backend.domains.background_manager.store import load_config, save_config
 
 _DEFAULT_STATUS: dict = {
     "isRegistering": False,
@@ -35,17 +30,7 @@ _DEFAULT_STATUS: dict = {
 
 async def _load_config() -> BackgroundManagerConfig:
     async def _op(session):
-        result = await session.execute(
-            text("SELECT value FROM settings WHERE key = 'background_manager_config'")
-        )
-        row = result.first()
-        if not row or not row[0]:
-            return BackgroundManagerConfig.model_validate({})
-        try:
-            value = json.loads(row[0])
-        except (json.JSONDecodeError, TypeError):
-            return BackgroundManagerConfig.model_validate({})
-        return normalise_background_manager_config(value)
+        return await load_config(session)
 
     return cast("BackgroundManagerConfig", await run_in_read_session(_op))
 
@@ -72,12 +57,4 @@ async def cmd_update_background_manager_config(db: AsyncSession, params: dict) -
     """Persist frontend ``{config}`` envelopes and legacy raw config bodies."""
     raw_config = params.get("config", params)
     config = BackgroundManagerConfig.model_validate(raw_config)
-    config_json = config.model_dump_json(by_alias=True)
-
-    await db.execute(
-        text(
-            "INSERT INTO settings (key, value) VALUES ('background_manager_config', :v) "
-            "ON CONFLICT(key) DO UPDATE SET value = :v"
-        ),
-        {"v": config_json},
-    )
+    await save_config(db, config)

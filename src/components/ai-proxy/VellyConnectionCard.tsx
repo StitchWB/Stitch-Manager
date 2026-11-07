@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Server } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Button, GlassCard, Input } from '@/components/ui';
+import { Button, EmptyState, GlassCard, Input } from '@/components/ui';
 import { API_BASE_URL } from '@/lib/backend/core/invoke';
 import { isDesktopApp } from '@/lib/backend/core/url';
 import { getAvailableModelsSafe, getLocalChatToken } from '@/lib/backend/modules/aiProxy';
@@ -52,7 +53,23 @@ export function VellyConnectionCard() {
     }
   };
 
-  if (!desktop || !count) return null;
+  if (!desktop) return null;
+
+  if (!count) {
+    return (
+      <GlassCard className="mx-auto w-full max-w-[1200px] p-4">
+        <EmptyState
+          icon={Server}
+          title={isRu ? 'Модели Velly не найдены' : 'No Velly models found'}
+          description={
+            isRu
+              ? 'Мост Velly не отдаёт модели. Запустите мост и добавьте ключ, чтобы модели появились в каталоге.'
+              : 'The Velly bridge is not returning models. Start the bridge and add a key to populate the catalog.'
+          }
+        />
+      </GlassCard>
+    );
+  }
 
   return (
     <GlassCard className="mx-auto w-full max-w-[1200px] space-y-3 p-4">

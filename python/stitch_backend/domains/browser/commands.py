@@ -20,9 +20,14 @@ from stitch_backend.database import run_in_read_session, run_in_session
 logger = logging.getLogger(__name__)
 
 
+def _coerce_account_id(raw: Any) -> int | str:
+    s = str(raw).strip()
+    return int(s) if s.isdigit() else s
+
+
 # ── DB helpers (raw SQL, matching Rust browser_session.rs) ─────────────────
 
-async def _save_session(db, account_id: int, profile_path: str, cookies: str, session_data: str) -> None:
+async def _save_session(db, account_id: int | str, profile_path: str, cookies: str, session_data: str) -> None:
     """Persist browser session data for an account."""
     from datetime import datetime
 
@@ -36,35 +41,37 @@ async def _save_session(db, account_id: int, profile_path: str, cookies: str, se
     await db.execute(
         text(
             "UPDATE accounts "
-            "SET browser_profile_path = :pp, cookies = :ck, session_data = :sd, updated_at = :now "
+            "SET profile_path = :pp, cookies = :ck, session_data = :sd, updated_at = :now "
             "WHERE id = :id"
         ),
         {"pp": profile_path, "ck": cookies, "sd": session_data, "now": now, "id": account_id},
     )
 
 
-async def _load_session(db, account_id: int) -> dict[str, str] | None:
+async def _load_session(db, account_id: int | str) -> dict[str, str] | None:
     """Load browser session data for an account."""
     row = (
         await db.execute(
-            text("SELECT browser_profile_path, cookies, session_data FROM accounts WHERE id = :id"),
+            text("SELECT profile_path, cookies, session_data FROM accounts WHERE id = :id"),
             {"id": account_id},
         )
     ).mappings().first()
 
     if not row:
         return None
-    pp = row.get("browser_profile_path")
-    if not pp:
+    pp = row.get("profile_path") or ""
+    cookies = row.get("cookies") or ""
+    session_data = row.get("session_data") or ""
+    if not (pp or cookies or session_data):
         return None
     return {
         "profilePath": pp,
-        "cookies": row.get("cookies") or "",
-        "sessionData": row.get("session_data") or "",
+        "cookies": cookies,
+        "sessionData": session_data,
     }
 
 
-async def _clear_session(db, account_id: int) -> None:
+async def _clear_session(db, account_id: int | str) -> None:
     """Clear browser session data for an account."""
     from datetime import datetime
 
@@ -72,14 +79,14 @@ async def _clear_session(db, account_id: int) -> None:
     await db.execute(
         text(
             "UPDATE accounts "
-            "SET browser_profile_path = NULL, cookies = NULL, session_data = NULL, updated_at = :now "
+            "SET profile_path = NULL, cookies = NULL, session_data = NULL, updated_at = :now "
             "WHERE id = :id"
         ),
         {"now": now, "id": account_id},
     )
 
 
-async def _get_account_info(db, account_id: int) -> dict[str, Any] | None:
+async def _get_account_info(db, account_id: int | str) -> dict[str, Any] | None:
     """Load minimal account info needed for browser launch."""
     try:
         row = (
@@ -116,7 +123,7 @@ async def _get_account_info(db, account_id: int) -> dict[str, Any] | None:
 @register_command("save_browser_session")
 async def cmd_save_browser_session(params: dict) -> dict:
     """Save browser session data (profile path, cookies, session data) for an account."""
-    account_id = int(params.get("accountId", params.get("account_id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -140,7 +147,7 @@ async def cmd_save_browser_session(params: dict) -> dict:
 @register_command("load_browser_session", readonly=True)
 async def cmd_load_browser_session(params: dict) -> dict | None:
     """Load saved browser session data for an account."""
-    account_id = int(params.get("accountId", params.get("account_id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
         return None
 
@@ -151,7 +158,7 @@ async def cmd_load_browser_session(params: dict) -> dict | None:
 @register_command("clear_browser_session")
 async def cmd_clear_browser_session(params: dict) -> dict:
     """Clear saved browser session data for an account."""
-    account_id = int(params.get("accountId", params.get("account_id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -302,7 +309,7 @@ async def cmd_open_account_browser(params: dict) -> dict:
     Loads saved session data from DB, launches the browser, and optionally
     injects cookies into the new session.
     """
-    account_id = int(params.get("accountId", params.get("id", params.get("account_id", 0))))
+    account_id = _coerce_account_id(params.get("accountId", params.get("id", params.get("account_id", 0))))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -314,6 +321,7 @@ async def cmd_open_account_browser(params: dict) -> dict:
     session = await run_in_read_session(lambda db: _load_session(db, account_id))
     profile_path = session["profilePath"] if session else None
     cookies = session["cookies"] if session else None
+    session_data = session["sessionData"] if session else None
 
     provider = info.get("provider", "")
     email = info.get("email", "")
@@ -334,6 +342,7 @@ async def cmd_open_account_browser(params: dict) -> dict:
         extra_url=extra_url,
         engine=info.get("browser_engine"),
         shard_profile_id=info.get("shard_profile_id"),
+        session_json=session_data,
     )
 
     return {
@@ -352,7 +361,7 @@ async def cmd_open_web_login_browser(params: dict) -> dict:
     Step 1 of the harvester flow: the user logs in manually in the opened
     window; step 2 (``capture_web_session_cookies``) pulls the cookies back.
     """
-    account_id = int(params.get("accountId", params.get("id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -368,7 +377,7 @@ async def cmd_capture_web_session_cookies(params: dict) -> dict:
     Step 2 of the harvester flow. Validates the required cookie set for the
     provider and stores the jar string on the account (adapters consume it).
     """
-    account_id = int(params.get("accountId", params.get("id", 0)))
+    account_id = _coerce_account_id(params.get("accountId", params.get("id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 

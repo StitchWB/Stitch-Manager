@@ -22,6 +22,7 @@ if ($Action -eq 'Check') {
     Assert-WorkspacePortsFree $plan
     if (-not (Test-Path -LiteralPath $plan.Python)) { throw "Python environment missing. Run -Action Setup: $($plan.Python)" }
     if (-not (Test-Path -LiteralPath (Join-Path $plan.AppRoot 'node_modules/vite/bin/vite.js'))) { throw 'Run npm install in AppRoot first' }
+    Invoke-CommandContractGate -Plan $plan
     exit 0
 }
 if ($Action -eq 'Restart') {
@@ -52,6 +53,7 @@ try {
         exit 0
     }
     if (-not (Test-Path -LiteralPath $plan.Python)) { throw 'Python environment missing; run -Action Setup' }
+    Invoke-CommandContractGate -Plan $plan
     Remove-Item -LiteralPath $stopFile -ErrorAction SilentlyContinue
     $environment = @{
         STITCH_PLUGINS_DIR = $plan.PluginHome

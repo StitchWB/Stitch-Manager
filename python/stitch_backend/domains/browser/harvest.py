@@ -47,6 +47,12 @@ WEB_SESSION_HARVEST_CONFIG: dict[str, dict[str, Any]] = {
         # WAF session continuity. No required-cookie gate.
         "required_cookies": (),
     },
+    "zcode": {
+        "login_url": "https://chat.z.ai/auth",
+        "cookie_domains": ("z.ai",),
+        # ZCode auth is in localStorage['token'] — no required-cookie gate
+        "required_cookies": (),
+    },
 }
 
 
@@ -128,7 +134,7 @@ async def cdp_get_all_cookies(port: int) -> list[dict[str, Any]]:
 # ─── Orchestration ───────────────────────────────────────────────────────────
 
 
-async def _get_account_row(account_id: int) -> dict[str, Any] | None:
+async def _get_account_row(account_id: int | str) -> dict[str, Any] | None:
     from stitch_backend.domains.accounts.models import Account
 
     async def _op(session):
@@ -149,7 +155,7 @@ async def _get_account_row(account_id: int) -> dict[str, Any] | None:
     return await run_in_session(_op)
 
 
-async def open_web_login(account_id: int) -> dict[str, Any]:
+async def open_web_login(account_id: int | str) -> dict[str, Any]:
     """Launch the account browser at the provider login page with CDP."""
     row = await _get_account_row(account_id)
     if row is None:
@@ -192,7 +198,7 @@ async def open_web_login(account_id: int) -> dict[str, Any]:
 
 
 async def capture_web_cookies(
-    account_id: int,
+    account_id: int | str,
     *,
     cdp_client: Any = None,
 ) -> dict[str, Any]:
@@ -243,11 +249,19 @@ async def capture_web_cookies(
         }
 
     jar = build_cookie_jar(provider_cookies)
+    local_storage: dict[str, Any] = {}
+    try:
+        from stitch_backend.domains.browser.inject import read_local_storage
+
+        local_storage = await read_local_storage(port)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("localStorage capture failed (non-fatal): %s", exc)
     session_data = _merge_session_data(
         str(row["session_data"] or "{}"),
         {
             "state": "harvest_ready",
             "cookiesJson": json.dumps(provider_cookies),
+            "localStorage": json.dumps(local_storage),
         },
     )
     await _update_account_fields(
@@ -277,7 +291,7 @@ def _merge_session_data(raw: str, patch: dict[str, Any]) -> str:
     return json.dumps(data)
 
 
-async def _update_account_fields(account_id: int, fields: dict[str, Any]) -> None:
+async def _update_account_fields(account_id: int | str, fields: dict[str, Any]) -> None:
     from datetime import UTC, datetime
 
     from stitch_backend.domains.accounts.models import Account

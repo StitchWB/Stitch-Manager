@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Download, FileJson, Gauge, Terminal, Upload, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -8,26 +8,37 @@ import { VellyConnectionCard } from '@/components/ai-proxy/VellyConnectionCard';
 import Header from '@/components/layout/Header';
 import { Button, GlassCard, Input, PageHeader, StatusBadge } from '@/components/ui';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
+import { getLocalChatToken } from '@/lib/backend/modules/aiProxy';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '@/stores/app';
 import { useAiProvidersController } from './hooks/useAiProvidersController';
-
-const CLIENT_API_KEY = 'proxystitch-local';
 
 interface AiIntegrationsProps {
   baseUrl?: string;
   clientApiKey?: string;
 }
 
-export function AiIntegrations({
-  baseUrl: baseUrlOverride,
-  clientApiKey = CLIENT_API_KEY,
-}: AiIntegrationsProps) {
+export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiIntegrationsProps) {
   const navigate = useNavigate();
   const language = useAppStore(state => state.language);
   const [copied, setCopied] = useState<'url' | 'key' | null>(null);
+  const [localToken, setLocalToken] = useState('');
   const [transferMode, setTransferMode] = useState<'import' | 'export' | null>(null);
   const controller = useAiProvidersController();
+
+  useEffect(() => {
+    let disposed = false;
+    getLocalChatToken()
+      .then(token => {
+        if (!disposed) setLocalToken(token);
+      })
+      .catch(() => {
+        if (!disposed) setLocalToken('');
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   const {
     baseUrl: detectedBaseUrl,
@@ -55,12 +66,13 @@ export function AiIntegrations({
   } = controller;
 
   const baseUrl = baseUrlOverride ?? detectedBaseUrl;
+  const effectiveClientApiKey = clientApiKey ?? localToken;
   const isRu = language === 'ru';
   const copy = isRu
     ? {
-      workspaceTitle: 'Подключение клиентов',
+      workspaceTitle: 'Единое API',
       workspaceDescription:
-        'Используйте эти данные в любом OpenAI-совместимом клиенте. Proxy должен быть запущен.',
+        'Один endpoint и ключ для любого OpenAI-совместимого клиента. Proxy должен быть запущен.',
       endpointTitle: 'Endpoint и ключ',
       endpointHint: 'Значения можно скопировать без ручного выделения.',
       proxySettings: 'Настройки Proxy',
@@ -79,9 +91,9 @@ export function AiIntegrations({
       sensitiveConfirm: 'Скопировать значение с секретами в буфер обмена?',
     }
     : {
-      workspaceTitle: 'Connect clients',
+      workspaceTitle: 'Unified API',
       workspaceDescription:
-        'Use these values in any OpenAI-compatible client. The proxy must be running.',
+        'One endpoint and key for any OpenAI-compatible client. The proxy must be running.',
       endpointTitle: 'Endpoint and key',
       endpointHint: 'Copy values without selecting them manually.',
       proxySettings: 'Proxy settings',
@@ -141,13 +153,12 @@ export function AiIntegrations({
       <Header title={t('sidebar.aiHub')} icon={<Zap size={18} />} />
       <PageHeader
         eyebrow={t('sidebar.aiHub')}
-        title={t('aiHub.tabs.integrations')}
+        title={t('aiHub.tabs.connections')}
         description={copy.workspaceDescription}
         className="px-4 py-2.5 md:px-5 md:py-3"
       />
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3 md:p-4">
-        <VellyConnectionCard />
         <GlassCard className="mx-auto w-full max-w-[1200px] overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-4 py-3">
             <div className="min-w-0">
@@ -189,7 +200,7 @@ export function AiIntegrations({
                 />
                 <Input
                   label={t('aiHub.integrations.apiKey')}
-                  value={clientApiKey}
+                  value={effectiveClientApiKey}
                   readOnly
                   className="font-mono text-xs"
                   rightElement={
@@ -197,7 +208,12 @@ export function AiIntegrations({
                       variant="ghost"
                       size="xs"
                       onClick={() =>
-                        void handleCopy(t('aiHub.integrations.apiKey'), clientApiKey, false, 'key')
+                        void handleCopy(
+                          t('aiHub.integrations.apiKey'),
+                          effectiveClientApiKey,
+                          true,
+                          'key'
+                        )
                       }
                       leftIcon={copied === 'key' ? <Check size={13} /> : <Copy size={13} />}
                     >
@@ -251,6 +267,7 @@ export function AiIntegrations({
             </section>
           </div>
         </GlassCard>
+        <VellyConnectionCard />
       </div>
 
       {transferMode ? (

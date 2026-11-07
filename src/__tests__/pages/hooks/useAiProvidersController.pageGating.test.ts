@@ -44,6 +44,8 @@ jest.mock('@/stores/aiProxy', () => ({
   useAiProxyStore: (selector?: (s: any) => any) =>
     selector ? selector(storeState) : storeState,
   refreshProxyStatus: jest.fn(async () => null),
+  startProxyStatusPolling: jest.fn(),
+  stopProxyStatusPolling: jest.fn(),
 }));
 
 const aiProxyFns = {

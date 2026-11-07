@@ -20,6 +20,12 @@ from stitch_backend.domains.ai_gateway.schemas.admin import (
     GatewayClaimLegacyRequest,
     GatewaySetInstanceSharedRequest,
 )
+from stitch_backend.domains.ai_gateway.schemas.connections import (
+    AdapterCapabilitiesResponse,
+    SaveConnectionAuth,
+    SaveConnectionRequest,
+    SaveConnectionResponse,
+)
 from stitch_backend.domains.ai_gateway.schemas.credentials import (
     CredentialCreateRequest,
     CredentialIdRequest,
@@ -60,10 +66,12 @@ from stitch_backend.domains.ai_gateway.schemas.proxy_keys import (
 )
 from stitch_backend.domains.ai_gateway.schemas.public_models import (
     ListPublicModelsRequest,
+    MergePublicModelsRequest,
     PublicModelCreateRequest,
     PublicModelIdRequest,
     PublicModelResponse,
     PublicModelUpdateRequest,
+    UnmergeRouteTargetRequest,
 )
 from stitch_backend.domains.ai_gateway.schemas.route_targets import (
     ListRouteTargetsForPublicModelRequest,
@@ -81,6 +89,7 @@ from stitch_backend.domains.ai_gateway.schemas.upstream_models import (
 )
 
 __all__ = [
+    "AdapterCapabilitiesResponse",
     "CredentialCreateRequest",
     "CredentialIdRequest",
     "CredentialModelAccessIdRequest",
@@ -96,6 +105,7 @@ __all__ = [
     "ListPublicModelsRequest",
     "ListRouteTargetsForPublicModelRequest",
     "ListUpstreamModelsRequest",
+    "MergePublicModelsRequest",
     "ProbeEndpointModelsRequest",
     "ProbeEndpointRequest",
     "ProviderEndpointCreateRequest",
@@ -118,6 +128,10 @@ __all__ = [
     "RouteTargetIdRequest",
     "RouteTargetResponse",
     "RouteTargetUpdateRequest",
+    "SaveConnectionAuth",
+    "SaveConnectionRequest",
+    "SaveConnectionResponse",
+    "UnmergeRouteTargetRequest",
     "UpstreamModelCreateRequest",
     "UpstreamModelIdRequest",
     "UpstreamModelResponse",

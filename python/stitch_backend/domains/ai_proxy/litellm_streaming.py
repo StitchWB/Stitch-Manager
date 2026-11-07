@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -11,12 +12,71 @@ from stitch_backend.domains.ai_proxy.litellm_response_parsing import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable
     from typing import Any
 
     from stitch_backend.domains.ai_proxy.holone_service import HoloneService
 
 logger = logging.getLogger(__name__)
+
+
+def _is_error_frame(line: str) -> bool:
+    """True when an SSE frame carries an upstream error despite an HTTP 200."""
+    stripped = line.strip()
+    if stripped.startswith("event: error"):
+        return True
+    if not stripped.startswith("data:"):
+        return False
+    payload = stripped[len("data:"):].strip()
+    if payload in ("", "[DONE]"):
+        return False
+    try:
+        parsed = json.loads(payload)
+    except ValueError:
+        return False
+    return isinstance(parsed, dict) and "error" in parsed
+
+
+async def prime_stream(response: Any) -> AsyncIterator[str]:
+    """Pull the first non-empty upstream line before the client stream opens.
+
+    Streaming adapters open the upstream connection lazily, so a 429/5xx/
+    timeout surfaces only on the first pull.  Pulling here lets the executor
+    fail over to the next candidate instead of aborting an SSE stream that
+    already sent 200 to the client.  An error frame delivered as the first
+    line (HTTP 200 + SSE error) is raised for the same reason.
+    """
+    iterator = response.__aiter__()
+    first: str | None = None
+    while True:
+        try:
+            line = await iterator.__anext__()
+        except StopAsyncIteration:
+            break
+        if line:
+            first = line
+            break
+
+    if first is not None and _is_error_frame(first):
+        raise RuntimeError(first)
+
+    async def _replay() -> AsyncIterator[str]:
+        if first is not None:
+            yield first
+        async for line in iterator:
+            yield line
+
+    return _replay()
+
+
+def _openai_error_frame(message: str) -> str:
+    payload = {"error": {"message": message, "type": "upstream_error"}}
+    return f"data: {json.dumps(payload)}\n\n"
+
+
+def _anthropic_error_frame(message: str) -> str:
+    payload = {"type": "error", "error": {"type": "api_error", "message": message}}
+    return f"event: error\ndata: {json.dumps(payload)}\n\n"
 
 
 async def stream_openai_response(
@@ -39,15 +99,19 @@ async def stream_openai_response(
     async def body_gen():
         nonlocal actual_tokens
         saw_done = False
-        async for line in response:
-            if not line:
-                continue
-            if line.strip() == "data: [DONE]":
-                saw_done = True
-            tokens = _tokens_from_sse_line(line)
-            if tokens is not None:
-                actual_tokens = max(actual_tokens or 0, tokens)
-            yield f"{line}\n\n"
+        try:
+            async for line in response:
+                if not line:
+                    continue
+                if line.strip() == "data: [DONE]":
+                    saw_done = True
+                tokens = _tokens_from_sse_line(line)
+                if tokens is not None:
+                    actual_tokens = max(actual_tokens or 0, tokens)
+                yield f"{line}\n\n"
+        except Exception:
+            logger.warning("Upstream stream failed after first chunk; terminating SSE", exc_info=True)
+            yield _openai_error_frame("upstream stream interrupted")
         if not saw_done:
             yield "data: [DONE]\n\n"
         if on_complete is not None:
@@ -109,17 +173,21 @@ async def stream_anthropic_response(
     async def body_gen():
         nonlocal input_tokens, output_tokens, found_usage
         saw_done = False
-        async for line in response:
-            if not line:
-                continue
-            if line.strip() == "data: [DONE]":
-                saw_done = True
-            usage = _anthropic_usage_from_sse_line(line)
-            if usage is not None:
-                found_usage = True
-                input_tokens = max(input_tokens, usage[0])
-                output_tokens = max(output_tokens, usage[1])
-            yield f"{line}\n\n"
+        try:
+            async for line in response:
+                if not line:
+                    continue
+                if line.strip() == "data: [DONE]":
+                    saw_done = True
+                usage = _anthropic_usage_from_sse_line(line)
+                if usage is not None:
+                    found_usage = True
+                    input_tokens = max(input_tokens, usage[0])
+                    output_tokens = max(output_tokens, usage[1])
+                yield f"{line}\n\n"
+        except Exception:
+            logger.warning("Upstream stream failed after first chunk; terminating SSE", exc_info=True)
+            yield _anthropic_error_frame("upstream stream interrupted")
         if not saw_done:
             yield "data: [DONE]\n\n"
         if on_complete is not None:

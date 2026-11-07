@@ -360,6 +360,7 @@ export default function Accounts() {
     handleCaptureWebCookies,
     handleAuthorizeKiroAccount,
     handleUpdateAccount,
+    handleSetAccountBrowserEngine,
     handleExportCSV,
     handleImportAccounts,
     handleImportFromClipboard,
@@ -750,6 +751,8 @@ export default function Accounts() {
                 onUpdate: handleUpdateAccount,
                 onClaim: handleClaimAccount,
                 onShareToGroup: handleOpenShareToGroup,
+                shardAvailable,
+                onSetBrowserEngine: handleSetAccountBrowserEngine,
                 selectedProvider: providerFilter === 'all' ? null : providerFilter,
               }}
               onRelationEdgeClickInAll={handleRelationEdgeClickInAll}

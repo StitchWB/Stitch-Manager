@@ -13,12 +13,18 @@ from stitch_backend.domains.ai_gateway.schemas._common import _validate_dict_siz
 if TYPE_CHECKING:
     from stitch_backend.domains.ai_gateway.models import ProviderEndpoint
 
-_VALID_ADAPTER_TYPES = {"openai_compatible", "anthropic", "gemini"}
+_VALID_ADAPTER_TYPES = {"openai_compatible", "anthropic", "gemini", "zcode_plan"}
 
-# Transport-controlled or security-sensitive headers — setting them would spoof identity or break routing.
+# Transport/identity-spoofing + credential-bearing names: default_headers is non-secret metadata echoed in responses.
 _BLOCKED_HEADERS = frozenset({
     "host", "x-forwarded-for", "x-real-ip", "content-length",
     "transfer-encoding", "connection", "authorization",
+    "proxy-authorization", "cookie",
+    "x-api-key", "x-goog-api-key", "api-key", "apikey",
+    "x-auth-token", "x-auth", "auth-token", "x-token",
+    "x-session-token", "session-token",
+    "x-bearer-token", "bearer-token", "x-api-token", "api-token",
+    "x-secret", "secret",
 })
 
 # Cap on a single default_header value — guards header injection (newlines) and unbounded storage.
