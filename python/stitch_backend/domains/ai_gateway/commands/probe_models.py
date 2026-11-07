@@ -265,6 +265,8 @@ def _capabilities(row: dict[str, Any], now: str) -> dict[str, Any]:
     caps: dict[str, Any] = {"source": "probe", "verified_at": now}
     if row.get("multimodalOk") is not None:
         caps["supports_vision"] = bool(row["multimodalOk"])
+    if row.get("ok") and row.get("latencyMs") is not None:
+        caps["probe_latency_ms"] = int(row["latencyMs"])
     return caps
 
 

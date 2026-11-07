@@ -45,6 +45,9 @@ from stitch_backend.domains.ai_gateway.commands.model_access import (
     cmd_list_credential_model_access,
     cmd_upsert_credential_model_access,
 )
+from stitch_backend.domains.ai_gateway.commands.model_health import (
+    cmd_list_model_health,
+)
 from stitch_backend.domains.ai_gateway.commands.opencode_import import (
     cmd_import_opencode_providers,
 )
@@ -105,6 +108,7 @@ __all__ = [
     "cmd_import_opencode_providers",
     "cmd_list_credential_model_access",
     "cmd_list_credentials",
+    "cmd_list_model_health",
     "cmd_list_provider_endpoints",
     "cmd_list_public_models",
     "cmd_list_route_targets_for_public_model",

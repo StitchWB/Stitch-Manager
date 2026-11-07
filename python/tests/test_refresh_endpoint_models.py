@@ -39,6 +39,13 @@ def test_capabilities_records_vision_only_when_known() -> None:
     assert "supports_vision" not in unknown
 
 
+def test_capabilities_records_latency_only_for_ok_rows() -> None:
+    now = "2026-01-01T00:00:00+00:00"
+    assert _capabilities({"ok": True, "latencyMs": 42}, now)["probe_latency_ms"] == 42
+    assert "probe_latency_ms" not in _capabilities({"ok": False, "latencyMs": 42}, now)
+    assert "probe_latency_ms" not in _capabilities({"ok": True, "latencyMs": None}, now)
+
+
 def test_refresh_request_inherits_probe_fields() -> None:
     req = RefreshEndpointModelsRequest(credentialId="cred-1", visionModels=["m1"])
     assert req.credential_id == "cred-1"
