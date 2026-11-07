@@ -134,7 +134,7 @@ async def cdp_get_all_cookies(port: int) -> list[dict[str, Any]]:
 # ─── Orchestration ───────────────────────────────────────────────────────────
 
 
-async def _get_account_row(account_id: int) -> dict[str, Any] | None:
+async def _get_account_row(account_id: int | str) -> dict[str, Any] | None:
     from stitch_backend.domains.accounts.models import Account
 
     async def _op(session):
@@ -155,7 +155,7 @@ async def _get_account_row(account_id: int) -> dict[str, Any] | None:
     return await run_in_session(_op)
 
 
-async def open_web_login(account_id: int) -> dict[str, Any]:
+async def open_web_login(account_id: int | str) -> dict[str, Any]:
     """Launch the account browser at the provider login page with CDP."""
     row = await _get_account_row(account_id)
     if row is None:
@@ -198,7 +198,7 @@ async def open_web_login(account_id: int) -> dict[str, Any]:
 
 
 async def capture_web_cookies(
-    account_id: int,
+    account_id: int | str,
     *,
     cdp_client: Any = None,
 ) -> dict[str, Any]:
@@ -291,7 +291,7 @@ def _merge_session_data(raw: str, patch: dict[str, Any]) -> str:
     return json.dumps(data)
 
 
-async def _update_account_fields(account_id: int, fields: dict[str, Any]) -> None:
+async def _update_account_fields(account_id: int | str, fields: dict[str, Any]) -> None:
     from datetime import UTC, datetime
 
     from stitch_backend.domains.accounts.models import Account

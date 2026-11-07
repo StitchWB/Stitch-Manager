@@ -68,7 +68,7 @@ def _status_info(
 
 # ── check_account_status ─────────────────────────────────────────────────────
 
-async def check_account_status(db: AsyncSession, account_id: int) -> dict[str, Any]:
+async def check_account_status(db: AsyncSession, account_id: int | str) -> dict[str, Any]:
     """Check account status — dispatches to provider-specific handlers."""
     account = await _get_account(db, account_id)
     if not account:
@@ -176,7 +176,7 @@ async def check_windsurf_balance(api_key: str) -> dict[str, Any]:
 
 # ── Profile session commands ──────────────────────────────────────────────────
 
-async def open_account_profile_session(db: AsyncSession, account_id: int) -> None:
+async def open_account_profile_session(db: AsyncSession, account_id: int | str) -> None:
     """Open a manual profile session for an account."""
     account = await _get_account(db, account_id)
     if not account:
@@ -201,7 +201,7 @@ async def open_account_profile_session(db: AsyncSession, account_id: int) -> Non
     logger.info("Profile session opened for account %d", account_id)
 
 
-async def confirm_account_profile_session(db: AsyncSession, account_id: int) -> None:
+async def confirm_account_profile_session(db: AsyncSession, account_id: int | str) -> None:
     """Confirm manual login for a profile session."""
     account = await _get_account(db, account_id)
     if not account:
@@ -241,7 +241,7 @@ async def confirm_account_profile_session(db: AsyncSession, account_id: int) -> 
     logger.info("Profile session confirmed for account %d", account_id)
 
 
-async def clear_account_profile_session(db: AsyncSession, account_id: int) -> None:
+async def clear_account_profile_session(db: AsyncSession, account_id: int | str) -> None:
     """Clear profile session data and tags for an account."""
     account = await _get_account(db, account_id)
     if not account:
@@ -262,7 +262,7 @@ async def clear_account_profile_session(db: AsyncSession, account_id: int) -> No
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-async def _get_account(db: AsyncSession, account_id: int) -> dict[str, Any] | None:
+async def _get_account(db: AsyncSession, account_id: int | str) -> dict[str, Any] | None:
     result = await db.execute(
         text("SELECT * FROM accounts WHERE id = :id"), {"id": account_id},
     )
@@ -273,7 +273,7 @@ async def _get_account(db: AsyncSession, account_id: int) -> dict[str, Any] | No
 
 
 async def _update_account_status(
-    db: AsyncSession, account_id: int, status: str, quota_used: int = 0,
+    db: AsyncSession, account_id: int | str, status: str, quota_used: int = 0,
     quota_limit: int = 0,
 ) -> None:
     now = _now_sqlite()
@@ -288,7 +288,7 @@ async def _update_account_status(
     await db.flush()
 
 
-async def _update_account_tags(db: AsyncSession, account_id: int, tags: list[str]) -> None:
+async def _update_account_tags(db: AsyncSession, account_id: int | str, tags: list[str]) -> None:
     now = _now_sqlite()
     await db.execute(
         text("UPDATE accounts SET tags=:tags, updated_at=:now WHERE id=:id"),
@@ -298,7 +298,7 @@ async def _update_account_tags(db: AsyncSession, account_id: int, tags: list[str
 
 
 async def _save_browser_session(
-    db: AsyncSession, account_id: int, profile_path: str, cookies: str, session_data: str,
+    db: AsyncSession, account_id: int | str, profile_path: str, cookies: str, session_data: str,
 ) -> None:
     now = _now_sqlite()
     await db.execute(

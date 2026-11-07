@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ async def inject_session(
                 if data.get("id") == mid:
                     if "error" in data:
                         raise RuntimeError(f"CDP {method} failed: {data['error']}")
-                    return data.get("result", {})
+                    return cast("dict[str, Any]", data.get("result", {}))
 
         targets = (await call("Target.getTargets")).get("targetInfos", [])
         page = next((t for t in targets if t.get("type") == "page"), None)
@@ -131,7 +131,7 @@ async def read_local_storage(port: int) -> dict[str, str]:
                 if data.get("id") == mid:
                     if "error" in data:
                         raise RuntimeError(f"CDP {method} failed: {data['error']}")
-                    return data.get("result", {})
+                    return cast("dict[str, Any]", data.get("result", {}))
 
         targets = (await call("Target.getTargets")).get("targetInfos", [])
         page = next((t for t in targets if t.get("type") == "page"), None)

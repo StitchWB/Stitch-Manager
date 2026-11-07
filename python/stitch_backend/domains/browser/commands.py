@@ -27,7 +27,7 @@ def _coerce_account_id(raw: Any) -> int | str:
 
 # ── DB helpers (raw SQL, matching Rust browser_session.rs) ─────────────────
 
-async def _save_session(db, account_id: int, profile_path: str, cookies: str, session_data: str) -> None:
+async def _save_session(db, account_id: int | str, profile_path: str, cookies: str, session_data: str) -> None:
     """Persist browser session data for an account."""
     from datetime import datetime
 
@@ -48,7 +48,7 @@ async def _save_session(db, account_id: int, profile_path: str, cookies: str, se
     )
 
 
-async def _load_session(db, account_id: int) -> dict[str, str] | None:
+async def _load_session(db, account_id: int | str) -> dict[str, str] | None:
     """Load browser session data for an account."""
     row = (
         await db.execute(
@@ -71,7 +71,7 @@ async def _load_session(db, account_id: int) -> dict[str, str] | None:
     }
 
 
-async def _clear_session(db, account_id: int) -> None:
+async def _clear_session(db, account_id: int | str) -> None:
     """Clear browser session data for an account."""
     from datetime import datetime
 
@@ -86,7 +86,7 @@ async def _clear_session(db, account_id: int) -> None:
     )
 
 
-async def _get_account_info(db, account_id: int) -> dict[str, Any] | None:
+async def _get_account_info(db, account_id: int | str) -> dict[str, Any] | None:
     """Load minimal account info needed for browser launch."""
     try:
         row = (

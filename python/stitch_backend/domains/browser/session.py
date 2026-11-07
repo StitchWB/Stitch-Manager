@@ -68,7 +68,7 @@ def _find_cloakbrowser() -> Path | None:
 
 # ── Profile helpers ────────────────────────────────────────────────────────
 
-def _profile_dir_for_account(account_id: int, email: str = "") -> Path:
+def _profile_dir_for_account(account_id: int | str, email: str = "") -> Path:
     """Return a stable profile directory for a given account."""
     home = Path.home() / ".stitch" / "profiles"
     # Use email-based slug if available, otherwise account_id
@@ -95,7 +95,7 @@ class LaunchResult:
 
 
 async def launch_account_browser(
-    account_id: int,
+    account_id: int | str,
     provider: str,
     email: str = "",
     profile_path: str | None = None,
@@ -192,7 +192,7 @@ async def launch_account_browser(
 
 
 async def _launch_shard_worker(
-    account_id: int,
+    account_id: int | str,
     provider: str,
     email: str,
     shard_profile_id: str | None,
