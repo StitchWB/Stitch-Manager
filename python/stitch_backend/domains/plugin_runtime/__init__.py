@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from autoreg.plugin.manifest import PluginManifest
 
     from .host import ServicePluginHost
+    from .reload import ReloadResult, reload_service_plugin
 
 logger = logging.getLogger(__name__)
 

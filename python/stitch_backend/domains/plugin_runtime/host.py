@@ -24,7 +24,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from autoreg.plugin.rpc import (
     RpcCallError,
@@ -65,6 +65,18 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
+
+
+class HostInitKwargs(TypedDict, total=False):
+    plugin_id: str
+    package_dir: Path | None
+    data_dir: Path | None
+    migrations: bool
+    source: str
+    host_driver: bool
+    memory_limit_mb: int | None
+    env: dict[str, str]
+    sidecar_name: str
 
 
 class ServicePluginHost:

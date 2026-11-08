@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 
     from autoreg.plugin.manifest import PluginManifest
 
-from .host import ServicePluginHost
+from .host import HostInitKwargs, ServicePluginHost
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +233,7 @@ async def ensure_sandbox_host(
 
         if host is None:
             data_dir = sandbox_plugin_data_dir(user_id, plugin_id)
-            common = {
+            common: HostInitKwargs = {
                 "plugin_id": plugin_id,
                 "package_dir": pkg_dir,
                 "data_dir": data_dir,

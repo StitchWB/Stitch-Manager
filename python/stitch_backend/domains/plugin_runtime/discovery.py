@@ -57,7 +57,10 @@ from stitch_backend.domains.plugin_runtime import (
     register_host,
     register_manifest,
 )
-from stitch_backend.domains.plugin_runtime.host import ServicePluginHost
+from stitch_backend.domains.plugin_runtime.host import (
+    HostInitKwargs,
+    ServicePluginHost,
+)
 from stitch_backend.domains.plugin_runtime.host_capabilities import (
     host_driver_eligible,
 )
@@ -228,7 +231,7 @@ def _make_service_host(
         if source == "community" and not host_driver
         else None
     )
-    common = {
+    common: HostInitKwargs = {
         "plugin_id": manifest.id,
         "package_dir": package_dir,
         "data_dir": _base_dir() / "data" / "plugins" / manifest.id,
@@ -440,7 +443,7 @@ async def rollback_service_plugin(plugin_id: str) -> bool:
                 return False
         except ValueError:
             pass
-    common = {
+    common: HostInitKwargs = {
         "plugin_id": plugin_id,
         "package_dir": prev_dir,
         "data_dir": _base_dir() / "data" / "plugins" / plugin_id,
