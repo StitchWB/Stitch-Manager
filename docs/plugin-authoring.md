@@ -584,8 +584,34 @@ The CLI covers the loop without booting the full app. Full reference:
   the package has `tests/`); `httpx` and `cryptography` are imported lazily
   and are needed only by the publish / install paths. The tooling itself is
   not published as a standalone package — run it from a Python environment
-  where `stitch_plugin_tools` is importable (the hub repo's `.venv`); the
-  external-install story is not finished.
+  where `stitch_plugin_tools` is importable (the hub repo's `.venv`). See
+  §8.1 for the verified minimal install.
+
+### 8.1 Минимальная установка для внешнего разработчика
+
+Проверено тестом `python/tests/test_plugin_tools_slim_imports.py`: пути
+`check` и `run` не тянут тяжёлый стек бэкенда (`fastapi`, `uvicorn`,
+`litellm`, `patchright`, `playwright`, `starlette`).
+
+Предусловие: нужен чекаут репозитория — тулинг не публикуется отдельным
+пакетом, `stitch_plugin_tools` импортируется из дерева `python/`.
+
+```powershell
+python -m venv .venv-ext
+.\.venv-ext\Scripts\Activate.ps1
+pip install ruff pytest cryptography httpx
+cd python
+python -m stitch_plugin_tools check <pkg> --json
+python -m stitch_plugin_tools run <pkg> <cmd> --json
+```
+
+Запускать из каталога `python/` (или выставить `PYTHONPATH=<repo>\python`).
+
+- **Работает на этом наборе:** `check` (нужен `ruff`; `pytest` — если у
+  пакета есть `tests/`) и `run`.
+- **Нужно больше:** `publish` и `install-from` требуют `httpx` +
+  `cryptography`; полный бэкенд (`dev-backend`, `invoke`) требует весь
+  тяжёлый стек.
 
 ---
 
