@@ -189,6 +189,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="reload service plugins when their sources change",
     )
+    p_dev_backend.add_argument(
+        "--data-dir",
+        default=None,
+        help="stable data dir so installs persist across runs "
+        "(default: <temp>/stitch-dev-backend)",
+    )
     p_dev_backend.set_defaults(func=_cmd_dev_backend)
 
     p_invoke = sub.add_parser(

@@ -140,7 +140,7 @@ def _read_manifest(package_dir: Path) -> PluginManifest | None:
     if not manifest_path.is_file():
         return None
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         return validate_manifest(raw)
     except (OSError, ValueError):
         return None

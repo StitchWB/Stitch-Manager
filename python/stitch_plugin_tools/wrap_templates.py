@@ -99,35 +99,52 @@ import subprocess
 import sys
 from typing import Any
 
+try:
+    from autoreg.plugin.rpc import PluginInputError
+except ImportError:
+    from ._vendor.rpc_server import PluginInputError
+
+# The wrapped program is not vendored: these paths resolve only on the machine that ran wrap.
 UPSTREAM_PATH = __UPSTREAM_PATH__
 UPSTREAM_RUNTIME = __UPSTREAM_RUNTIME__
 UPSTREAM_MODULE = __UPSTREAM_MODULE__
 UPSTREAM_CWD = __UPSTREAM_CWD__
+UPSTREAM_ARGV = __UPSTREAM_ARGV__
 
 _DEFAULT_TIMEOUT = 60.0
 
 
 def upstream_argv() -> list[str]:
     """Base argv that launches the wrapped program."""
+    if UPSTREAM_ARGV is not None:
+        return list(UPSTREAM_ARGV)
     if UPSTREAM_RUNTIME == "python-module":
         return [sys.executable, "-m", UPSTREAM_MODULE]
     if UPSTREAM_RUNTIME == "python-script":
         return [sys.executable, UPSTREAM_PATH]
-    return [UPSTREAM_PATH]
+    raise PluginInputError(
+        "adapter.upstream_argv not configured — edit adapter.py"
+    )
 
 
 def run_upstream(
     args: list[str], *, timeout: float = _DEFAULT_TIMEOUT
 ) -> dict[str, Any]:
     """Run the wrapped program with ``args`` and capture its output."""
-    proc = subprocess.run(
-        [*upstream_argv(), *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        cwd=UPSTREAM_CWD,
-        timeout=timeout,
-    )
+    try:
+        proc = subprocess.run(
+            [*upstream_argv(), *args],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=UPSTREAM_CWD,
+            timeout=timeout,
+        )
+    except OSError as exc:
+        raise PluginInputError(
+            f"cannot launch the wrapped program — edit adapter.py ({exc})"
+        ) from exc
     return {
         "returncode": proc.returncode,
         "stdout": proc.stdout,

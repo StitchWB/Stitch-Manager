@@ -149,7 +149,7 @@ def run_typegen(package_dir: Path, *, check: bool = False) -> int:
         print(f"error: manifest not found: {manifest_path}", file=sys.stderr)
         return 2
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         manifest = validate_manifest(raw)
     except (OSError, ValueError, ManifestValidationError) as exc:
         print(f"error: invalid manifest: {exc}", file=sys.stderr)

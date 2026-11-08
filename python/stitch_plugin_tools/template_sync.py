@@ -435,7 +435,7 @@ def _looks_like_template(path: Path) -> bool:
     if not manifest.is_file():
         return not any(path.iterdir())
     try:
-        raw: Any = json.loads(manifest.read_text(encoding="utf-8"))
+        raw: Any = json.loads(manifest.read_text(encoding="utf-8-sig"))
     except ValueError:
         return False
     return isinstance(raw, dict) and raw.get("id") == TEMPLATE_PLUGIN_ID

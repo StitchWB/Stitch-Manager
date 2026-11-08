@@ -430,7 +430,7 @@ async def publish_all(
                 manifest_path = child / MANIFEST_FILENAME
                 if not child.is_dir() or not manifest_path.is_file():
                     continue
-                raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+                raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
                 if raw.get("kind") == "service":
                     pack_dir = Path(tempfile.mkdtemp(prefix=f"stitch-{raw['id']}-"))
                     temp_dirs.append(pack_dir)
@@ -451,7 +451,7 @@ async def publish_all(
         records: list[tuple[dict, Path]] = []
         for package_dir in package_dirs:
             raw = json.loads(
-                (package_dir / MANIFEST_FILENAME).read_text(encoding="utf-8")
+                (package_dir / MANIFEST_FILENAME).read_text(encoding="utf-8-sig")
             )
             records.append((raw, package_dir))
         records.sort(key=lambda r: r[0]["id"])

@@ -24,6 +24,12 @@ CATALOG_FILENAME = "catalog.json"
 _HUB_PYTHON = Path(__file__).resolve().parents[1]
 _MAX_FINDING_CHARS = 2000
 
+# Canonical plugin lint rules; a package outside the hub tree has no ruff config.
+_RUFF_CONFIG = (
+    "lint.select=['E','F','W','I','N','UP','B','C4']\n"
+    "lint.ignore=['E501','B008']"
+)
+
 
 def _tail(text: str) -> str:
     text = text.strip()
@@ -48,7 +54,18 @@ def _subprocess_gate(
             capture_output=True,
             text=True,
             encoding="utf-8",
+            stdin=subprocess.DEVNULL,
+            timeout=600,
         )
+    except subprocess.TimeoutExpired:
+        return {
+            "name": name,
+            "status": "fail",
+            "blocking": blocking,
+            "findings": [
+                {"code": f"{name}.timeout", "message": f"{name} timed out after 600s"}
+            ],
+        }
     except OSError as exc:
         return {
             "name": name,
@@ -69,19 +86,18 @@ def _subprocess_gate(
 
 
 def ruff_gate(package_dir: Path) -> dict[str, Any]:
-    return _subprocess_gate(
+    argv = [
+        sys.executable,
+        "-m",
         "ruff",
-        [
-            sys.executable,
-            "-m",
-            "ruff",
-            "check",
-            str(package_dir),
-            "--extend-exclude",
-            "_vendor",
-        ],
-        blocking=True,
-    )
+        "check",
+        str(package_dir),
+        "--extend-exclude",
+        "_vendor",
+        "--config",
+        _RUFF_CONFIG,
+    ]
+    return _subprocess_gate("ruff", argv, blocking=True)
 
 
 def manifest_lint_gate(package_dir: Path) -> dict[str, Any]:
@@ -116,9 +132,16 @@ def pytest_gate(package_dir: Path, *, provider: bool) -> dict[str, Any]:
         env["PYTHONPATH"] = str(_HUB_PYTHON) + (
             os.pathsep + existing if existing else ""
         )
+    argv = [sys.executable, "-m", "pytest", str(tests_dir), "-q"]
+    try:
+        import pytest_timeout
+    except ImportError:
+        pytest_timeout = None
+    if pytest_timeout is not None:
+        argv.append("--timeout=60")
     return _subprocess_gate(
         "pytest",
-        [sys.executable, "-m", "pytest", str(tests_dir), "-q", "--timeout=60"],
+        argv,
         blocking=True,
         cwd=package_dir,
         env=env,

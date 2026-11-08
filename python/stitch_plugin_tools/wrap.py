@@ -9,6 +9,7 @@ LOCAL directory is accepted — no git fetch (that is ``install-from``).
 from __future__ import annotations
 
 import json
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from stitch_plugin_tools.scaffold_common import (
 )
 from stitch_plugin_tools.wrap_detect import (
     RUNTIMES,
+    cli_argv,
     detect_runtime,
     explicit_source,
 )
@@ -40,7 +42,17 @@ def _upstream_module(runtime: str, source: Path) -> str:
 
 
 def _upstream_cwd(runtime: str, source: Path) -> Path:
-    return source if runtime == "cli" else source.parent
+    if runtime == "cli":
+        return source if source.is_dir() else source.parent
+    return source.parent
+
+
+def _upstream_argv(runtime: str, repo_dir: Path, source: Path) -> list[str] | None:
+    if runtime == "cli":
+        return cli_argv(repo_dir)
+    if runtime == "native":
+        return [str(source)] if source.is_file() else None
+    return None
 
 
 def _build_manifest(
@@ -104,13 +116,14 @@ def _render_main(plugin_id: str, pkg_name: str) -> str:
     )
 
 
-def _render_adapter(runtime: str, source: Path) -> str:
+def _render_adapter(runtime: str, source: Path, argv: list[str] | None) -> str:
     return (
         _ADAPTER_TEMPLATE.replace("__WRAP_VERSION__", str(WRAP_VERSION))
         .replace("__UPSTREAM_PATH__", repr(str(source)))
         .replace("__UPSTREAM_RUNTIME__", repr(runtime))
         .replace("__UPSTREAM_MODULE__", repr(_upstream_module(runtime, source)))
         .replace("__UPSTREAM_CWD__", repr(str(_upstream_cwd(runtime, source))))
+        .replace("__UPSTREAM_ARGV__", repr(argv))
     )
 
 
@@ -171,6 +184,8 @@ def wrap_repo(
         detected_runtime = runtime
         source = explicit_source(repo_dir, runtime)
 
+    upstream_argv = _upstream_argv(detected_runtime, repo_dir, source)
+
     out_dir = (out_dir or Path(plugin_id)).resolve()
     pkg_name = _pkg_name(plugin_id)
     display_name = name or plugin_id
@@ -209,9 +224,16 @@ def wrap_repo(
     vendor_all(pkg_dir)
 
     (pkg_dir / "adapter.py").write_text(
-        _render_adapter(detected_runtime, source), encoding="utf-8"
+        _render_adapter(detected_runtime, source, upstream_argv), encoding="utf-8"
     )
     (pkg_dir / "commands.py").write_text(_render_commands(), encoding="utf-8")
+
+    if detected_runtime in ("cli", "native") and upstream_argv is None:
+        print(
+            "note: adapter.upstream_argv not configured — edit "
+            f"{pkg_dir / 'adapter.py'}",
+            file=sys.stderr,
+        )
 
     tests_dir = out_dir / "tests"
     tests_dir.mkdir(exist_ok=True)

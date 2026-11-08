@@ -106,7 +106,7 @@ async def cmd_list_local_packages(params: dict) -> dict:
         if not manifest_path.is_file():
             continue
         try:
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
             manifest = validate_manifest(raw)
         except Exception:  # noqa: BLE001 — skip corrupt
             continue
@@ -146,7 +146,7 @@ async def cmd_submit_for_review(params: dict) -> dict:
     if not manifest_path.is_file():
         return {"success": False, "error": "package missing plugin.json"}
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         manifest = validate_manifest(raw)
     except Exception as exc:  # noqa: BLE001 — manifest parse
         return {"success": False, "error": f"manifest invalid: {exc}"}

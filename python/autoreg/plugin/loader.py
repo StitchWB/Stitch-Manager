@@ -26,7 +26,6 @@ Signature policy:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from pathlib import Path
@@ -36,11 +35,10 @@ from autoreg.scenario.schema import ENGINE_API, ENGINE_HOST_VERSION
 from . import crypto
 from .layout import plugins_cache_dir, plugins_local_dir
 from .manifest import (
-    ManifestValidationError,
     PluginManifest,
     parse_semver,
     semver_sort_key,
-    validate_manifest,
+    try_read_manifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -340,13 +338,4 @@ def _try_read_manifest(package_dir: Path) -> PluginManifest | None:
     prevent the loader from finding the next candidate.  Every failure
     logs a warning with the package path and the concrete reason.
     """
-    manifest_path = package_dir / "plugin.json"
-    if not manifest_path.is_file():
-        logger.warning("package %s: missing plugin.json", package_dir)
-        return None
-    try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return validate_manifest(raw)
-    except (OSError, ValueError, ManifestValidationError) as exc:
-        logger.warning("package %s: unreadable manifest (%s)", package_dir, exc)
-        return None
+    return try_read_manifest(package_dir, logger=logger)

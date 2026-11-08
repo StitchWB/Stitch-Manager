@@ -104,7 +104,7 @@ def _manifest_kind(package_dir: Path) -> str | None:
     if not manifest.is_file():
         return None
     try:
-        raw = json.loads(manifest.read_text(encoding="utf-8"))
+        raw = json.loads(manifest.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return None
     kind = raw.get("kind")

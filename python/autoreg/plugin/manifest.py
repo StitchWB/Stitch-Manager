@@ -12,10 +12,12 @@ Required fields are enforced; missing or invalid values raise
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import logging
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 SCHEMA_ID = "stitch.plugin/v1"
@@ -602,6 +604,30 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         contributions=contributions,
         distribution=distribution,
     )
+
+
+def try_read_manifest(
+    package_dir: Path, *, logger: logging.Logger | None = None
+) -> PluginManifest | None:
+    """Read + validate ``plugin.json``; return ``None`` on any failure.
+
+    A missing, unreadable, or invalid manifest yields ``None`` instead of
+    raising, so one bad package cannot abort a directory scan.  When
+    ``logger`` is given, each failure is logged with the package path and
+    the concrete reason.
+    """
+    manifest_path = package_dir / MANIFEST_FILENAME
+    if not manifest_path.is_file():
+        if logger is not None:
+            logger.warning("package %s: missing plugin.json", package_dir)
+        return None
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        return validate_manifest(raw)
+    except (OSError, ValueError, ManifestValidationError) as exc:
+        if logger is not None:
+            logger.warning("package %s: unreadable manifest (%s)", package_dir, exc)
+        return None
 
 
 def parse_semver(version: str) -> tuple[int, int, int]:

@@ -244,7 +244,7 @@ def _package_module_dir(package_dir: Path) -> Path | None:
     manifest_path = package_dir / MANIFEST_FILENAME
     if manifest_path.is_file():
         try:
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         except (ValueError, OSError):
             raw = None
         if isinstance(raw, dict):
@@ -286,7 +286,7 @@ def detect_scaffold_version(package_dir: Path) -> DetectedVersion | None:
     manifest_path = package_dir / MANIFEST_FILENAME
     if manifest_path.is_file():
         try:
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         except (ValueError, OSError):
             raw = None
         if isinstance(raw, dict):

@@ -65,9 +65,6 @@ _CROSS = "✗"
 _WARN = "!"
 _SKIP = "-"
 
-# Human-readable labels for the gate names (the JSON document keeps the short names).
-_HUMAN_LABELS = {"ruff": "ruff check"}
-
 
 def _utf8_stdio() -> None:
     # tick/cross marks crash a cp1251 console (skill §3 trap)
@@ -83,7 +80,7 @@ def _resolve_target(package_dir: Path) -> dict:
     manifest_path = package_dir / MANIFEST_FILENAME
     if manifest_path.is_file():
         try:
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         except ValueError as exc:
             raise ValueError(f"failed to parse {manifest_path}: {exc}") from exc
         if not isinstance(raw, dict):
@@ -91,7 +88,7 @@ def _resolve_target(package_dir: Path) -> dict:
         kind = raw.get("kind")
         if not isinstance(kind, str) or not kind:
             raise ValueError(f"{manifest_path} has no kind field")
-        if kind not in ("service", "provider", "data", "catalog"):
+        if kind not in ("service", "provider", "data", "catalog", "engine-pack"):
             raise ValueError(f"unknown plugin kind: {kind!r}")
         return {
             "kind": kind,
@@ -110,7 +107,7 @@ def _read_manifest(package_dir: Path) -> dict[str, Any] | None:
     if not manifest_path.is_file():
         return None
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return None
     return raw if isinstance(raw, dict) else None
@@ -120,10 +117,10 @@ def _build_gates(
     package_dir: Path, target: dict, manifest: dict[str, Any] | None
 ) -> list[dict[str, Any]]:
     kind = target["kind"]
-    if kind in ("data", "catalog"):
+    if kind == "catalog":
         return [catalog_lint_gate(package_dir)]
     gates = [ruff_gate(package_dir)]
-    if kind == "service":
+    if kind in ("service", "engine-pack"):
         gates.append(manifest_lint_gate(package_dir))
     gates.append(pytest_gate(package_dir, provider=(kind == "provider")))
     if kind == "service" and manifest is not None:
@@ -141,7 +138,7 @@ def _print_gate_line(gate: dict[str, Any]) -> None:
     mark = {"pass": _TICK, "fail": _CROSS, "warn": _WARN, "skipped": _SKIP}.get(
         gate["status"], "?"
     )
-    label = _HUMAN_LABELS.get(gate["name"], gate["name"])
+    label = "ruff check" if gate["name"] == "ruff" else gate["name"]
     suffix = f" — {gate['reason']}" if gate.get("reason") else ""
     print(f"  [{mark}] {label}{suffix}")
     for finding in gate["findings"]:

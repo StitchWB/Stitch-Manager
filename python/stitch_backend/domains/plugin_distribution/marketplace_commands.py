@@ -170,7 +170,7 @@ def _local_service_manifests() -> list[dict[str, Any]]:
             continue
         try:
             manifest = validate_manifest(
-                json.loads(manifest_path.read_text(encoding="utf-8"))
+                json.loads(manifest_path.read_text(encoding="utf-8-sig"))
             )
         except Exception:  # noqa: BLE001 — a broken local package must not break the marketplace
             continue
