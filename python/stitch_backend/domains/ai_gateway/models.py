@@ -61,6 +61,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -71,6 +72,18 @@ from stitch_backend.security.fernet_at_rest import EncryptedText
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class UtcDateTime(TypeDecorator):
+    """Re-attach UTC on load: SQLite drops tzinfo, so naive values would break comparisons against aware now()."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 def _uuid() -> str:
@@ -208,9 +221,9 @@ class Credential(Base):
     )
     status_reason: Mapped[str | None] = mapped_column(Text)
     next_retry_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), comment="Earliest retry time (from Retry-After, backoff, etc.)",
+        UtcDateTime(), comment="Earliest retry time (from Retry-After, backoff, etc.)",
     )
-    quota_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    quota_reset_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)

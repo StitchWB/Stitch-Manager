@@ -71,6 +71,8 @@ export interface ProviderEmailStrategy {
 export type ProviderEmailStrategies = Partial<Record<ProviderName, ProviderEmailStrategy>>;
 
 // Proxy configuration
+export type ProxyIpPolicy = 'per_run' | 'per_account' | 'on_failure' | 'every_n';
+
 export interface ProxyConfig {
   enabled: boolean;
   url: string;
@@ -80,6 +82,8 @@ export interface ProxyConfig {
   list: string;
   rotationEnabled: boolean;
   proxyLibraryId?: string;
+  ipPolicy?: ProxyIpPolicy;
+  ipReuseCount?: number;
 }
 
 // Auto-registration credentials
@@ -245,6 +249,8 @@ export const DEFAULT_CONFIG: RegistrationConfig = {
     type: 'http',
     list: '',
     rotationEnabled: false,
+    ipPolicy: 'per_run',
+    ipReuseCount: 1,
   },
   patterns: {
     emailPattern: 'provider_timestamp',

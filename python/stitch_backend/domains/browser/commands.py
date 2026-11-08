@@ -15,14 +15,10 @@ from typing import Any
 from sqlalchemy import text
 
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.ids import normalize_account_id
 from stitch_backend.database import run_in_read_session, run_in_session
 
 logger = logging.getLogger(__name__)
-
-
-def _coerce_account_id(raw: Any) -> int | str:
-    s = str(raw).strip()
-    return int(s) if s.isdigit() else s
 
 
 # ── DB helpers (raw SQL, matching Rust browser_session.rs) ─────────────────
@@ -123,7 +119,7 @@ async def _get_account_info(db, account_id: int | str) -> dict[str, Any] | None:
 @register_command("save_browser_session")
 async def cmd_save_browser_session(params: dict) -> dict:
     """Save browser session data (profile path, cookies, session data) for an account."""
-    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
+    account_id = normalize_account_id(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -147,7 +143,7 @@ async def cmd_save_browser_session(params: dict) -> dict:
 @register_command("load_browser_session", readonly=True)
 async def cmd_load_browser_session(params: dict) -> dict | None:
     """Load saved browser session data for an account."""
-    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
+    account_id = normalize_account_id(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
         return None
 
@@ -158,7 +154,7 @@ async def cmd_load_browser_session(params: dict) -> dict | None:
 @register_command("clear_browser_session")
 async def cmd_clear_browser_session(params: dict) -> dict:
     """Clear saved browser session data for an account."""
-    account_id = _coerce_account_id(params.get("accountId", params.get("account_id", 0)))
+    account_id = normalize_account_id(params.get("accountId", params.get("account_id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -309,7 +305,7 @@ async def cmd_open_account_browser(params: dict) -> dict:
     Loads saved session data from DB, launches the browser, and optionally
     injects cookies into the new session.
     """
-    account_id = _coerce_account_id(params.get("accountId", params.get("id", params.get("account_id", 0))))
+    account_id = normalize_account_id(params.get("accountId", params.get("id", params.get("account_id", 0))))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -361,7 +357,7 @@ async def cmd_open_web_login_browser(params: dict) -> dict:
     Step 1 of the harvester flow: the user logs in manually in the opened
     window; step 2 (``capture_web_session_cookies``) pulls the cookies back.
     """
-    account_id = _coerce_account_id(params.get("accountId", params.get("id", 0)))
+    account_id = normalize_account_id(params.get("accountId", params.get("id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 
@@ -377,7 +373,7 @@ async def cmd_capture_web_session_cookies(params: dict) -> dict:
     Step 2 of the harvester flow. Validates the required cookie set for the
     provider and stores the jar string on the account (adapters consume it).
     """
-    account_id = _coerce_account_id(params.get("accountId", params.get("id", 0)))
+    account_id = normalize_account_id(params.get("accountId", params.get("id", 0)))
     if not account_id:
         return {"success": False, "error": "No accountId specified"}
 

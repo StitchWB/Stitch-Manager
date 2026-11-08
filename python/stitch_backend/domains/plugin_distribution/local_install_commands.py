@@ -75,7 +75,7 @@ async def cmd_install_local_plugin(params: dict) -> dict:
         except Exception as exc:  # noqa: BLE001 — report as install failure
             return {"success": False, "error": f"manifest invalid: {exc}"}
 
-        if manifest.signature:
+        if crypto.read_signature(src):
             pubkey = crypto.load_embedded_pubkey()
             if not pubkey:
                 return {"success": False, "error": "no embedded public key"}

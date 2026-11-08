@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +22,10 @@ SCHEMA_ID = "stitch.plugin/v1"
 SCHEMA_ID_V2 = "stitch.plugin/v2"
 SCHEMA_IDS = (SCHEMA_ID, SCHEMA_ID_V2)
 MANIFEST_FILENAME = "plugin.json"
+SIGNATURE_FILENAME = "plugin.sig"
+
+#: Token in ``entry.command`` that expands to the package dir at spawn time.
+PACKAGE_DIR_PLACEHOLDER = "${package_dir}"
 
 # Valid plugin kinds across v1 + v2 schemas.
 # "data" — v1 registration scenario plugin (trust tier: data-only).
@@ -45,6 +50,10 @@ VALID_FEATURE_STATUSES = ("stable", "beta", "planned")
 
 # Param types accepted in contributions.commands[].params.<name>.type.
 VALID_PARAM_TYPES = ("string", "number", "boolean", "object", "array")
+
+# Optional declarative distribution claim; reconciled against classify, never gating.
+VALID_DISTRIBUTION_CHANNELS = ("gated", "public", "none")
+VALID_DISTRIBUTION_CLASSES = ("prohibited", "method", "open-core")
 
 _logger = logging.getLogger(__name__)
 
@@ -202,6 +211,27 @@ def _validate_marketplace_metadata(raw: dict[str, Any]) -> None:
                 _check_i18n(change, f"changelog[{i}].changes[{j}]")
 
 
+def _validate_distribution(raw: dict[str, Any]) -> None:
+    """Type-check the optional ``distribution`` claim (channel + class)."""
+    if "distribution" not in raw:
+        return
+    dist = raw["distribution"]
+    if not isinstance(dist, dict):
+        raise ManifestValidationError("distribution", "must be an object")
+    channel = dist.get("channel")
+    if channel not in VALID_DISTRIBUTION_CHANNELS:
+        raise ManifestValidationError(
+            "distribution.channel",
+            f'must be one of {VALID_DISTRIBUTION_CHANNELS}, got "{channel}"',
+        )
+    cls = dist.get("class")
+    if cls not in VALID_DISTRIBUTION_CLASSES:
+        raise ManifestValidationError(
+            "distribution.class",
+            f'must be one of {VALID_DISTRIBUTION_CLASSES}, got "{cls}"',
+        )
+
+
 @dataclass(frozen=True)
 class PluginManifest:
     """Validated plugin manifest (plan §4.2).
@@ -241,6 +271,9 @@ class PluginManifest:
     # declarative UI tabs, i18n bundles, and storage declarations here.
     # Defaults to empty so v1 manifests parse identically.
     contributions: dict[str, Any] = field(default_factory=dict)
+
+    # Optional declarative distribution claim; absent → empty dict.
+    distribution: dict[str, Any] = field(default_factory=dict)
 
     def service_ids(self) -> list[str]:
         """Return all service ids this package serves.
@@ -308,6 +341,45 @@ def _validate_command_params(contributions: dict[str, Any]) -> None:
                 )
             if "required" in spec and not isinstance(spec["required"], bool):
                 raise ManifestValidationError(field, "required must be a boolean")
+
+
+def _validate_entry_command(command: Any) -> None:
+    """Type-check ``entry.command`` for a kind=service manifest.
+
+    Must be a non-empty list of non-empty strings.  The first token must
+    be an absolute path or start with ``${package_dir}`` (which expands to
+    the absolute package dir); later tokens are resolved relative to
+    ``cwd=package_dir`` at spawn.
+    """
+    if not isinstance(command, list) or not command:
+        raise ManifestValidationError(
+            "entry.command", "must be a non-empty list of strings"
+        )
+    for i, token in enumerate(command):
+        if not isinstance(token, str) or not token:
+            raise ManifestValidationError(
+                f"entry.command[{i}]", "must be a non-empty string"
+            )
+    first = command[0]
+    if not first.startswith(PACKAGE_DIR_PLACEHOLDER) and not os.path.isabs(first):
+        raise ManifestValidationError(
+            "entry.command[0]",
+            "must be an absolute path or start with ${package_dir}",
+        )
+
+
+def resolve_entry_command(
+    entry: dict[str, Any], package_dir: str | os.PathLike[str]
+) -> list[str] | None:
+    """Return the spawn argv for a service entry, or None when it uses entry.module.
+
+    Expands every ``${package_dir}`` token to the absolute package dir.
+    """
+    command = entry.get("command")
+    if not isinstance(command, list):
+        return None
+    base = str(package_dir)
+    return [token.replace(PACKAGE_DIR_PLACEHOLDER, base) for token in command]
 
 
 def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
@@ -424,13 +496,26 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
                 )
         entry = dict(entry_raw)
     elif kind == "service":
-        # v2 service plugin: entry points at a Python module spawned as a
-        # subprocess (sys.executable -m <entry.module>).  The host communicates
-        # via stdio JSON-RPC (plan plugin-platform-v2 todo 2-3).
+        # entry.module (python -m) or entry.command (explicit argv) — exactly one.
         if not isinstance(entry_raw, dict):
             raise ManifestValidationError("entry", "required field missing or not an object")
-        if "module" not in entry_raw or not isinstance(entry_raw["module"], str):
-            raise ManifestValidationError("entry.module", "required string missing")
+        has_module = "module" in entry_raw
+        has_command = "command" in entry_raw
+        if has_module and has_command:
+            raise ManifestValidationError(
+                "entry", "entry.module and entry.command are mutually exclusive"
+            )
+        if not has_module and not has_command:
+            raise ManifestValidationError(
+                "entry.module", "required: entry.module or entry.command"
+            )
+        if has_module:
+            if not isinstance(entry_raw["module"], str) or not entry_raw["module"].strip():
+                raise ManifestValidationError(
+                    "entry.module", "must be a non-empty string"
+                )
+        else:
+            _validate_entry_command(entry_raw["command"])
         entry = dict(entry_raw)
     elif kind == "data":
         if not isinstance(entry_raw, dict):
@@ -481,11 +566,12 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
 
     # Validated here but kept in extras on purpose: publish reads them from extras.
     _validate_marketplace_metadata(raw)
+    _validate_distribution(raw)
 
     known = {
         "schema", "id", "name", "version", "service", "kind",
         "engine", "depends", "entry", "capabilities", "outputs", "signature",
-        "services", "contributions",
+        "services", "contributions", "distribution",
     }
     extras = {k: v for k, v in raw.items() if k not in known}
 
@@ -494,6 +580,9 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
     # original manifest omitted engine.api (v1 backward compat).
     engine_dict = dict(engine_raw)
     engine_dict["api"] = engine_api
+
+    distribution_raw = raw.get("distribution", {})
+    distribution = dict(distribution_raw) if isinstance(distribution_raw, dict) else {}
 
     return PluginManifest(
         schema=schema,
@@ -511,6 +600,7 @@ def validate_manifest(raw: dict[str, Any]) -> PluginManifest:
         services=services,
         extras=extras,
         contributions=contributions,
+        distribution=distribution,
     )
 
 

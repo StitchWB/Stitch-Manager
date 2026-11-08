@@ -24,7 +24,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from autoreg.plugin.rpc import (
     RpcCallError,
@@ -65,6 +65,18 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
+
+
+class HostInitKwargs(TypedDict, total=False):
+    plugin_id: str
+    package_dir: Path | None
+    data_dir: Path | None
+    migrations: bool
+    source: str
+    host_driver: bool
+    memory_limit_mb: int | None
+    env: dict[str, str]
+    sidecar_name: str
 
 
 class ServicePluginHost:
@@ -321,6 +333,11 @@ class ServicePluginHost:
         for plugins that predate the capability handshake.
         """
         return list(self._capabilities)
+
+    @property
+    def package_dir(self) -> Path | None:
+        """Package dir the host was started from (None for command-only hosts)."""
+        return Path(self._cwd) if self._cwd else None
 
     def get_logs(self, lines: int = 100) -> list[str]:
         """Return the last *lines* entries from the stderr ring buffer.

@@ -10,6 +10,7 @@ import { DEFAULT_IMAP_PORT } from '../../../../constants/registration';
 import type { OpenAIAutoregResult, FireworksAutoregResult, QoderAutoregResult, V0AppAutoregResult } from '../../../../types/ui';
 import type { ProviderJobParams } from './types';
 import { REGISTRATION_TIMEOUT_MS, setActivePythonJobId, waitForJobResult } from './recovery';
+import { buildProxyJobFields } from './proxyJobFields';
 
 export async function runOpenAIJob(params: ProviderJobParams): Promise<OpenAIAutoregResult> {
   const { email, config, imapServer, imapUser, imapPassword, onCancelled, onLog } = params;
@@ -32,7 +33,7 @@ export async function runOpenAIJob(params: ProviderJobParams): Promise<OpenAIAut
     password: null,
     name: null,
     headless: config.advanced.headless,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer: normalizedImapServer,
     imapPort: normalizedImapServer ? config.imap.port || DEFAULT_IMAP_PORT : null,
     imapUser: normalizedImapUser,
@@ -100,7 +101,7 @@ export async function runFireworksJob(params: ProviderJobParams): Promise<Firewo
     firstName: null,
     lastName: null,
     headless: config.advanced.headless,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer: normalizedImapServer,
     imapPort: normalizedImapServer ? config.imap.port || DEFAULT_IMAP_PORT : null,
     imapUser: normalizedImapUser,
@@ -190,7 +191,7 @@ export async function runQoderJob(params: ProviderJobParams): Promise<QoderAutor
     firstName: null,
     lastName: null,
     headless: config.advanced.headless,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer: normalizedImapServer,
     imapPort: normalizedImapServer ? config.imap.port || DEFAULT_IMAP_PORT : null,
     imapUser: normalizedImapUser,
@@ -274,7 +275,7 @@ export async function runV0AppJob(params: ProviderJobParams): Promise<V0AppAutor
     password: null,
     name: null,
     headless: config.advanced.headless,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer: normalizedImapServer,
     imapPort: normalizedImapServer ? config.imap.port || DEFAULT_IMAP_PORT : null,
     imapUser: normalizedImapUser,

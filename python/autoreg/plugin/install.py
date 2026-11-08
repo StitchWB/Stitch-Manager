@@ -14,7 +14,6 @@ is never created — the cache is left untouched.
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import uuid
@@ -77,16 +76,12 @@ def list_installed_versions(
 
 
 def _signature_valid(version_dir: Path, public_key_b64: str) -> bool:
-    """True if ``version_dir``'s manifest carries a signature that verifies.
+    """True if ``version_dir`` carries a sidecar signature that verifies.
 
-    A missing or broken manifest counts as unsigned; never raises.
+    A missing or broken signature counts as unsigned; never raises.
     """
-    try:
-        raw = json.loads((version_dir / "plugin.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    signature = raw.get("signature") if isinstance(raw, dict) else None
-    if not isinstance(signature, str) or not signature:
+    signature = crypto.read_signature(version_dir)
+    if not signature:
         return False
     return crypto.verify_package(version_dir, signature, public_key_b64)
 
@@ -258,11 +253,12 @@ def _verify_signature(
     manifest: PluginManifest,
     public_key_b64: str,
 ) -> None:
-    if not manifest.signature:
+    signature = crypto.read_signature(staging)
+    if not signature:
         raise InstallError(
             "unsigned", f"package {manifest.id}@{manifest.version} has no signature"
         )
-    if not crypto.verify_package(staging, manifest.signature, public_key_b64):
+    if not crypto.verify_package(staging, signature, public_key_b64):
         raise InstallError(
             "bad_signature",
             f"signature verification failed for {manifest.id}@{manifest.version}",

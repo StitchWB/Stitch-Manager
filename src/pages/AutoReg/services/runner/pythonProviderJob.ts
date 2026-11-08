@@ -4,6 +4,7 @@ import { DEFAULT_IMAP_PORT } from '../../../../constants/registration';
 import type { PythonAutoregResult, PythonAutoregConfig } from '../../../../types/generated';
 import type { ProviderJobParams } from './types';
 import { REGISTRATION_TIMEOUT_MS, waitForJobResult } from './recovery';
+import { buildProxyJobFields, type ProxyJobFields } from './proxyJobFields';
 
 // Default: Kiro/AWS (Python autoreg)
 export async function runPythonProviderJob(params: ProviderJobParams): Promise<PythonAutoregResult> {
@@ -43,7 +44,7 @@ export async function runPythonProviderJob(params: ProviderJobParams): Promise<P
               : aliasStrategy === 'domain_pool'
                 ? 'domain_pool'
                 : 'static',
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     speedMultiplier: config.advanced.speedMultiplier,
     verificationCodeTimeout: config.advanced.verificationCodeTimeout,
     oauthCallbackTimeout: config.advanced.oauthCallbackTimeout,
@@ -78,7 +79,7 @@ export async function runPythonProviderJob(params: ProviderJobParams): Promise<P
     inboxMailtmPassword: config.imap.mailtmEnabled ? imapPassword : null,
     inboxMailtmBaseUrl: null,
     correlationId: createCorrelationId(),
-  } as PythonAutoregConfig & {
+  } as PythonAutoregConfig & ProxyJobFields & {
     launchProfileAlias?: string | null;
     launchMode?: string | null;
     awsBootstrapAccountId?: number | null;

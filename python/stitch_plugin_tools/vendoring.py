@@ -9,12 +9,12 @@ copy to ``<pkg>/_vendor/plugin_helpers.py`` (no AST extraction).
 Extraction is AST-driven and byte-stable: the same canonical source always
 produces the same vendored file.  The vendored module is importable
 standalone (stdlib-only: ``json``, ``sys``, ``threading``, ``time``,
-``typing.Any``).
+``traceback``, ``typing.Any``).
 
 Symbols extracted:
   - ``_JSONRPC``, ``_ERR_INTERNAL`` constants
   - ``RpcError``, ``RpcTimeoutError``, ``RpcProtocolError``,
-    ``RpcCallError`` exception classes
+    ``RpcCallError``, ``PluginInputError`` exception classes
   - ``RpcPluginServer`` class
   - ``_error`` helper function
 
@@ -47,6 +47,7 @@ _TARGET_SYMBOLS: list[tuple[type, str]] = [
     (ast.ClassDef, "RpcTimeoutError"),
     (ast.ClassDef, "RpcProtocolError"),
     (ast.ClassDef, "RpcCallError"),
+    (ast.ClassDef, "PluginInputError"),
     (ast.ClassDef, "RpcPluginServer"),
     (ast.FunctionDef, "_error"),
 ]
@@ -81,6 +82,7 @@ _HEADER_SUFFIX = (
     "import sys\n"
     "import threading\n"
     "import time\n"
+    "import traceback\n"
     "from typing import Any\n"
 )
 

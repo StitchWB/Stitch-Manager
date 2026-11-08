@@ -51,6 +51,16 @@ def _load_script_module(name: str, path: Path) -> Any:
     return module
 
 
+def zone_rules_available() -> bool:
+    """True when the hub-only zone-rule scripts are present (hub checkout).
+
+    A public open-core checkout ships neither ``scripts/export_public_zone.py``
+    nor ``scripts/scan_public_capabilities.py``; callers use this to skip
+    classify instead of hard-failing.
+    """
+    return _EXPORT_ZONE_SCRIPT.is_file() and _SCAN_CAPABILITIES_SCRIPT.is_file()
+
+
 def _zone_rules() -> tuple[Any, Any]:
     export = _load_script_module("export_public_zone", _EXPORT_ZONE_SCRIPT)
     scan = _load_script_module("scan_public_capabilities", _SCAN_CAPABILITIES_SCRIPT)
@@ -210,15 +220,6 @@ def classify_path(rel_path: Path) -> dict:
     parts = rel.parts
 
     if posix.startswith("python/autoreg/plugin/"):
-        if any(part.endswith("-autoreg") for part in parts):
-            return _verdict(
-                METHOD,
-                "gated",
-                None,
-                None,
-                "provider wrapper package (PEP 562); closed method zone, "
-                "open-core runs providers via plugins",
-            )
         if rel.name in export._METHOD_PLUGIN_FILES:
             return _verdict(
                 METHOD,
@@ -327,8 +328,6 @@ def _resolve_installed(name: str) -> Path | None:
 def _classify_plugin_id(name: str) -> dict | None:
     stripped = name.removesuffix("-autoreg")
     candidates: list[Path] = []
-    if stripped != name:
-        candidates.append(_REPO_ROOT / "python" / "autoreg" / "plugin" / name)
     candidates.append(_REPO_ROOT / "python" / "autoreg" / "providers" / stripped)
     candidates.append(_REPO_ROOT / "python" / "autoreg" / "providers" / stripped.replace("-", "_"))
     candidates.append(_REPO_ROOT / "plugins-src" / name)

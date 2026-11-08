@@ -152,6 +152,16 @@ line on stdin (requests from host) and stdout (responses from plugin).
 Malformed lines from the plugin are skipped+logged — they never crash
 the host.
 
+### Язык реализации
+
+Протокол не привязан к языку: это построчный JSON-RPC 2.0 поверх stdio,
+поэтому сервисный плагин можно написать на любом языке. Вместо
+`entry.module` (запуск `python -m <module>`) манифест может объявить
+`entry.command` — argv-команду запуска. Python — единственный язык с SDK
+(`RpcPluginServer`) и кодовыми гейтами (`check`, `manifest-lint`); для
+остальных языков контракт — только этот протокол. См.
+[docs/plugin-authoring.md](plugin-authoring.md).
+
 ### Methods
 
 | Method | Direction | Params | Result | Description |
@@ -798,6 +808,74 @@ that use `server.call_host` fail gracefully instead of hanging.  Built
 -ins: `ping`, `init-info` (handshake result + capabilities), `logs`
 (last 50 child stderr lines), `help`, `exit`/`quit`/EOF/Ctrl-C.
 
+### Local development loop
+
+Three CLI entry points cover the loop without booting the full app.
+
+**One-shot command run.** `run <pkg> <cmd>` spawns the plugin child, runs
+one command, and exits:
+
+```bash
+python -m stitch_plugin_tools run my-plugin/ health_check --params @params.json --json
+```
+
+`--params` takes an inline JSON object or `@file`. `--json` emits JSONL
+events on stdout: `ready` (`{plugin_id, commands, data_dir}`) then `call`
+(`{command, ok: true, result}` or `{command, ok: false, error: {code,
+message}}`). Exit codes: `0` ok, `1` runtime failure (command error,
+timeout, protocol break), `2` bad package (missing/invalid manifest,
+unresolvable entry module, bad `--params`). Without a command, `run <pkg>`
+opens the interactive REPL (built-ins `ping`, `init-info`, `logs`, `help`,
+`exit`).
+
+**Watch mode.** `run <pkg> --watch` (or `run <pkg> <cmd> --watch`) polls
+the package source tree by mtime (stdlib only) and rebuilds the child on
+change: kill-tree, respawn, re-attach, then re-run the command or re-open
+the REPL against the fresh child. `_vendor/`, `__pycache__`, `*.pyc` and
+`*.db` are ignored. The per-plugin run data dir is
+`<temp>/stitch-run-<id>`; `--fresh` (default) wipes it, `--keep` preserves
+it.
+
+**Gate document.** `check <pkg> --json` runs every gate for the plugin
+kind and prints a machine-readable document (`schema_version: 1`):
+
+```bash
+python -m stitch_plugin_tools check my-plugin/ --json
+```
+
+Gates: `ruff`, `manifest-lint` (service), `pytest` (when `<pkg>/tests`
+exists), `contract` (static-AST commands<->handlers), `engine`,
+`capability`, `typegen-drift`, `vendor-drift`, `classify`. Exit codes: `0`
+no blocking gate failed, `1` a blocking gate failed, `2` bad package or
+classify could not run. `verify` is a thin alias for `check`
+(human-readable output, no `--json`).
+
+**Integration loop.** `dev-backend` runs the real backend headless for
+plugin development:
+
+```bash
+python -m stitch_plugin_tools dev-backend [--watch]
+python -m stitch_plugin_tools invoke <plugin-id>.<cmd> --params @params.json --json
+```
+
+`dev-backend` scopes every writable path into a per-run temp dir
+(throwaway SQLite DB), disables auth, drops `TOKEN_ENCRYPTION_KEY`, and
+binds `127.0.0.1:25584` (`--port` to change). `--watch` reloads service
+plugins when their sources change. `invoke` POSTs a command to the running
+backend (`--url` defaults to `http://127.0.0.1:25584`) and prints the JSON
+body.
+
+**Reload contract.** `POST /api/reload_service_plugin` (admin-only, body
+`{"plugin_id": "<id>"}`) reloads ONE plugin: it re-reads `plugin.json`
+from disk and swaps the host, unlike `restart_service_plugin` which only
+restarts the existing process. A reload loses any in-memory session state.
+A plugin that must survive a reload persists resumable state under its
+`data_dir` (passed in the `plugin.init` handshake).
+
+**External-developer prerequisites.** `python -m stitch_plugin_tools`
+imports `httpx` and `cryptography` at startup. `check` and `run` need no
+hub checkout; they operate on the package directory alone.
+
 ### Upgrading an authored plugin
 
 When the scaffold conventions change, migrate an existing package with
@@ -1295,7 +1373,9 @@ test.
 | `sync-template [--out <dir>] [--license <file>]` | Regenerate the repo-root `template/` directory (published as the GitHub template repo [StitchWB/stitch-plugin-template](https://github.com/StitchWB/stitch-plugin-template)) from the scaffold internals: scaffolded `stitch-plugin-template` package + vendored server + CI workflow, `.gitignore`, LICENSE, template-grade README, a raw-stdin starter test, `env.example`, and `requirements-dev.txt`. |
 | `keygen --out <dir>` | Generate an ed25519 keypair. |
 | `sign <package_dir> --key <private.key>` | Sign a plugin package. |
-| `verify <package_dir> --pubkey <public.key>` | Verify a package signature. |
+| `check [package_dir] [--json]` | Run every dev gate for the plugin kind; emit the gate document (`--json`). Exit `0`/`1`/`2`. |
+| `verify [package_dir]` | Thin alias for `check` (human-readable output, no `--json`). |
+| `verify-signature <package_dir> [--pubkey <public.key>]` | Verify a package signature. |
 | `publish <package_dir> [--server-url …] [--key …]` | Sign + zip + POST to server. |
 | `dev-install <package_dir>` | Copy package to `plugins-local/`. Refreshes `_vendor/rpc_server.py` from canonical on each install. |
 | `run <package_dir>` | Interactive plugin REPL — spawn, stream child stderr live to the tool's stderr prefixed `[<plugin_id>]`, drive commands from stdin (`<command> [json-params]` -> pretty-printed result), and stub reverse-RPC `engine.oauth.*` requests so plugins that use `server.call_host` fail gracefully instead of hanging. Built-ins: `ping`, `init-info`, `logs`, `help`, `exit`. The author loop: `new` -> edit handlers -> `run` -> `test` -> `dev-install`. |

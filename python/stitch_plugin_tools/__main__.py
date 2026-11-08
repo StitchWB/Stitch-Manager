@@ -4,6 +4,7 @@ Twenty-seven subcommands:
     keygen --out <dir>                          generate ed25519 keypair
     sign <package_dir> --key <private.key>      sign a plugin package
     verify [package_dir]                        run every dev gate for the plugin kind
+    check [package_dir] [--json]                run every dev gate; emit a gate document
     verify-signature <package_dir> --pubkey …   verify a plugin package signature
     publish <package_dir> [--dry-run]           sign + zip + POST /admin/publish
                                                 (--dry-run: lane + workflow + gate checklist)

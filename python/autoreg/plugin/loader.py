@@ -141,7 +141,7 @@ class PluginLoader:
                     entry.name,
                 )
                 return entry
-            ok, reason = self._verify_signed(entry, manifest)
+            ok, reason = self._verify_signed(entry)
             if ok:
                 return entry
             logger.warning(
@@ -194,7 +194,7 @@ class PluginLoader:
         if manifest is None:
             return None
         # Cache packages ALWAYS require a valid signature, even in dev_mode.
-        ok, reason = self._verify_signed(newest_dir, manifest)
+        ok, reason = self._verify_signed(newest_dir)
         if ok:
             return newest_dir
         logger.warning(
@@ -206,10 +206,9 @@ class PluginLoader:
 
     # ── signature verification ─────────────────────────────────────────────
 
-    def _verify_signed(
-        self, package_dir: Path, manifest: PluginManifest
-    ) -> tuple[bool, str]:
-        if not manifest.signature:
+    def _verify_signed(self, package_dir: Path) -> tuple[bool, str]:
+        signature = crypto.read_signature(package_dir)
+        if not signature:
             return False, "unsigned"
         if not self._public_key_b64:
             logger.warning(
@@ -217,7 +216,7 @@ class PluginLoader:
             )
             return False, "no_pubkey"
         return crypto.verify_package_verbose(
-            package_dir, manifest.signature, self._public_key_b64
+            package_dir, signature, self._public_key_b64
         )
 
     # ── community ───────────────────────────────────────────────────────────

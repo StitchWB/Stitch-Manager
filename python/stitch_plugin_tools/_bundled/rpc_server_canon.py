@@ -13,6 +13,7 @@ import json
 import sys
 import threading
 import time
+import traceback
 from typing import Any
 
 _JSONRPC = "2.0"
@@ -44,6 +45,14 @@ class RpcCallError(RpcError):
         super().__init__(f"[{code}] {message}")
 
 
+class PluginInputError(Exception):
+    """Raised by a plugin handler when caller-supplied params are invalid.
+
+    The server classifies it as ``kind="validation"`` in the JSON-RPC
+    error ``data`` envelope, distinct from an unexpected ``plugin_bug``.
+    """
+
+
 # ── Server side (plugin entry-point helper) ───────────────────────────────
 
 
@@ -66,6 +75,8 @@ class RpcPluginServer:
     names return a JSON-RPC error (code -32601, method not found).
     Handler exceptions are caught and returned as JSON-RPC error
     responses (code -32603, internal error) — the server never crashes.
+    The error ``data`` carries ``{"kind", "traceback"}``: ``validation``
+    for :class:`PluginInputError`, ``plugin_bug`` for anything else.
 
     Reverse RPC: plugin→host requests are sent via ``call_host(method,
     params)`` from inside a handler.  The server writes a JSON-RPC
@@ -576,8 +587,18 @@ class RpcPluginServer:
                     return _error(-32601, f"method not found: {name}")
                 return handler(args)
             return _error(-32601, f"unknown method: {method}")
+        except PluginInputError as exc:
+            return _error(
+                _ERR_INTERNAL,
+                str(exc),
+                {"kind": "validation", "traceback": traceback.format_exc()},
+            )
         except Exception as exc:  # noqa: BLE001 — server never crashes
-            return _error(_ERR_INTERNAL, str(exc))
+            return _error(
+                _ERR_INTERNAL,
+                str(exc),
+                {"kind": "plugin_bug", "traceback": traceback.format_exc()},
+            )
 
     def _send_response(self, rid: Any, result: Any) -> None:
         """Write one JSON-RPC response line to the pinned output stream.
@@ -610,6 +631,7 @@ def _error(code: int, message: str, data: Any = None) -> dict[str, Any]:
 from .rpc_client import RpcPluginClient
 
 __all__ = [
+    "PluginInputError",
     "RpcCallError",
     "RpcError",
     "RpcPluginClient",
