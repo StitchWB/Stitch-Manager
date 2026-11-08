@@ -11,6 +11,11 @@ REPO = Path(__file__).resolve().parents[2]
 GATE = REPO / "scripts" / "check-browser-smoke.mjs"
 NODE = "node"
 
+pytestmark = pytest.mark.skipif(
+    not (REPO / "node_modules" / "playwright-core").exists(),
+    reason="playwright-core is not installed (run npm install)",
+)
+
 
 def _run(*extra: str) -> subprocess.CompletedProcess:
     return subprocess.run(
