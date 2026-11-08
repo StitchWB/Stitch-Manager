@@ -661,6 +661,17 @@ describe('DevboxPrompt action footer', () => {
     expect(column?.contains(screen.getByTestId('devbox-prompt-copy'))).toBe(true);
     expect(column?.lastElementChild).toBe(hint);
   });
+
+  it('renders the copy-step annotation next to the copy CTA', async () => {
+    renderPrompt();
+    await promptReady();
+
+    const step = screen.getByTestId('devbox-prompt-step2');
+    expect(step.textContent).toBe(t('devboxPage.promptStep2'));
+    const column = step.parentElement;
+    expect(column?.contains(screen.getByTestId('devbox-prompt-copy'))).toBe(true);
+    expect(column?.contains(screen.getByTestId('devbox-prompt-hint'))).toBe(true);
+  });
 });
 
 describe('DevboxPrompt hint and warning lines', () => {

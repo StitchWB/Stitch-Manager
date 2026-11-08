@@ -43,7 +43,7 @@ describe('DevboxMcpSection', () => {
     renderSection(gatewayFixture);
 
     expect(screen.getByTestId('devbox-mcp-section').textContent).toBe(
-      'My MCP servers for the agent',
+      'MCP servers for the agent',
     );
     const totp = screen.getByTestId('devbox-mcp-row-stitch-totp');
     expect(totp.textContent).toContain('stitch-totp');

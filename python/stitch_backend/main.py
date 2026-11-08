@@ -136,6 +136,14 @@ def create_app() -> FastAPI:
 
     register_meta_routes(app)
 
+    from stitch_backend.domains.plugin_runtime.dev_watch import (
+        dev_watch_enabled,
+        install_plugin_watch,
+    )
+
+    if dev_watch_enabled():
+        install_plugin_watch(app)
+
     return app
 
 

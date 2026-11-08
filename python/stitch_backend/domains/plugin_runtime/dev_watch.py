@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 import time
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from autoreg.plugin.layout import plugins_local_dir, resolve_link
@@ -21,12 +23,15 @@ if TYPE_CHECKING:
     from concurrent.futures import Future
     from pathlib import Path
 
+    from fastapi import FastAPI
+
     from stitch_backend.domains.plugin_runtime.reload import ReloadResult
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_DEBOUNCE_SECONDS = 3.0
 DEFAULT_POLL_SECONDS = 1.0
+ENV_PLUGIN_WATCH = "STITCH_DEV_PLUGIN_WATCH"
 _IGNORED_DIRS = frozenset(
     {
         "_vendor",
@@ -208,9 +213,43 @@ def _log_reload(future: Future) -> None:
         logger.warning("dev-watch: reload failed: %s", result.error)
 
 
+def dev_watch_enabled() -> bool:
+    """Read STITCH_DEV_PLUGIN_WATCH env var (default False)."""
+    raw = os.environ.get(ENV_PLUGIN_WATCH, "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def install_plugin_watch(app: FastAPI) -> None:
+    """Wrap the app lifespan to reload service plugins on source change.
+
+    Idempotent: repeated calls leave the lifespan wrapped once.
+    """
+    if getattr(app.state, "_stitch_plugin_watch", False):
+        return
+    app.state._stitch_plugin_watch = True
+    original = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def _lifespan(inner: FastAPI):
+        async with original(inner) as state:
+            loop = asyncio.get_running_loop()
+            watcher = PluginWatcher(reload=make_loop_reload(loop))
+            watcher.start()
+            logger.info("dev-watch: watching plugin sources")
+            try:
+                yield state
+            finally:
+                watcher.stop()
+
+    app.router.lifespan_context = _lifespan
+
+
 __all__ = [
     "DEFAULT_DEBOUNCE_SECONDS",
+    "ENV_PLUGIN_WATCH",
     "PluginWatcher",
+    "dev_watch_enabled",
+    "install_plugin_watch",
     "latest_mtime",
     "make_loop_reload",
     "scan_targets",

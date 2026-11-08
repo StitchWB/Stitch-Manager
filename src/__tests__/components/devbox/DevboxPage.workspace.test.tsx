@@ -141,8 +141,8 @@ describe('Devbox page poll contract', () => {
     expect(devboxCalls(invokeMock, 'poll')).toHaveLength(1);
     expect(screen.getByTestId('devbox-rail-active-job').textContent).toContain('bash');
     expect(screen.getByText('rm -rf build/')).toBeTruthy();
-    expect(screen.getByTestId('devbox-events-river').textContent).toContain('tool_call');
-    expect(screen.getByTestId('devbox-service-value-ingress').textContent).toBe('up');
+    expect(screen.getByTestId('devbox-events-river').textContent).toContain('bash');
+    expect(screen.getByTestId('devbox-service-value-ingress').textContent).toBe('running');
     for (const cmd of ['overview', 'action_status', 'jobs_live', 'permissions_pending', 'events_tail']) {
       expect(devboxCalls(invokeMock, cmd)).toHaveLength(0);
     }
@@ -357,19 +357,23 @@ describe('Devbox page header control bar', () => {
     expect(await screen.findByText('Agent on your hardware')).toBeTruthy();
   });
 
-  it('hides the Doctor and Cockpit labels below the 1400px breakpoint, keeping icons', async () => {
+  it('moves Doctor and Cockpit into the More menu with always-visible labels', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
 
-    for (const testId of ['devbox-control-doctor', 'devbox-control-cockpit']) {
-      const button = screen.getByTestId(testId);
-      const label = button.querySelector('span.hidden');
-      expect(label?.className).toContain('hidden');
-      expect(label?.className).toContain('min-[1400px]:inline');
-      expect(button.querySelector('svg')).toBeTruthy();
-    }
-    expect(screen.getByTestId('devbox-control-doctor').textContent).toBe('Doctor');
-    expect(screen.getByTestId('devbox-control-cockpit').textContent).toBe('Open cockpit');
+    expect(screen.queryByTestId('devbox-control-doctor')).toBeNull();
+    expect(screen.queryByTestId('devbox-control-cockpit')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('devbox-more-toggle'));
+
+    const doctor = screen.getByTestId('devbox-control-doctor');
+    const cockpit = screen.getByTestId('devbox-control-cockpit');
+    expect(doctor.textContent).toBe('Doctor');
+    expect(cockpit.textContent).toBe('Open cockpit');
+    expect(doctor.querySelector('svg')).toBeTruthy();
+    expect(cockpit.querySelector('svg')).toBeTruthy();
+    expect(doctor.querySelector('span.hidden')).toBeNull();
+    expect(cockpit.querySelector('span.hidden')).toBeNull();
   });
 
   it('select __add switches to infra, opens the projects modal in add mode and snaps back', async () => {
@@ -682,6 +686,9 @@ describe('Devbox page header control bar', () => {
     expect(screen.queryByTestId('devbox-danger-menu')).toBeNull();
     fireEvent.click(screen.getByTestId('devbox-danger-toggle'));
 
+    expect(screen.queryByTestId('devbox-control-tokens')).toBeNull();
+    expect(screen.queryByTestId('devbox-control-ingress')).toBeNull();
+
     const stopAll = screen.getByTestId('devbox-control-stop-all');
     fireEvent.click(stopAll);
     expect(devboxCalls(invokeMock, 'stack_full_down')).toHaveLength(0);
@@ -690,12 +697,33 @@ describe('Devbox page header control bar', () => {
       expect(devboxCalls(invokeMock, 'stack_full_down')).toHaveLength(1);
     });
 
+    fireEvent.click(screen.getByTestId('devbox-more-toggle'));
     const tokens = screen.getByTestId('devbox-control-tokens');
     fireEvent.click(tokens);
     fireEvent.click(tokens);
     await waitFor(() => {
       expect(devboxCalls(invokeMock, 'issue_tokens')).toHaveLength(1);
     });
+  });
+
+  it('shows the onboarding strip when no project is active', async () => {
+    mockRoutes({ profiles_list: [] });
+    render(<DevboxPage />);
+
+    const banner = await screen.findByTestId('devbox-onboard-project');
+    expect(banner.textContent).toContain('Create a project first');
+    expect(banner.textContent).toContain('A project is a folder on this machine');
+
+    fireEvent.click(screen.getByTestId('devbox-onboard-new-project'));
+    expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
+    expect(await screen.findByTestId('devbox-profile-new-name')).toBeTruthy();
+  });
+
+  it('hides the onboarding strip when a project is active', async () => {
+    render(<DevboxPage />);
+    await screen.findByTestId('devbox-stack-badge');
+
+    expect(screen.queryByTestId('devbox-onboard-project')).toBeNull();
   });
 
   it('tabs toggle between task and infra without unmounting the prompt', async () => {
@@ -719,7 +747,7 @@ describe('Devbox page card normalization', () => {
     render(<DevboxPage />);
 
     const bridge = await screen.findByTestId('devbox-service-value-bridge');
-    expect(bridge.textContent).toBe('up');
+    expect(bridge.textContent).toBe('running');
   });
 
   it('resolves plugin i18n keys in service badge titles via the plugin bundle', async () => {

@@ -394,6 +394,7 @@ try {
     $previousPollDelay = $env:WATCHFILES_POLL_DELAY_MS
     $previousDesktopMode = $env:STITCH_DESKTOP_MODE
     $previousDevMode = $env:STITCH_DEV_MODE
+    $previousPluginWatch = $env:STITCH_DEV_PLUGIN_WATCH
     $previousDatabaseUrl = $env:DATABASE_URL
     $env:WATCHFILES_FORCE_POLLING = "true"
     $env:WATCHFILES_POLL_DELAY_MS = "250"
@@ -401,6 +402,8 @@ try {
     $env:STITCH_DESKTOP_MODE = "1"
     # Dev mode: unsigned service plugins from plugins-local/ are loadable.
     $env:STITCH_DEV_MODE = "1"
+    # Dev loop: reload service plugins in-process when their plugin-src sources change.
+    $env:STITCH_DEV_PLUGIN_WATCH = "1"
     # Checkout-local dev DB: never the installed app's canonical DB under %LOCALAPPDATA%.
     $env:DATABASE_URL = "sqlite+aiosqlite:///" + ($DEV_DB_PATH -replace "\\", "/")
     # Graceful drain 0: WS sockets would otherwise hold the API port across reloads (Errno 10048).
@@ -439,6 +442,11 @@ try {
             Remove-Item Env:STITCH_DEV_MODE -ErrorAction SilentlyContinue
         } else {
             $env:STITCH_DEV_MODE = $previousDevMode
+        }
+        if ($null -eq $previousPluginWatch) {
+            Remove-Item Env:STITCH_DEV_PLUGIN_WATCH -ErrorAction SilentlyContinue
+        } else {
+            $env:STITCH_DEV_PLUGIN_WATCH = $previousPluginWatch
         }
         if ($null -eq $previousDatabaseUrl) {
             Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
