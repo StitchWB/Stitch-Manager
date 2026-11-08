@@ -29,7 +29,7 @@ table column — rows may legitimately carry extra keys (e.g. totp rows expose
 on the page — the renderer ignores unknown ids; and a ``core_page`` manifest
 carrying ``ui.page`` — the host page owns the page tree.  Dead-key detection
 is skipped for ``ui.kind=core_page`` because the core React page owns those
-keys.
+keys, and when the manager ``src/`` tree is absent (installed wheel).
 
 Honest scope: see docs/service-plugins.md — semantic param inversion and
 runtime data strings are NOT caught.
@@ -278,7 +278,7 @@ def lint_contributions(
 
     ``src_root`` overrides the manager frontend sources consulted by the
     dead-key rule (default: the ``src/`` tree of the repository hosting this
-    tool; a missing tree disables the literal escape and keeps the rule strict).
+    tool; a missing tree skips the rule).
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -336,23 +336,26 @@ def lint_contributions(
             for i, node in enumerate(page.get("nodes") or []):
                 linter.visit(node, f"ui.page.nodes[{i}]")
             literals = _src_literal_blob(src_root)
-            for locale in LOCALES:
-                bundle = bundles.get(locale)
-                if not isinstance(bundle, dict):
-                    continue
-                seen: set[tuple[str, ...]] = set()
-                for leaf in _leaf_paths(bundle):
-                    if leaf in seen:
+            if literals is None:
+                warnings.append("dead-key i18n check skipped: no src/ tree")
+            else:
+                for locale in LOCALES:
+                    bundle = bundles.get(locale)
+                    if not isinstance(bundle, dict):
                         continue
-                    seen.add(leaf)
-                    if leaf in linter.used:
-                        continue
-                    key = ".".join(leaf)
-                    if literals is not None and _live_in_src(plugin_id, key, literals):
-                        continue
-                    linter.errors.append(
-                        f"dead i18n key in {locale!r} bundle: {key}"
-                    )
+                    seen: set[tuple[str, ...]] = set()
+                    for leaf in _leaf_paths(bundle):
+                        if leaf in seen:
+                            continue
+                        seen.add(leaf)
+                        if leaf in linter.used:
+                            continue
+                        key = ".".join(leaf)
+                        if _live_in_src(plugin_id, key, literals):
+                            continue
+                        linter.errors.append(
+                            f"dead i18n key in {locale!r} bundle: {key}"
+                        )
 
     errors.extend(linter.errors)
     warnings.extend(linter.warnings)

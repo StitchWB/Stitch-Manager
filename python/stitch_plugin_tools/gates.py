@@ -22,7 +22,8 @@ Gate matrix (a blocking gate that fails fails the run):
 classify runs as a live subprocess so the verdict comes from the tree the
 tooling was imported from.  On a public checkout the hub-only zone rules are
 absent, so the classify gate degrades to ``skipped`` (``classify`` is
-``null``); ``publish --dry-run`` refuses instead.
+``null``): ``check --json`` reports ``publishable: false`` with a reason, and
+``publish --dry-run`` prints the lane plan but exits non-zero.
 """
 
 from __future__ import annotations
@@ -32,7 +33,6 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from autoreg.plugin.manifest import MANIFEST_FILENAME
-from stitch_plugin_tools import classify
 from stitch_plugin_tools.contract_gate import (
     capability_gate,
     contract_gate,
@@ -59,6 +59,10 @@ LANE_WORKFLOWS = {
     "provider": "publish-provider-plugins.yml",
     "service": "publish-service-plugins.yml",
 }
+
+_CLASSIFY_UNAVAILABLE_REASON = (
+    "classify unavailable off-hub; the farm decides publication"
+)
 
 _TICK = "✓"
 _CROSS = "✗"
@@ -162,12 +166,27 @@ def _emit_bad_package(exc: Exception, json_output: bool) -> int:
     if json_output:
         doc = {
             "schema_version": 1, "ok": False, "kind": None, "plugin_id": None,
-            "version": None, "gates": [], "classify": None, "error": str(exc),
+            "version": None, "gates": [], "classify": None,
+            "publishable": False, "publish_reason": "package could not be resolved",
+            "error": str(exc),
         }
         print(json.dumps(doc, ensure_ascii=False))
     else:
         print(f"error: {exc}", file=sys.stderr)
     return 2
+
+
+def _publication_verdict(
+    classify_result: dict[str, Any], verdict: dict | None
+) -> tuple[bool, str | None]:
+    """Publishable only when classify ran and its verdict is not prohibited."""
+    if verdict is not None:
+        if verdict.get("class") == "prohibited":
+            return False, verdict.get("reason") or "classify verdict prohibited"
+        return True, None
+    if classify_result.get("status") == "skipped":
+        return False, _CLASSIFY_UNAVAILABLE_REASON
+    return False, "classify failed"
 
 
 def _run_check(package_dir: Path, *, json_output: bool, command: str) -> int:
@@ -185,6 +204,7 @@ def _run_check(package_dir: Path, *, json_output: bool, command: str) -> int:
     gates.append(distribution_gate(manifest, verdict))
 
     ok = not any(g["status"] == "fail" and g["blocking"] for g in gates)
+    publishable, publish_reason = _publication_verdict(classify_result, verdict)
     doc = {
         "schema_version": 1,
         "ok": ok,
@@ -193,6 +213,8 @@ def _run_check(package_dir: Path, *, json_output: bool, command: str) -> int:
         "version": target["version"],
         "gates": gates,
         "classify": verdict,
+        "publishable": publishable,
+        "publish_reason": publish_reason,
     }
     if json_output:
         print(json.dumps(doc, ensure_ascii=False))
@@ -227,14 +249,6 @@ def publish_dry_run(package_dir: Path) -> int:
     """Print the publication plan + pre-flight gate checklist; publish nothing."""
     _utf8_stdio()
     package_dir = package_dir.resolve()
-    if not classify.zone_rules_available():
-        print(
-            "REFUSED: publish --dry-run needs the hub tree to classify the "
-            "publication lane (scripts/export_public_zone.py is absent on a "
-            "public checkout)",
-            file=sys.stderr,
-        )
-        return 2
     try:
         target = _resolve_target(package_dir)
     except ValueError as exc:
@@ -257,6 +271,7 @@ def publish_dry_run(package_dir: Path) -> int:
         )
         return 2
 
+    classify_skipped = verdict is None
     kind = target["kind"]
     plugin_id = target["plugin_id"]
     if kind in ("data", "catalog"):
@@ -267,15 +282,19 @@ def publish_dry_run(package_dir: Path) -> int:
             "catalog-snapshot + a commit to the catalog repo"
         )
     else:
-        channel = verdict.get("channel")
-        submodule = verdict.get("submodule") or _default_submodule(kind, plugin_id)
         lane = "provider" if kind == "provider" else "service"
+        channel = verdict.get("channel") if verdict else "unknown (classify skipped)"
+        submodule = (
+            (verdict.get("submodule") if verdict else None)
+            or _default_submodule(kind, plugin_id)
+        )
         dispatch = (
             f"gh workflow run {LANE_WORKFLOWS[lane]} --repo {FARM_REPO} "
             f"-f version={target['version']}"
         )
 
-    print(f"Plugin: {plugin_id or package_dir.name} kind={kind} class={verdict.get('class')}")
+    class_label = verdict.get("class") if verdict else "skipped"
+    print(f"Plugin: {plugin_id or package_dir.name} kind={kind} class={class_label}")
     print(f"Channel: {channel}")
     print(f"Submodule path: {submodule}")
     print(f"CI workflow to dispatch: {dispatch}")
@@ -284,6 +303,13 @@ def publish_dry_run(package_dir: Path) -> int:
     gates.append(classify_result)
     for gate in gates:
         _print_gate_line(gate)
+    if classify_skipped:
+        print(
+            "cannot publish from here: classify is unavailable off-hub; "
+            "the farm decides publication — dispatch the workflow above",
+            file=sys.stderr,
+        )
+        return 2
     ok = not any(g["status"] == "fail" and g["blocking"] for g in gates)
     if ok:
         print("dry-run OK: nothing was published — dispatch the workflow above")

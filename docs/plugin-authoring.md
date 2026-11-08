@@ -563,6 +563,23 @@ directory — the tooling handles it.
 The CLI covers the loop without booting the full app. Full reference:
 [docs/service-plugins.md §8](service-plugins.md).
 
+**Внешний разработчик — начните отсюда.** Тулинг не публикуется отдельным
+пакетом: нужен чекаут репозитория, `stitch_plugin_tools` импортируется из
+дерева `python/`. Минимальный набор (проверено
+`python/tests/test_plugin_tools_slim_imports.py`):
+
+```powershell
+python -m venv .venv-ext
+.\.venv-ext\Scripts\Activate.ps1
+pip install ruff pytest pytest-timeout
+cd python
+python -m stitch_plugin_tools check <pkg> --json
+python -m stitch_plugin_tools run <pkg> <cmd> --json
+```
+
+`cryptography` и `httpx` нужны только для `sign` / `publish` /
+`install-from`. Детали и оговорки — §8.1.
+
 - **One-shot run.** `python -m stitch_plugin_tools run <pkg> <cmd> --params @file --json`
   spawns the plugin child, runs one command, and exits. `--json` emits JSONL
   `ready` / `call` events; exit codes `0` ok, `1` runtime failure, `2` bad
@@ -599,7 +616,7 @@ The CLI covers the loop without booting the full app. Full reference:
 ```powershell
 python -m venv .venv-ext
 .\.venv-ext\Scripts\Activate.ps1
-pip install ruff pytest cryptography httpx
+pip install ruff pytest pytest-timeout
 cd python
 python -m stitch_plugin_tools check <pkg> --json
 python -m stitch_plugin_tools run <pkg> <cmd> --json
@@ -607,11 +624,18 @@ python -m stitch_plugin_tools run <pkg> <cmd> --json
 
 Запускать из каталога `python/` (или выставить `PYTHONPATH=<repo>\python`).
 
-- **Работает на этом наборе:** `check` (нужен `ruff`; `pytest` — если у
-  пакета есть `tests/`) и `run`.
-- **Нужно больше:** `publish` и `install-from` требуют `httpx` +
+- **Работает на этом наборе:** `check` (нужен `ruff`; `pytest` +
+  `pytest-timeout` — если у пакета есть `tests/`) и `run`.
+- **Нужно больше:** `sign` / `publish` / `install-from` требуют `httpx` +
   `cryptography`; полный бэкенд (`dev-backend`, `invoke`) требует весь
   тяжёлый стек.
+
+**SDK-wheel (planned).** Отдельный wheel `stitch-plugin-sdk` пока не
+публикуется: тайминг-гейт — первая сторонняя запись в каталоге. До этого
+внешний путь — рецепт выше. Учтите: `check --json` теперь отдаёт флаг
+верхнего уровня `publishable`; вне хаба он `false`, потому что гейт
+`classify` пропускается, — зелёный `check` не является вердиктом о
+публикации.
 
 ---
 
