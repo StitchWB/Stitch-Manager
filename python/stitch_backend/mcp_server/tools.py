@@ -310,13 +310,17 @@ def _build_annotations(meta: CommandMeta) -> ToolAnnotations:
     )
 
 
-def register_all_tools(mcp: FastMCP, core_only: bool = True) -> int:
+def register_all_tools(
+    mcp: FastMCP, core_only: bool = True, allow: set[str] | None = None
+) -> int:
     """Register MCP tools from command metadata.
 
     Args:
         mcp: FastMCP instance
         core_only: If True, only register CORE_TOOLS; if False, register
-                   every registered command.
+                   every registered command.  Ignored when ``allow`` is given.
+        allow: Explicit set of command names to register.  ``None`` defers to
+               ``core_only``; an empty set registers no typed tools.
 
     Returns:
         Number of tools registered
@@ -327,8 +331,10 @@ def register_all_tools(mcp: FastMCP, core_only: bool = True) -> int:
     registered = 0
 
     for name, meta in all_meta.items():
-        # Filter by core_only
-        if core_only and name not in CORE_TOOLS:
+        if allow is not None:
+            if name not in allow:
+                continue
+        elif core_only and name not in CORE_TOOLS:
             continue
 
         try:
@@ -355,5 +361,5 @@ def register_all_tools(mcp: FastMCP, core_only: bool = True) -> int:
         except Exception as e:
             logger.warning(f"Failed to register tool '{name}': {e}")
 
-    logger.info(f"Registered {registered} MCP tools (core_only={core_only})")
+    logger.info(f"Registered {registered} MCP tools")
     return registered
