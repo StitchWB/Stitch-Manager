@@ -8,12 +8,16 @@ flags, defaults and help texts to them.
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoreg.plugin.manifest import (
     VALID_CATEGORIES,
     VALID_STATUSES,
 )
-from stitch_plugin_tools.classify import _cmd_classify
+from autoreg.scenario.schema import ENGINE_API, ENGINE_HOST_VERSION
+from stitch_plugin_tools.classify import _cmd_classify, zone_rules_available
 from stitch_plugin_tools.cli_commands_package import (
     _cmd_check,
     _cmd_dev_backend,
@@ -51,11 +55,42 @@ from stitch_plugin_tools.cli_commands_server import (
     _cmd_publish_selectors,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+SDK_VERSION = "0.1.0"
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _wheel_context() -> bool:
+    return not zone_rules_available() and not (_REPO_ROOT / ".git").exists()
+
+
+def _hub_only(
+    func: Callable[[argparse.Namespace], int],
+) -> Callable[[argparse.Namespace], int]:
+    def guarded(args: argparse.Namespace) -> int:
+        if _wheel_context():
+            print("hub-only: run from a repo checkout", file=sys.stderr)
+            return 2
+        return func(args)
+
+    return guarded
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m stitch_plugin_tools",
         description="Stitch plugin tooling: keygen / sign / verify",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=(
+            f"stitch-plugin-sdk {SDK_VERSION} "
+            f"(ENGINE_API={ENGINE_API}, ENGINE_HOST_VERSION={ENGINE_HOST_VERSION})"
+        ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -137,7 +172,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="plan only: classify + lane + farm workflow + gate checklist; no publish",
     )
-    p_publish.set_defaults(func=_cmd_publish)
+    p_publish.set_defaults(func=_hub_only(_cmd_publish))
 
     p_publish_all = sub.add_parser(
         "publish-all",
@@ -163,7 +198,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="pack + validate only; no server contact, no keys/URL needed",
     )
-    p_publish_all.set_defaults(func=_cmd_publish_all)
+    p_publish_all.set_defaults(func=_hub_only(_cmd_publish_all))
 
     p_dev = sub.add_parser(
         "dev-install", help="copy a package to plugins-local for the dev loop"
@@ -242,7 +277,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "SDK location"
         ),
     )
-    p_pack.set_defaults(func=_cmd_pack_engine)
+    p_pack.set_defaults(func=_hub_only(_cmd_pack_engine))
 
     p_pack_service = sub.add_parser(
         "pack-service",
@@ -277,7 +312,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "default: resolve autoreg/providers from the installed SDK location"
         ),
     )
-    p_pack_provider.set_defaults(func=_cmd_pack_provider)
+    p_pack_provider.set_defaults(func=_hub_only(_cmd_pack_provider))
 
     p_new = sub.add_parser(
         "new",
@@ -524,7 +559,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="write the reranked scenario.json back to --package-dir",
     )
-    p_drift.set_defaults(func=_cmd_drift)
+    p_drift.set_defaults(func=_hub_only(_cmd_drift))
 
     p_pub_sel = sub.add_parser(
         "publish-selectors",
@@ -610,7 +645,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--trust", action="store_true",
         help="admin override for the dev-tier gate (git mode)",
     )
-    p_install_from.set_defaults(func=_cmd_install_from)
+    p_install_from.set_defaults(func=_hub_only(_cmd_install_from))
 
     # ── catalog-lint ─────────────────────────────────────────────────────
     p_catalog_lint = sub.add_parser(
@@ -620,7 +655,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_catalog_lint.add_argument(
         "catalog", help="path to catalog.json to validate"
     )
-    p_catalog_lint.set_defaults(func=_cmd_catalog_lint)
+    p_catalog_lint.set_defaults(func=_hub_only(_cmd_catalog_lint))
 
     p_catalog_snapshot = sub.add_parser(
         "catalog-snapshot",
@@ -639,7 +674,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--repo",
         help="snapshot store repo for gh release upload (default StitchWB/stitch-plugin-snapshots)",
     )
-    p_catalog_snapshot.set_defaults(func=_cmd_catalog_snapshot)
+    p_catalog_snapshot.set_defaults(func=_hub_only(_cmd_catalog_snapshot))
 
     # ── attest ───────────────────────────────────────────────────────────
     p_attest = sub.add_parser(
@@ -660,7 +695,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=ENV_ADMIN_KEY,
         help="env var holding the admin key (default: STITCH_ADMIN_KEY)",
     )
-    p_attest.set_defaults(func=_cmd_attest)
+    p_attest.set_defaults(func=_hub_only(_cmd_attest))
 
     p_classify = sub.add_parser(
         "classify",
