@@ -13,6 +13,8 @@ type ExtendedSettingsData = SettingsData & {
   cardBin?: string;
   browserEngine?: string;
   kiroPlan?: string;
+  proxyIpPolicy?: string;
+  proxyIpReuseCount?: number | string;
 };
 import type { LogVerbosity } from '../../constants/logging';
 import type {
@@ -23,6 +25,7 @@ import type {
   NamePattern,
   SaveStatus,
   MailStrategy,
+  ProxyIpPolicy,
 } from './types';
 import {
   loadProviderStrategies,
@@ -144,6 +147,8 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
           type: (settings.proxyType as 'http' | 'socks5') || 'http',
           list: settings.proxyList || '',
           rotationEnabled: settings.proxyRotationEnabled || false,
+          ipPolicy: (settings.proxyIpPolicy as ProxyIpPolicy) || 'per_run',
+          ipReuseCount: Number(settings.proxyIpReuseCount) || 1,
         },
         patterns: {
           emailPattern: settings.emailCustomPrefix
@@ -238,6 +243,8 @@ export const usePersistenceStore = create<PersistenceState>(set => ({
         proxyType: config.proxy.type,
         proxyList: config.proxy.list,
         proxyRotationEnabled: config.proxy.rotationEnabled,
+        proxyIpPolicy: config.proxy.ipPolicy ?? 'per_run',
+        proxyIpReuseCount: config.proxy.ipReuseCount ?? 1,
         emailPattern: config.patterns.emailPattern,
         emailCustomPrefix: config.imap.emailCustomPrefix || config.patterns.emailCustomPrefix || '',
         namePattern: config.patterns.namePattern,

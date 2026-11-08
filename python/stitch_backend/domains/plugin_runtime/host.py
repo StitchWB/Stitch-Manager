@@ -322,6 +322,11 @@ class ServicePluginHost:
         """
         return list(self._capabilities)
 
+    @property
+    def package_dir(self) -> Path | None:
+        """Package dir the host was started from (None for command-only hosts)."""
+        return Path(self._cwd) if self._cwd else None
+
     def get_logs(self, lines: int = 100) -> list[str]:
         """Return the last *lines* entries from the stderr ring buffer.
 

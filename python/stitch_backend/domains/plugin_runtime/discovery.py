@@ -46,9 +46,11 @@ from autoreg.plugin.manifest import (
     ManifestValidationError,
     PluginManifest,
     parse_semver,
+    resolve_entry_command,
     semver_sort_key,
     validate_manifest,
 )
+from autoreg.scenario.schema import ENGINE_API
 from stitch_backend.domains.plugin_runtime import (
     get_host,
     get_manifest,
@@ -115,95 +117,15 @@ async def start_service_plugins() -> None:
     logger.info("Started %d/%d service plugin(s)", started, len(discovered))
 
 
-async def _start_one(
-    manifest: PluginManifest,
-    package_dir: Path,
-    *,
-    source: str = "local",
-    loader: PluginLoader | None = None,
-) -> bool:
-    """Register + start a single service plugin host.  Returns True on success."""
-    entry_module = manifest.entry.get("module")
-    if not entry_module or not isinstance(entry_module, str):
-        logger.warning(
-            "Service plugin %s: entry.module missing — skipping",
-            manifest.id,
-        )
-        return False
+def build_child_env(manifest: PluginManifest, source: str = "local") -> dict[str, str]:
+    """Child env for a service plugin: storage Fernet key (trusted sources
+    only) plus the id-specific bridge env resolved in the core process.
 
-    # Skip v2 plugins whose engine.min is newer than the host's
-    # service-plugin engine version.  Never crash startup — just log.
-    # Uses semver_sort_key so that a same-triple prerelease (e.g.
-    # "0.3.0-rc.1") is accepted (≤ current release) while a higher-triple
-    # prerelease (e.g. "0.4.0-alpha") is correctly rejected.
-    engine_api = manifest.engine.get("api")
-    if engine_api is not None and engine_api >= 2:
-        engine_min = manifest.engine.get("min", "")
-        try:
-            if semver_sort_key(engine_min) > semver_sort_key(SERVICE_ENGINE_VERSION):
-                logger.warning(
-                    "Service plugin %s: engine.min %s is newer than host "
-                    "service-plugin engine %s — skipping",
-                    manifest.id, engine_min, SERVICE_ENGINE_VERSION,
-                )
-                return False
-        except ValueError:
-            logger.warning(
-                "Service plugin %s: engine.min %s is not valid semver — skipping",
-                manifest.id, engine_min,
-            )
-            return False
-
-    # Dependency presence check — v2 service plugins can declare depends.
-    # Skip (don't crash) when a declared dependency is not installed so
-    # startup continues for the remaining plugins.  Range suffixes
-    # (``@^1.0``) are stripped by parse_dep_entry; only the dep id is
-    # checked against the loader (PRESENCE, not scenario loading).
-    if manifest.depends:
-        dep_loader = loader or PluginLoader()
-        missing = resolve_service_dependencies(manifest, dep_loader)
-        if missing:
-            logger.warning(
-                "Service plugin %s: dependency %s not installed — skipping",
-                manifest.id, ", ".join(missing),
-            )
-            return False
-
-    contributions = manifest.contributions
-    storage_decl = contributions.get("storage", {})
-    migrations = bool(storage_decl.get("migrations"))
-
-    # Vendor drift check — WARN only, never block startup.  The vendored
-    # rpc_server.py may drift when a package is hand-edited or generated
-    # from a different canonical source.  The upgrade tool + dev-install
-    # refresh exist to fix drift; this is just a visibility nudge.
-    # The vendored file lives in the MODULE dir (<pkg>/<module>/_vendor/),
-    # not the package root — resolve it the same way the spawner does.
-    try:
-        from stitch_plugin_tools.vendoring import vendored_matches_canonical
-        if not vendored_matches_canonical(package_dir / entry_module):
-            logger.warning(
-                "Service plugin %s: vendored rpc_server.py drifts from "
-                "canonical — run `python -m stitch_plugin_tools vendor "
-                "<package>` to refresh",
-                manifest.id,
-            )
-    except ImportError:
-        pass  # stitch_plugin_tools not available — skip drift check
-
-    # Plugins with their own storage need TOKEN_ENCRYPTION_KEY to encrypt
-    # secrets at rest with the same Fernet key as the core (tokens stay
-    # interchangeable across the migration boundary).  Passed via plan.env,
-    # NOT the supervisor allowlist — it is a secret that only
-    # storage-declaring plugins should see.
-    #
-    # SECURITY: only TRUSTED sources (local dev / signed cache) receive the
-    # core Fernet key.  Community / sandbox plugins are unsigned arbitrary
-    # code — handing them the core key would let them decrypt every secret
-    # in the core DB.  They fall back to their own key: plugin crypto
-    # (e.g. stitch-totp's crypto.py) resolves env var → core key file →
-    # plugin-local ``<data_dir>/.db_key`` when the env var is absent.
+    Shared by discovery and reload so the two spawn paths cannot drift.
+    """
     child_env: dict[str, str] = {}
+    storage_decl = manifest.contributions.get("storage", {})
+    # SECURITY: the core Fernet key must never reach unsigned community/sandbox code.
     if (
         storage_decl
         and source not in ("community", "sandbox")
@@ -211,17 +133,14 @@ async def _start_one(
     ):
         child_env["TOKEN_ENCRYPTION_KEY"] = tok
 
-    # The freemodel bridge needs the claude CLI, invisible under the
-    # supervisor's stripped PATH — resolve it here, in the core process.
+    # The claude CLI is invisible under the supervisor's stripped PATH — resolve it here.
     if manifest.id == "stitch-freemodel":
         from stitch_backend.domains.ai_proxy.freemodel_sidecar import (
             freemodel_child_env,
         )
         child_env.update(freemodel_child_env())
 
-    # The antigravity plugin scans auth files under the real user home,
-    # invisible under the child's sandbox-scoped USERPROFILE — resolve the
-    # dirs here, in the core process.
+    # Auth files live under the real user home, invisible to the sandbox-scoped child.
     if manifest.id == "stitch-antigravity":
         from stitch_backend.domains.ai_proxy.antigravity_sidecar import (
             antigravity_child_env,
@@ -240,6 +159,51 @@ async def _start_one(
 
         child_env.update(velly_child_env())
 
+    return child_env
+
+
+def _preflight_manifest(
+    manifest: PluginManifest, loader: PluginLoader | None
+) -> str | None:
+    """Return a skip reason when a start guard fails, else None.
+
+    Guards: entry.module or entry.command present, engine.api not newer
+    than the host, engine.min not newer than the host service-plugin
+    engine, declared dependencies installed.
+    """
+    entry_module = manifest.entry.get("module")
+    entry_command = manifest.entry.get("command")
+    has_module = isinstance(entry_module, str) and bool(entry_module)
+    has_command = isinstance(entry_command, list) and bool(entry_command)
+    if not has_module and not has_command:
+        return "entry.module or entry.command missing"
+
+    engine_api = manifest.engine.get("api")
+    if isinstance(engine_api, int) and engine_api > ENGINE_API:
+        return f"engine.api {engine_api} is newer than host ENGINE_API {ENGINE_API}"
+
+    # semver_sort_key accepts a same-triple prerelease (0.3.0-rc.1) but rejects a higher triple.
+    if engine_api is not None and engine_api >= 2:
+        engine_min = manifest.engine.get("min", "")
+        try:
+            if semver_sort_key(engine_min) > semver_sort_key(SERVICE_ENGINE_VERSION):
+                return (
+                    f"engine.min {engine_min} is newer than host "
+                    f"service-plugin engine {SERVICE_ENGINE_VERSION}"
+                )
+        except ValueError:
+            return f"engine.min {engine_min} is not valid semver"
+
+    # Presence check only — range suffixes are stripped; the dep id is checked, not its scenario.
+    if manifest.depends:
+        dep_loader = loader or PluginLoader()
+        missing = resolve_service_dependencies(manifest, dep_loader)
+        if missing:
+            return f"dependency {', '.join(missing)} not installed"
+    return None
+
+
+async def _resolve_host_driver(manifest: PluginManifest, source: str) -> bool:
     host_driver = host_driver_eligible(manifest.capabilities, source)
     if host_driver:
         from stitch_backend.domains.plugin_distribution.entitlements import (
@@ -248,22 +212,79 @@ async def _start_one(
         )
         entitlements = await get_effective_entitlements(None, None)
         host_driver = is_entitled_to(manifest.id, entitlements)
+    return host_driver
+
+
+def _make_service_host(
+    manifest: PluginManifest,
+    package_dir: Path,
+    *,
+    source: str,
+    host_driver: bool,
+) -> ServicePluginHost:
+    storage_decl = manifest.contributions.get("storage", {})
     memory_limit_mb = (
         _COMMUNITY_MEMORY_LIMIT_MB
         if source == "community" and not host_driver
         else None
     )
+    common = {
+        "plugin_id": manifest.id,
+        "package_dir": package_dir,
+        "data_dir": _base_dir() / "data" / "plugins" / manifest.id,
+        "migrations": bool(storage_decl.get("migrations")),
+        "source": source,
+        "host_driver": host_driver,
+        "memory_limit_mb": memory_limit_mb,
+        "env": build_child_env(manifest, source),
+    }
+    command = resolve_entry_command(manifest.entry, package_dir)
+    if command is not None:
+        return ServicePluginHost(command=command, **common)
+    return ServicePluginHost(entry_module=manifest.entry["module"], **common)
 
-    host = ServicePluginHost(
-        plugin_id=manifest.id,
-        entry_module=entry_module,
-        package_dir=package_dir,
-        data_dir=_base_dir() / "data" / "plugins" / manifest.id,
-        migrations=migrations,
-        source=source,
-        host_driver=host_driver,
-        memory_limit_mb=memory_limit_mb,
-        env=child_env,
+
+async def _start_one(
+    manifest: PluginManifest,
+    package_dir: Path,
+    *,
+    source: str = "local",
+    loader: PluginLoader | None = None,
+) -> bool:
+    """Register + start a single service plugin host.  Returns True on success."""
+    reason = _preflight_manifest(manifest, loader)
+    if reason is not None:
+        logger.warning("Service plugin %s: %s — skipping", manifest.id, reason)
+        return False
+
+    entry_module = manifest.entry.get("module")
+    module_dir = (
+        package_dir / entry_module
+        if isinstance(entry_module, str) and entry_module
+        else None
+    )
+
+    # Vendor drift check — WARN only, never block startup.  The vendored
+    # rpc_server.py may drift when a package is hand-edited or generated
+    # from a different canonical source.  The upgrade tool + dev-install
+    # refresh exist to fix drift; this is just a visibility nudge.
+    # The vendored file lives in the MODULE dir (<pkg>/<module>/_vendor/),
+    # not the package root — resolve it the same way the spawner does.
+    try:
+        from stitch_plugin_tools.vendoring import vendored_matches_canonical
+        if module_dir is not None and not vendored_matches_canonical(module_dir):
+            logger.warning(
+                "Service plugin %s: vendored rpc_server.py drifts from "
+                "canonical — run `python -m stitch_plugin_tools vendor "
+                "<package>` to refresh",
+                manifest.id,
+            )
+    except ImportError:
+        pass  # stitch_plugin_tools not available — skip drift check
+
+    host_driver = await _resolve_host_driver(manifest, source)
+    host = _make_service_host(
+        manifest, package_dir, source=source, host_driver=host_driver,
     )
     # Crash-loop hook: telemetry report + LKG rollback (todo 23).
     host.crash_hook = _on_crash_loop
@@ -361,12 +382,15 @@ async def rollback_service_plugin(plugin_id: str) -> bool:
         return False
 
     prev_manifest = _try_read_manifest(prev_dir)
-    entry_module = prev_manifest.entry.get("module") if prev_manifest else None
+    prev_entry = prev_manifest.entry if prev_manifest else {}
+    entry_module = prev_entry.get("module")
+    entry_command = prev_entry.get("command")
+    has_module = isinstance(entry_module, str) and bool(entry_module)
+    has_command = isinstance(entry_command, list) and bool(entry_command)
     if (
         prev_manifest is None
         or prev_manifest.kind != "service"
-        or not isinstance(entry_module, str)
-        or not entry_module
+        or not (has_module or has_command)
     ):
         logger.warning(
             "Service plugin %s: previous version %s has no usable manifest — degraded",
@@ -416,16 +440,20 @@ async def rollback_service_plugin(plugin_id: str) -> bool:
                 return False
         except ValueError:
             pass
-    new_host = ServicePluginHost(
-        plugin_id=plugin_id,
-        entry_module=entry_module,
-        package_dir=prev_dir,
-        data_dir=_base_dir() / "data" / "plugins" / plugin_id,
-        migrations=bool(storage_decl.get("migrations")),
-        source=host.source,
-        host_driver=host.host_driver,
-        memory_limit_mb=host.memory_limit_mb,
-    )
+    common = {
+        "plugin_id": plugin_id,
+        "package_dir": prev_dir,
+        "data_dir": _base_dir() / "data" / "plugins" / plugin_id,
+        "migrations": bool(storage_decl.get("migrations")),
+        "source": host.source,
+        "host_driver": host.host_driver,
+        "memory_limit_mb": host.memory_limit_mb,
+    }
+    command = resolve_entry_command(prev_manifest.entry, prev_dir)
+    if command is not None:
+        new_host = ServicePluginHost(command=command, **common)
+    else:
+        new_host = ServicePluginHost(entry_module=entry_module, **common)
     new_host.crash_hook = _on_crash_loop
     result = await new_host.start()
     if result.get("status") != "running":
@@ -496,7 +524,7 @@ def _discover_service_plugins(
                 continue
             if manifest.id in seen_ids:
                 continue
-            if not dev_mode and not _verify_signed(entry, manifest, pubkey):
+            if not dev_mode and not _verify_signed(entry, pubkey):
                 logger.warning(
                     "plugins-local/%s: invalid signature — skipping", entry.name
                 )
@@ -529,7 +557,7 @@ def _discover_service_plugins(
             if newest is None:
                 continue
             _ver, path, manifest = newest
-            if not _verify_signed(path, manifest, pubkey):
+            if not _verify_signed(path, pubkey):
                 logger.warning(
                     "cache package %s: invalid signature — skipping", path
                 )
@@ -581,18 +609,17 @@ def _try_read_manifest(package_dir: Path) -> PluginManifest | None:
         return None
 
 
-def _verify_signed(
-    package_dir: Path, manifest: PluginManifest, pubkey: str | None
-) -> bool:
+def _verify_signed(package_dir: Path, pubkey: str | None) -> bool:
     """Verify the package signature.  Returns False if unsigned or invalid."""
-    if not manifest.signature:
+    signature = crypto.read_signature(package_dir)
+    if not signature:
         return False
     if not pubkey:
         logger.warning(
             "no public key configured; cannot verify %s", package_dir
         )
         return False
-    return crypto.verify_package(package_dir, manifest.signature, pubkey)
+    return crypto.verify_package(package_dir, signature, pubkey)
 
 
 def _resolve_dev_mode() -> bool:
@@ -611,4 +638,9 @@ def _community_services_enabled() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
-__all__ = ["start_service_plugins", "rollback_service_plugin", "SERVICE_ENGINE_VERSION"]
+__all__ = [
+    "start_service_plugins",
+    "rollback_service_plugin",
+    "build_child_env",
+    "SERVICE_ENGINE_VERSION",
+]

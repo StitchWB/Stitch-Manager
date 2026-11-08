@@ -24,6 +24,7 @@ from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_session
+from stitch_backend.domains.accounts.models import Account
 from stitch_backend.domains.auth.permissions import ensure_permission
 from stitch_backend.domains.groups.models import Group
 from stitch_backend.domains.groups.service import (
@@ -340,6 +341,7 @@ async def cmd_get_runtime_url(db: AsyncSession, params: dict) -> str | None:
     """
     uid = _caller_uid(params)
     entry_id = str(params.get("id", ""))
+    account_id = params.get("accountId")
 
     group_ids = await group_ids_for_user(db, uid)
     result = await db.execute(
@@ -348,9 +350,35 @@ async def cmd_get_runtime_url(db: AsyncSession, params: dict) -> str | None:
         )
     )
     entry = result.scalar_one_or_none()
-    if entry is not None and entry.enabled:
-        return entry_to_proxy_url(entry)
-    return None
+    if entry is None or not entry.enabled:
+        return None
+    if account_id is not None:
+        affinity_url = await _account_affinity_url(db, str(account_id), entry, uid)
+        if affinity_url is not None:
+            return affinity_url
+    return entry_to_proxy_url(entry)
+
+
+async def _account_affinity_url(
+    db: AsyncSession, account_id: str, entry: ProxyLibraryEntry, uid: int | None
+) -> str | None:
+    result = await db.execute(select(Account).where(Account.id == account_id))
+    account = result.scalar_one_or_none()
+    if account is None:
+        return None
+    if uid is not None and account.owner_id is not None and account.owner_id != uid:
+        return None
+    config = account.proxy_config or {}
+    if config.get("proxy_library_id") != entry.id:
+        return None
+    username = config.get("username")
+    if not username:
+        return None
+    password = _load_secret(entry.password) if entry.password else None
+    auth = str(username)
+    if password:
+        auth += f":{password}"
+    return f"{entry.proxy_type}://{auth}@{entry.host}:{entry.port}"
 
 
 @command("get_proxy_library_runtime_proxy_map", readonly=True)

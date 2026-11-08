@@ -341,7 +341,7 @@ async def install_from_source(
             }
 
         # Release mode: signed → install_package, unsigned → community tier.
-        if package_is_signed(manifest):
+        if package_is_signed(pkg_dir):
             pubkey = load_embedded_pubkey()
             if not pubkey:
                 raise SourceError("no_pubkey", "no embedded public key for signature verify")

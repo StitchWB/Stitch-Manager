@@ -17,6 +17,7 @@ import httpx
 from sqlalchemy import text
 
 from autoreg.provider_ids import ProviderId
+from stitch_backend.core.exceptions import AccountNotFoundError
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,7 +73,7 @@ async def check_account_status(db: AsyncSession, account_id: int | str) -> dict[
     """Check account status — dispatches to provider-specific handlers."""
     account = await _get_account(db, account_id)
     if not account:
-        raise RuntimeError(f"Account {account_id} not found")
+        raise AccountNotFoundError(account_id)
 
     provider = account.get("provider", "")
     email = account.get("email", "")

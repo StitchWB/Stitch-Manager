@@ -48,6 +48,7 @@ from autoreg.plugin.layout import (
     sandbox_plugin_dir,
     sandbox_user_dir,
 )
+from autoreg.plugin.manifest import resolve_entry_command
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -212,8 +213,11 @@ async def ensure_sandbox_host(
                     return None
                 _sandbox_manifests[key] = manifest
 
+            command = resolve_entry_command(manifest.entry, pkg_dir)
             entry_module = manifest.entry.get("module")
-            if not entry_module or not isinstance(entry_module, str):
+            if command is None and (
+                not entry_module or not isinstance(entry_module, str)
+            ):
                 return None
 
         # A sandbox host exists or would be created/started by this call.
@@ -229,15 +233,18 @@ async def ensure_sandbox_host(
 
         if host is None:
             data_dir = sandbox_plugin_data_dir(user_id, plugin_id)
-            host = ServicePluginHost(
-                plugin_id=plugin_id,
-                entry_module=entry_module,
-                package_dir=pkg_dir,
-                data_dir=data_dir,
-                source="sandbox",
-                memory_limit_mb=_SANDBOX_MEMORY_LIMIT_MB,
-                sidecar_name=f"sandbox:{user_id}:{plugin_id}",
-            )
+            common = {
+                "plugin_id": plugin_id,
+                "package_dir": pkg_dir,
+                "data_dir": data_dir,
+                "source": "sandbox",
+                "memory_limit_mb": _SANDBOX_MEMORY_LIMIT_MB,
+                "sidecar_name": f"sandbox:{user_id}:{plugin_id}",
+            }
+            if command is not None:
+                host = ServicePluginHost(command=command, **common)
+            else:
+                host = ServicePluginHost(entry_module=entry_module, **common)
             _sandbox_hosts[key] = host
 
         # Start if not running (on-demand).  When the host was idle-stopped,

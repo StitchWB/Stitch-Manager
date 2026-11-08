@@ -1,33 +1,53 @@
-"""Gate sets for the plugin dev loop: ``verify`` and ``publish --dry-run``.
+"""Gate sets for the plugin dev loop: ``check`` / ``verify`` / ``publish --dry-run``.
 
-``python -m stitch_plugin_tools verify [package_dir]`` reads the package
-manifest (or a community ``catalog.json``), picks the gate set for the kind
-and runs every gate as a live subprocess, streaming its output:
+``check [package_dir] [--json]`` reads the package manifest (or a community
+``catalog.json``), runs every gate for the kind, and emits a machine-readable
+gate document (``--json``) or a human-readable report.  ``verify`` is a thin
+alias over the same engine.  Exit codes: 0 = ok; 1 = a blocking gate failed;
+2 = bad package / cannot classify.
 
-    kind=service              ruff check, manifest-lint, pytest (if tests/)
-    kind=provider             ruff check
-    kind=data / catalog dir   catalog-lint
-    every kind                classify — the authoritative publication verdict
+Gate matrix (a blocking gate that fails fails the run):
 
-``publish --dry-run`` reuses the same gate set as a pre-flight checklist and
-prints the lane, the hub submodule path and the farm workflow dispatch line
-instead of publishing.  Both commands exit non-zero when a gate fails or the
-classify verdict is ``prohibited``.
+    ruff            block
+    manifest-lint   block   (kind=service)
+    pytest          block   (when <pkg>/tests exists)
+    contract        block   (kind=service; static-AST commands<->handlers)
+    engine          warn    (engine.min/api preflight)
+    capability      warn    (manifest capabilities preflight, kind=service)
+    typegen-drift   warn
+    vendor-drift    warn
+    classify        block-when-available (skipped on a public checkout)
+    distribution    warn    (declared claim vs classify verdict)
 
-classify always runs as a ``python -m stitch_plugin_tools classify``
-subprocess so the verdict comes from the live zone rules of the tree the
-tooling was imported from — never from a stale in-process copy.
+classify runs as a live subprocess so the verdict comes from the tree the
+tooling was imported from.  On a public checkout the hub-only zone rules are
+absent, so the classify gate degrades to ``skipped`` (``classify`` is
+``null``); ``publish --dry-run`` refuses instead.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from autoreg.plugin.manifest import MANIFEST_FILENAME
+from stitch_plugin_tools import classify
+from stitch_plugin_tools.contract_gate import (
+    capability_gate,
+    contract_gate,
+    distribution_gate,
+    engine_gate,
+)
+from stitch_plugin_tools.gate_runners import (
+    catalog_lint_gate,
+    classify_gate,
+    manifest_lint_gate,
+    pytest_gate,
+    ruff_gate,
+    typegen_drift_gate,
+    vendor_drift_gate,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,6 +62,11 @@ LANE_WORKFLOWS = {
 
 _TICK = "✓"
 _CROSS = "✗"
+_WARN = "!"
+_SKIP = "-"
+
+# Human-readable labels for the gate names (the JSON document keeps the short names).
+_HUMAN_LABELS = {"ruff": "ruff check"}
 
 
 def _utf8_stdio() -> None:
@@ -51,14 +76,6 @@ def _utf8_stdio() -> None:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError, ValueError):
             pass
-
-
-@dataclass
-class _Gate:
-    label: str
-    argv: list[str] | None = None
-    cwd: Path | None = None
-    note: str | None = None
 
 
 def _resolve_target(package_dir: Path) -> dict:
@@ -74,6 +91,8 @@ def _resolve_target(package_dir: Path) -> dict:
         kind = raw.get("kind")
         if not isinstance(kind, str) or not kind:
             raise ValueError(f"{manifest_path} has no kind field")
+        if kind not in ("service", "provider", "data", "catalog"):
+            raise ValueError(f"unknown plugin kind: {kind!r}")
         return {
             "kind": kind,
             "plugin_id": raw.get("id"),
@@ -86,129 +105,119 @@ def _resolve_target(package_dir: Path) -> dict:
     )
 
 
-def _gates_for(package_dir: Path, kind: str) -> list[_Gate]:
-    py = sys.executable
+def _read_manifest(package_dir: Path) -> dict[str, Any] | None:
+    manifest_path = package_dir / MANIFEST_FILENAME
+    if not manifest_path.is_file():
+        return None
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _build_gates(
+    package_dir: Path, target: dict, manifest: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    kind = target["kind"]
     if kind in ("data", "catalog"):
-        catalog_path = package_dir / CATALOG_FILENAME
-        if not catalog_path.is_file():
-            raise ValueError(f"kind={kind!r} requires a {catalog_path}")
-        return [
-            _Gate(
-                "catalog-lint",
-                [py, "-m", "stitch_plugin_tools", "catalog-lint", str(catalog_path)],
-            ),
-        ]
-    gates: list[_Gate] = [
-        # _vendor/ is regenerated, never hand-linted (template CI convention)
-        _Gate(
-            "ruff check",
-            [py, "-m", "ruff", "check", str(package_dir), "--extend-exclude", "_vendor"],
-        ),
-    ]
+        return [catalog_lint_gate(package_dir)]
+    gates = [ruff_gate(package_dir)]
     if kind == "service":
-        gates.append(
-            _Gate(
-                "manifest-lint",
-                [
-                    py,
-                    "-m",
-                    "stitch_plugin_tools",
-                    "manifest-lint",
-                    str(package_dir / MANIFEST_FILENAME),
-                ],
-            )
-        )
-        tests_dir = package_dir / "tests"
-        if tests_dir.is_dir():
-            gates.append(
-                _Gate(
-                    "pytest",
-                    [py, "-m", "pytest", str(tests_dir), "-q", "--timeout=60"],
-                    cwd=package_dir,
-                )
-            )
-        else:
-            gates.append(_Gate("pytest", note="no tests/ directory"))
-    elif kind != "provider":
-        # provider tests run from the hub python/ dir (autoreg imports), not here
-        raise ValueError(f"unknown plugin kind: {kind!r}")
+        gates.append(manifest_lint_gate(package_dir))
+    gates.append(pytest_gate(package_dir, provider=(kind == "provider")))
+    if kind == "service" and manifest is not None:
+        gates.append(contract_gate(package_dir, manifest))
+    if manifest is not None:
+        gates.append(engine_gate(manifest))
+        if kind == "service":
+            gates.append(capability_gate(manifest))
+    gates.append(typegen_drift_gate(package_dir))
+    gates.append(vendor_drift_gate(package_dir))
     return gates
 
 
-def _run_gate(gate: _Gate) -> bool:
-    if gate.argv is None:
-        print(f"  [-] {gate.label} — {gate.note}")
-        return True
-    proc = subprocess.run(gate.argv, cwd=str(gate.cwd) if gate.cwd else None)
-    ok = proc.returncode == 0
-    mark = _TICK if ok else _CROSS
-    suffix = "" if ok else f" (exit {proc.returncode})"
-    print(f"  [{mark}] {gate.label}{suffix}")
-    return ok
-
-
-def _run_classify(package_dir: Path) -> tuple[dict | None, str]:
-    """Run classify as a live subprocess; return (verdict, stderr)."""
-    proc = subprocess.run(
-        [sys.executable, "-m", "stitch_plugin_tools", "classify", str(package_dir)],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
+def _print_gate_line(gate: dict[str, Any]) -> None:
+    mark = {"pass": _TICK, "fail": _CROSS, "warn": _WARN, "skipped": _SKIP}.get(
+        gate["status"], "?"
     )
-    verdict: dict | None = None
-    if proc.returncode == 0:
-        try:
-            parsed = json.loads(proc.stdout.strip())
-        except ValueError:
-            parsed = None
-        if isinstance(parsed, dict):
-            verdict = parsed
-    return verdict, proc.stderr.strip()
+    label = _HUMAN_LABELS.get(gate["name"], gate["name"])
+    suffix = f" — {gate['reason']}" if gate.get("reason") else ""
+    print(f"  [{mark}] {label}{suffix}")
+    for finding in gate["findings"]:
+        print(f"      {finding.get('code', '')}: {finding.get('message', '')}")
 
 
-def _classify_passed(verdict: dict | None) -> bool:
-    return verdict is not None and verdict.get("class") != "prohibited"
+def _print_human(doc: dict[str, Any], *, command: str, package_dir: Path) -> None:
+    label = doc["plugin_id"] or "catalog"
+    print(f"{command} {label} kind={doc['kind']} at {package_dir}")
+    for gate in doc["gates"]:
+        _print_gate_line(gate)
+    if doc["classify"] is not None:
+        print(json.dumps(doc["classify"], ensure_ascii=False))
+    if doc["ok"]:
+        print(f"{command} OK")
+    else:
+        print(f"{command} FAILED", file=sys.stderr)
 
 
-def _print_classify_gate(verdict: dict | None, stderr: str) -> bool:
-    ok = _classify_passed(verdict)
-    mark = _TICK if ok else _CROSS
-    print(f"  [{mark}] classify")
-    if verdict is not None:
-        print(json.dumps(verdict, ensure_ascii=False))
-    elif stderr:
-        print(stderr, file=sys.stderr)
-    return ok
+def _emit_bad_package(exc: Exception, json_output: bool) -> int:
+    if json_output:
+        doc = {
+            "schema_version": 1, "ok": False, "kind": None, "plugin_id": None,
+            "version": None, "gates": [], "classify": None, "error": str(exc),
+        }
+        print(json.dumps(doc, ensure_ascii=False))
+    else:
+        print(f"error: {exc}", file=sys.stderr)
+    return 2
 
 
-def _resolve_target_and_gates(package_dir: Path) -> tuple[dict, list[_Gate]]:
-    if not package_dir.is_dir():
-        raise ValueError(f"package dir not found: {package_dir}")
-    target = _resolve_target(package_dir)
-    gates = _gates_for(package_dir, target["kind"])
-    return target, gates
-
-
-def run_verify(package_dir: Path) -> int:
-    """Run every gate for the plugin kind; 0 = all green."""
+def _run_check(package_dir: Path, *, json_output: bool, command: str) -> int:
     _utf8_stdio()
     package_dir = package_dir.resolve()
     try:
-        target, gates = _resolve_target_and_gates(package_dir)
+        target = _resolve_target(package_dir)
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+        return _emit_bad_package(exc, json_output)
 
-    label = target["plugin_id"] or package_dir.name
-    print(f"verify {label} kind={target['kind']} at {package_dir}")
-    results = [_run_gate(gate) for gate in gates]
-    verdict, stderr = _run_classify(package_dir)
-    results.append(_print_classify_gate(verdict, stderr))
-    if all(results):
-        print("verify OK")
-        return 0
-    print("verify FAILED", file=sys.stderr)
-    return 1
+    manifest = _read_manifest(package_dir)
+    gates = _build_gates(package_dir, target, manifest)
+    classify_result, verdict, cannot_classify = classify_gate(package_dir)
+    gates.append(classify_result)
+    gates.append(distribution_gate(manifest, verdict))
+
+    ok = not any(g["status"] == "fail" and g["blocking"] for g in gates)
+    doc = {
+        "schema_version": 1,
+        "ok": ok,
+        "kind": target["kind"],
+        "plugin_id": target["plugin_id"],
+        "version": target["version"],
+        "gates": gates,
+        "classify": verdict,
+    }
+    if json_output:
+        print(json.dumps(doc, ensure_ascii=False))
+    else:
+        _print_human(doc, command=command, package_dir=package_dir)
+    if cannot_classify:
+        return 2
+    return 0 if ok else 1
+
+
+def run_check(package_dir: Path, *, json_output: bool) -> int:
+    """Run every gate for the plugin kind; emit the gate document.
+
+    Returns 0 when no blocking gate failed, 1 when one did, 2 for a bad
+    package or a classify that could not run.
+    """
+    return _run_check(package_dir, json_output=json_output, command="check")
+
+
+def run_verify(package_dir: Path) -> int:
+    """Back-compat alias for :func:`run_check` (human-readable output)."""
+    return _run_check(package_dir, json_output=False, command="verify")
 
 
 def _default_submodule(kind: str, plugin_id: str | None) -> str:
@@ -221,22 +230,34 @@ def publish_dry_run(package_dir: Path) -> int:
     """Print the publication plan + pre-flight gate checklist; publish nothing."""
     _utf8_stdio()
     package_dir = package_dir.resolve()
+    if not classify.zone_rules_available():
+        print(
+            "REFUSED: publish --dry-run needs the hub tree to classify the "
+            "publication lane (scripts/export_public_zone.py is absent on a "
+            "public checkout)",
+            file=sys.stderr,
+        )
+        return 2
     try:
-        target, gates = _resolve_target_and_gates(package_dir)
+        target = _resolve_target(package_dir)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    verdict, stderr = _run_classify(package_dir)
+    manifest = _read_manifest(package_dir)
+    classify_result, verdict, cannot_classify = classify_gate(package_dir)
+    if cannot_classify:
+        print(
+            f"error: classify failed — {classify_result['findings'][0]['message']}",
+            file=sys.stderr,
+        )
+        return 2
     if verdict is not None and verdict.get("class") == "prohibited":
         print(
             "REFUSED: class=prohibited — this package must never be published "
             f"({verdict.get('reason')}); see docs/PUBLICATION-POLICY.md",
             file=sys.stderr,
         )
-        return 2
-    if verdict is None:
-        print(f"error: classify failed — {stderr or 'no verdict'}", file=sys.stderr)
         return 2
 
     kind = target["kind"]
@@ -262,9 +283,12 @@ def publish_dry_run(package_dir: Path) -> int:
     print(f"Submodule path: {submodule}")
     print(f"CI workflow to dispatch: {dispatch}")
     print("Pre-flight checklist:")
-    results = [_run_gate(gate) for gate in gates]
-    results.append(_print_classify_gate(verdict, stderr))
-    if all(results):
+    gates = _build_gates(package_dir, target, manifest)
+    gates.append(classify_result)
+    for gate in gates:
+        _print_gate_line(gate)
+    ok = not any(g["status"] == "fail" and g["blocking"] for g in gates)
+    if ok:
         print("dry-run OK: nothing was published — dispatch the workflow above")
         return 0
     print("dry-run FAILED: fix the gates above before dispatching", file=sys.stderr)

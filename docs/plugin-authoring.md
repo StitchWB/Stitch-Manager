@@ -10,9 +10,10 @@ typegen, release), see [docs/service-plugin-cookbook.md](service-plugin-cookbook
 > surface that a `kind=service` plugin exposes to the host. The
 > subprocess protocol (stdio JSON-RPC 2.0, `plugin.init` / `plugin.call`
 > / `plugin.ping` / `plugin.shutdown`), the manifest schema, the
-> declarative UI vocabulary, storage/migrations, entitlements, and the
-> dev loop are documented in **[docs/service-plugins.md](service-plugins.md)** —
+> declarative UI vocabulary, storage/migrations, and entitlements are
+> documented in **[docs/service-plugins.md](service-plugins.md)** —
 > that document is the protocol reference and is not duplicated here.
+> The local development loop CLI is summarized in §8 below.
 
 ---
 
@@ -541,3 +542,58 @@ regenerated from canonical on every `dev-install` / `vendor` / publish.
 The `upgrade` tool byte-compares it against canonical and swaps on
 drift. Authors do not need to create or maintain the `_vendor/`
 directory — the tooling handles it.
+
+---
+
+## 8. Local Development Loop
+
+The CLI covers the loop without booting the full app. Full reference:
+[docs/service-plugins.md §8](service-plugins.md).
+
+- **One-shot run.** `python -m stitch_plugin_tools run <pkg> <cmd> --params @file --json`
+  spawns the plugin child, runs one command, and exits. `--json` emits JSONL
+  `ready` / `call` events; exit codes `0` ok, `1` runtime failure, `2` bad
+  package. Without a command, `run <pkg>` opens the interactive REPL.
+- **Watch.** `run <pkg> --watch` (or `run <pkg> <cmd> --watch`) polls the
+  package source tree by mtime and rebuilds the child on change.
+- **Gate document.** `python -m stitch_plugin_tools check <pkg> --json` runs
+  every gate for the plugin kind and prints a machine-readable document
+  (`schema_version: 1`; gates `ruff`, `manifest-lint`, `pytest`, `contract`,
+  `engine`, `capability`, `typegen-drift`, `vendor-drift`, `classify`,
+  `distribution`; exit `0`/`1`/`2`). `verify` is a thin alias for `check`.
+- **Integration loop.** `python -m stitch_plugin_tools dev-backend [--watch]`
+  runs the real backend headless (temp-scoped, throwaway DB, no
+  `TOKEN_ENCRYPTION_KEY`); `invoke <id>.<cmd> --json` POSTs a command to it.
+- **Reload.** `POST /api/reload_service_plugin` reloads ONE plugin (code +
+  manifest). A reload loses in-memory session state; a plugin that must
+  survive a reload persists resumable state under its `data_dir`.
+- **Prerequisites.** `check` and `run` need only the standard library plus
+  `ruff` (and `pytest` when the package has `tests/`); `httpx` and
+  `cryptography` are needed only by the publish / sign / pack / codes
+  commands. `check` and `run` need no hub checkout.
+
+---
+
+## 9. Провайдеры и сервисные плагины
+
+Провайдер-плагины работают **в процессе** хоста: бэкенд импортирует их как
+обычный модуль (`python/autoreg/providers/registry.py` наполняет
+`PLUGIN_PROVIDERS`, инстанцирует `RegistrationService._build_provider`).
+Поэтому провайдер обязан быть на Python и поставляется скомпилированным и
+подписанным (Nuitka + подпись на ферме).
+
+Автоматизацию на другом языке так не подключить. Её оформляют как
+**сервисный плагин**: он запускается отдельным процессом и может объявить
+`entry.command` на любом языке. Контракт: [docs/service-plugins.md](service-plugins.md).
+
+---
+
+## 10. Как решается публичность плагина
+
+Класс определяет судьбу плагина: **P0** запрещён, **P1** метод (наружу только
+подписанный артефакт), **P2** инфраструктура (только хаб), **P3** open-core
+(публичный). Канал: gated, public или none.
+
+Видимость не выбирается руками. Единственный источник истины: классификатор
+`python -m stitch_plugin_tools classify <path-or-id>`. Новое содержимое по
+умолчанию closed. Полные правила: [docs/PUBLICATION-POLICY.md](PUBLICATION-POLICY.md).

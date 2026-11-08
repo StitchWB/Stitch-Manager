@@ -217,6 +217,27 @@ async def _restart_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
     return await host.restart()
 
 
+@register_command("reload_service_plugin", admin_only=True)
+async def _reload_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
+    """Reload a service-plugin host from disk (admin-only).
+
+    Re-reads ``plugin.json`` and swaps the host, unlike
+    ``restart_service_plugin`` which only restarts the existing process.
+    """
+    plugin_id = params.get("plugin_id")
+    if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
+        raise HTTPException(
+            status_code=400, detail="plugin_id is required and must be valid"
+        )
+    from stitch_backend.domains.plugin_runtime import reload_service_plugin
+
+    result = await reload_service_plugin(plugin_id)
+    if not result.ok:
+        status_code = 404 if result.error_kind == "unknown_plugin" else 400
+        raise HTTPException(status_code=status_code, detail=result.error)
+    return result.status or {}
+
+
 @register_command("set_service_plugin_enabled", admin_only=True)
 async def _set_service_plugin_enabled(params: dict[str, Any]) -> dict[str, Any]:
     """Enable/disable a service-plugin host without uninstalling (admin-only).

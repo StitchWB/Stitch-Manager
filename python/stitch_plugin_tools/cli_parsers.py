@@ -15,7 +15,10 @@ from autoreg.plugin.manifest import (
 )
 from stitch_plugin_tools.classify import _cmd_classify
 from stitch_plugin_tools.cli_commands_package import (
+    _cmd_check,
+    _cmd_dev_backend,
     _cmd_dev_install,
+    _cmd_invoke,
     _cmd_keygen,
     _cmd_manifest_lint,
     _cmd_new,
@@ -34,6 +37,7 @@ from stitch_plugin_tools.cli_commands_package import (
     _cmd_vendor,
     _cmd_verify,
     _cmd_verify_signature,
+    _cmd_wrap,
 )
 from stitch_plugin_tools.cli_commands_server import (
     ENV_ADMIN_KEY,
@@ -75,6 +79,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="package directory (default: cwd; reads plugin.json or catalog.json)",
     )
     p_verify.set_defaults(func=_cmd_verify)
+
+    p_check = sub.add_parser(
+        "check",
+        help="run every dev gate and emit a machine-readable gate document",
+    )
+    p_check.add_argument(
+        "package_dir",
+        nargs="?",
+        default=".",
+        help="package directory (default: cwd; reads plugin.json or catalog.json)",
+    )
+    p_check.add_argument(
+        "--json",
+        action="store_true",
+        help="emit the gate document as JSON on stdout",
+    )
+    p_check.set_defaults(func=_cmd_check)
 
     p_verify_sig = sub.add_parser(
         "verify-signature", help="verify a plugin package signature"
@@ -155,6 +176,40 @@ def _build_parser() -> argparse.ArgumentParser:
         "in the working copy are live without re-install",
     )
     p_dev.set_defaults(func=_cmd_dev_install)
+
+    p_dev_backend = sub.add_parser(
+        "dev-backend",
+        help="run the real backend headless for plugin development",
+    )
+    p_dev_backend.add_argument(
+        "--port", type=int, default=25584, help="bind port (default: 25584)"
+    )
+    p_dev_backend.add_argument(
+        "--watch",
+        action="store_true",
+        help="reload service plugins when their sources change",
+    )
+    p_dev_backend.set_defaults(func=_cmd_dev_backend)
+
+    p_invoke = sub.add_parser(
+        "invoke",
+        help="POST a plugin command to a running dev backend",
+    )
+    p_invoke.add_argument("target", help="<plugin-id>.<cmd>")
+    p_invoke.add_argument(
+        "--params",
+        default=None,
+        help="JSON object for the command, or @file to read it",
+    )
+    p_invoke.add_argument(
+        "--json", action="store_true", help="print the raw response body"
+    )
+    p_invoke.add_argument(
+        "--url",
+        default="http://127.0.0.1:25584",
+        help="backend base URL (default: http://127.0.0.1:25584)",
+    )
+    p_invoke.set_defaults(func=_cmd_invoke)
 
     p_pack = sub.add_parser(
         "pack-engine",
@@ -263,6 +318,56 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_new.set_defaults(func=_cmd_new)
 
+    p_wrap = sub.add_parser(
+        "wrap",
+        help="wrap an existing local directory as a kind=service plugin package",
+    )
+    p_wrap.add_argument(
+        "repo_dir", help="local directory to wrap (no git URL)"
+    )
+    p_wrap.add_argument(
+        "--id", required=True, help="plugin id ([A-Za-z0-9_-], no dots)"
+    )
+    p_wrap.add_argument(
+        "--name", default="", help="human-readable name (default: same as --id)"
+    )
+    p_wrap.add_argument(
+        "--out", default=None, help="output directory (default: ./<id>)"
+    )
+    p_wrap.add_argument(
+        "--runtime",
+        choices=["auto", "python-module", "python-script", "cli", "native"],
+        default="auto",
+        help="wrapped program runtime (default: auto-detect)",
+    )
+    p_wrap.add_argument(
+        "--version", default="0.1.0", help="semver version (default: 0.1.0)"
+    )
+    p_wrap.add_argument(
+        "--description",
+        default="",
+        help="short marketplace description (default: generated from the path)",
+    )
+    p_wrap.add_argument(
+        "--category",
+        default="productivity",
+        choices=list(VALID_CATEGORIES),
+        help="marketplace category (default: productivity)",
+    )
+    p_wrap.add_argument(
+        "--status",
+        default="beta",
+        choices=list(VALID_STATUSES),
+        help="marketplace status (default: beta)",
+    )
+    p_wrap.add_argument(
+        "--icon", default="🧩", help="single emoji icon (default: 🧩)"
+    )
+    p_wrap.add_argument(
+        "--author", default="", help="author name (written to manifest extras)"
+    )
+    p_wrap.set_defaults(func=_cmd_wrap)
+
     p_upgrade = sub.add_parser(
         "upgrade",
         help="migrate an authored plugin to the current scaffold conventions",
@@ -302,10 +407,41 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_run = sub.add_parser(
         "run",
-        help="interactive plugin REPL — spawn, stream stderr, drive commands",
+        help="run a plugin: '<pkg> <cmd>' runs one command; '<pkg>' opens the REPL",
     )
     p_run.add_argument(
         "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_run.add_argument(
+        "command",
+        nargs="?",
+        help="plugin command to invoke once (one-shot); omit for the REPL",
+    )
+    p_run.add_argument(
+        "--params",
+        default=None,
+        help="JSON object for the one-shot command, or @file to read it",
+    )
+    run_fresh = p_run.add_mutually_exclusive_group()
+    run_fresh.add_argument(
+        "--fresh",
+        action="store_true",
+        help="wipe the per-plugin run data_dir before starting (default)",
+    )
+    run_fresh.add_argument(
+        "--keep",
+        action="store_true",
+        help="keep the existing per-plugin run data_dir",
+    )
+    p_run.add_argument(
+        "--json",
+        action="store_true",
+        help="one-shot mode: emit JSONL events (ready / call) on stdout",
+    )
+    p_run.add_argument(
+        "--watch",
+        action="store_true",
+        help="rebuild the plugin child when its sources change (poll mtime)",
     )
     p_run.set_defaults(func=_cmd_run)
 
@@ -342,6 +478,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_typegen.add_argument(
         "package_dir", help="package directory (contains plugin.json)"
+    )
+    p_typegen.add_argument(
+        "--check",
+        action="store_true",
+        help="compare generated output against on-disk; non-zero exit on drift",
     )
     p_typegen.set_defaults(func=_cmd_typegen)
 

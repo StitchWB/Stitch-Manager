@@ -16,6 +16,7 @@ import type {
 import type { BitbucketAutoregResult, KiroV2AutoregResult } from '../../../../types/ui';
 import type { ProviderJobParams } from './types';
 import { REGISTRATION_TIMEOUT_MS, setActivePythonJobId, waitForJobResult } from './recovery';
+import { buildProxyJobFields } from './proxyJobFields';
 
 export async function runWindsurfJob(params: ProviderJobParams): Promise<WindsurfAutoregResult> {
   const { email, config, imapServer, imapUser, imapPassword, onCancelled, onLog } = params;
@@ -33,7 +34,7 @@ export async function runWindsurfJob(params: ProviderJobParams): Promise<Windsur
     name: null,
     headless: config.advanced.headless,
     loginOnly: false,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer,
     imapPort: config.imap.port || DEFAULT_IMAP_PORT,
     imapUser,
@@ -87,7 +88,7 @@ export async function runTraeJob(params: ProviderJobParams): Promise<TraeAutoreg
     password: null,
     name: null,
     headless: config.advanced.headless,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer,
     imapPort: config.imap.port || DEFAULT_IMAP_PORT,
     imapUser,
@@ -176,7 +177,7 @@ export async function runBitbucketJob(params: ProviderJobParams): Promise<Bitbuc
     password: null,
     name: null,
     headless: config.advanced.headless,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer,
     imapPort: config.imap.port || DEFAULT_IMAP_PORT,
     imapUser,
@@ -224,7 +225,7 @@ export async function runKiroV2Job(params: ProviderJobParams): Promise<KiroV2Aut
     password: null,
     name: null,
     headless: config.advanced.headless,
-    proxyUrl: config.proxy.enabled ? config.proxy.url : null,
+    ...buildProxyJobFields(config),
     imapServer,
     imapPort: config.imap.port || DEFAULT_IMAP_PORT,
     imapUser,
