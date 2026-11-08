@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 # Import spi_builtin_oauth so the built-in OAuthProvider SPI is registered
 # at startup (before any service-plugin that may call engine.oauth.* starts).
@@ -305,13 +305,27 @@ async def _start_one(
             manifest.id, existing.status().get("pid"),
         )
         return True
-    result = await host.start()
-    if result.get("status") != "running":
+    ok, result = await _start_host(host, manifest)
+    if not ok:
         logger.warning(
             "Service plugin %s unhealthy (status=%s) — skipping",
             manifest.id, result.get("status"),
         )
         return False
+    logger.info("Service plugin %s started (pid=%s, source=%s)", manifest.id, result.get("pid"), source)
+    return True
+
+
+async def _start_host(
+    host: ServicePluginHost, manifest: PluginManifest
+) -> tuple[bool, dict[str, Any]]:
+    """Start a prepared host and wire it into the registry + SPI bridge.
+
+    Shared by discovery and reload so the start sequence cannot drift.
+    """
+    result = await host.start()
+    if result.get("status") != "running":
+        return False, result
     register_host(host)
     reset_crashes(manifest.id)
     # Register plugin-backed SPI proxies (MailInboxSPI, EmailVerificationProvider,
@@ -326,8 +340,7 @@ async def _start_one(
         logger.warning(
             "Service plugin %s: SPI registration failed: %s", manifest.id, exc
         )
-    logger.info("Service plugin %s started (pid=%s, source=%s)", manifest.id, result.get("pid"), source)
-    return True
+    return True, result
 
 
 # ── LKG rollback (todo 23) ────────────────────────────────────────────────
@@ -539,22 +552,9 @@ def _discover_service_plugins(
         for plugin_id_entry in sorted(cache_root.iterdir()):
             if not plugin_id_entry.is_dir() or plugin_id_entry.name == ".staging":
                 continue
-            # Pick newest version for this plugin id.
-            newest: tuple[tuple[int, int, int], Path, PluginManifest] | None = None
-            for version_entry in sorted(plugin_id_entry.iterdir()):
-                if not version_entry.is_dir():
-                    continue
-                manifest = _try_read_manifest(version_entry)
-                if manifest is None or manifest.kind != "service":
-                    continue
-                if manifest.id in seen_ids:
-                    continue
-                try:
-                    ver_tuple = parse_semver(manifest.version)
-                except ValueError:
-                    continue
-                if newest is None or ver_tuple > newest[0]:
-                    newest = (ver_tuple, version_entry, manifest)
+            newest = _newest_service_version(
+                plugin_id_entry, seen_ids, skip_dotfiles=False
+            )
             if newest is None:
                 continue
             _ver, path, manifest = newest
@@ -573,29 +573,40 @@ def _discover_service_plugins(
             for plugin_id_entry in sorted(community_root.iterdir()):
                 if not plugin_id_entry.is_dir():
                     continue
-                # Pick newest version for this plugin id.
-                newest_comm: tuple[tuple[int, int, int], Path, PluginManifest] | None = None
-                for version_entry in sorted(plugin_id_entry.iterdir()):
-                    if not version_entry.is_dir() or version_entry.name.startswith("."):
-                        continue
-                    manifest = _try_read_manifest(version_entry)
-                    if manifest is None or manifest.kind != "service":
-                        continue
-                    if manifest.id in seen_ids:
-                        continue
-                    try:
-                        ver_tuple = parse_semver(manifest.version)
-                    except ValueError:
-                        continue
-                    if newest_comm is None or ver_tuple > newest_comm[0]:
-                        newest_comm = (ver_tuple, version_entry, manifest)
-                if newest_comm is None:
+                newest = _newest_service_version(
+                    plugin_id_entry, seen_ids, skip_dotfiles=True
+                )
+                if newest is None:
                     continue
-                _ver, path, manifest = newest_comm
+                _ver, path, manifest = newest
                 seen_ids.add(manifest.id)
                 result.append((manifest, path, "community"))
 
     return result
+
+
+def _newest_service_version(
+    plugin_id_entry: Path, seen_ids: set[str], *, skip_dotfiles: bool
+) -> tuple[tuple[int, int, int], Path, PluginManifest] | None:
+    """Newest ``kind=service`` version dir under a plugin-id dir, or None."""
+    newest: tuple[tuple[int, int, int], Path, PluginManifest] | None = None
+    for version_entry in sorted(plugin_id_entry.iterdir()):
+        if not version_entry.is_dir():
+            continue
+        if skip_dotfiles and version_entry.name.startswith("."):
+            continue
+        manifest = _try_read_manifest(version_entry)
+        if manifest is None or manifest.kind != "service":
+            continue
+        if manifest.id in seen_ids:
+            continue
+        try:
+            ver_tuple = parse_semver(manifest.version)
+        except ValueError:
+            continue
+        if newest is None or ver_tuple > newest[0]:
+            newest = (ver_tuple, version_entry, manifest)
+    return newest
 
 
 def _try_read_manifest(package_dir: Path) -> PluginManifest | None:

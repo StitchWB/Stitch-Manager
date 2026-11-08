@@ -43,6 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from autoreg.plugin.childenv import build_child_env
 from autoreg.plugin.manifest import (
     MANIFEST_FILENAME,
     ManifestValidationError,
@@ -301,47 +302,20 @@ def _resolve_module_dir(package_dir: Path, manifest: Any) -> Path:
     )
 
 
-# ── minimal child env ──────────────────────────────────────────────────
-# runtool matches the host's env contract (the sidecar supervisor's
-# ``_CHILD_ENV_ALLOWLIST``): the plugin under development must NOT inherit
-# the developer's full environment (API keys, tokens, shell secrets).
-# Only runtime/locale vars, a reduced PATH, and a TEMP/TMP scoped under the
-# run session's data_dir are passed.  ``stitch_backend`` is not importable
-# in this zone, so the allowlist semantics are replicated here — keep the
-# two in sync.
-
-
 def _minimal_child_env(data_dir: Path) -> dict[str, str]:
-    """Build the minimal env for the plugin child (see module note)."""
-    python_dir = os.path.dirname(sys.executable)
-    if os.name == "nt":
-        win_dir = os.environ.get("SYSTEMROOT", r"C:\Windows")
-        path = os.pathsep.join(
-            [python_dir, os.path.join(win_dir, "System32"), win_dir]
-        )
-    else:
-        path = os.pathsep.join([python_dir, "/usr/bin", "/bin"])
+    """Build the minimal env for the plugin child.
 
+    Delegates to the shared ``autoreg.plugin.childenv`` contract (the same
+    allowlist/PATH the sidecar supervisor uses); TEMP/TMP stay scoped under
+    the run session's data_dir and the real HOME is kept for dev convenience.
+    """
     scoped_tmp = data_dir / "tmp"
     scoped_tmp.mkdir(parents=True, exist_ok=True)
-
-    env = {
-        "PATH": path,
-        "PYTHONIOENCODING": "utf-8",
-        "PYTHONUTF8": "1",
-        "TEMP": str(scoped_tmp),
-        "TMP": str(scoped_tmp),
-    }
-    if os.name == "nt":
-        for key in ("SYSTEMROOT", "COMSPEC", "PATHEXT"):
-            value = os.environ.get(key)
-            if value:
-                env[key] = value
-    else:
-        value = os.environ.get("HOME")
-        if value:
-            env["HOME"] = value
-    return env
+    return build_child_env(
+        {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+        temp_dir=scoped_tmp,
+        scope_home=False,
+    )
 
 
 def _spawn_plugin(
@@ -896,26 +870,6 @@ def _start_stdin_pump() -> queue.Queue[str | None]:
     return lines
 
 
-def _wait_for_change(
-    session: _RunSession,
-    snapshot: dict[str, int],
-    lines: queue.Queue[str | None],
-) -> tuple[list[str], dict[str, int]] | None:
-    """Poll for a source change; return (changed, new_snapshot) or None on EOF."""
-    while True:
-        try:
-            line = lines.get(timeout=_WATCH_POLL_INTERVAL)
-        except queue.Empty:
-            pass
-        else:
-            if line is None:
-                return None
-        new_snapshot = _snapshot_sources(session.package_dir, session.data_dir)
-        changed = _diff_snapshots(snapshot, new_snapshot)
-        if changed:
-            return changed, new_snapshot
-
-
 def _reload_session(
     session: _RunSession, changed: list[str], *, json_output: bool
 ) -> _RunSession | None:
@@ -969,15 +923,16 @@ def _reload_session(
     return new_session
 
 
-def _watch_command(
+def _watch_loop(
     package_dir: Path,
-    command: str,
-    params: dict[str, Any],
     *,
     fresh: bool,
     json_output: bool,
+    interactive: bool,
+    command: str | None = None,
+    params: dict[str, Any] | None = None,
 ) -> int:
-    """Run one command, then re-run it after each source change until stopped."""
+    """Run one command (or a REPL) and rebuild the child on each source change."""
     rc, session = _open_session(package_dir, fresh=fresh, new_session=True)
     if session is None:
         return rc
@@ -985,43 +940,13 @@ def _watch_command(
     snapshot = _snapshot_sources(session.package_dir, session.data_dir)
     if json_output:
         _emit_ready(session)
-    lines = _start_stdin_pump()
-
-    try:
-        _run_one_command(session, command, params, json_output=json_output)
-        while True:
-            change = _wait_for_change(session, snapshot, lines)
-            if change is None:
-                return _RC_OK
-            changed, snapshot = change
-            reloaded = _reload_session(session, changed, json_output=json_output)
-            if reloaded is None:
-                continue
-            session = reloaded
-            _run_one_command(session, command, params, json_output=json_output)
-    except KeyboardInterrupt:
-        return _RC_OK
-    finally:
-        _teardown_session(session)
-
-
-def _watch_repl(
-    package_dir: Path, *, fresh: bool, json_output: bool
-) -> int:
-    """Interactive REPL that reloads the child when its sources change."""
-    rc, session = _open_session(package_dir, fresh=fresh, new_session=True)
-    if session is None:
-        return rc
-
-    snapshot = _snapshot_sources(session.package_dir, session.data_dir)
-    if json_output:
-        _emit_ready(session)
-    else:
+    elif interactive:
         _print_banner(session.client, session.manifest, session.writer)
     lines = _start_stdin_pump()
 
-    rc = _RC_OK
     try:
+        if not interactive:
+            _run_one_command(session, command, params, json_output=json_output)
         while True:
             try:
                 line = lines.get(timeout=_WATCH_POLL_INTERVAL)
@@ -1029,31 +954,34 @@ def _watch_repl(
                 pass
             else:
                 if line is None:
-                    break
-                try:
-                    should_exit = _handle_repl_line(
-                        line, session.client, session.manifest, session.ring
-                    )
-                except KeyboardInterrupt:
-                    should_exit = True
-                if should_exit:
-                    break
+                    return _RC_OK
+                if interactive:
+                    try:
+                        should_exit = _handle_repl_line(
+                            line, session.client, session.manifest, session.ring
+                        )
+                    except KeyboardInterrupt:
+                        should_exit = True
+                    if should_exit:
+                        return _RC_OK
             new_snapshot = _snapshot_sources(session.package_dir, session.data_dir)
             changed = _diff_snapshots(snapshot, new_snapshot)
-            if changed:
-                snapshot = new_snapshot
-                reloaded = _reload_session(session, changed, json_output=json_output)
-                if reloaded is not None:
-                    session = reloaded
-                    if not json_output:
-                        _print_banner(
-                            session.client, session.manifest, session.writer
-                        )
+            if not changed:
+                continue
+            snapshot = new_snapshot
+            reloaded = _reload_session(session, changed, json_output=json_output)
+            if reloaded is None:
+                continue
+            session = reloaded
+            if interactive:
+                if not json_output:
+                    _print_banner(session.client, session.manifest, session.writer)
+            else:
+                _run_one_command(session, command, params, json_output=json_output)
     except KeyboardInterrupt:
-        pass
+        return _RC_OK
     finally:
         _teardown_session(session)
-    return rc
 
 
 def run_command(
@@ -1073,8 +1001,9 @@ def run_command(
     re-runs after each source change until stdin closes or Ctrl-C.
     """
     if watch:
-        return _watch_command(
-            package_dir, command, params, fresh=fresh, json_output=json_output
+        return _watch_loop(
+            package_dir, fresh=fresh, json_output=json_output,
+            interactive=False, command=command, params=params,
         )
     rc, session = _open_session(package_dir, fresh=fresh)
     if session is None:
@@ -1104,7 +1033,9 @@ def run_package(
     With ``watch`` the child is rebuilt on each source change.
     """
     if watch:
-        return _watch_repl(package_dir, fresh=fresh, json_output=json_output)
+        return _watch_loop(
+            package_dir, fresh=fresh, json_output=json_output, interactive=True,
+        )
     rc, session = _open_session(package_dir, fresh=fresh)
     if session is None:
         return rc
