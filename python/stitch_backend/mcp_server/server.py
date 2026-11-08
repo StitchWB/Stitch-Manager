@@ -374,7 +374,9 @@ def main() -> None:
     """Run the MCP server on stdio."""
     global _registered_core_tool_count
     asyncio.run(bootstrap(log_to_stderr=True))
-    _registered_core_tool_count = register_all_tools(mcp, allow=_surface_allowlist())
+    _registered_core_tool_count = register_all_tools(
+        mcp, core_only=(_surface() != "full"), allow=_surface_allowlist()
+    )
     mcp.run(transport="stdio")
 
 
