@@ -595,7 +595,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if args.params:
             print("error: --params requires a command", file=sys.stderr)
             return 2
-        if json_output and not watch:
+        if json_output:
             print("error: --json requires a command", file=sys.stderr)
             return 2
         return run_package(
@@ -679,7 +679,11 @@ def _cmd_typegen(args: argparse.Namespace) -> int:
 def _cmd_dev_backend(args: argparse.Namespace) -> int:
     from stitch_plugin_tools.devbackend import run_dev_backend
 
-    return run_dev_backend(port=args.port, watch=bool(args.watch))
+    return run_dev_backend(
+        port=args.port,
+        watch=bool(args.watch),
+        data_dir=Path(args.data_dir) if args.data_dir else None,
+    )
 
 
 def _cmd_invoke(args: argparse.Namespace) -> int:

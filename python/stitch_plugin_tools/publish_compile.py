@@ -116,7 +116,7 @@ def compile_provider_package(package_dir: Path, provider_id: str) -> Path:
 
     # ── 6. Rewrite the manifest entry to the compiled form ───────────────
     manifest_path = package_dir / MANIFEST_FILENAME
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     manifest["entry"] = {
         "module": base_name,
         "class": class_name,

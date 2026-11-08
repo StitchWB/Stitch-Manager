@@ -21,7 +21,6 @@ Zone-2: depends on ``stitch_backend`` (plugin_runtime, sidecar) and
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import TYPE_CHECKING
@@ -43,12 +42,11 @@ from autoreg.plugin.layout import (
 )
 from autoreg.plugin.loader import PluginLoader
 from autoreg.plugin.manifest import (
-    ManifestValidationError,
     PluginManifest,
     parse_semver,
     resolve_entry_command,
     semver_sort_key,
-    validate_manifest,
+    try_read_manifest,
 )
 from autoreg.scenario.schema import ENGINE_API
 from stitch_backend.domains.plugin_runtime import (
@@ -602,14 +600,7 @@ def _discover_service_plugins(
 
 def _try_read_manifest(package_dir: Path) -> PluginManifest | None:
     """Read + validate a manifest, returning None on any failure."""
-    manifest_path = package_dir / "plugin.json"
-    if not manifest_path.is_file():
-        return None
-    try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return validate_manifest(raw)
-    except (OSError, ValueError, ManifestValidationError):
-        return None
+    return try_read_manifest(package_dir)
 
 
 def _verify_signed(package_dir: Path, pubkey: str | None) -> bool:

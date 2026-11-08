@@ -169,7 +169,7 @@ async def install_community(
             if not manifest_path.is_file():
                 return {"success": False, "error": "package missing plugin.json"}
             try:
-                raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+                raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
                 validate_manifest(raw)
             except Exception as exc:  # noqa: BLE001 — manifest parse
                 return {"success": False, "error": f"manifest invalid: {exc}"}
@@ -507,7 +507,7 @@ async def install_server_community(
             return {"success": False, "error": "package missing plugin.json"}
         try:
             validate_manifest(
-                json.loads((src_pkg / "plugin.json").read_text(encoding="utf-8"))
+                json.loads((src_pkg / "plugin.json").read_text(encoding="utf-8-sig"))
             )
         except Exception as exc:  # noqa: BLE001 — manifest parse
             return {"success": False, "error": f"manifest invalid: {exc}"}
@@ -639,7 +639,7 @@ def _read_package_info(pkg_dir: Path) -> dict[str, Any] | None:
     if not manifest_path.is_file():
         return None
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         manifest = validate_manifest(raw)
     except Exception:  # noqa: BLE001 — skip corrupt
         return None

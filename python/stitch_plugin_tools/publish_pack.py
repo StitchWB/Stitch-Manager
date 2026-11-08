@@ -71,7 +71,7 @@ def _canonical_manifest(plugin_id: str) -> dict | None:
         if not root.is_dir():
             continue
         for manifest_path in sorted(root.glob(f"*/{MANIFEST_FILENAME}")):
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
             if raw.get("id") == plugin_id:
                 return raw
     return None
@@ -83,7 +83,7 @@ def _tree_manifest(provider_src: Path) -> dict | None:
     manifest_path = provider_src / MANIFEST_FILENAME
     if not manifest_path.is_file():
         return None
-    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     return raw if isinstance(raw, dict) else None
 
 
@@ -576,7 +576,7 @@ def _manifest_excludes(package_dir: Path) -> frozenset[str]:
 
     manifest_path = package_dir / MANIFEST_FILENAME
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return frozenset()
     values = raw.get("package_exclude")

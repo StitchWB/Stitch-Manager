@@ -1,9 +1,11 @@
 """Headless dev backend launcher + thin invoke client for the plugin dev loop.
 
-``dev-backend`` scopes every writable path into a per-run temp dir, disables
-auth, drops the core encryption key, and runs the real backend
-(``stitch_backend.main``) in the foreground on 127.0.0.1.  ``--watch``
-additionally reloads service plugins when their sources change.
+``dev-backend`` scopes every writable path into a dev data dir (stable
+default ``<temp>/stitch-dev-backend``, ``--data-dir`` to override) so
+``dev-install``ed plugins persist across runs, disables auth, drops the
+core encryption key, and runs the real backend (``stitch_backend.main``)
+in the foreground on 127.0.0.1.  ``--watch`` additionally reloads service
+plugins when their sources change.
 
 ``invoke`` is the matching thin client: it POSTs a plugin command to a
 running dev backend and prints the JSON body.
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 25584
 DEFAULT_INVOKE_TIMEOUT = 30.0
+DEFAULT_DATA_DIR = Path(tempfile.gettempdir()) / "stitch-dev-backend"
 _REMOVED_ENV = ("TOKEN_ENCRYPTION_KEY",)
 
 
@@ -37,8 +40,6 @@ def build_dev_env(base_dir: Path, port: int) -> dict[str, str]:
     return {
         "STITCH_PLUGINS_DIR": str(base_dir / "plugins"),
         "LOCALAPPDATA": str(base_dir / "localappdata"),
-        "XDG_DATA_HOME": str(base_dir / "xdg-data"),
-        "XDG_CACHE_HOME": str(base_dir / "xdg-cache"),
         "STITCH_DEV_MODE": "1",
         "STITCH_AUTH_ENABLED": "0",
         "PORT": str(port),
@@ -127,9 +128,22 @@ def _install_watch(app: FastAPI) -> None:
     app.router.lifespan_context = _lifespan
 
 
-def run_dev_backend(port: int, watch: bool) -> int:
+def _install_line(plugins_dir: Path) -> str:
+    if os.name == "nt":
+        return (
+            f'$env:STITCH_PLUGINS_DIR = "{plugins_dir}"; '
+            "python -m stitch_plugin_tools dev-install <package_dir>"
+        )
+    return (
+        f'STITCH_PLUGINS_DIR="{plugins_dir}" '
+        "python -m stitch_plugin_tools dev-install <package_dir>"
+    )
+
+
+def run_dev_backend(port: int, watch: bool, data_dir: Path | None = None) -> int:
     """Run the real backend headless in the foreground; return the exit code."""
-    base_dir = Path(tempfile.mkdtemp(prefix="stitch-dev-backend-"))
+    base_dir = DEFAULT_DATA_DIR if data_dir is None else data_dir
+    base_dir.mkdir(parents=True, exist_ok=True)
     apply_dev_env(build_dev_env(base_dir, port))
 
     import uvicorn
@@ -143,6 +157,7 @@ def run_dev_backend(port: int, watch: bool) -> int:
     print(f"dev backend: http://127.0.0.1:{port}")
     print(f"  data dir: {base_dir}")
     print(f"  watch:    {'on' if watch else 'off'}")
+    print(f"  install:  {_install_line(base_dir / 'plugins')}")
     sys.stdout.flush()
 
     try:
@@ -153,6 +168,7 @@ def run_dev_backend(port: int, watch: bool) -> int:
 
 
 __all__ = [
+    "DEFAULT_DATA_DIR",
     "DEFAULT_PORT",
     "apply_dev_env",
     "build_dev_env",

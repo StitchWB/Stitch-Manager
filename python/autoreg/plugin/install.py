@@ -206,7 +206,7 @@ def _read_manifest(source_dir: Path) -> PluginManifest:
     if not manifest_path.is_file():
         raise InstallError("no_manifest", f"missing plugin.json in {source_dir}")
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         return validate_manifest(raw)
     except ManifestValidationError as exc:
         raise InstallError("bad_manifest", str(exc)) from exc

@@ -16,6 +16,7 @@ Error mapping:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 
@@ -160,9 +161,22 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
         ) from None
     except RpcCallError as exc:
         logger.warning("Plugin '%s' command '%s' error: %s", plugin_id, cmd, exc)
+        data = getattr(exc, "data", None)
+        kind = data.get("kind") if isinstance(data, dict) else None
+        dev_mode = os.environ.get("STITCH_DEV_MODE", "").strip().lower()
+        tb = (
+            data.get("traceback")
+            if isinstance(data, dict) and dev_mode in ("1", "true", "yes", "on")
+            else None
+        )
+        detail = {
+            "detail": f"Plugin '{plugin_id}' error: {exc}",
+            "kind": kind,
+            "traceback": tb,
+        }
         raise HTTPException(
             status_code=400,
-            detail=f"Plugin '{plugin_id}' error: {exc}",
+            detail=detail,
         ) from exc
 
 

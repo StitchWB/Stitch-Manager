@@ -70,7 +70,7 @@ async def cmd_install_local_plugin(params: dict) -> dict:
             return {"success": False, "error": "plugin.json not found (not a package dir)"}
         try:
             manifest = validate_manifest(
-                json.loads((src / "plugin.json").read_text(encoding="utf-8"))
+                json.loads((src / "plugin.json").read_text(encoding="utf-8-sig"))
             )
         except Exception as exc:  # noqa: BLE001 — report as install failure
             return {"success": False, "error": f"manifest invalid: {exc}"}

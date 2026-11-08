@@ -23,9 +23,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # Host-injected command names a plugin may register without declaring them.
-RESERVED_COMMANDS = frozenset({"_migrate_db", "list_jobs", "get_job", "cancel_job"})
+RESERVED_COMMANDS = frozenset(
+    {"_migrate_db", "list_jobs", "get_job", "cancel_job", "metrics"}
+)
 
-_SKIP_DIRS = frozenset({"_vendor", "__pycache__"})
+_SKIP_DIRS = frozenset({"_vendor", "__pycache__", "tests"})
 
 
 def _skipped(name: str, reason: str) -> dict[str, Any]:
@@ -54,8 +56,9 @@ def _declared_commands(manifest: dict[str, Any]) -> set[str]:
     return out
 
 
-def _registered_handlers(package_dir: Path) -> set[str]:
+def _registered_handlers(package_dir: Path) -> tuple[set[str], bool]:
     names: set[str] = set()
+    dynamic = False
     for path in sorted(package_dir.rglob("*.py")):
         if _SKIP_DIRS.intersection(path.parts):
             continue
@@ -74,24 +77,64 @@ def _registered_handlers(package_dir: Path) -> set[str]:
             first = node.args[0]
             if isinstance(first, ast.Constant) and isinstance(first.value, str):
                 names.add(first.value)
-    return names
+            else:
+                dynamic = True
+    return names, dynamic
+
+
+def _spi_exempt_commands(manifest: dict[str, Any]) -> set[str]:
+    """Commands a plugin may register without declaring (SPI-only convention)."""
+    contributions = manifest.get("contributions")
+    if not isinstance(contributions, dict):
+        return set()
+    spi_names = contributions.get("spi")
+    if not isinstance(spi_names, list) or not spi_names:
+        return set()
+    try:
+        from stitch_backend.domains.plugin_runtime.spi_bridge import SPI_METHOD_MAP
+    except ImportError:
+        return set()
+    exempt: set[str] = set()
+    for methods in SPI_METHOD_MAP.values():
+        for spec in methods.values():
+            cmd = spec.get("cmd")
+            if isinstance(cmd, str) and cmd:
+                exempt.add(cmd)
+    return exempt
 
 
 def contract_gate(package_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     """Static-AST commands<->handlers contract gate (kind=service)."""
+    entry = manifest.get("entry")
+    if isinstance(entry, dict) and "command" in entry:
+        return _skipped("contract", "non-Python entry")
     declared = _declared_commands(manifest)
-    handlers = _registered_handlers(package_dir)
+    handlers, dynamic = _registered_handlers(package_dir)
+    exempt = _spi_exempt_commands(manifest)
     findings: list[dict[str, Any]] = []
+    has_fail = False
     for name in sorted(declared - handlers - RESERVED_COMMANDS):
-        findings.append({
-            "code": "contract.command.no_handler",
-            "command": name,
-            "message": (
-                f"command {name!r} is declared in contributions.commands "
-                "but no server.register handler was found"
-            ),
-        })
-    for name in sorted(handlers - declared - RESERVED_COMMANDS):
+        if dynamic:
+            findings.append({
+                "code": "contract.command.unknown_handler",
+                "command": name,
+                "message": (
+                    f"command {name!r} is declared in contributions.commands "
+                    "but no literal server.register handler was found "
+                    "(dynamic registration present)"
+                ),
+            })
+        else:
+            findings.append({
+                "code": "contract.command.no_handler",
+                "command": name,
+                "message": (
+                    f"command {name!r} is declared in contributions.commands "
+                    "but no server.register handler was found"
+                ),
+            })
+            has_fail = True
+    for name in sorted(handlers - declared - RESERVED_COMMANDS - exempt):
         findings.append({
             "code": "contract.command.undeclared_handler",
             "command": name,
@@ -100,9 +143,11 @@ def contract_gate(package_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]
                 "contributions.commands"
             ),
         })
+        has_fail = True
+    status = "fail" if has_fail else ("warn" if findings else "pass")
     return {
         "name": "contract",
-        "status": "fail" if findings else "pass",
+        "status": status,
         "blocking": True,
         "findings": findings,
     }

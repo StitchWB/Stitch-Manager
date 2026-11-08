@@ -48,7 +48,7 @@ from autoreg.plugin.layout import (
     sandbox_plugin_dir,
     sandbox_user_dir,
 )
-from autoreg.plugin.manifest import resolve_entry_command
+from autoreg.plugin.manifest import resolve_entry_command, try_read_manifest
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -157,21 +157,7 @@ def get_sandbox_host(
 
 def _try_read_manifest(package_dir: Path) -> PluginManifest | None:
     """Read + validate a manifest, returning None on any failure."""
-    import json
-
-    from autoreg.plugin.manifest import (
-        ManifestValidationError,
-        validate_manifest,
-    )
-
-    manifest_path = package_dir / "plugin.json"
-    if not manifest_path.is_file():
-        return None
-    try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return validate_manifest(raw)
-    except (OSError, ValueError, ManifestValidationError):
-        return None
+    return try_read_manifest(package_dir)
 
 
 async def ensure_sandbox_host(

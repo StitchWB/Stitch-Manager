@@ -364,23 +364,36 @@ conventions** — the patterns the shipped plugins follow inside their
 `__main__.py` and supporting modules. These are not enforced by the
 loader, but they are the canonical shape new plugins should match.
 
-### 7.1 Error convention — `ValueError` for input validation
+### 7.1 Error convention — `PluginInputError` for input validation
 
-Command handlers validate input by **raising `ValueError`** for missing
-or invalid parameters. The `RpcPluginServer._dispatch` method catches
-all exceptions and surfaces them as JSON-RPC `{-32603, message}` errors,
-which the host's bridge translates to HTTP 400. This is the only
-sanctioned way to reject bad input from a handler.
+Command handlers validate input by **raising `PluginInputError`** for
+missing or invalid parameters. Import it the same way as the server
+(`from autoreg.plugin.rpc import PluginInputError`, falling back to
+`._vendor.rpc_server`). `RpcPluginServer._dispatch` catches every
+exception and returns a JSON-RPC `{-32603, message, data}` error; the
+`data` envelope carries `kind` and `traceback`:
+
+- `PluginInputError` → `kind="validation"` — the caller's params were bad.
+- any other exception → `kind="plugin_bug"` — an unexpected handler fault.
+
+The envelope reaches both consumers:
+
+- **CLI.** `run` prints `[error <code>] <message> (kind=…)` plus the
+  traceback; `run … --json` puts `kind` and `traceback` into the `call`
+  event's `error` object.
+- **HTTP bridge.** The 400 `detail` always carries `kind`; `traceback` is
+  included only when `STITCH_DEV_MODE` is truthy (never leak a traceback
+  in production).
 
 Returning a `{"success": false, "error": "..."}` dict is **reserved for
 API-result shapes** — commands that wrap an external API call and
 report that API's failure (e.g. a `test_api`-style command whose result
 is a structured status object the frontend renders). It is **never**
-used for input validation: a missing `profile_id` raises `ValueError`,
-it does not return a failure dict. The distinction matters because the
-dispatcher treats a raised exception as a JSON-RPC error (client sees
-an error response), while a returned dict is a normal result (client
-must inspect `success` manually).
+used for input validation: a missing `profile_id` raises
+`PluginInputError`, it does not return a failure dict. The distinction
+matters because the dispatcher treats a raised exception as a JSON-RPC
+error (client sees an error response), while a returned dict is a normal
+result (client must inspect `success` manually).
 
 ### 7.2 SPI-target commands are NOT declared in `contributions.commands`
 
@@ -567,10 +580,12 @@ The CLI covers the loop without booting the full app. Full reference:
 - **Reload.** `POST /api/reload_service_plugin` reloads ONE plugin (code +
   manifest). A reload loses in-memory session state; a plugin that must
   survive a reload persists resumable state under its `data_dir`.
-- **Prerequisites.** `check` and `run` need only the standard library plus
-  `ruff` (and `pytest` when the package has `tests/`); `httpx` and
-  `cryptography` are needed only by the publish / sign / pack / codes
-  commands. `check` and `run` need no hub checkout.
+- **Prerequisites.** `check` and `run` need only `ruff` (and `pytest` when
+  the package has `tests/`); `httpx` and `cryptography` are imported lazily
+  and are needed only by the publish / install paths. The tooling itself is
+  not published as a standalone package — run it from a Python environment
+  where `stitch_plugin_tools` is importable (the hub repo's `.venv`); the
+  external-install story is not finished.
 
 ---
 

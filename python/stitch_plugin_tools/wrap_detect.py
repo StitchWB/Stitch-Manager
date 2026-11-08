@@ -46,7 +46,19 @@ def _python_script(repo_dir: Path) -> Path | None:
     return scripts[0] if scripts else None
 
 
-def _cli_entry(repo_dir: Path) -> Path | None:
+def _package_bin_path(bin_field: object, package_name: object) -> str | None:
+    if isinstance(bin_field, str) and bin_field:
+        return bin_field
+    if isinstance(bin_field, dict):
+        if isinstance(package_name, str) and isinstance(bin_field.get(package_name), str):
+            return bin_field[package_name]
+        for value in bin_field.values():
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def _cli_entry(repo_dir: Path) -> tuple[Path, list[str] | None] | None:
     package_json = repo_dir / "package.json"
     if package_json.is_file():
         try:
@@ -54,16 +66,26 @@ def _cli_entry(repo_dir: Path) -> Path | None:
         except (OSError, ValueError):
             raw = None
         if isinstance(raw, dict) and raw.get("bin"):
-            return repo_dir
+            bin_path = _package_bin_path(raw.get("bin"), raw.get("name"))
+            argv = ["node", str((repo_dir / bin_path).resolve())] if bin_path else None
+            return repo_dir, argv
     if (repo_dir / "go.mod").is_file() or (repo_dir / "Cargo.toml").is_file():
-        return repo_dir
+        return repo_dir, None
     pyproject = repo_dir / "pyproject.toml"
     if pyproject.is_file():
         text = pyproject.read_text(encoding="utf-8", errors="replace")
         if any(marker in text for marker in _CLI_MARKERS):
-            return repo_dir
+            return repo_dir, None
     shells = sorted(repo_dir.glob("*.sh"))
-    return shells[0] if shells else None
+    if shells:
+        return shells[0], ["bash", str(shells[0].resolve())]
+    return None
+
+
+def cli_argv(repo_dir: Path) -> list[str] | None:
+    """Launch argv for a CLI repo, or None when it cannot be derived."""
+    entry = _cli_entry(repo_dir)
+    return entry[1] if entry is not None else None
 
 
 def _native_entry(repo_dir: Path) -> Path | None:
@@ -94,7 +116,7 @@ def detect_runtime(repo_dir: Path) -> tuple[str, Path]:
         return "python-script", script
     cli = _cli_entry(repo_dir)
     if cli is not None:
-        return "cli", cli
+        return "cli", cli[0]
     native = _native_entry(repo_dir)
     if native is not None:
         return "native", native
@@ -112,5 +134,6 @@ def explicit_source(repo_dir: Path, runtime: str) -> Path:
     if runtime == "python-script":
         return _python_script(repo_dir) or repo_dir
     if runtime == "cli":
-        return _cli_entry(repo_dir) or repo_dir
+        entry = _cli_entry(repo_dir)
+        return entry[0] if entry is not None else repo_dir
     return _native_entry(repo_dir) or repo_dir

@@ -56,25 +56,6 @@ from autoreg.plugin.rpc import (
     RpcTimeoutError,
 )
 
-# Reverse-RPC methods the playground stubs (mirrors the host-side
-# ``register_engine_handlers`` surface in ``spi_builtin_oauth``).  Any
-# ``engine.oauth.*`` method not listed here still gets a stub response
-# via the ``_RunRpcPluginClient._handle_plugin_request`` override -
-# the explicit list is just for the ``help`` banner.
-_ENGINE_OAUTH_STUB_METHODS = (
-    "engine.oauth.start_pkce_flow",
-    "engine.oauth.start_device_flow",
-    "engine.oauth.exchange_code",
-)
-
-# Mirrors the host-side register_secret_handlers surface (plugin_runtime/host_secrets).
-_HOST_SECRETS_STUB_METHODS = (
-    "host.secrets.get",
-    "host.secrets.set",
-    "host.secrets.delete",
-    "host.secrets.list",
-)
-
 # Exit codes (mirrors the rest of the CLI).
 _RC_OK = 0
 _RC_BAD_PACKAGE = 2
@@ -96,10 +77,14 @@ _ERR_PROTOCOL = -32002
 
 # --watch: _vendor/ is regenerated on every attach, so it must never trigger a reload.
 _WATCH_POLL_INTERVAL = 0.3
+_WATCH_DEBOUNCE = 0.3
+_WATCH_MAX_FAILURES = 20
 _WATCH_IGNORE_DIRS = frozenset({"_vendor", "__pycache__"})
 _WATCH_IGNORE_SUFFIXES = (".pyc", ".db")
 _WATCH_SOURCE_SUFFIXES = (".py",)
 _WATCH_SOURCE_NAMES = frozenset({"plugin.json"})
+
+_TRACEBACK_MAX = 2000
 
 
 class _RunRpcPluginClient(RpcPluginClient):
@@ -112,10 +97,9 @@ class _RunRpcPluginClient(RpcPluginClient):
     raises ``RpcCallError`` with a clear message instead of hanging.
     """
 
-    def __init__(self, *, plugin_id: str, stderr_writer: Any,
+    def __init__(self, *, stderr_writer: Any,
                  default_timeout: float = _DEFAULT_CALL_TIMEOUT) -> None:
         super().__init__(default_timeout=default_timeout)
-        self._plugin_id = plugin_id
         self._stderr_writer = stderr_writer
 
     def _handle_plugin_request(
@@ -171,6 +155,58 @@ class _StderrWriter:
                 pass
 
 
+class _RunLock:
+    """Exclusive advisory lock on a plugin's run data_dir.
+
+    The OS drops the lock when the process exits, so a crash cannot leave
+    a stale lock behind.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._fd: int | None = None
+
+    def acquire(self) -> bool:
+        fd = os.open(self._path, os.O_CREAT | os.O_RDWR)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                if os.fstat(fd).st_size == 0:
+                    os.write(fd, b"\0")
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+            return False
+        self._fd = fd
+        return True
+
+    def release(self) -> None:
+        fd = self._fd
+        if fd is None:
+            return
+        self._fd = None
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
+
+
 @dataclass
 class _RunSession:
     client: _RunRpcPluginClient
@@ -182,14 +218,21 @@ class _RunSession:
     plugin_id: str
     proc: subprocess.Popen[bytes]
     package_dir: Path
+    lock: _RunLock
 
 
-def _prepare_data_dir(plugin_id: str, fresh: bool) -> Path:
+def _prepare_data_dir(
+    plugin_id: str, fresh: bool, lock: _RunLock | None
+) -> tuple[Path, _RunLock | None]:
     data_dir = Path(tempfile.gettempdir()) / f"stitch-run-{plugin_id}"
+    if lock is None:
+        lock = _RunLock(data_dir.parent / f"{data_dir.name}.lock")
+        if not lock.acquire():
+            return data_dir, None
     if fresh and data_dir.exists():
         shutil.rmtree(data_dir, ignore_errors=True)
     data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
+    return data_dir, lock
 
 
 def parse_params_arg(raw: str | None) -> dict[str, Any]:
@@ -224,7 +267,7 @@ def _read_manifest(package_dir: Path) -> Any:
             f"no {MANIFEST_FILENAME} found in {package_dir}"
         )
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, ValueError) as exc:
         raise ValueError(
             f"failed to parse {manifest_path}: {exc}"
@@ -394,7 +437,7 @@ def _attach_client(
         "supported": ["reverse_rpc", "caller_identity"],
     }
     client = _RunRpcPluginClient(
-        plugin_id=plugin_id, stderr_writer=writer,
+        stderr_writer=writer,
         default_timeout=_DEFAULT_CALL_TIMEOUT,
     )
     try:
@@ -440,14 +483,8 @@ def _print_banner(
     print(
         "built-ins: ping, init-info, logs, help, exit"
     )
-    print(
-        f"stubs: {', '.join(m.split('.')[-1] for m in _ENGINE_OAUTH_STUB_METHODS)}"
-        " (engine.oauth.* -> stub error)"
-    )
-    print(
-        f"stubs: {', '.join(m.split('.')[-1] for m in _HOST_SECRETS_STUB_METHODS)}"
-        " (host.secrets.* -> stub error)"
-    )
+    print("stubs: engine.oauth.* -> stub error")
+    print("stubs: host.secrets.* -> stub error")
 
 
 def _print_help(manifest: Any) -> None:
@@ -539,7 +576,13 @@ def _handle_repl_line(
         # original call_host error as ``str(exc)`` in its own error
         # response, so the code prefix may appear twice — that's fine,
         # the author sees the full chain.
-        print(f"[error {exc.code}] {exc}")
+        fields = _envelope_fields(exc.data)
+        line = f"[error {exc.code}] {exc}"
+        if fields.get("kind"):
+            line += f" (kind={fields['kind']})"
+        print(line)
+        if fields.get("traceback"):
+            print(fields["traceback"])
         return False
     except RpcTimeoutError:
         print(
@@ -564,7 +607,8 @@ def _graceful_shutdown(client: _RunRpcPluginClient) -> None:
 
 
 def _open_session(
-    package_dir: Path, *, fresh: bool, new_session: bool = False
+    package_dir: Path, *, fresh: bool, new_session: bool = False,
+    lock: _RunLock | None = None,
 ) -> tuple[int, _RunSession | None]:
     """Validate, vendor, spawn and attach a plugin child.
 
@@ -606,7 +650,14 @@ def _open_session(
             print(f"warning: vendor refresh failed: {exc}", file=sys.stderr)
 
     plugin_id = manifest.id
-    data_dir = _prepare_data_dir(plugin_id, fresh)
+    data_dir, lock = _prepare_data_dir(plugin_id, fresh, lock)
+    if lock is None:
+        print(
+            f"error: another run of {plugin_id} is active "
+            f"(data_dir {data_dir} is locked)",
+            file=sys.stderr,
+        )
+        return _RC_RUNTIME_FAILURE, None
     db_path = data_dir / "plugin.db"
 
     writer = _StderrWriter(plugin_id)
@@ -634,13 +685,9 @@ def _open_session(
             migrations=migrations,
             writer=writer,
         )
-    except (RpcTimeoutError, RpcProtocolError) as exc:
+    except (RpcTimeoutError, RpcProtocolError, RpcCallError) as exc:
         print(f"error: plugin.init failed: {exc}", file=sys.stderr)
-        try:
-            proc.kill()
-            proc.wait(timeout=2.0)
-        except Exception:  # noqa: BLE001
-            pass
+        _kill_tree(proc)
         return _RC_RUNTIME_FAILURE, None
 
     session = _RunSession(
@@ -653,12 +700,26 @@ def _open_session(
         plugin_id=plugin_id,
         proc=proc,
         package_dir=package_dir,
+        lock=lock,
     )
     return _RC_OK, session
 
 
 def _emit_json(event: dict[str, Any]) -> None:
     print(json.dumps(event, ensure_ascii=False), flush=True)
+
+
+def _envelope_fields(data: object) -> dict[str, str]:
+    if not isinstance(data, dict):
+        return {}
+    fields: dict[str, str] = {}
+    kind = data.get("kind")
+    if isinstance(kind, str) and kind:
+        fields["kind"] = kind
+    trace = data.get("traceback")
+    if isinstance(trace, str) and trace:
+        fields["traceback"] = trace[-_TRACEBACK_MAX:]
+    return fields
 
 
 def _command_names(manifest: Any) -> list[str]:
@@ -682,19 +743,30 @@ def _emit_ready(session: _RunSession) -> None:
 
 
 def _report_call_error(
-    command: str, code: int, message: str, *, json_output: bool
+    command: str,
+    code: int,
+    message: str,
+    *,
+    json_output: bool,
+    data: object = None,
 ) -> int:
+    fields = _envelope_fields(data)
     if json_output:
+        error: dict[str, Any] = {"code": code, "message": message}
+        error.update(fields)
         _emit_json(
             {
                 "event": "call",
                 "command": command,
                 "ok": False,
-                "error": {"code": code, "message": message},
+                "error": error,
             }
         )
     else:
-        print(f"[error {code}] {message}", file=sys.stderr)
+        suffix = f" (kind={fields['kind']})" if fields.get("kind") else ""
+        print(f"[error {code}] {message}{suffix}", file=sys.stderr)
+        if fields.get("traceback"):
+            print(fields["traceback"], file=sys.stderr)
     return _RC_RUNTIME_FAILURE
 
 
@@ -711,7 +783,11 @@ def _run_one_command(
         )
     except RpcCallError as exc:
         return _report_call_error(
-            command, exc.code, str(exc), json_output=json_output
+            command,
+            exc.code,
+            str(exc),
+            json_output=json_output,
+            data=exc.data,
         )
     except RpcTimeoutError:
         message = f"call '{command}' timed out after {_DEFAULT_CALL_TIMEOUT}s"
@@ -800,6 +876,7 @@ def _teardown_session(session: _RunSession) -> None:
         session.stderr_thread.join(timeout=2.0)
     except Exception:  # noqa: BLE001 - best-effort teardown
         pass
+    session.lock.release()
 
 
 def _start_stdin_pump() -> queue.Queue[str | None]:
@@ -852,7 +929,10 @@ def _reload_session(
         pass
 
     rc, new_session = _open_session(
-        session.package_dir, fresh=False, new_session=True
+        session.package_dir,
+        fresh=False,
+        new_session=True,
+        lock=session.lock,
     )
     if new_session is None:
         if json_output:
@@ -908,16 +988,17 @@ def _watch_command(
     lines = _start_stdin_pump()
 
     try:
+        _run_one_command(session, command, params, json_output=json_output)
         while True:
-            _run_one_command(session, command, params, json_output=json_output)
             change = _wait_for_change(session, snapshot, lines)
             if change is None:
                 return _RC_OK
             changed, snapshot = change
             reloaded = _reload_session(session, changed, json_output=json_output)
             if reloaded is None:
-                return _RC_RUNTIME_FAILURE
+                continue
             session = reloaded
+            _run_one_command(session, command, params, json_output=json_output)
     except KeyboardInterrupt:
         return _RC_OK
     finally:
@@ -962,12 +1043,12 @@ def _watch_repl(
             if changed:
                 snapshot = new_snapshot
                 reloaded = _reload_session(session, changed, json_output=json_output)
-                if reloaded is None:
-                    rc = _RC_RUNTIME_FAILURE
-                    break
-                session = reloaded
-                if not json_output:
-                    _print_banner(session.client, session.manifest, session.writer)
+                if reloaded is not None:
+                    session = reloaded
+                    if not json_output:
+                        _print_banner(
+                            session.client, session.manifest, session.writer
+                        )
     except KeyboardInterrupt:
         pass
     finally:

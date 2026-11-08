@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,8 @@ from stitch_backend.domains.plugin_runtime.discovery import (
     _resolve_host_driver,
     _try_read_manifest,
 )
+from stitch_backend.domains.plugin_runtime.lkg import reset_crashes
+from stitch_backend.domains.plugin_runtime.runtime_state import is_plugin_disabled
 from stitch_backend.domains.plugin_runtime.spi_bridge import (
     register_plugin_spi,
     unregister_plugin_spi,
@@ -38,6 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _reload_locks: dict[str, asyncio.Lock] = {}
+_reload_locks_guard = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -46,9 +50,9 @@ class ReloadResult:
 
     ``ok`` is True only when a new host started and was registered.  On
     failure ``error_kind`` names the stage (``unknown_plugin``,
-    ``no_package_dir``, ``invalid_manifest``, ``guard_failed``,
-    ``start_failed``) and the old host is left registered (dead) — never
-    silently resurrected.
+    ``no_package_dir``, ``invalid_manifest``, ``disabled``,
+    ``guard_failed``, ``start_failed``) and the old host is left
+    registered (dead) — never silently resurrected.
     """
 
     ok: bool
@@ -58,11 +62,12 @@ class ReloadResult:
 
 
 def _reload_lock(plugin_id: str) -> asyncio.Lock:
-    lock = _reload_locks.get(plugin_id)
-    if lock is None:
-        lock = asyncio.Lock()
-        _reload_locks[plugin_id] = lock
-    return lock
+    with _reload_locks_guard:
+        lock = _reload_locks.get(plugin_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _reload_locks[plugin_id] = lock
+        return lock
 
 
 def _static_validate(package_dir: Path) -> tuple[PluginManifest | None, str | None]:
@@ -84,7 +89,8 @@ async def reload_service_plugin(plugin_id: str) -> ReloadResult:
 
     Static-validates the manifest before any side effect, then stops the
     old host, re-reads the manifest, re-checks the start guards, and starts
-    a new host.  The new host is registered only on a successful start; a
+    a new host.  A user-disabled plugin is refused without touching its
+    host.  The new host is registered only on a successful start; a
     failed start leaves the old host registered (dead).
     """
     host = get_host(plugin_id)
@@ -111,6 +117,12 @@ async def reload_service_plugin(plugin_id: str) -> ReloadResult:
                 ok=False,
                 error=f"unknown plugin: {plugin_id}",
                 error_kind="unknown_plugin",
+            )
+        if is_plugin_disabled(plugin_id):
+            return ReloadResult(
+                ok=False,
+                error=f"plugin {plugin_id} is disabled",
+                error_kind="disabled",
             )
         unregister_plugin_spi(host)
         await host.stop_forced()
@@ -139,6 +151,7 @@ async def reload_service_plugin(plugin_id: str) -> ReloadResult:
                 error_kind="start_failed",
             )
         register_host(new_host)
+        reset_crashes(plugin_id)
         register_manifest(plugin_id, manifest)
         register_plugin_spi(new_host, manifest)
         return ReloadResult(ok=True, status=result)

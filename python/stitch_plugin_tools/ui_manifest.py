@@ -391,7 +391,7 @@ def lint_paths(patterns: list[str]) -> int:
             total_errors += 1
             continue
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError) as exc:
             print(f"  FAIL  {path}: {exc}", file=sys.stderr)
             total_errors += 1

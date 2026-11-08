@@ -400,9 +400,6 @@ class ServicePluginHost:
     ) -> Any:
         return host_attach.attach_rpc(self, proc, timeout)
 
-    def _stderr_reader(self) -> None:
-        host_logs.stderr_reader(self)
-
     async def _monitor(self) -> None:
         await host_lifecycle.monitor(self)
 
