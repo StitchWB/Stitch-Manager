@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any
 from autoreg.plugin.loader import PluginLoader
 from stitch_backend.domains.plugin_runtime import (
     get_host,
-    register_host,
     register_manifest,
 )
 from stitch_backend.domains.plugin_runtime.discovery import (
@@ -24,14 +23,11 @@ from stitch_backend.domains.plugin_runtime.discovery import (
     _on_crash_loop,
     _preflight_manifest,
     _resolve_host_driver,
+    _start_host,
     _try_read_manifest,
 )
-from stitch_backend.domains.plugin_runtime.lkg import reset_crashes
 from stitch_backend.domains.plugin_runtime.runtime_state import is_plugin_disabled
-from stitch_backend.domains.plugin_runtime.spi_bridge import (
-    register_plugin_spi,
-    unregister_plugin_spi,
-)
+from stitch_backend.domains.plugin_runtime.spi_bridge import unregister_plugin_spi
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -143,17 +139,14 @@ async def reload_service_plugin(plugin_id: str) -> ReloadResult:
             manifest, package_dir, source=host.source, host_driver=host_driver
         )
         new_host.crash_hook = _on_crash_loop
-        result = await new_host.start()
-        if result.get("status") != "running":
+        ok, result = await _start_host(new_host, manifest)
+        if not ok:
             return ReloadResult(
                 ok=False,
                 error=result.get("error") or "new host failed to start",
                 error_kind="start_failed",
             )
-        register_host(new_host)
-        reset_crashes(plugin_id)
         register_manifest(plugin_id, manifest)
-        register_plugin_spi(new_host, manifest)
         return ReloadResult(ok=True, status=result)
 
 
