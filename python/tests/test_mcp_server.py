@@ -195,7 +195,10 @@ def test_surface_registers_expected_count():
         "lite=[c for c in CURATED_TOOLS if c in present];"
         "assert register_all_tools(FastMCP('l'), allow=set(CURATED_TOOLS)) == len(lite);"
         "core=[c for c in CORE_TOOLS if c in present];"
-        "assert register_all_tools(FastMCP('c'), allow=set(CORE_TOOLS)) == len(core)"
+        "nc=register_all_tools(FastMCP('c'), allow=set(CORE_TOOLS));"
+        "assert nc == len(core);"
+        "nf=register_all_tools(FastMCP('f'), core_only=False);"
+        "assert nf > nc, (nf, nc)"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
