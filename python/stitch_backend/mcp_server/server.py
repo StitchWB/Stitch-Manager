@@ -3,7 +3,8 @@
 Exposes core commands as typed MCP tools plus meta tools (list_mcp_commands,
 execute_any, get_backend_health, get_safety_status, read_critical_journal,
 get_mcp_doctor).  Write commands route through the safety layer
-(kill-switch, dry-run, journal).
+(kill-switch, dry-run, journal).  STITCH_MCP_SURFACE selects the typed-tool
+surface: "meta" (none), "lite" (curated), "core" (default) or "full".
 
 Start::
 
@@ -16,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Any
 
 from fastmcp import FastMCP
@@ -128,6 +130,51 @@ CORE_TOOLS = [
     "update_settings",
 ]
 
+CURATED_TOOLS = [
+    "list_accounts",
+    "add_account",
+    "delete_account",
+    "refresh_account",
+    "get_account_quota",
+    "archive_account",
+    "set_active_account",
+    "get_active_accounts",
+    "start_registration",
+    "cancel_registration",
+    "get_registration_progress",
+    "get_registration_status",
+    "get_providers",
+    "list_recorded_scenarios",
+    "list_composed_flows",
+    "get_proxy_settings",
+    "test_provider_connection",
+    "get_available_models",
+    "list_model_health",
+    "get_settings",
+    "update_settings",
+]
+
+SURFACES = ("meta", "lite", "core", "full")
+
+
+def _surface() -> str:
+    """Active tool surface read from STITCH_MCP_SURFACE (default "core")."""
+    value = os.getenv("STITCH_MCP_SURFACE", "core").strip().lower()
+    return value if value in SURFACES else "core"
+
+
+def _surface_allowlist() -> set[str] | None:
+    """Command names to expose; empty set for none, None means every command."""
+    surface = _surface()
+    if surface == "meta":
+        return set()
+    if surface == "lite":
+        return set(CURATED_TOOLS)
+    if surface == "full":
+        return None
+    return set(CORE_TOOLS)
+
+
 # Meta tools registered directly on the FastMCP app (not backed by commands).
 _META_TOOLS = (
     "list_mcp_commands",
@@ -173,6 +220,7 @@ async def get_backend_health() -> dict:
     """Return backend health status."""
     return {
         "status": "ok",
+        "surface": _surface(),
         "commandsRegistered": len(list_commands()),
         "coreToolsDeclared": len(CORE_TOOLS),
         "coreToolsRegistered": _registered_core_tool_count,
@@ -241,13 +289,15 @@ async def get_mcp_doctor() -> dict:
     unparsed = [n for n in known if meta[n].schema_source == "unparsed"]
     no_meta = [name for name in CORE_TOOLS if name not in meta]
 
+    surface = _surface()
     warnings: list[str] = []
-    if missing:
-        warnings.append(f"{len(missing)} CORE_TOOLS declared but not registered")
-    if _registered_core_tool_count != len(CORE_TOOLS):
-        warnings.append(
-            f"registered core tools {_registered_core_tool_count} != declared {len(CORE_TOOLS)}"
-        )
+    if surface == "core":
+        if missing:
+            warnings.append(f"{len(missing)} CORE_TOOLS declared but not registered")
+        if _registered_core_tool_count != len(CORE_TOOLS):
+            warnings.append(
+                f"registered core tools {_registered_core_tool_count} != declared {len(CORE_TOOLS)}"
+            )
     if no_meta:
         warnings.append(f"{len(no_meta)} CORE_TOOLS have no metadata")
     if unparsed:
@@ -255,6 +305,7 @@ async def get_mcp_doctor() -> dict:
 
     return {
         "status": "warn" if warnings else "ok",
+        "surface": surface,
         "callerRole": _mcp_caller()["_caller_role"],
         "commandsRegistered": len(registered),
         "coreToolsDeclared": len(CORE_TOOLS),
@@ -323,7 +374,7 @@ def main() -> None:
     """Run the MCP server on stdio."""
     global _registered_core_tool_count
     asyncio.run(bootstrap(log_to_stderr=True))
-    _registered_core_tool_count = register_all_tools(mcp, core_only=True)
+    _registered_core_tool_count = register_all_tools(mcp, allow=_surface_allowlist())
     mcp.run(transport="stdio")
 
 
