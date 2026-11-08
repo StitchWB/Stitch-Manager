@@ -19,7 +19,13 @@ from pathlib import Path
 import pytest
 
 NODE = "node"
-GATE = Path(__file__).resolve().parents[2] / "scripts" / "check-vite-modules.mjs"
+REPO = Path(__file__).resolve().parents[2]
+GATE = REPO / "scripts" / "check-vite-modules.mjs"
+
+pytestmark = pytest.mark.skipif(
+    not (REPO / "node_modules" / "typescript").exists(),
+    reason="typescript is not installed (run npm install)",
+)
 
 
 class _FixtureServer:
