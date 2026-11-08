@@ -259,10 +259,46 @@ describe('DevboxNowRail recent activity', () => {
 
     const rows = screen.getByTestId('devbox-rail-recent');
     expect(rows.className).not.toContain('before:');
-    expect(rows.textContent).toContain('bash · ok');
-    expect(rows.textContent).toContain('git · failed');
-    expect(rows.textContent).toContain('note · weird');
+    expect(rows.textContent).toContain('bash');
+    expect(rows.textContent).toContain('git');
+    expect(rows.textContent).toContain('Event');
+    expect(rows.textContent).not.toContain('tool_call');
     expect(rows.querySelector('.font-mono')).toBeNull();
+  });
+
+  it('marks awaiting-permission rows with the attention tone and never spins', () => {
+    renderRail({
+      events: [
+        { ts: 1791536982, kind: 'mcp_request', tool: 'bash', status: 'awaiting_permission' },
+      ],
+    });
+
+    const icon = screen.getByTestId('devbox-rail-event-icon');
+    expect(icon.getAttribute('data-tone')).toBe('attention');
+    expect(icon.getAttribute('class')).toContain('text-amber-300');
+    expect(icon.getAttribute('class')).not.toContain('animate-spin');
+  });
+
+  it('inserts a date separator when the day changes between events', () => {
+    jest.useFakeTimers().setSystemTime(NOW_MS);
+    const now = new Date();
+    const todayTs = Math.floor(now.getTime() / 1000);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayTs = Math.floor(yesterday.getTime() / 1000);
+
+    renderRail({
+      events: [
+        { ts: yesterdayTs, kind: 'tool_call', tool: 'old', status: 'ok' },
+        { ts: todayTs, kind: 'tool_call', tool: 'now', status: 'ok' },
+      ],
+    });
+
+    const separators = screen.getAllByTestId('devbox-rail-event-date');
+    expect(separators).toHaveLength(2);
+    expect(separators[0].textContent).toBe(t('devboxPage.dateToday'));
+    expect(separators[1].textContent).toBe(t('devboxPage.dateYesterday'));
+    jest.useRealTimers();
   });
 });
 

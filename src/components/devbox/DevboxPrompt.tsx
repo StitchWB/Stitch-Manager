@@ -797,6 +797,12 @@ export function DevboxPrompt({
                   </Button>
                 </div>
                 <div className="flex flex-col items-end gap-1">
+                  <span
+                    className="max-w-[320px] text-right text-xs text-slate-300"
+                    data-testid="devbox-prompt-step2"
+                  >
+                    {t('devboxPage.promptStep2')}
+                  </span>
                   {copyDisabled ? (
                     <Tooltip
                       content={t('devboxPage.promptBlockedTip', {

@@ -28,7 +28,7 @@ import {
 import { Toggle } from '@/components/ui/Toggle';
 import { IconButton } from '@/components/ui/IconButton';
 import { t } from '@/lib/i18n';
-import { cn, formatTime } from '@/lib/utils';
+import { cn, formatDateTime, formatTime } from '@/lib/utils';
 import {
   devboxLatestFinishedPayload,
   devboxLogs,
@@ -38,21 +38,38 @@ import {
   type DevboxRecentAction,
 } from '@/lib/backend/modules/devbox';
 import { DEVBOX_LOGS_LIMIT } from './constants';
-import { devboxEventTone, type DevboxEventTone } from './eventLine';
+import { devboxEventPhrase, devboxEventTone, type DevboxEventTone } from './eventLine';
 
 type ConsoleTab = 'events' | 'logs' | 'actions';
 type ConsoleFilter = 'all' | 'errors';
 
 const EVENTS_TAIL = 200;
 const ERROR_LINE_RE = /error|fail|exception|traceback|warn/i;
-const ERROR_EVENT_STATUSES = new Set(['failed', 'error']);
+const ERROR_ACTION_STATUSES = new Set(['failed', 'error', 'interrupted']);
 
 function isErrorEvent(row: DevboxEventRow): boolean {
-  return ERROR_EVENT_STATUSES.has(String(row.status ?? '').toLowerCase());
+  if (devboxEventTone(row) === 'failed') return true;
+  if (typeof row.exit === 'number' && row.exit !== 0) return true;
+  return row.kind === 'tap_error';
 }
 
 function isErrorAction(row: DevboxRecentAction): boolean {
-  return row.exit !== null && row.exit !== undefined && row.exit !== 0;
+  if (row.exit !== null && row.exit !== undefined && row.exit !== 0) return true;
+  return ERROR_ACTION_STATUSES.has(String(row.status ?? '').toLowerCase());
+}
+
+const ACTION_STATUS_KEY: Record<string, string> = {
+  finished: 'devboxPage.eventStatusFinished',
+  failed: 'devboxPage.eventStatusFailed',
+  error: 'devboxPage.eventStatusFailed',
+  interrupted: 'devboxPage.eventStatusInterrupted',
+  running: 'devboxPage.eventStatusRunning',
+  pending: 'devboxPage.eventStatusRunning',
+};
+
+function actionStatusLabel(status: string): string {
+  const key = ACTION_STATUS_KEY[status.toLowerCase()];
+  return key ? t(key) : status;
 }
 
 function payloadString(payload: Record<string, unknown> | null, key: string): string | null {
@@ -67,15 +84,38 @@ const TIME_OPTS: Intl.DateTimeFormatOptions = {
   second: '2-digit',
 };
 
-function logTime(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'number' && Number.isFinite(value)) return formatTime(value * 1000, TIME_OPTS);
+const DATE_TIME_OPTS: Intl.DateTimeFormatOptions = {
+  day: '2-digit',
+  month: '2-digit',
+  ...TIME_OPTS,
+};
+
+function toEpochMs(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value * 1000;
   if (typeof value === 'string') {
     const asNumber = Number(value);
-    if (value.trim() !== '' && Number.isFinite(asNumber)) return formatTime(asNumber * 1000, TIME_OPTS);
-    return formatTime(value, TIME_OPTS);
+    if (value.trim() !== '' && Number.isFinite(asNumber)) return asNumber * 1000;
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
   }
-  return '—';
+  return null;
+}
+
+function isToday(ms: number): boolean {
+  const date = new Date(ms);
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+function logTime(value: unknown): string {
+  const ms = toEpochMs(value);
+  if (ms === null) return '—';
+  return isToday(ms) ? formatTime(ms, TIME_OPTS) : formatDateTime(ms, DATE_TIME_OPTS);
 }
 
 const HOST_TS_RE = /^\[([^\]]+)\]\s*/;
@@ -180,44 +220,34 @@ function groupTimeRange(group: LogGroup): string {
   return `${start} → ${logTime(group.lastTs)}`;
 }
 
-const EVENT_DETAIL_KEYS = ['method', 'tool', 'name', 'detail', 'status'] as const;
-
-function eventDetail(row: DevboxEventRow): string {
-  const parts: string[] = [];
-  for (const key of EVENT_DETAIL_KEYS) {
-    const value = row[key];
-    if (typeof value === 'string' && value !== '' && value !== '—') parts.push(value);
-  }
-  return parts.join(' · ');
-}
-
-interface EventRowParts {
-  time: string;
-  kind: string;
-  detail: string;
+interface EventLineParts {
+  time: string | null;
+  phrase: string;
+  tool: string | null;
   tone: DevboxEventTone;
 }
 
-function eventRowParts(row: DevboxEventRow): EventRowParts {
-  return {
-    time: logTime(row.ts),
-    kind: typeof row.kind === 'string' && row.kind !== '' ? row.kind : 'event',
-    detail: eventDetail(row),
-    tone: devboxEventTone(row),
-  };
+function eventLineParts(row: DevboxEventRow): EventLineParts {
+  const time = logTime(row.ts);
+  const phrase = devboxEventPhrase(row);
+  const rawTool =
+    typeof row.tool === 'string' && row.tool !== '' && row.tool !== '—' ? row.tool : '';
+  const tool = rawTool !== '' && rawTool.toLowerCase() !== phrase.toLowerCase() ? rawTool : null;
+  return { time: time === '—' ? null : time, phrase, tool, tone: devboxEventTone(row) };
 }
 
 function eventPlainText(row: DevboxEventRow): string {
-  const parts = eventRowParts(row);
-  return parts.detail === ''
-    ? `[${parts.time}] · ${parts.kind}`
-    : `[${parts.time}] · ${parts.kind} · ${parts.detail}`;
+  const parts = eventLineParts(row);
+  return [parts.time, parts.phrase, parts.tool]
+    .filter((part): part is string => part !== null)
+    .join(' · ');
 }
 
 const EVENT_TONE_TEXT: Record<DevboxEventTone, string> = {
   failed: 'text-red-300',
   ok: 'text-emerald-300',
   running: 'text-amber-300',
+  attention: 'text-amber-300',
   other: 'text-slate-300',
 };
 
@@ -225,6 +255,7 @@ const EVENT_TONE_DOT: Record<DevboxEventTone, string> = {
   failed: 'bg-red-300/40',
   ok: 'bg-emerald-300/60',
   running: 'bg-amber-300/60',
+  attention: 'bg-amber-300/60',
   other: 'bg-slate-400/60',
 };
 
@@ -304,6 +335,16 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
     if (errorsOnly) rows = rows.filter(isErrorEvent);
     return rows.slice(-EVENTS_TAIL);
   }, [events, eventsBaseline, query, errorsOnly]);
+
+  const bufferEvents = useMemo(() => {
+    const start = Math.min(eventsBaseline, events.length);
+    return events.slice(start);
+  }, [events, eventsBaseline]);
+  const failedCount = useMemo(() => bufferEvents.filter(isErrorEvent).length, [bufferEvents]);
+  const attentionCount = useMemo(
+    () => bufferEvents.filter(row => devboxEventTone(row) === 'attention').length,
+    [bufferEvents],
+  );
 
   const recentRows = useMemo(() => (Array.isArray(recent) ? recent : []), [recent]);
   const visibleActions = useMemo(() => {
@@ -443,6 +484,20 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
             onClick={() => setTab('actions')}
           />
         </div>
+        {(failedCount > 0 || attentionCount > 0) && (
+          <div className="flex items-center gap-2" data-testid="devbox-console-counts">
+            {failedCount > 0 && (
+              <span className="text-2xs text-red-300">
+                {t('devboxPage.consoleCountErrors', { count: failedCount })}
+              </span>
+            )}
+            {attentionCount > 0 && (
+              <span className="text-2xs text-amber-300">
+                {t('devboxPage.consoleCountAttention', { count: attentionCount })}
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedControl
             size="sm"
@@ -533,7 +588,7 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
             className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/5 bg-black/40 p-2 font-mono text-2xs leading-5 text-slate-300"
           >
             {visibleEvents.map((row, i) => {
-              const parts = eventRowParts(row);
+              const parts = eventLineParts(row);
               return (
                 <div
                   key={i}
@@ -545,13 +600,17 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
                       EVENT_TONE_DOT[parts.tone],
                     )}
                   />
-                  <span className="text-slate-500">[{parts.time}]</span>
-                  <span className="text-slate-600"> · </span>
-                  <span className="text-slate-400">{parts.kind}</span>
-                  {parts.detail !== '' && (
+                  {parts.time !== null && (
+                    <>
+                      <span className="text-slate-500">[{parts.time}]</span>
+                      <span className="text-slate-600"> · </span>
+                    </>
+                  )}
+                  <span className={EVENT_TONE_TEXT[parts.tone]}>{parts.phrase}</span>
+                  {parts.tool !== null && (
                     <>
                       <span className="text-slate-600"> · </span>
-                      <span className={EVENT_TONE_TEXT[parts.tone]}>{parts.detail}</span>
+                      <span className="text-slate-500">{parts.tool}</span>
                     </>
                   )}
                 </div>
@@ -746,7 +805,7 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
                             row.status === 'finished' && 'text-emerald-300',
                           )}
                         >
-                          {row.status}
+                          {actionStatusLabel(row.status)}
                         </TableCell>
                         <TableCell>{devboxTime(row.startedAt)}</TableCell>
                         <TableCell>{devboxTime(row.finishedAt)}</TableCell>

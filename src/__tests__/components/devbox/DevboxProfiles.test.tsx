@@ -300,6 +300,16 @@ describe('Devbox profile editor', () => {
     expect(start.parentElement?.className).toContain('gap-2');
   });
 
+  it('renders the localized mode title in the projects table', () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    renderProfiles();
+
+    expect(screen.queryByText('standard')).toBeNull();
+    expect(screen.queryByText('readonly')).toBeNull();
+    expect(screen.getAllByText('Standard')).toHaveLength(2);
+    expect(screen.getByText('Read-only')).toBeTruthy();
+  });
+
   it('keeps advanced fields collapsed in create mode until toggled', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
     renderProfiles();

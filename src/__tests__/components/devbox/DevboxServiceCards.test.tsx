@@ -62,11 +62,11 @@ beforeEach(() => {
 });
 
 describe('DevboxServiceCards badge states', () => {
-  it('renders a badge per known service with its poll value', () => {
+  it('renders a badge per known service with its human status', () => {
     renderCards();
 
-    expect(cardValue('ingress')).toBe('up');
-    expect(cardValue('watchdog')).toBe('on');
+    expect(cardValue('ingress')).toBe('running');
+    expect(cardValue('watchdog')).toBe('running');
     expect(cardValue('runner')).toBe('down');
     expect(screen.getByTestId('devbox-service-host_services')).toBeTruthy();
   });
@@ -79,13 +79,13 @@ describe('DevboxServiceCards badge states', () => {
     expect(screen.queryByTestId('devbox-service-runner-restart')).toBeNull();
   });
 
-  it('gives a downed card the warning tone', () => {
+  it('gives a downed card the down tone', () => {
     renderCards();
 
     const runner = screen.getByTestId('devbox-service-runner');
-    expect(runner.className).toContain('border-amber-500/30');
+    expect(runner.className).toContain('border-red-500/30');
     expect(screen.getByTestId('devbox-service-value-runner').className).toContain(
-      'text-amber-300',
+      'text-red-300',
     );
   });
 });
@@ -94,20 +94,20 @@ describe('DevboxServiceCards gateway card', () => {
   it('renders up from the overview gateway block when enabled', () => {
     renderCards();
 
-    expect(cardValue('gateway')).toBe('up');
+    expect(cardValue('gateway')).toBe('running');
     expect(screen.getByTestId('devbox-service-gateway').querySelector('.bg-emerald-400')).toBeTruthy();
     expect(screen.getByTestId('devbox-service-sub-gateway').textContent).toContain('12');
   });
 
-  it('renders down with the warning tone when the gateway is not up', () => {
+  it('renders down in red when the gateway is not up', () => {
     renderCards({ gateway: { ...gatewayFixture, up: false } });
 
     expect(cardValue('gateway')).toBe('down');
     const card = screen.getByTestId('devbox-service-gateway');
-    expect(card.className).toContain('border-amber-500/30');
-    expect(card.querySelector('.bg-amber-400')).toBeTruthy();
+    expect(card.className).toContain('border-red-500/30');
+    expect(card.querySelector('.bg-red-400')).toBeTruthy();
     expect(screen.getByTestId('devbox-service-value-gateway').className).toContain(
-      'text-amber-300',
+      'text-red-300',
     );
   });
 
@@ -186,6 +186,10 @@ describe('DevboxServiceCards inline actions', () => {
     );
     renderCards({ cards });
 
+    expect(cardValue('watchdog')).toBe('off');
+    expect(
+      screen.getByTestId('devbox-service-watchdog').querySelector('.bg-slate-600'),
+    ).toBeTruthy();
     const toggle = screen
       .getByTestId('devbox-service-watchdog')
       .querySelector('input[type="checkbox"]') as HTMLInputElement;
@@ -203,7 +207,7 @@ describe('DevboxServiceCards inline actions', () => {
     expect(host.querySelector('button')).toBeNull();
   });
 
-  it('host services 0/0 renders neutral gray even with tone ok', () => {
+  it('host services 0/0 renders neutral gray with no data', () => {
     const cards: DevboxVitalCard[] = [
       ...overviewFixture.cards,
       { id: 'host_services', title: 'Host services', value: '0/0', tone: 'ok', updatedAt: null },
@@ -215,10 +219,36 @@ describe('DevboxServiceCards inline actions', () => {
     expect(screen.getByTestId('devbox-service-value-host_services').className).toContain(
       'text-slate-400',
     );
-    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe('0/0');
+    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe('no data');
   });
 
-  it('host services green only when recorded and alive are above zero', () => {
+  it('host services 1/2 renders the alive-of-total count', () => {
+    const cards: DevboxVitalCard[] = [
+      ...overviewFixture.cards,
+      { id: 'host_services', title: 'Host services', value: '1/2', tone: 'warn', updatedAt: null },
+    ];
+    renderCards({ cards });
+
+    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe(
+      '1 of 2 services',
+    );
+  });
+
+  it('host services 3/3 is healthy', () => {
+    const cards: DevboxVitalCard[] = [
+      ...overviewFixture.cards,
+      { id: 'host_services', title: 'Host services', value: '3/3', tone: 'ok', updatedAt: null },
+    ];
+    renderCards({ cards });
+
+    const host = screen.getByTestId('devbox-service-host_services');
+    expect(host.querySelector('.bg-emerald-400')).toBeTruthy();
+    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe(
+      '3 of 3 services',
+    );
+  });
+
+  it('host services 2/3 is degraded', () => {
     const cards: DevboxVitalCard[] = [
       ...overviewFixture.cards,
       { id: 'host_services', title: 'Host services', value: '2/3', tone: 'ok', updatedAt: null },
@@ -226,10 +256,13 @@ describe('DevboxServiceCards inline actions', () => {
     renderCards({ cards });
 
     const host = screen.getByTestId('devbox-service-host_services');
-    expect(host.querySelector('.bg-emerald-400')).toBeTruthy();
+    expect(host.querySelector('.bg-amber-400')).toBeTruthy();
+    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe(
+      '2 of 3 services',
+    );
   });
 
-  it('host services amber when recorded but none alive', () => {
+  it('host services 0/3 is down', () => {
     const cards: DevboxVitalCard[] = [
       ...overviewFixture.cards,
       { id: 'host_services', title: 'Host services', value: '0/3', tone: 'warn', updatedAt: null },
@@ -237,9 +270,12 @@ describe('DevboxServiceCards inline actions', () => {
     renderCards({ cards });
 
     const host = screen.getByTestId('devbox-service-host_services');
-    expect(host.querySelector('.bg-amber-400')).toBeTruthy();
+    expect(host.querySelector('.bg-red-400')).toBeTruthy();
     expect(screen.getByTestId('devbox-service-value-host_services').className).toContain(
-      'text-amber-300',
+      'text-red-300',
+    );
+    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe(
+      '0 of 3 services',
     );
   });
 

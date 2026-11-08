@@ -22,6 +22,7 @@ jest.mock('sonner', () => ({
 }));
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
+import { t } from '@/lib/i18n';
 import type { DevboxEventRow, DevboxRecentAction } from '@/lib/backend/modules/devbox';
 import { DevboxConsole, type DevboxConsoleProps } from '@/components/devbox/DevboxConsole';
 import { devboxRouter, devboxCallArgs, pageRoutes } from './devboxTestKit';
@@ -217,7 +218,7 @@ describe('DevboxConsole toolbar', () => {
     renderConsole();
 
     fireEvent.change(screen.getByTestId('devbox-console-search'), {
-      target: { value: 'permission_request' },
+      target: { value: 'shell' },
     });
 
     const river = screen.getByTestId('devbox-events-river');
@@ -398,5 +399,80 @@ describe('DevboxConsole error filter', () => {
     expect(pre.textContent).toContain('warn: slow disk');
     expect(pre.textContent).not.toContain('runner started');
     expect(pre.textContent).not.toContain('all good here');
+  });
+});
+
+describe('DevboxConsole human phrases', () => {
+  it('renders the human phrase instead of the raw kind token', () => {
+    renderConsole();
+
+    const river = screen.getByTestId('devbox-events-river');
+    expect(river.textContent).toContain('bash');
+    expect(river.textContent).toContain('shell');
+    expect(river.textContent).not.toContain('tool_call');
+    expect(river.textContent).not.toContain('permission_request');
+  });
+
+  it('colors awaiting-permission events with the amber attention dot', () => {
+    renderConsole({
+      events: [
+        { ts: 1791536980, kind: 'mcp_request', tool: 'bash', status: 'awaiting_permission' },
+      ],
+    });
+
+    const dot = screen.getByTestId('devbox-events-river').querySelector('span');
+    expect(dot?.className).toContain('bg-amber-300/60');
+  });
+
+  it('hides the counts container when the buffer has no failures or pending permissions', () => {
+    renderConsole();
+
+    expect(screen.queryByTestId('devbox-console-counts')).toBeNull();
+  });
+
+  it('summarizes failed and awaiting-permission events in the buffer', () => {
+    renderConsole({
+      events: [
+        { ts: 1791536980, kind: 'tool_call', tool: 'bash', status: 'failed' },
+        { ts: 1791536981, kind: 'tool_call', tool: 'git', status: 'error' },
+        { ts: 1791536982, kind: 'mcp_request', tool: 'bash', status: 'awaiting_permission' },
+        { ts: 1791536983, kind: 'tool_call', tool: 'npm', status: 'ok' },
+      ],
+    });
+
+    const counts = screen.getByTestId('devbox-console-counts');
+    expect(screen.getByText(t('devboxPage.consoleCountErrors', { count: 2 }))).toBeTruthy();
+    expect(screen.getByText(t('devboxPage.consoleCountAttention', { count: 1 }))).toBeTruthy();
+    expect(counts).toBeTruthy();
+  });
+
+  it('localizes action statuses in the actions table', () => {
+    const localizedActions: DevboxRecentAction[] = [
+      {
+        id: 's1',
+        cmd: 'alpha',
+        status: 'pending',
+        startedAt: 1791536980,
+        finishedAt: null,
+        exit: null,
+        payload: null,
+      },
+      {
+        id: 's2',
+        cmd: 'beta',
+        status: 'error',
+        startedAt: 1791536980,
+        finishedAt: 1791536981,
+        exit: 1,
+        payload: null,
+      },
+    ];
+    renderConsole({ recent: localizedActions });
+
+    fireEvent.click(screen.getByTestId('devbox-console-tab-actions'));
+    expect(screen.getByText(t('devboxPage.eventStatusRunning'))).toBeTruthy();
+    expect(screen.getByText(t('devboxPage.eventStatusFailed'))).toBeTruthy();
+    expect(screen.queryByText('pending')).toBeNull();
+    expect(screen.queryByText('error')).toBeNull();
   });
 });

@@ -13,9 +13,7 @@ running dev backend and prints the JSON body.
 
 from __future__ import annotations
 
-import asyncio
 import json
-import logging
 import os
 import sys
 import tempfile
@@ -26,8 +24,6 @@ if TYPE_CHECKING:
     from collections.abc import MutableMapping
 
     from fastapi import FastAPI
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 25584
 DEFAULT_INVOKE_TIMEOUT = 30.0
@@ -104,28 +100,9 @@ def invoke_command(
 
 
 def _install_watch(app: FastAPI) -> None:
-    from contextlib import asynccontextmanager
+    from stitch_backend.domains.plugin_runtime.dev_watch import install_plugin_watch
 
-    from stitch_backend.domains.plugin_runtime.dev_watch import (
-        PluginWatcher,
-        make_loop_reload,
-    )
-
-    original = app.router.lifespan_context
-
-    @asynccontextmanager
-    async def _lifespan(app: FastAPI):
-        async with original(app) as state:
-            loop = asyncio.get_running_loop()
-            watcher = PluginWatcher(reload=make_loop_reload(loop))
-            watcher.start()
-            logger.info("dev-watch: watching plugin sources")
-            try:
-                yield state
-            finally:
-                watcher.stop()
-
-    app.router.lifespan_context = _lifespan
+    install_plugin_watch(app)
 
 
 def _install_line(plugins_dir: Path) -> str:

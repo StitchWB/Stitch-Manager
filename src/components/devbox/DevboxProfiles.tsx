@@ -31,12 +31,12 @@ import {
   devboxProfilePut,
   devboxProfileUse,
   devboxStackStart,
-  devboxVitalValue,
   type DevboxAccepted,
   type DevboxProfileRow,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
+import { stackVitalState } from './state';
 
 interface EditorState {
   name: string;
@@ -190,10 +190,8 @@ export function DevboxProfiles({
   const rows = Array.isArray(profiles) ? profiles : [];
   const activeRow = rows.find(row => row.active) ?? null;
   const activeModeTitle = activeRow ? modeTitle(activeRow.mode) : '';
-  const stackRunning =
-    devboxVitalValue(overviewCards, 'ingress') === 'up' ||
-    devboxVitalValue(overviewCards, 'bridge') === 'up' ||
-    devboxVitalValue(overviewCards, 'runner') === 'up';
+  const stackState = stackVitalState(overviewCards);
+  const stackRunning = stackState === 'healthy' || stackState === 'degraded';
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -508,7 +506,7 @@ export function DevboxProfiles({
             {rows.map(row => (
               <TableRow key={row.name}>
                 <TableCell className="font-medium text-white">{row.name}</TableCell>
-                <TableCell>{row.mode}</TableCell>
+                <TableCell>{modeTitle(row.mode)}</TableCell>
                 <TableCell className="font-mono text-2xs text-slate-400">{row.project_dir}</TableCell>
                 <TableCell>
                   {row.active ? (
