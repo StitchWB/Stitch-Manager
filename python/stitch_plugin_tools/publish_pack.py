@@ -56,8 +56,9 @@ def _canonical_manifest(plugin_id: str) -> dict | None:
     """Return the canonical authored manifest for ``plugin_id``, else ``None``.
 
     Canonical manifests carry the rich marketplace fields generated manifests
-    lack; they live in ``python/autoreg/plugin/<id>/`` (engine-pack + provider
-    packs) and ``plugins-src/<id>/`` (service plugins) of this repo.
+    lack; they live in ``python/autoreg/plugin/<id>/`` (engine-pack) and
+    ``plugins-src/<id>/`` (service plugins) of this repo.  Provider packs read
+    their canonical manifest from the tree via :func:`_tree_manifest`.
     """
     import json
 
@@ -70,10 +71,20 @@ def _canonical_manifest(plugin_id: str) -> dict | None:
         if not root.is_dir():
             continue
         for manifest_path in sorted(root.glob(f"*/{MANIFEST_FILENAME}")):
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
             if raw.get("id") == plugin_id:
                 return raw
     return None
+
+
+def _tree_manifest(provider_src: Path) -> dict | None:
+    import json
+
+    manifest_path = provider_src / MANIFEST_FILENAME
+    if not manifest_path.is_file():
+        return None
+    raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    return raw if isinstance(raw, dict) else None
 
 
 def _merge_canonical_metadata(manifest: dict, canonical: dict | None) -> dict:
@@ -359,7 +370,7 @@ def pack_provider(
 
     The emitted manifest id is the canonical ``<provider>-autoreg`` form
     (``kiro`` → ``kiro-autoreg``); marketplace metadata and the default
-    version come from the canonical manifest when one exists.
+    version come from the provider's tree manifest.
 
     The package is unsigned — sign with :func:`autoreg.plugin.crypto.sign_package`
     + :func:`autoreg.plugin.crypto.write_signature`, then publish with
@@ -470,7 +481,7 @@ def pack_provider(
         "outputs": [],
         "signature": "",
     }
-    canonical = _canonical_manifest(manifest["id"])
+    canonical = _tree_manifest(provider_src)
     _merge_canonical_metadata(manifest, canonical)
     manifest["version"] = version or (canonical or {}).get("version") or "0.1.0"
     validate_manifest(manifest)
@@ -565,7 +576,7 @@ def _manifest_excludes(package_dir: Path) -> frozenset[str]:
 
     manifest_path = package_dir / MANIFEST_FILENAME
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return frozenset()
     values = raw.get("package_exclude")

@@ -152,6 +152,16 @@ line on stdin (requests from host) and stdout (responses from plugin).
 Malformed lines from the plugin are skipped+logged — they never crash
 the host.
 
+### Язык реализации
+
+Протокол не привязан к языку: это построчный JSON-RPC 2.0 поверх stdio,
+поэтому сервисный плагин можно написать на любом языке. Вместо
+`entry.module` (запуск `python -m <module>`) манифест может объявить
+`entry.command` — argv-команду запуска. Python — единственный язык с SDK
+(`RpcPluginServer`) и кодовыми гейтами (`check`, `manifest-lint`); для
+остальных языков контракт — только этот протокол. См.
+[docs/plugin-authoring.md](plugin-authoring.md).
+
 ### Methods
 
 | Method | Direction | Params | Result | Description |
@@ -798,6 +808,92 @@ that use `server.call_host` fail gracefully instead of hanging.  Built
 -ins: `ping`, `init-info` (handshake result + capabilities), `logs`
 (last 50 child stderr lines), `help`, `exit`/`quit`/EOF/Ctrl-C.
 
+### Local development loop
+
+Three CLI entry points cover the loop without booting the full app.
+
+**One-shot command run.** `run <pkg> <cmd>` spawns the plugin child, runs
+one command, and exits:
+
+```bash
+python -m stitch_plugin_tools run my-plugin/ health_check --params @params.json --json
+```
+
+`--params` takes an inline JSON object or `@file`. `--json` emits JSONL
+events on stdout: `ready` (`{plugin_id, commands, data_dir}`) then `call`
+(`{command, ok: true, result}` or `{command, ok: false, error: {code,
+message}}`). Exit codes: `0` ok, `1` runtime failure (command error,
+timeout, protocol break), `2` bad package (missing/invalid manifest,
+unresolvable entry module, bad `--params`). Without a command, `run <pkg>`
+opens the interactive REPL (built-ins `ping`, `init-info`, `logs`, `help`,
+`exit`).
+
+**Watch mode.** `run <pkg> --watch` (or `run <pkg> <cmd> --watch`) polls
+the package source tree by mtime (stdlib only) and rebuilds the child on
+change: kill-tree, respawn, re-attach, then re-run the command or re-open
+the REPL against the fresh child. `_vendor/`, `__pycache__`, `*.pyc` and
+`*.db` are ignored. The per-plugin run data dir is
+`<temp>/stitch-run-<id>`; `--fresh` (default) wipes it, `--keep` preserves
+it.
+
+**Gate document.** `check <pkg> --json` runs every gate for the plugin
+kind and prints a machine-readable document (`schema_version: 1`):
+
+```bash
+python -m stitch_plugin_tools check my-plugin/ --json
+```
+
+Gates: `ruff`, `manifest-lint` (service), `pytest` (when `<pkg>/tests`
+exists), `contract` (static-AST commands<->handlers), `engine`,
+`capability`, `typegen-drift`, `vendor-drift`, `classify`. Exit codes: `0`
+no blocking gate failed, `1` a blocking gate failed, `2` bad package or
+classify could not run. `verify` is a thin alias for `check`
+(human-readable output, no `--json`).
+
+**Integration loop.** `dev-backend` runs the real backend headless for
+plugin development:
+
+```bash
+python -m stitch_plugin_tools dev-backend [--watch] [--data-dir <dir>]
+python -m stitch_plugin_tools invoke <plugin-id>.<cmd> --params @params.json --json
+```
+
+`dev-backend` scopes every writable path into a dev data dir (default
+`<temp>/stitch-dev-backend`, `--data-dir` to override), disables auth,
+drops `TOKEN_ENCRYPTION_KEY`, and binds `127.0.0.1:25584` (`--port` to
+change). It also redirects `LOCALAPPDATA` into that dir. The point is
+isolation: a plugin under
+development must not read or write the real secret store (the Fernet key
+and the user's live `plugins-local/`), so the dev backend gets a throwaway
+SQLite DB and a private plugin dir. The default data dir is stable across
+runs, so `dev-install`ed plugins persist; `--data-dir` pins it explicitly.
+`--watch` reloads service plugins when their sources change. `invoke`
+POSTs a command to the running backend (`--url` defaults to
+`http://127.0.0.1:25584`) and prints the JSON body.
+
+**UI preview.** The declarative page renders against the dev backend
+through the Vite dev server, which proxies `/api` (and `/v1`) to the
+backend port (`vite.config.ts`; `STITCH_API_PORT` or `25584`). The recipe:
+`check` the package, run `dev-backend`, `dev-install` the plugin, then
+`npm run dev` — the plugin's tab/page renders at the Vite port (5174)
+against live backend data.
+
+**Reload contract.** `POST /api/reload_service_plugin` (admin-only, body
+`{"plugin_id": "<id>"}`) reloads ONE plugin: it re-reads `plugin.json`
+from disk and swaps the host, unlike `restart_service_plugin` which only
+restarts the existing process. A reload loses any in-memory session state.
+A plugin that must survive a reload persists resumable state under its
+`data_dir` (passed in the `plugin.init` handshake).
+
+**External-developer prerequisites.** `check` and `run` need only `ruff`
+(plus `pytest` when the package has `tests/`); they operate on the package
+directory alone. `httpx` and `cryptography` are imported lazily and are
+needed only by the publish / install paths (`publish`, `publish-all`,
+`install-from`, `attest`, `catalog-snapshot`, `codes`, `drift`,
+`publish-selectors`). The tooling itself is not published as a standalone
+package — run it from a Python environment where `stitch_plugin_tools` is
+importable (the hub repo's `.venv`).
+
 ### Upgrading an authored plugin
 
 When the scaffold conventions change, migrate an existing package with
@@ -1291,20 +1387,34 @@ test.
 | Command | Description |
 |---------|-------------|
 | `new <out_dir> --id <id> [--name …] [--author …] [--version …]` | Scaffold a kind=service plugin package. |
+| `wrap <repo_dir> --id <id> [--runtime …] [--out …]` | Wrap an existing local directory as a kind=service plugin package. |
 | `upgrade <package_dir> [--apply]` | Migrate an authored plugin to the current scaffold conventions. Previews to `<package>/upgrade.diff`; `--apply` writes. Only canonical regions are rewritten (vendored `_vendor/rpc_server.py`, `_generated_by` marker, generated manifest fields) — author code is never clobbered. Legacy (unmarked) packages get a manual-migration checklist. Handles v2→v3 generation migration (inline fallback → try-import + vendored server). |
 | `sync-template [--out <dir>] [--license <file>]` | Regenerate the repo-root `template/` directory (published as the GitHub template repo [StitchWB/stitch-plugin-template](https://github.com/StitchWB/stitch-plugin-template)) from the scaffold internals: scaffolded `stitch-plugin-template` package + vendored server + CI workflow, `.gitignore`, LICENSE, template-grade README, a raw-stdin starter test, `env.example`, and `requirements-dev.txt`. |
 | `keygen --out <dir>` | Generate an ed25519 keypair. |
 | `sign <package_dir> --key <private.key>` | Sign a plugin package. |
-| `verify <package_dir> --pubkey <public.key>` | Verify a package signature. |
+| `check [package_dir] [--json]` | Run every dev gate for the plugin kind; emit the gate document (`--json`). Exit `0`/`1`/`2`. |
+| `verify [package_dir]` | Thin alias for `check` (human-readable output, no `--json`). |
+| `verify-signature <package_dir> [--pubkey <public.key>]` | Verify a package signature. |
 | `publish <package_dir> [--server-url …] [--key …]` | Sign + zip + POST to server. |
+| `publish-all [--only <id>] [--dry-run]` | Publish every official package (services + engine-pack + providers). `--dry-run` packs + validates only. |
 | `dev-install <package_dir>` | Copy package to `plugins-local/`. Refreshes `_vendor/rpc_server.py` from canonical on each install. |
+| `dev-backend [--port <n>] [--watch] [--data-dir <dir>]` | Run the real backend headless for plugin development (temp-scoped, throwaway DB, no `TOKEN_ENCRYPTION_KEY`). |
+| `invoke <plugin-id>.<cmd> [--params …] [--json] [--url …]` | POST a plugin command to a running dev backend. |
 | `run <package_dir>` | Interactive plugin REPL — spawn, stream child stderr live to the tool's stderr prefixed `[<plugin_id>]`, drive commands from stdin (`<command> [json-params]` -> pretty-printed result), and stub reverse-RPC `engine.oauth.*` requests so plugins that use `server.call_host` fail gracefully instead of hanging. Built-ins: `ping`, `init-info`, `logs`, `help`, `exit`. The author loop: `new` -> edit handlers -> `run` -> `test` -> `dev-install`. |
 | `test <package_dir>` | Run the plugin's own tests via the venv pytest (`python -m pytest <dir>/tests -q --timeout=60`). No tests dir -> friendly message pointing at the template's `tests/test_plugin_protocol.py`. pytest absent -> error with install hint. |
 | `vendor <package_dir>` | Vendor the canonical `RpcPluginServer` into `<pkg>/_vendor/rpc_server.py`. Idempotent — skips the write when the file is already canonical. Run after `dev-install` or before `publish` to refresh the vendored server. |
 | `pack-engine <out_dir> [--version …]` | Assemble an engine-pack (captcha solvers). |
+| `pack-service <package_dir> <out>` | Assemble a clean, signable copy of a service-plugin package. |
+| `pack-provider <provider_id> <out> [--version …]` | Assemble a kind=provider CODE plugin package from a providers tree. |
+| `manifest-lint <paths/globs…>` | Validate plugin manifest UI contributions (CI). |
+| `validate <package_dir>` | Validate a plugin manifest + cross-check UI contributions. |
+| `typegen <package_dir> [--check]` | Generate `_types.py` + `ui-types.d.ts` from command params schemas; `--check` fails on drift. |
 | `codes {issue\|list} [--server-url …] [--admin-key …]` | Issue and list activation codes (admin). |
 | `install-from <url> [--ref\|--release] [--sha256] [--trust]` | Fetch + install a plugin from a git repo or release tarball. |
 | `catalog-lint <catalog.json>` | Validate a community catalog offline (for catalog repo CI). Never fetches anything. |
+| `catalog-snapshot <catalog.json> [--id …] [--version …]` | Snapshot third-party catalog sources into the controlled-org store. |
+| `attest --submission <id> --reviewer <name> [--server …]` | Offline-sign an approved submission attestation (admin). |
+| `classify <path-or-id>` | Publication verdict for a path or plugin id (class/channel/repo). |
 | `drift [--server-url …] --plugin <id> [--version …] [--window-hours …] [--package-dir …] [--apply]` | **v1 selector tooling.** Fetch drift report + propose selector weight rerank. Expects `scenario.json` — not applicable to v2 service plugins. |
 | `publish-selectors [--server-url …] --plugin-id <id> --plugin-version <ver> --package-dir <dir> [--note …]` | **v1 selector tooling.** Publish a selector overlay pack (hot update). Expects `scenario.json` — not applicable to v2 service plugins. |
 

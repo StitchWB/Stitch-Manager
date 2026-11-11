@@ -147,7 +147,7 @@ class PluginScenarioProvider:
 
         # Read + validate manifest.
         manifest_path = self._package_dir / "plugin.json"
-        raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         self._manifest: PluginManifest = validate_manifest(raw_manifest)
         self._service = self._manifest.service
 

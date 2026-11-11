@@ -112,12 +112,12 @@ def _classify_status(status: int, lowered_body: str) -> tuple[str, bool]:
         return "auth_failed", False
     if _contains(lowered_body, _AUTH_SIGNALS):
         return "auth_failed", False
+    if 500 <= status < 600:
+        return "server_error", True
     if status == 402 or _contains(lowered_body, _QUOTA_SIGNALS):
         return "quota_exhausted", False
     if status == 429:
         return "rate_limited", False
-    if 500 <= status < 600:
-        return "server_error", True
     if status == 404 and "model" in lowered_body:
         return "model_not_found", True
     if status == 400:

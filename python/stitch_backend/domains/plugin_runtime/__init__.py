@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from autoreg.plugin.manifest import PluginManifest
 
     from .host import ServicePluginHost
+    from .reload import ReloadResult, reload_service_plugin
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,15 @@ async def stop_all() -> None:
     await get_supervisor().stop_all()
 
 
+def __getattr__(name: str) -> object:
+    # Lazy: importing reload pulls in discovery (built-in SPI side effects).
+    if name in ("reload_service_plugin", "ReloadResult"):
+        from stitch_backend.domains.plugin_runtime import reload as _reload
+
+        return getattr(_reload, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     "register_host",
     "get_host",
@@ -96,4 +106,6 @@ __all__ = [
     "get_manifest",
     "all_manifests",
     "stop_all",
+    "reload_service_plugin",
+    "ReloadResult",
 ]

@@ -164,3 +164,47 @@ def test_core_tools_register_under_bootstrap():
         timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_surface_allowlist_levels(monkeypatch):
+    from stitch_backend.mcp_server import server
+
+    monkeypatch.setenv("STITCH_MCP_SURFACE", "meta")
+    assert server._surface_allowlist() == set()
+    monkeypatch.setenv("STITCH_MCP_SURFACE", "lite")
+    assert server._surface_allowlist() == set(server.CURATED_TOOLS)
+    monkeypatch.setenv("STITCH_MCP_SURFACE", "core")
+    assert server._surface_allowlist() == set(server.CORE_TOOLS)
+    monkeypatch.setenv("STITCH_MCP_SURFACE", "full")
+    assert server._surface_allowlist() is None
+    monkeypatch.setenv("STITCH_MCP_SURFACE", "garbage")
+    assert server._surface() == "core"
+
+
+def test_surface_registers_expected_count():
+    code = (
+        "import asyncio;"
+        "from fastmcp import FastMCP;"
+        "from stitch_backend.bootstrap import bootstrap;"
+        "from stitch_backend.core.command_registry import list_commands;"
+        "from stitch_backend.mcp_server.server import CORE_TOOLS, CURATED_TOOLS;"
+        "from stitch_backend.mcp_server.tools import register_all_tools;"
+        "asyncio.run(bootstrap());"
+        "present=set(list_commands());"
+        "assert register_all_tools(FastMCP('m'), allow=set()) == 0;"
+        "lite=[c for c in CURATED_TOOLS if c in present];"
+        "assert register_all_tools(FastMCP('l'), allow=set(CURATED_TOOLS)) == len(lite);"
+        "core=[c for c in CORE_TOOLS if c in present];"
+        "nc=register_all_tools(FastMCP('c'), allow=set(CORE_TOOLS));"
+        "assert nc == len(core);"
+        "nf=register_all_tools(FastMCP('f'), core_only=False);"
+        "assert nf > nc, (nf, nc)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

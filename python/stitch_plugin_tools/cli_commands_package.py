@@ -15,9 +15,6 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
-
-from autoreg.plugin import crypto
 from autoreg.plugin.manifest import MANIFEST_FILENAME
 
 if TYPE_CHECKING:
@@ -31,6 +28,8 @@ _PUBLIC_KEY_NAME = "public.key"
 
 
 def _cmd_keygen(args: argparse.Namespace) -> int:
+    from autoreg.plugin import crypto
+
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -84,6 +83,8 @@ def _restrict_permissions_windows(path: Path) -> None:
 
 
 def _cmd_sign(args: argparse.Namespace) -> int:
+    from autoreg.plugin import crypto
+
     package_dir = Path(args.package_dir)
     key_path = Path(args.key)
 
@@ -122,7 +123,20 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return run_verify(Path(args.package_dir))
 
 
+def _cmd_check(args: argparse.Namespace) -> int:
+    """Run every dev gate and emit the machine-readable gate document.
+
+    ``--json`` prints the document on stdout; without it a human-readable
+    report is printed.  See :mod:`stitch_plugin_tools.gates`.
+    """
+    from stitch_plugin_tools.gates import run_check
+
+    return run_check(Path(args.package_dir), json_output=bool(args.json))
+
+
 def _cmd_verify_signature(args: argparse.Namespace) -> int:
+    from autoreg.plugin import crypto
+
     package_dir = Path(args.package_dir)
 
     if not package_dir.is_dir():
@@ -163,6 +177,8 @@ def _cmd_verify_signature(args: argparse.Namespace) -> int:
 
 def _cmd_publish(args: argparse.Namespace) -> int:
     import asyncio
+
+    import httpx
 
     from stitch_plugin_tools.publish import publish_package, resolve_publish_config
 
@@ -273,6 +289,7 @@ def _cmd_pack_engine(args: argparse.Namespace) -> int:
     ``python -m stitch_plugin_tools sign <out_dir> --key <private.key>``
     to produce a publish-ready, signed pack.
     """
+    from autoreg.plugin import crypto
     from stitch_plugin_tools.publish import pack_engine
 
     out_dir = Path(args.out)
@@ -325,6 +342,7 @@ def _cmd_pack_provider(args: argparse.Namespace) -> int:
     ``python -m stitch_plugin_tools sign <out_dir> --key <private.key>``
     to produce a publish-ready, signed package.
     """
+    from autoreg.plugin import crypto
     from stitch_plugin_tools.publish import pack_provider
 
     out_dir = Path(args.out)
@@ -400,6 +418,44 @@ def _cmd_new(args: argparse.Namespace) -> int:
         f"  sign with: python -m stitch_plugin_tools sign {result} "
         f"--key <private.key>"
     )
+    return 0
+
+
+def _cmd_wrap(args: argparse.Namespace) -> int:
+    """Wrap an existing local directory as a kind=service plugin package.
+
+    See :func:`stitch_plugin_tools.wrap.wrap_repo` for the generated layout.
+    The package is unsigned — fill ``commands.py``, then ``check`` / ``run``.
+    """
+    from stitch_plugin_tools.scaffold_common import _pkg_name
+    from stitch_plugin_tools.wrap import wrap_repo
+
+    out_dir = Path(args.out) if args.out else None
+    try:
+        result = wrap_repo(
+            Path(args.repo_dir),
+            plugin_id=args.id,
+            name=args.name,
+            out_dir=out_dir,
+            runtime=args.runtime,
+            version=args.version,
+            description=args.description,
+            category=args.category,
+            status=args.status,
+            icon=args.icon,
+            author=args.author,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    commands_path = result / _pkg_name(args.id) / "commands.py"
+    print(f"wrapped {Path(args.repo_dir).resolve()} as a service plugin at {result}")
+    print(f"  id:      {args.id}")
+    print(f"  runtime: {args.runtime}")
+    print("next steps:")
+    print(f"  1. fill {commands_path} with your command map")
+    print(f"  2. python -m stitch_plugin_tools check {result} --json")
+    print(f"  3. python -m stitch_plugin_tools run {result} health_check --json")
     return 0
 
 
@@ -519,16 +575,49 @@ def _cmd_vendor(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    """Interactive plugin REPL — spawn, stream stderr, drive commands.
+    """Run a plugin: one command (one-shot) or the interactive REPL.
 
-    See :func:`stitch_plugin_tools.runtool.run_package` for the spawn /
-    attach / stderr-streaming / reverse-RPC-stub design.  The author
-    loop becomes: ``new`` → edit handlers → ``run`` (exercise commands
-    instantly, watch stderr) → ``test`` → ``dev-install``.
+    ``run <pkg> <cmd>`` runs a single command non-interactively; ``run
+    <pkg>`` opens the REPL.  See :mod:`stitch_plugin_tools.runtool`.
     """
-    from stitch_plugin_tools.runtool import run_package
+    from stitch_plugin_tools.runtool import (
+        parse_params_arg,
+        run_command,
+        run_package,
+    )
 
-    return run_package(Path(args.package_dir))
+    command = getattr(args, "command", None)
+    fresh = not getattr(args, "keep", False)
+    json_output = bool(getattr(args, "json", False))
+    watch = bool(getattr(args, "watch", False))
+
+    if command is None:
+        if args.params:
+            print("error: --params requires a command", file=sys.stderr)
+            return 2
+        if json_output:
+            print("error: --json requires a command", file=sys.stderr)
+            return 2
+        return run_package(
+            Path(args.package_dir),
+            fresh=fresh,
+            watch=watch,
+            json_output=json_output,
+        )
+
+    try:
+        params = parse_params_arg(args.params)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return run_command(
+        Path(args.package_dir),
+        command,
+        params,
+        fresh=fresh,
+        json_output=json_output,
+        watch=watch,
+    )
 
 
 def _cmd_test(args: argparse.Namespace) -> int:
@@ -577,8 +666,35 @@ def _cmd_typegen(args: argparse.Namespace) -> int:
     """Generate _types.py + ui-types.d.ts from command params schemas.
 
     See :mod:`stitch_plugin_tools.typegen` for the marker / refusal /
-    idempotency contract.
+    idempotency contract.  ``--check`` compares against on-disk instead of
+    writing.
     """
     from stitch_plugin_tools.typegen import run_typegen
 
-    return run_typegen(Path(args.package_dir))
+    return run_typegen(
+        Path(args.package_dir), check=bool(getattr(args, "check", False))
+    )
+
+
+def _cmd_dev_backend(args: argparse.Namespace) -> int:
+    from stitch_plugin_tools.devbackend import run_dev_backend
+
+    return run_dev_backend(
+        port=args.port,
+        watch=bool(args.watch),
+        data_dir=Path(args.data_dir) if args.data_dir else None,
+    )
+
+
+def _cmd_invoke(args: argparse.Namespace) -> int:
+    from stitch_plugin_tools.devbackend import invoke_command
+    from stitch_plugin_tools.runtool import parse_params_arg
+
+    try:
+        params = parse_params_arg(args.params)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return invoke_command(
+        args.target, params, url=args.url, json_output=bool(args.json)
+    )

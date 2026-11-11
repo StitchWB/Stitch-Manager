@@ -183,7 +183,7 @@ def scaffold_provider_plugin(
 
     manifest: dict[str, Any] = {
         "schema": SCHEMA_ID_V2,
-        "id": f"{plugin_id.replace('_', '-')}-autoreg",
+        "id": f"{plugin_id.replace('_', '-')}-provider",
         "name": f"{display_name} provider",
         "description": description
         or f"Code plugin for the {display_name} registration provider.",

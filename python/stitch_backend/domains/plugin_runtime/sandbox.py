@@ -48,13 +48,14 @@ from autoreg.plugin.layout import (
     sandbox_plugin_dir,
     sandbox_user_dir,
 )
+from autoreg.plugin.manifest import resolve_entry_command, try_read_manifest
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from autoreg.plugin.manifest import PluginManifest
 
-from .host import ServicePluginHost
+from .host import HostInitKwargs, ServicePluginHost
 
 logger = logging.getLogger(__name__)
 
@@ -156,21 +157,7 @@ def get_sandbox_host(
 
 def _try_read_manifest(package_dir: Path) -> PluginManifest | None:
     """Read + validate a manifest, returning None on any failure."""
-    import json
-
-    from autoreg.plugin.manifest import (
-        ManifestValidationError,
-        validate_manifest,
-    )
-
-    manifest_path = package_dir / "plugin.json"
-    if not manifest_path.is_file():
-        return None
-    try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return validate_manifest(raw)
-    except (OSError, ValueError, ManifestValidationError):
-        return None
+    return try_read_manifest(package_dir)
 
 
 async def ensure_sandbox_host(
@@ -212,8 +199,11 @@ async def ensure_sandbox_host(
                     return None
                 _sandbox_manifests[key] = manifest
 
+            command = resolve_entry_command(manifest.entry, pkg_dir)
             entry_module = manifest.entry.get("module")
-            if not entry_module or not isinstance(entry_module, str):
+            if command is None and (
+                not entry_module or not isinstance(entry_module, str)
+            ):
                 return None
 
         # A sandbox host exists or would be created/started by this call.
@@ -229,15 +219,18 @@ async def ensure_sandbox_host(
 
         if host is None:
             data_dir = sandbox_plugin_data_dir(user_id, plugin_id)
-            host = ServicePluginHost(
-                plugin_id=plugin_id,
-                entry_module=entry_module,
-                package_dir=pkg_dir,
-                data_dir=data_dir,
-                source="sandbox",
-                memory_limit_mb=_SANDBOX_MEMORY_LIMIT_MB,
-                sidecar_name=f"sandbox:{user_id}:{plugin_id}",
-            )
+            common: HostInitKwargs = {
+                "plugin_id": plugin_id,
+                "package_dir": pkg_dir,
+                "data_dir": data_dir,
+                "source": "sandbox",
+                "memory_limit_mb": _SANDBOX_MEMORY_LIMIT_MB,
+                "sidecar_name": f"sandbox:{user_id}:{plugin_id}",
+            }
+            if command is not None:
+                host = ServicePluginHost(command=command, **common)
+            else:
+                host = ServicePluginHost(entry_module=entry_module, **common)
             _sandbox_hosts[key] = host
 
         # Start if not running (on-demand).  When the host was idle-stopped,

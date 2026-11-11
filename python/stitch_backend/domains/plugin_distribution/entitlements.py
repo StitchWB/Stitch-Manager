@@ -197,7 +197,7 @@ async def resolve_provider_plugin_id(provider_name: str) -> str | None:
         if pkg_dir is not None:
             manifest_path = pkg_dir / "plugin.json"
             if manifest_path.is_file():
-                raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+                raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
                 pid = str(raw.get("id", ""))
                 return pid or None
     except Exception as exc:  # noqa: BLE001 — tolerant, never raises
@@ -235,7 +235,7 @@ async def resolve_provider_plugin_id(provider_name: str) -> str | None:
                 if manifest_path.is_file():
                     try:
                         raw = json.loads(
-                            manifest_path.read_text(encoding="utf-8")
+                            manifest_path.read_text(encoding="utf-8-sig")
                         )
                         pid = str(raw.get("id", ""))
                         if pid:

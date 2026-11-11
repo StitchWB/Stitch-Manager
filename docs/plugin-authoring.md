@@ -10,9 +10,10 @@ typegen, release), see [docs/service-plugin-cookbook.md](service-plugin-cookbook
 > surface that a `kind=service` plugin exposes to the host. The
 > subprocess protocol (stdio JSON-RPC 2.0, `plugin.init` / `plugin.call`
 > / `plugin.ping` / `plugin.shutdown`), the manifest schema, the
-> declarative UI vocabulary, storage/migrations, entitlements, and the
-> dev loop are documented in **[docs/service-plugins.md](service-plugins.md)** —
+> declarative UI vocabulary, storage/migrations, and entitlements are
+> documented in **[docs/service-plugins.md](service-plugins.md)** —
 > that document is the protocol reference and is not duplicated here.
+> The local development loop CLI is summarized in §8 below.
 
 ---
 
@@ -363,23 +364,36 @@ conventions** — the patterns the shipped plugins follow inside their
 `__main__.py` and supporting modules. These are not enforced by the
 loader, but they are the canonical shape new plugins should match.
 
-### 7.1 Error convention — `ValueError` for input validation
+### 7.1 Error convention — `PluginInputError` for input validation
 
-Command handlers validate input by **raising `ValueError`** for missing
-or invalid parameters. The `RpcPluginServer._dispatch` method catches
-all exceptions and surfaces them as JSON-RPC `{-32603, message}` errors,
-which the host's bridge translates to HTTP 400. This is the only
-sanctioned way to reject bad input from a handler.
+Command handlers validate input by **raising `PluginInputError`** for
+missing or invalid parameters. Import it the same way as the server
+(`from autoreg.plugin.rpc import PluginInputError`, falling back to
+`._vendor.rpc_server`). `RpcPluginServer._dispatch` catches every
+exception and returns a JSON-RPC `{-32603, message, data}` error; the
+`data` envelope carries `kind` and `traceback`:
+
+- `PluginInputError` → `kind="validation"` — the caller's params were bad.
+- any other exception → `kind="plugin_bug"` — an unexpected handler fault.
+
+The envelope reaches both consumers:
+
+- **CLI.** `run` prints `[error <code>] <message> (kind=…)` plus the
+  traceback; `run … --json` puts `kind` and `traceback` into the `call`
+  event's `error` object.
+- **HTTP bridge.** The 400 `detail` always carries `kind`; `traceback` is
+  included only when `STITCH_DEV_MODE` is truthy (never leak a traceback
+  in production).
 
 Returning a `{"success": false, "error": "..."}` dict is **reserved for
 API-result shapes** — commands that wrap an external API call and
 report that API's failure (e.g. a `test_api`-style command whose result
 is a structured status object the frontend renders). It is **never**
-used for input validation: a missing `profile_id` raises `ValueError`,
-it does not return a failure dict. The distinction matters because the
-dispatcher treats a raised exception as a JSON-RPC error (client sees
-an error response), while a returned dict is a normal result (client
-must inspect `success` manually).
+used for input validation: a missing `profile_id` raises
+`PluginInputError`, it does not return a failure dict. The distinction
+matters because the dispatcher treats a raised exception as a JSON-RPC
+error (client sees an error response), while a returned dict is a normal
+result (client must inspect `success` manually).
 
 ### 7.2 SPI-target commands are NOT declared in `contributions.commands`
 
@@ -541,3 +555,110 @@ regenerated from canonical on every `dev-install` / `vendor` / publish.
 The `upgrade` tool byte-compares it against canonical and swaps on
 drift. Authors do not need to create or maintain the `_vendor/`
 directory — the tooling handles it.
+
+---
+
+## 8. Local Development Loop
+
+The CLI covers the loop without booting the full app. Full reference:
+[docs/service-plugins.md §8](service-plugins.md).
+
+**Внешний разработчик — начните отсюда.** Тулинг не публикуется отдельным
+пакетом: нужен чекаут репозитория, `stitch_plugin_tools` импортируется из
+дерева `python/`. Минимальный набор (проверено
+`python/tests/test_plugin_tools_slim_imports.py`):
+
+```powershell
+python -m venv .venv-ext
+.\.venv-ext\Scripts\Activate.ps1
+pip install ruff pytest pytest-timeout
+cd python
+python -m stitch_plugin_tools check <pkg> --json
+python -m stitch_plugin_tools run <pkg> <cmd> --json
+```
+
+`cryptography` и `httpx` нужны только для `sign` / `publish` /
+`install-from`. Детали и оговорки — §8.1.
+
+- **One-shot run.** `python -m stitch_plugin_tools run <pkg> <cmd> --params @file --json`
+  spawns the plugin child, runs one command, and exits. `--json` emits JSONL
+  `ready` / `call` events; exit codes `0` ok, `1` runtime failure, `2` bad
+  package. Without a command, `run <pkg>` opens the interactive REPL.
+- **Watch.** `run <pkg> --watch` (or `run <pkg> <cmd> --watch`) polls the
+  package source tree by mtime and rebuilds the child on change.
+- **Gate document.** `python -m stitch_plugin_tools check <pkg> --json` runs
+  every gate for the plugin kind and prints a machine-readable document
+  (`schema_version: 1`; gates `ruff`, `manifest-lint`, `pytest`, `contract`,
+  `engine`, `capability`, `typegen-drift`, `vendor-drift`, `classify`,
+  `distribution`; exit `0`/`1`/`2`). `verify` is a thin alias for `check`.
+- **Integration loop.** `python -m stitch_plugin_tools dev-backend [--watch]`
+  runs the real backend headless (temp-scoped, throwaway DB, no
+  `TOKEN_ENCRYPTION_KEY`); `invoke <id>.<cmd> --json` POSTs a command to it.
+- **Reload.** `POST /api/reload_service_plugin` reloads ONE plugin (code +
+  manifest). A reload loses in-memory session state; a plugin that must
+  survive a reload persists resumable state under its `data_dir`.
+- **Prerequisites.** `check` and `run` need only `ruff` (and `pytest` when
+  the package has `tests/`); `httpx` and `cryptography` are imported lazily
+  and are needed only by the publish / install paths. The tooling itself is
+  not published as a standalone package — run it from a Python environment
+  where `stitch_plugin_tools` is importable (the hub repo's `.venv`). See
+  §8.1 for the verified minimal install.
+
+### 8.1 Минимальная установка для внешнего разработчика
+
+Проверено тестом `python/tests/test_plugin_tools_slim_imports.py`: пути
+`check` и `run` не тянут тяжёлый стек бэкенда (`fastapi`, `uvicorn`,
+`litellm`, `patchright`, `playwright`, `starlette`).
+
+Предусловие: нужен чекаут репозитория — тулинг не публикуется отдельным
+пакетом, `stitch_plugin_tools` импортируется из дерева `python/`.
+
+```powershell
+python -m venv .venv-ext
+.\.venv-ext\Scripts\Activate.ps1
+pip install ruff pytest pytest-timeout
+cd python
+python -m stitch_plugin_tools check <pkg> --json
+python -m stitch_plugin_tools run <pkg> <cmd> --json
+```
+
+Запускать из каталога `python/` (или выставить `PYTHONPATH=<repo>\python`).
+
+- **Работает на этом наборе:** `check` (нужен `ruff`; `pytest` +
+  `pytest-timeout` — если у пакета есть `tests/`) и `run`.
+- **Нужно больше:** `sign` / `publish` / `install-from` требуют `httpx` +
+  `cryptography`; полный бэкенд (`dev-backend`, `invoke`) требует весь
+  тяжёлый стек.
+
+**SDK-wheel (planned).** Отдельный wheel `stitch-plugin-sdk` пока не
+публикуется: тайминг-гейт — первая сторонняя запись в каталоге. До этого
+внешний путь — рецепт выше. Учтите: `check --json` теперь отдаёт флаг
+верхнего уровня `publishable`; вне хаба он `false`, потому что гейт
+`classify` пропускается, — зелёный `check` не является вердиктом о
+публикации.
+
+---
+
+## 9. Провайдеры и сервисные плагины
+
+Провайдер-плагины работают **в процессе** хоста: бэкенд импортирует их как
+обычный модуль (`python/autoreg/providers/registry.py` наполняет
+`PLUGIN_PROVIDERS`, инстанцирует `RegistrationService._build_provider`).
+Поэтому провайдер обязан быть на Python и поставляется скомпилированным и
+подписанным (Nuitka + подпись на ферме).
+
+Автоматизацию на другом языке так не подключить. Её оформляют как
+**сервисный плагин**: он запускается отдельным процессом и может объявить
+`entry.command` на любом языке. Контракт: [docs/service-plugins.md](service-plugins.md).
+
+---
+
+## 10. Как решается публичность плагина
+
+Класс определяет судьбу плагина: **P0** запрещён, **P1** метод (наружу только
+подписанный артефакт), **P2** инфраструктура (только хаб), **P3** open-core
+(публичный). Канал: gated, public или none.
+
+Видимость не выбирается руками. Единственный источник истины: классификатор
+`python -m stitch_plugin_tools classify <path-or-id>`. Новое содержимое по
+умолчанию closed. Полные правила: [docs/PUBLICATION-POLICY.md](PUBLICATION-POLICY.md).

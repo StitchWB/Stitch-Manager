@@ -8,6 +8,9 @@ files carry the ``_generated_by: stitch_plugin_tools typegen v1`` marker;
 existing files without the marker are refused (rc 2) so hand-written code
 is never silently overwritten.  Output is deterministic — reruns are
 byte-identical.
+
+``--check`` compares the generated text against the on-disk files instead
+of writing: rc 0 = in sync, 1 = drift, 2 = hand-edited file.
 """
 
 from __future__ import annotations
@@ -131,8 +134,13 @@ def _commands_with_params(contributions: dict[str, Any]) -> list[tuple[str, dict
     return out
 
 
-def run_typegen(package_dir: Path) -> int:
-    """Generate ``_types.py`` + ``ui-types.d.ts`` for one package dir."""
+def run_typegen(package_dir: Path, *, check: bool = False) -> int:
+    """Generate ``_types.py`` + ``ui-types.d.ts`` for one package dir.
+
+    With ``check=True`` nothing is written: the generated text is compared
+    against the on-disk files and a non-zero exit reports drift (1) or a
+    hand-edited file (2).
+    """
     if not package_dir.is_dir():
         print(f"error: package dir not found: {package_dir}", file=sys.stderr)
         return 2
@@ -141,7 +149,7 @@ def run_typegen(package_dir: Path) -> int:
         print(f"error: manifest not found: {manifest_path}", file=sys.stderr)
         return 2
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         manifest = validate_manifest(raw)
     except (OSError, ValueError, ManifestValidationError) as exc:
         print(f"error: invalid manifest: {exc}", file=sys.stderr)
@@ -160,6 +168,20 @@ def run_typegen(package_dir: Path) -> int:
 
     commands = _commands_with_params(manifest.contributions)
     if not commands:
+        if check:
+            stale = [
+                path
+                for path in (module_dir / "_types.py", module_dir / "ui-types.d.ts")
+                if path.exists()
+            ]
+            if stale:
+                for path in stale:
+                    print(
+                        f"drift: {path} exists but the manifest declares no "
+                        "params schemas",
+                        file=sys.stderr,
+                    )
+                return 1
         print("no commands with params schemas; nothing to generate")
         return 0
 
@@ -191,6 +213,19 @@ def run_typegen(package_dir: Path) -> int:
                 file=sys.stderr,
             )
             return 2
+    if check:
+        drift = False
+        for path, content in targets:
+            if not path.exists():
+                print(f"drift: {path} is missing", file=sys.stderr)
+                drift = True
+            elif path.read_text(encoding="utf-8") != content:
+                print(f"drift: {path} is out of date", file=sys.stderr)
+                drift = True
+        if drift:
+            return 1
+        print("typegen: no drift")
+        return 0
     for path, content in targets:
         path.write_text(content, encoding="utf-8")
         print(f"generated {path}")

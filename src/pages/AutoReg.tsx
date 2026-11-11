@@ -471,6 +471,8 @@ export default function AutoRegNext() {
     type: config.proxy.type,
     list: config.proxy.list,
     rotationEnabled: config.proxy.rotationEnabled,
+    ipPolicy: config.proxy.ipPolicy,
+    ipReuseCount: config.proxy.ipReuseCount,
   };
 
   // Empty state: no provider plugins installed. Each provider is a separate

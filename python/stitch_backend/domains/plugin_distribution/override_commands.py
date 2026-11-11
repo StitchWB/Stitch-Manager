@@ -82,7 +82,7 @@ def _resolve_package_dir(plugin_id: str) -> Path | None:
                 continue
             try:
                 raw = json.loads(
-                    (version_dir / "plugin.json").read_text(encoding="utf-8")
+                    (version_dir / "plugin.json").read_text(encoding="utf-8-sig")
                 )
                 manifest = validate_manifest(raw)
             except Exception:  # noqa: BLE001 — skip corrupt
@@ -108,7 +108,7 @@ def _resolve_package_dir(plugin_id: str) -> Path | None:
                 continue
             try:
                 raw = json.loads(
-                    (version_dir / "plugin.json").read_text(encoding="utf-8")
+                    (version_dir / "plugin.json").read_text(encoding="utf-8-sig")
                 )
                 manifest = validate_manifest(raw)
             except Exception:  # noqa: BLE001 — skip corrupt
@@ -132,7 +132,7 @@ def _read_manifest_id(pkg_dir: Path) -> str | None:
     if not manifest_path.is_file():
         return None
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         return str(raw.get("id", ""))
     except Exception:  # noqa: BLE001 — skip corrupt
         return None
@@ -144,7 +144,7 @@ def _read_manifest_version(pkg_dir: Path) -> str | None:
     if not manifest_path.is_file():
         return None
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         return str(raw.get("version", ""))
     except Exception:  # noqa: BLE001 — skip corrupt
         return None

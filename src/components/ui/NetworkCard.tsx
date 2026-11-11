@@ -11,6 +11,7 @@ import { t } from '@/lib/i18n';
 import { Button } from './Button';
 import { Input } from './Input';
 import { SegmentedControl } from './SegmentedControl';
+import { Select } from './Select';
 import { useUIPreferencesStore } from '../../stores/uiPreferences';
 
 export interface NetworkConfig {
@@ -21,6 +22,8 @@ export interface NetworkConfig {
   type: 'http' | 'socks5';
   list: string;
   rotationEnabled: boolean;
+  ipPolicy?: 'per_run' | 'per_account' | 'on_failure' | 'every_n';
+  ipReuseCount?: number;
 }
 
 interface NetworkCardProps {
@@ -37,6 +40,13 @@ const CONNECTION_MODE_OPTIONS = [
 const PROXY_TYPE_OPTIONS = [
   { label: 'HTTP', value: 'http' },
   { label: 'SOCKS5', value: 'socks5' },
+];
+
+const IP_POLICY_OPTIONS = [
+  { label: 'Новый IP на каждую регистрацию', value: 'per_run' },
+  { label: 'Один IP на аккаунт', value: 'per_account' },
+  { label: 'Менять только после неудачи', value: 'on_failure' },
+  { label: 'Менять каждые N раз', value: 'every_n' },
 ];
 
 export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
@@ -158,6 +168,30 @@ export function NetworkCard({ config, onChange, disabled }: NetworkCardProps) {
           >
             {t('uiTexts.proxyLibraryTitle')}
           </Button>
+
+          {config.rotationEnabled && (
+            <div className="flex flex-col gap-1.5">
+              <Select
+                label="IP policy"
+                options={IP_POLICY_OPTIONS}
+                value={config.ipPolicy ?? 'per_run'}
+                onValueChange={(v) => onChange({ ipPolicy: v as NetworkConfig['ipPolicy'] })}
+                disabled={disabled}
+              />
+              {(config.ipPolicy ?? 'per_run') === 'every_n' && (
+                <Input
+                  type="number"
+                  min={1}
+                  label="Менять каждые N регистраций"
+                  value={config.ipReuseCount ?? 1}
+                  onChange={(e) =>
+                    onChange({ ipReuseCount: Math.max(1, Number(e.target.value) || 1) })
+                  }
+                  disabled={disabled}
+                />
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

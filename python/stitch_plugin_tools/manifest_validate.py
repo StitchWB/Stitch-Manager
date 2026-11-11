@@ -56,7 +56,7 @@ def validate_package(package_dir: Path) -> ValidateReport:
             findings=[f"{manifest_path}: manifest not found"],
         )
     try:
-        raw: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw: Any = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as exc:
         return ValidateReport(
             label=package_dir.name,

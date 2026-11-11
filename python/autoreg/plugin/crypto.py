@@ -4,7 +4,9 @@ Uses the ``cryptography`` library (already in ``requirements.txt`` for
 stitch_backend; no new dependency).  The signing payload is a sha256
 digest over the *canonical package content*: the manifest with its
 ``signature`` field stripped (so signing is idempotent) plus a sorted
-list of every other file's relative path and sha256.
+list of every other file's relative path and sha256.  The signature
+itself lives in the ``plugin.sig`` sidecar, which is excluded from the
+payload (it would otherwise cover itself).
 
 The signing private key is OFFLINE, owned by the developer.  The loader
 only verifies with the public key.  ``dev_mode`` bypasses verification for
@@ -27,7 +29,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-from .manifest import MANIFEST_FILENAME, PluginManifest, validate_manifest
+from .manifest import (
+    MANIFEST_FILENAME,
+    SIGNATURE_FILENAME,
+    PluginManifest,
+    validate_manifest,
+)
 
 SIGNATURE_PREFIX = "ed25519:"
 
@@ -46,7 +53,7 @@ def _canonical_manifest_bytes(manifest_path: Path) -> bytes:
     so the same package always hashes to the same value regardless of
     formatting or signature state.
     """
-    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     raw.pop("signature", None)
     return json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -54,17 +61,33 @@ def _canonical_manifest_bytes(manifest_path: Path) -> bytes:
 # Client state written into the version dir after install (plugin sync overlay).
 _OVERLAY_FILENAMES = frozenset({"selectors_overlay.json", ".selectors_meta.json"})
 
+# Mirrors publish_pack.PACKAGE_EXCLUDE_DIRS: tooling/VCS state, never package content.
+_PACKAGE_EXCLUDE_DIRS = frozenset(
+    {
+        "__pycache__",
+        ".git",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
+        ".venv",
+        "node_modules",
+    }
+)
+
 
 def _walk_package_files(package_dir: Path) -> list[tuple[str, bytes]]:
     """Return ``[(relative_posix_path, sha256_hexdigest), ...]`` for every
     file in the package except the manifest (which is hashed separately),
-    runtime bytecode caches (``__pycache__`` / ``*.pyc`` — written by
-    module execution after installation, not package content) and the
-    post-install client-state overlay files.
+    the ``plugin.sig`` signature sidecar (which would otherwise cover
+    itself), runtime bytecode caches (``__pycache__`` / ``*.pyc`` — written
+    by module execution after installation, not package content), local
+    tooling/VCS state directories (``.git`` / ``.pytest_cache`` / ``.venv``
+    / ``node_modules`` / ... — created in the package dir by running tools,
+    never shipped) and the post-install client-state overlay files.
     """
     out: list[tuple[str, bytes]] = []
     for root, dirs, files in os.walk(package_dir):
-        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        dirs[:] = [d for d in dirs if d not in _PACKAGE_EXCLUDE_DIRS]
         for fname in files:
             if fname.endswith((".pyc", ".pyo")):
                 continue
@@ -72,7 +95,7 @@ def _walk_package_files(package_dir: Path) -> list[tuple[str, bytes]]:
                 continue
             full = Path(root) / fname
             rel = full.relative_to(package_dir).as_posix()
-            if rel == MANIFEST_FILENAME:
+            if rel in (MANIFEST_FILENAME, SIGNATURE_FILENAME):
                 continue
             digest = hashlib.sha256(full.read_bytes()).hexdigest().encode("ascii")
             out.append((rel, digest))
@@ -193,9 +216,9 @@ def load_embedded_pubkey() -> str | None:
 def sign_package(package_dir: Path, private_key_pem: bytes | str) -> str:
     """Sign a package and return the ``ed25519:<base64>`` signature string.
 
-    Does NOT write the manifest — the caller (CLI or installer) updates the
-    manifest's ``signature`` field.  This keeps the function pure and
-    testable.
+    Does NOT write anything — the caller persists the signature via
+    :func:`write_signature` (the ``plugin.sig`` sidecar).  This keeps the
+    function pure and testable.
     """
     priv = load_private_key(private_key_pem)
     digest = compute_package_hash(package_dir)
@@ -244,29 +267,62 @@ def verify_package(package_dir: Path, signature: str, public_key_b64: str) -> bo
     return verify_package_verbose(package_dir, signature, public_key_b64)[0]
 
 
-def package_is_signed(manifest: PluginManifest) -> bool:
-    """True if the manifest carries a non-empty ``ed25519:`` signature."""
-    return bool(manifest.signature) and manifest.signature.startswith(SIGNATURE_PREFIX)
+def read_signature(package_dir: Path) -> str:
+    """Return the package signature: the ``plugin.sig`` sidecar when present,
+    else the manifest's inline ``signature`` field.
+
+    The inline fallback keeps already-installed cache packages and old signed
+    zips (which carry ``signature`` in ``plugin.json`` and no sidecar)
+    verifiable after the sidecar migration; it is removable once the fleet
+    re-syncs.  An unreadable or corrupt sidecar is treated as absent so one
+    bad file cannot disable discovery of every other package.
+    """
+    sig_path = package_dir / SIGNATURE_FILENAME
+    try:
+        sidecar = sig_path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        sidecar = ""
+    if sidecar:
+        return sidecar
+    return _inline_signature(package_dir)
+
+
+def _inline_signature(package_dir: Path) -> str:
+    """Return the manifest's inline ``signature`` value, or "" when absent."""
+    manifest_path = package_dir / MANIFEST_FILENAME
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return ""
+    value = raw.get("signature")
+    return value.strip() if isinstance(value, str) else ""
+
+
+def package_is_signed(package_dir: Path) -> bool:
+    """True if the package carries a non-empty ``ed25519:`` sidecar signature."""
+    signature = read_signature(package_dir)
+    return bool(signature) and signature.startswith(SIGNATURE_PREFIX)
 
 
 def read_manifest(package_dir: Path) -> PluginManifest:
-    """Read + validate the manifest from a package dir."""
+    """Read + validate the manifest from a package dir.
+
+    The signature is taken from the ``plugin.sig`` sidecar when present,
+    falling back to a legacy inline ``signature`` field.
+    """
     manifest_path = package_dir / MANIFEST_FILENAME
-    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    sidecar = read_signature(package_dir)
+    if sidecar:
+        raw["signature"] = sidecar
     return validate_manifest(raw)
 
 
 def write_signature(package_dir: Path, signature: str) -> PluginManifest:
-    """Write the signature into the manifest's ``signature`` field.
+    """Write the signature to the ``plugin.sig`` sidecar (no trailing newline).
 
-    Preserves all other fields and key ordering as much as possible.
-    Returns the re-validated manifest.
+    The manifest is left untouched so it stays freely editable.  Returns the
+    re-validated manifest with ``signature`` populated from the sidecar.
     """
-    manifest_path = package_dir / MANIFEST_FILENAME
-    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-    raw["signature"] = signature
-    manifest_path.write_text(
-        json.dumps(raw, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    return validate_manifest(raw)
+    (package_dir / SIGNATURE_FILENAME).write_text(signature, encoding="utf-8")
+    return read_manifest(package_dir)

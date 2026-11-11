@@ -16,6 +16,7 @@ Error mapping:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 
@@ -160,9 +161,22 @@ async def call_plugin_command(name: str, body: dict[str, Any]) -> Any:
         ) from None
     except RpcCallError as exc:
         logger.warning("Plugin '%s' command '%s' error: %s", plugin_id, cmd, exc)
+        data = getattr(exc, "data", None)
+        kind = data.get("kind") if isinstance(data, dict) else None
+        dev_mode = os.environ.get("STITCH_DEV_MODE", "").strip().lower()
+        tb = (
+            data.get("traceback")
+            if isinstance(data, dict) and dev_mode in ("1", "true", "yes", "on")
+            else None
+        )
+        detail = {
+            "detail": f"Plugin '{plugin_id}' error: {exc}",
+            "kind": kind,
+            "traceback": tb,
+        }
         raise HTTPException(
             status_code=400,
-            detail=f"Plugin '{plugin_id}' error: {exc}",
+            detail=detail,
         ) from exc
 
 
@@ -215,6 +229,27 @@ async def _restart_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
             status_code=404, detail=f"Unknown plugin: {plugin_id}"
         )
     return await host.restart()
+
+
+@register_command("reload_service_plugin", admin_only=True)
+async def _reload_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
+    """Reload a service-plugin host from disk (admin-only).
+
+    Re-reads ``plugin.json`` and swaps the host, unlike
+    ``restart_service_plugin`` which only restarts the existing process.
+    """
+    plugin_id = params.get("plugin_id")
+    if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
+        raise HTTPException(
+            status_code=400, detail="plugin_id is required and must be valid"
+        )
+    from stitch_backend.domains.plugin_runtime import reload_service_plugin
+
+    result = await reload_service_plugin(plugin_id)
+    if not result.ok:
+        status_code = 404 if result.error_kind == "unknown_plugin" else 400
+        raise HTTPException(status_code=status_code, detail=result.error)
+    return result.status or {}
 
 
 @register_command("set_service_plugin_enabled", admin_only=True)
