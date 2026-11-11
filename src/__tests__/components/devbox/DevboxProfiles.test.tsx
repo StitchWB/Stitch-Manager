@@ -66,8 +66,99 @@ describe('Devbox profile editor', () => {
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'profile_get')).toEqual([{ name: 'example-simple' }]);
     });
-    expect(await screen.findByText('R1: project_dir missing')).toBeTruthy();
+    expect(await screen.findByText('Project folder is required')).toBeTruthy();
+    expect(screen.getByTitle('R1: project_dir missing')).toBeTruthy();
     expect(screen.getByTestId('devbox-profile-save')).toBeDisabled();
+  });
+
+  it('classifies real R1 errors under the project folder field', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_get: {
+            json: JSON.stringify({ project_dir: '', mode: 'standard' }),
+            valid: false,
+            errors: ['R1: пусто $ProjectDir'],
+          },
+        }),
+      ),
+    );
+    renderProfiles();
+
+    fireEvent.click(screen.getByTestId('devbox-profile-edit-example-simple'));
+
+    expect(await screen.findByTestId('devbox-profile-error-project_dir')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-profile-errors')).toBeNull();
+  });
+
+  it('clears the auto-filled toolchain when the next folder has none', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_detect: (args: Record<string, unknown>) => {
+            const path = String(args.path ?? '');
+            const base = {
+              path,
+              exists: true,
+              is_git: false,
+              name: '',
+              stacks: [],
+              suggested: null,
+              provenance: {},
+              warnings: [],
+              port_conflicts: [],
+              requires_choice: false,
+            };
+            if (path.endsWith('java')) {
+              return {
+                ...base,
+                name: 'java',
+                stacks: [{ id: 'java', markers: ['pom.xml'] }],
+                suggested: {
+                  project_dir: path,
+                  mode: 'standard',
+                  toolchain: 'java21',
+                  ui_port: 8080,
+                  allowed_ports: [8080],
+                },
+                provenance: { git: 'none' },
+              };
+            }
+            if (path.endsWith('web')) {
+              return {
+                ...base,
+                name: 'web',
+                stacks: [{ id: 'vite', markers: ['package.json'] }],
+                suggested: {
+                  project_dir: path,
+                  mode: 'standard',
+                  ui_port: 5173,
+                  allowed_ports: [5173],
+                },
+                provenance: { git: 'none' },
+              };
+            }
+            return base;
+          },
+        }),
+      ),
+    );
+    renderProfiles();
+
+    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    const folder = (await screen.findByTestId(
+      'devbox-profile-field-project_dir',
+    )) as HTMLInputElement;
+
+    fireEvent.change(folder, { target: { value: 'd:/work/java' } });
+    fireEvent.click(await screen.findByTestId('devbox-profile-advanced-toggle'));
+    const toolchain = (await screen.findByTestId(
+      'devbox-profile-field-toolchain',
+    )) as HTMLInputElement;
+    await waitFor(() => expect(toolchain.value).toBe('java21'));
+
+    fireEvent.change(folder, { target: { value: 'd:/work/web' } });
+    await waitFor(() => expect(toolchain.value).toBe(''));
   });
 
   it('maps project_dir put errors under the folder field when the form is visible', async () => {
@@ -154,7 +245,7 @@ describe('Devbox profile editor', () => {
   });
 
   it('renders put validation errors under the editor and keeps it open', async () => {
-    renderProfilesOnPut({ valid: false, errors: ['R7: allowed_ports out of range'] });
+    renderProfilesOnPut({ valid: false, errors: ['R12: allowed_ports out of range'] });
     fireEvent.click(await screen.findByTestId('devbox-profile-json-toggle'));
     const editor = (await screen.findByTestId(
       'devbox-profile-editor',
@@ -163,7 +254,8 @@ describe('Devbox profile editor', () => {
     fireEvent.change(editor, { target: { value: '{"mode": "full"}' } });
     fireEvent.click(screen.getByTestId('devbox-profile-save'));
 
-    expect(await screen.findByText('R7: allowed_ports out of range')).toBeTruthy();
+    expect(await screen.findByText('Port must be 1-65535')).toBeTruthy();
+    expect(screen.getByTitle('R12: allowed_ports out of range')).toBeTruthy();
     expect(screen.getByTestId('devbox-profile-editor')).toBeTruthy();
     expect(screen.getByTestId('devbox-profile-save')).toBeDisabled();
   });
@@ -300,6 +392,16 @@ describe('Devbox profile editor', () => {
     expect(start.parentElement?.className).toContain('gap-2');
   });
 
+  it('renders the localized mode title in the projects table', () => {
+    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+    renderProfiles();
+
+    expect(screen.queryByText('standard')).toBeNull();
+    expect(screen.queryByText('readonly')).toBeNull();
+    expect(screen.getAllByText('Standard')).toHaveLength(2);
+    expect(screen.getByText('Read-only')).toBeTruthy();
+  });
+
   it('keeps advanced fields collapsed in create mode until toggled', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
     renderProfiles();
@@ -409,9 +511,29 @@ describe('Devbox profile editor', () => {
     delete (window as any).pywebview;
   });
 
-  it('shows folder existence status from folder_check', async () => {
+  it('shows folder detection from profile_detect', async () => {
     invokeMock.mockImplementation(
-      devboxRouter(pageRoutes({ folder_check: { exists: true, is_git: true } })),
+      devboxRouter(
+        pageRoutes({
+          profile_detect: {
+            path: 'd:/work/repo',
+            exists: true,
+            is_git: true,
+            name: 'repo',
+            stacks: [{ id: 'vite', markers: ['package.json'] }],
+            suggested: {
+              project_dir: 'd:/work/repo',
+              mode: 'standard',
+              ui_port: 5173,
+              allowed_ports: [5173],
+            },
+            provenance: { git: 'local' },
+            warnings: [],
+            port_conflicts: [],
+            requires_choice: false,
+          },
+        }),
+      ),
     );
     renderProfiles();
 
@@ -421,8 +543,9 @@ describe('Devbox profile editor', () => {
     });
 
     expect(await screen.findByText('Folder exists, git repo')).toBeTruthy();
+    expect(await screen.findByText('vite')).toBeTruthy();
     await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'folder_check')).toEqual([{ path: 'd:/work/repo' }]);
+      expect(devboxCallArgs(invokeMock, 'profile_detect')).toEqual([{ path: 'd:/work/repo' }]);
     });
   });
 

@@ -24,19 +24,21 @@ import { isDesktopApp } from '@/lib/backend/core/url';
 import { pickFolderNative, nativePickerAvailable } from '@/lib/desktop/nativeDialogs';
 import { t } from '@/lib/i18n';
 import {
-  devboxFolderCheck,
   devboxProfileDefaults,
   devboxProfileDelete,
+  devboxProfileDetect,
   devboxProfileGet,
   devboxProfilePut,
   devboxProfileUse,
   devboxStackStart,
-  devboxVitalValue,
   type DevboxAccepted,
+  type DevboxProfileDetect,
   type DevboxProfileRow,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
+import { isFolderProfileError, profileErrorTitle } from './profileErrors';
+import { stackVitalState } from './state';
 
 interface EditorState {
   name: string;
@@ -48,6 +50,8 @@ interface EditorState {
 }
 
 const CREATE_TEMPLATE = JSON.stringify({ project_dir: '', mode: 'standard' }, null, 2);
+
+const DETECT_DEBOUNCE_MS = 400;
 
 const MCP_SEED: Record<string, unknown> = {
   exposed_mcps: [{ name: 'context7', mode: 'readonly', tool_allow: [] }],
@@ -172,6 +176,7 @@ export interface DevboxProfilesProps {
   onAction: (action: Promise<DevboxAccepted>) => void;
   onRetry: () => void;
   onChanged: () => void;
+  onStarted?: () => void;
   addSignal?: number;
   seedSignal?: number;
 }
@@ -184,23 +189,23 @@ export function DevboxProfiles({
   onAction,
   onRetry,
   onChanged,
+  onStarted,
   addSignal = 0,
   seedSignal = 0,
 }: DevboxProfilesProps) {
   const rows = Array.isArray(profiles) ? profiles : [];
   const activeRow = rows.find(row => row.active) ?? null;
   const activeModeTitle = activeRow ? modeTitle(activeRow.mode) : '';
-  const stackRunning =
-    devboxVitalValue(overviewCards, 'ingress') === 'up' ||
-    devboxVitalValue(overviewCards, 'bridge') === 'up' ||
-    devboxVitalValue(overviewCards, 'runner') === 'up';
+  const stackState = stackVitalState(overviewCards);
+  const stackRunning = stackState === 'healthy' || stackState === 'degraded';
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
-  const [folderStatus, setFolderStatus] = useState<{ exists: boolean; isGit: boolean } | null>(
-    null,
-  );
+  const nameTouchedRef = useRef(false);
+  const autoFilledRef = useRef<Record<string, unknown>>({});
+  const detectSeqRef = useRef(0);
+  const [detect, setDetect] = useState<DevboxProfileDetect | null>(null);
   const [gitIdentity, setGitIdentity] = useState('');
   const [recents, setRecents] = useState<string[]>([]);
 
@@ -227,11 +232,70 @@ export function DevboxProfiles({
     });
   }, []);
 
+  const applyDetect = useCallback((result: DevboxProfileDetect) => {
+    const suggested = result.suggested;
+    const gitName = suggested && typeof suggested.git_name === 'string' ? suggested.git_name : '';
+    const gitEmail =
+      suggested && typeof suggested.git_email === 'string' ? suggested.git_email : '';
+    setGitIdentity(gitName && gitEmail ? `${gitName} <${gitEmail}>` : '');
+    setEditor(prev => {
+      if (!prev || !prev.create) return prev;
+      const current = parseModel(prev.json) ?? {};
+      const next: ProfileModel = { ...current };
+      const auto = autoFilledRef.current;
+      const assign = (key: string, value: unknown) => {
+        if (value === undefined || value === null || value === '') return;
+        const prevValue = current[key];
+        const wasAuto =
+          auto[key] !== undefined && JSON.stringify(prevValue) === JSON.stringify(auto[key]);
+        if (prevValue === undefined || prevValue === '' || wasAuto) {
+          next[key] = value;
+          auto[key] = value;
+        }
+      };
+      const clearIfAuto = (key: string) => {
+        const prevValue = current[key];
+        const wasAuto =
+          auto[key] !== undefined && JSON.stringify(prevValue) === JSON.stringify(auto[key]);
+        if (!wasAuto) return;
+        delete next[key];
+        delete auto[key];
+      };
+      if (result.path !== '' && current.project_dir !== result.path) {
+        next.project_dir = result.path;
+      }
+      if (suggested) {
+        assign('toolchain', suggested.toolchain);
+        assign('ui_port', suggested.ui_port);
+        assign('allowed_ports', suggested.allowed_ports);
+        assign('git_name', suggested.git_name);
+        assign('git_email', suggested.git_email);
+        if (suggested.toolchain === undefined) clearIfAuto('toolchain');
+        if (suggested.ui_port === undefined) {
+          clearIfAuto('ui_port');
+          clearIfAuto('allowed_ports');
+        }
+        if (suggested.git_name === undefined) clearIfAuto('git_name');
+        if (suggested.git_email === undefined) clearIfAuto('git_email');
+      } else {
+        for (const key of ['toolchain', 'ui_port', 'allowed_ports', 'git_name', 'git_email']) {
+          clearIfAuto(key);
+        }
+      }
+      const name = !nameTouchedRef.current && result.name ? result.name : prev.name;
+      if (name === prev.name && JSON.stringify(next) === JSON.stringify(current)) return prev;
+      return { ...prev, name, json: JSON.stringify(next, null, 2) };
+    });
+  }, []);
+
   const openEditor = useCallback(
     (name: string, seed?: Record<string, unknown>) => {
       setAdvancedOpen(false);
       setJsonOpen(seed !== undefined);
       setNameTouched(true);
+      nameTouchedRef.current = true;
+      detectSeqRef.current += 1;
+      setDetect(null);
       setEditor({ name, json: '', loading: true, saving: false, create: false, lastInvalid: null });
       devboxProfileGet(name)
         .then(result => {
@@ -259,7 +323,10 @@ export function DevboxProfiles({
     setAdvancedOpen(false);
     setJsonOpen(false);
     setNameTouched(false);
-    setFolderStatus(null);
+    nameTouchedRef.current = false;
+    autoFilledRef.current = {};
+    detectSeqRef.current += 1;
+    setDetect(null);
     loadCreateExtras();
     setEditor({
       name: '',
@@ -302,7 +369,10 @@ export function DevboxProfiles({
       setAdvancedOpen(false);
       setJsonOpen(false);
       setNameTouched(false);
-      setFolderStatus(null);
+      nameTouchedRef.current = false;
+      autoFilledRef.current = {};
+      detectSeqRef.current += 1;
+      setDetect(null);
       loadCreateExtras();
       setEditor({
         name: '',
@@ -365,7 +435,7 @@ export function DevboxProfiles({
   );
 
   const folderErrors = useMemo(
-    () => (model ? editorErrors.filter(line => line.includes('project_dir')) : []),
+    () => (model ? editorErrors.filter(isFolderProfileError) : []),
     [editorErrors, model],
   );
   const generalErrors = useMemo(
@@ -376,6 +446,7 @@ export function DevboxProfiles({
   const onFolderChange = useCallback(
     (value: string) => {
       updateModel({ project_dir: value });
+      if (value.trim() === '') setDetect(null);
       if (!nameTouched) {
         setEditor(prev => (prev && prev.create ? { ...prev, name: basename(value) } : prev));
       }
@@ -393,19 +464,26 @@ export function DevboxProfiles({
   }, [onFolderChange]);
 
   const folder = typeof model?.project_dir === 'string' ? model.project_dir : '';
+  const createMode = editor?.create === true;
+  const editorLoading = editor?.loading === true;
 
   useEffect(() => {
+    const path = folder.trim();
+    if (!createMode || editorLoading || path === '') return;
+    const seq = ++detectSeqRef.current;
     const timer = setTimeout(() => {
-      if (!editor || editor.loading || folder.trim() === '') {
-        setFolderStatus(null);
-        return;
-      }
-      devboxFolderCheck(folder)
-        .then(result => setFolderStatus({ exists: result.exists, isGit: result.is_git }))
-        .catch(() => setFolderStatus(null));
-    }, 300);
+      devboxProfileDetect(path)
+        .then(result => {
+          if (seq !== detectSeqRef.current) return;
+          setDetect(result);
+          applyDetect(result);
+        })
+        .catch(() => {
+          if (seq === detectSeqRef.current) setDetect(null);
+        });
+    }, DETECT_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [editor, folder]);
+  }, [createMode, editorLoading, folder, applyDetect]);
 
   const saveDisabled =
     editor === null ||
@@ -425,11 +503,12 @@ export function DevboxProfiles({
       if (result.valid) {
         appToast.success(t('devboxPage.editorSaved'));
         if (create) writeRecents(folder);
-        if (startAfter) {
-          onAction(devboxStackStart(name, false));
-        }
         setEditor(null);
         onChanged();
+        if (startAfter) {
+          onAction(devboxStackStart(name, false));
+          onStarted?.();
+        }
         return;
       }
       setEditor(prev =>
@@ -508,7 +587,7 @@ export function DevboxProfiles({
             {rows.map(row => (
               <TableRow key={row.name}>
                 <TableCell className="font-medium text-white">{row.name}</TableCell>
-                <TableCell>{row.mode}</TableCell>
+                <TableCell>{modeTitle(row.mode)}</TableCell>
                 <TableCell className="font-mono text-2xs text-slate-400">{row.project_dir}</TableCell>
                 <TableCell>
                   {row.active ? (
@@ -602,34 +681,34 @@ export function DevboxProfiles({
           size="lg"
           footer={
             editor.create ? (
-              <div className="flex justify-end gap-2">
-                <Button size="sm" variant="secondary" onClick={() => setEditor(null)}>
-                  {t('common.close')}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={saveDisabled}
+                  isLoading={editor.saving}
+                  data-testid="devbox-profile-save"
+                  onClick={() => void save(false)}
+                >
+                  {t('devboxPage.saveWithoutStart')}
                 </Button>
-                {saveWithTip(
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={saveDisabled}
-                    isLoading={editor.saving}
-                    data-testid="devbox-profile-save"
-                    onClick={() => void save(false)}
-                  >
-                    {t('devboxPage.addProfile')}
-                  </Button>,
-                )}
-                {saveWithTip(
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={saveDisabled}
-                    isLoading={editor.saving}
-                    data-testid="devbox-profile-save-start"
-                    onClick={() => void save(true)}
-                  >
-                    {t('devboxPage.addAndStart')}
-                  </Button>,
-                )}
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => setEditor(null)}>
+                    {t('common.close')}
+                  </Button>
+                  {saveWithTip(
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={saveDisabled}
+                      isLoading={editor.saving}
+                      data-testid="devbox-profile-save-start"
+                      onClick={() => void save(true)}
+                    >
+                      {t('devboxPage.addAndStart')}
+                    </Button>,
+                  )}
+                </div>
               </div>
             ) : (
               <div className="flex justify-end gap-2">
@@ -673,6 +752,7 @@ export function DevboxProfiles({
                     data-testid="devbox-profile-new-name"
                     onChange={e => {
                       setNameTouched(true);
+                      nameTouchedRef.current = true;
                       setEditor(prev => (prev ? { ...prev, name: e.target.value } : prev));
                     }}
                   />
@@ -710,23 +790,115 @@ export function DevboxProfiles({
                         </Button>
                       )}
                     </div>
-                    {folderStatus && (
-                      <span
-                        className={
-                          folderStatus.exists
-                            ? folderStatus.isGit
-                              ? 'text-2xs text-emerald-300'
-                              : 'text-2xs text-slate-400'
-                            : 'text-2xs text-red-300'
-                        }
-                        data-testid="devbox-profile-folder-status"
+                    {detect && (
+                      <div
+                        className="flex flex-col gap-1"
+                        data-testid="devbox-profile-detect"
                       >
-                        {folderStatus.exists
-                          ? folderStatus.isGit
-                            ? t('devboxPage.folderExistsGit')
-                            : t('devboxPage.folderExistsNoGit')
-                          : t('devboxPage.folderMissing')}
-                      </span>
+                        <span
+                          className={
+                            detect.exists
+                              ? detect.is_git
+                                ? 'text-2xs text-emerald-300'
+                                : 'text-2xs text-slate-400'
+                              : 'text-2xs text-red-300'
+                          }
+                          data-testid="devbox-profile-folder-status"
+                        >
+                          {detect.exists
+                            ? detect.is_git
+                              ? t('devboxPage.folderExistsGit')
+                              : t('devboxPage.folderExistsNoGit')
+                            : t('devboxPage.folderMissing')}
+                        </span>
+                        {detect.stacks.length > 0 && (
+                          <div
+                            className="flex flex-wrap items-center gap-1"
+                            data-testid="devbox-profile-detect-stacks"
+                          >
+                            <span className="text-2xs text-slate-500">
+                              {t('devboxPage.detectStackLabel')}
+                            </span>
+                            {detect.stacks.map(stack => (
+                              <Badge
+                                key={`${stack.subdir ?? ''}:${stack.id}`}
+                                variant="info"
+                                size="sm"
+                                className="normal-case tracking-normal"
+                              >
+                                {stack.subdir ? `${stack.subdir}/${stack.id}` : stack.id}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {detect.provenance.git && (
+                          <span className="text-2xs text-slate-500">
+                            {detect.provenance.git === 'local'
+                              ? t('devboxPage.detectGitLocal')
+                              : detect.provenance.git === 'global'
+                                ? t('devboxPage.detectGitGlobal')
+                                : t('devboxPage.detectGitNone')}
+                          </span>
+                        )}
+                        {detect.warnings.map(warning => {
+                          if (warning.code === 'not_absolute') {
+                            return (
+                              <span
+                                key="not_absolute"
+                                className="text-2xs text-amber-300"
+                                data-testid="devbox-profile-detect-warning"
+                              >
+                                {t('devboxPage.detectWarnNotAbsolute')}
+                              </span>
+                            );
+                          }
+                          if (warning.code === 'monorepo') {
+                            return (
+                              <span
+                                key="monorepo"
+                                className="text-2xs text-amber-300"
+                                data-testid="devbox-profile-detect-warning"
+                              >
+                                {t('devboxPage.detectWarnMonorepo', {
+                                  stacks: (warning.stacks ?? []).join(', '),
+                                })}
+                              </span>
+                            );
+                          }
+                          if (warning.code === 'no_stack') {
+                            return (
+                              <span
+                                key="no_stack"
+                                className="text-2xs text-slate-400"
+                                data-testid="devbox-profile-detect-warning"
+                              >
+                                {t('devboxPage.detectWarnNoStack')}
+                              </span>
+                            );
+                          }
+                          if (warning.code === 'not_git') {
+                            return (
+                              <span
+                                key="not_git"
+                                className="text-2xs text-slate-400"
+                                data-testid="devbox-profile-detect-warning"
+                              >
+                                {t('devboxPage.detectWarnNotGit')}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })}
+                        {detect.port_conflicts.map(conflict => (
+                          <span
+                            key={conflict.port}
+                            className="text-2xs text-amber-300"
+                            data-testid="devbox-profile-detect-port-conflict"
+                          >
+                            {t('devboxPage.detectPortInUse', { port: conflict.port })}
+                          </span>
+                        ))}
+                      </div>
                     )}
                     {editor.create && recents.length > 0 && (
                       <div className="flex flex-wrap gap-1" data-testid="devbox-profile-recents">
@@ -746,10 +918,11 @@ export function DevboxProfiles({
                     {folderErrors.map((line, i) => (
                       <span
                         key={i}
-                        className="text-2xs font-mono text-red-300"
+                        className="text-2xs text-red-300"
+                        title={line}
                         data-testid="devbox-profile-error-project_dir"
                       >
-                        {line}
+                        {profileErrorTitle(line) ?? <span className="font-mono">{line}</span>}
                       </span>
                     ))}
                     <span className="mt-2 flex items-center gap-1 text-2xs uppercase tracking-wider text-slate-400">
@@ -948,8 +1121,8 @@ export function DevboxProfiles({
                     {t('devboxPage.editorErrors')}
                   </span>
                   {generalErrors.map((line, i) => (
-                    <span key={i} className="text-2xs text-red-300 font-mono">
-                      {line}
+                    <span key={i} className="text-2xs text-red-300" title={line}>
+                      {profileErrorTitle(line) ?? <span className="font-mono">{line}</span>}
                     </span>
                   ))}
                 </div>

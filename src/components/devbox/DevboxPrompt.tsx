@@ -48,9 +48,31 @@ import { DevboxSection } from './DevboxSection';
 
 const STALE_COMMAND_RE = /method not found|-32601/i;
 
-const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', 'stack_start']);
+const STACK_START_CMD = 'stack_start';
+
+const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', STACK_START_CMD]);
+
+const TASK_DRAFT_KEY = 'devbox.taskDraft';
+
+function readTaskDraft(): string {
+  try {
+    return localStorage.getItem(TASK_DRAFT_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeTaskDraft(value: string): void {
+  try {
+    localStorage.setItem(TASK_DRAFT_KEY, value);
+  } catch {
+    return;
+  }
+}
 
 const COPY_FLASH_MS = 2000;
+const INGRESS_RETRY_MS = 3000;
+const INGRESS_RETRY_LIMIT = 10;
 
 type ConnectionMode = 'sandbox' | 'remote';
 
@@ -94,12 +116,18 @@ function cardUp(cards: DevboxVitalCard[] | null, id: string): boolean {
 
 function readyFromCards(cards: DevboxVitalCard[] | null): DevboxAgentPromptReady {
   const profile = devboxVitalValue(cards, 'profile');
+  const runner = devboxVitalValue(cards, 'runner');
   return {
     profile:
       profile !== null && !['', '—', '-', 'none', 'down', 'off'].includes(profile),
     bridge: cardUp(cards, 'bridge'),
     ingress: cardUp(cards, 'ingress'),
-    runner: cardUp(cards, 'runner'),
+    runner:
+      runner === 'up' || runner === 'on' || runner === 'true'
+        ? 'up'
+        : runner === 'down' || runner === 'false'
+          ? 'down'
+          : 'off',
   };
 }
 
@@ -150,7 +178,7 @@ export function DevboxPrompt({
   const [tab, setTab] = useState<PromptTab>('editor');
   const [manualCopy, setManualCopy] = useState(false);
   const [acceptanceOpen, setAcceptanceOpen] = useState(false);
-  const [task, setTask] = useState('');
+  const [task, setTask] = useState(readTaskDraft);
   const [acceptance, setAcceptance] = useState('');
   const [client, setClient] = useState('universal');
   const [authType, setAuthType] = useState('bearer');
@@ -160,7 +188,7 @@ export function DevboxPrompt({
   const [endpointsOpen, setEndpointsOpen] = useState(false);
   const [check, setCheck] = useState<CheckState>({ status: 'idle' });
   const revealedRef = useRef(false);
-  const taskRef = useRef('');
+  const taskRef = useRef(task);
   const acceptanceRef = useRef('');
   const clientRef = useRef('universal');
   const flashTimerRef = useRef<number | null>(null);
@@ -198,10 +226,36 @@ export function DevboxPrompt({
     [],
   );
 
-  const ready = useMemo(
-    () => data?.ready ?? readyFromCards(overviewCards),
-    [data, overviewCards],
-  );
+  const cardReady = useMemo(() => readyFromCards(overviewCards), [overviewCards]);
+  const ready = useMemo(() => data?.ready ?? cardReady, [data, cardReady]);
+
+  const cardSignature = `${cardReady.profile}|${cardReady.bridge}|${cardReady.ingress}|${cardReady.runner}`;
+  const cardSignatureRef = useRef(cardSignature);
+  useEffect(() => {
+    if (cardSignatureRef.current === cardSignature) return;
+    cardSignatureRef.current = cardSignature;
+    load(revealedRef.current);
+  }, [cardSignature, load]);
+
+  const wasBusyRef = useRef(false);
+  const busy = actionStatus?.busy === true;
+  useEffect(() => {
+    if (wasBusyRef.current && !busy) load(revealedRef.current);
+    wasBusyRef.current = busy;
+  }, [busy, load]);
+
+  const ingressUrlPending = cardReady.ingress && !ready.ingress;
+  const ingressRetryRef = useRef(0);
+  useEffect(() => {
+    if (!ingressUrlPending) {
+      ingressRetryRef.current = 0;
+      return;
+    }
+    if (ingressRetryRef.current >= INGRESS_RETRY_LIMIT) return;
+    ingressRetryRef.current += 1;
+    const timer = window.setTimeout(() => load(revealedRef.current), INGRESS_RETRY_MS);
+    return () => window.clearTimeout(timer);
+  }, [ingressUrlPending, data, load]);
 
   const connection = useMemo(
     () => (data !== null ? devboxNormalizeConnection(data.connection) : null),
@@ -299,6 +353,28 @@ export function DevboxPrompt({
     );
   }, [recent, copied]);
 
+  const starting =
+    actionStatus?.busy === true && actionStatus.current?.cmd === STACK_START_CMD;
+  const lastStart = useMemo(() => {
+    if (!Array.isArray(recent)) return null;
+    for (let index = recent.length - 1; index >= 0; index -= 1) {
+      if (recent[index].cmd === STACK_START_CMD) return recent[index];
+    }
+    return null;
+  }, [recent]);
+  const startFailed =
+    !starting && lastStart !== null && !devboxActionSucceeded(lastStart) && !ready.bridge;
+  const rawStartOutput = lastStart?.payload?.output;
+  const startOutput =
+    startFailed && typeof rawStartOutput === 'string'
+      ? rawStartOutput.trim().split(/\r?\n/).slice(-6).join('\n')
+      : '';
+  const startSteps = [
+    { id: 'profile', label: t('devboxPage.startStepProfile'), done: ready.profile, failed: false },
+    { id: 'stack', label: t('devboxPage.startStepStack'), done: ready.bridge, failed: startFailed },
+    { id: 'ingress', label: t('devboxPage.startStepIngress'), done: ready.ingress, failed: false },
+  ];
+
   const flashCopied = () => {
     setCopyFlash(true);
     if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
@@ -371,36 +447,88 @@ export function DevboxPrompt({
     </span>
   );
 
+  const blockingMessage = starting
+    ? t('devboxPage.promptStackStarting')
+    : !ready.profile
+      ? t('devboxPage.promptProfileMissing')
+      : !ready.bridge
+        ? t('devboxPage.promptStackDownWarning')
+        : t('devboxPage.promptIngressDownWarning');
+
   const blockingAlert = (
     <div
-      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
+      className="flex shrink-0 flex-col gap-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
       data-testid="devbox-prompt-stack-warning"
     >
-      <span className="flex items-center gap-1">
-        <AlertTriangle size={12} className="shrink-0" aria-hidden />
-        {t('devboxPage.promptStackDownWarning')}
-      </span>
-      {(!ready.bridge || !ready.runner) && (
-        <Button
-          size="xs"
-          variant="outline"
-          leftIcon={<Power size={12} />}
-          data-testid="devbox-prompt-alert-stack-start"
-          onClick={() => onAction(devboxStackStart(activeProfileName, false))}
-        >
-          {t('devboxPage.promptChipStackStart')}
-        </Button>
-      )}
-      {ready.bridge && ready.runner && !ready.ingress && (
-        <Button
-          size="xs"
-          variant="outline"
-          leftIcon={<Play size={12} />}
-          data-testid="devbox-prompt-alert-ingress-up"
-          onClick={() => onAction(devboxIngressControl('up'))}
-        >
-          {t('devboxPage.promptChipIngressUp')}
-        </Button>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="flex items-center gap-1">
+          <AlertTriangle size={12} className="shrink-0" aria-hidden />
+          {blockingMessage}
+        </span>
+        {!ready.bridge && !starting && (
+          <Button
+            size="xs"
+            variant="outline"
+            leftIcon={<Power size={12} />}
+            data-testid="devbox-prompt-alert-stack-start"
+            onClick={() => onAction(devboxStackStart(activeProfileName, false))}
+          >
+            {t('devboxPage.promptChipStackStart')}
+          </Button>
+        )}
+        {ready.bridge && !ready.ingress && (
+          <Button
+            size="xs"
+            variant="outline"
+            leftIcon={<Play size={12} />}
+            data-testid="devbox-prompt-alert-ingress-up"
+            onClick={() => onAction(devboxIngressControl('up'))}
+          >
+            {t('devboxPage.promptChipIngressUp')}
+          </Button>
+        )}
+      </div>
+      {(starting || startFailed) && (
+        <div className="flex flex-col gap-1" data-testid="devbox-prompt-start-progress">
+          <div className="flex flex-wrap items-center gap-2 text-2xs">
+            {startSteps.map((step, index) => (
+              <span key={step.id} className="flex items-center gap-1">
+                {index > 0 && <span className="text-amber-200/50">→</span>}
+                <span
+                  className={
+                    step.failed
+                      ? 'text-red-300'
+                      : step.done
+                        ? 'text-emerald-300'
+                        : 'text-amber-200'
+                  }
+                >
+                  {step.failed ? (
+                    <X size={10} aria-hidden />
+                  ) : step.done ? (
+                    <Check size={10} aria-hidden />
+                  ) : (
+                    <RefreshCw size={10} className="animate-spin" aria-hidden />
+                  )}
+                  {step.label}
+                </span>
+              </span>
+            ))}
+            {startFailed && (
+              <span className="text-red-300" data-testid="devbox-prompt-start-failure">
+                {t('devboxPage.startFailedTitle', { code: String(lastStart?.exit ?? '?') })}
+              </span>
+            )}
+          </div>
+          {startOutput !== '' && (
+            <pre
+              className="max-h-24 overflow-auto whitespace-pre-wrap rounded bg-black/20 px-2 py-1 font-mono text-2xs text-red-200"
+              data-testid="devbox-prompt-start-output"
+            >
+              {startOutput}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   );
@@ -680,6 +808,7 @@ export function DevboxPrompt({
                     onChange={e => {
                       taskRef.current = e.target.value;
                       setTask(e.target.value);
+                      writeTaskDraft(e.target.value);
                     }}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -714,7 +843,7 @@ export function DevboxPrompt({
 
                   {copyDisabled
                     ? blockingAlert
-                    : !ready.runner
+                    : ready.runner === 'down'
                       ? alertPlate(
                           'devbox-prompt-runner-warning',
                           t('devboxPage.promptRunnerDownHint'),
@@ -797,6 +926,12 @@ export function DevboxPrompt({
                   </Button>
                 </div>
                 <div className="flex flex-col items-end gap-1">
+                  <span
+                    className="max-w-[320px] text-right text-xs text-slate-300"
+                    data-testid="devbox-prompt-step2"
+                  >
+                    {t('devboxPage.promptStep2')}
+                  </span>
                   {copyDisabled ? (
                     <Tooltip
                       content={t('devboxPage.promptBlockedTip', {

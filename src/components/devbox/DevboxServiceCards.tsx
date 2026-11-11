@@ -14,6 +14,15 @@ import {
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
 import { devboxLabel } from './labels';
+import {
+  cardVitalState,
+  findVitalCard,
+  parseHostCount,
+  STATE_BORDER,
+  STATE_DOT,
+  STATE_TEXT,
+  vitalStateLabelKey,
+} from './state';
 
 const SERVICES = [
   { id: 'ingress', nameKey: 'devboxPage.serviceIngress', tipKey: 'devboxPage.tipVitalIngress' },
@@ -36,46 +45,6 @@ const SERVICES = [
   },
 ] as const;
 
-const UP_VALUES = new Set(['up', 'on', 'true']);
-
-const DOT_CLASSES = {
-  ok: 'bg-emerald-400',
-  warn: 'bg-amber-400',
-  down: 'bg-red-400',
-  unknown: 'bg-slate-500',
-} as const;
-
-const BORDER_CLASSES = {
-  ok: 'border-white/10',
-  warn: 'border-amber-500/30',
-  down: 'border-amber-500/30',
-  unknown: 'border-white/10',
-} as const;
-
-const VALUE_CLASSES = {
-  ok: 'text-emerald-300',
-  warn: 'text-amber-300',
-  down: 'text-amber-300',
-  unknown: 'text-slate-400',
-} as const;
-
-function findCard(cards: DevboxVitalCard[] | null, id: string): DevboxVitalCard | null {
-  if (!Array.isArray(cards)) return null;
-  return cards.find(c => c.id?.toLowerCase().includes(id) || c.title?.toLowerCase().includes(id)) ?? null;
-}
-
-const HOST_COUNT_RE = /^(\d+)\s*\/\s*(\d+)$/;
-
-type CardState = 'ok' | 'warn' | 'down' | 'unknown';
-
-function cardState(card: DevboxVitalCard | null, up: boolean): CardState {
-  if (card === null) return 'unknown';
-  if (up) return 'ok';
-  if (card.tone === 'warn') return 'warn';
-  if (card.tone === 'down') return 'down';
-  return 'ok';
-}
-
 function gatewayVital(
   gateway: DevboxOverviewGateway | null,
   name: string,
@@ -89,16 +58,6 @@ function gatewayVital(
     sub: t('devboxPage.gatewayMetrics', { calls: gateway.calls, errors: gateway.errors }),
     updatedAt: null,
   };
-}
-
-function hostServicesState(card: DevboxVitalCard | null): CardState | null {
-  if (card === null) return null;
-  const match = HOST_COUNT_RE.exec(String(card.value ?? '').trim());
-  if (!match) return null;
-  const alive = Number(match[1]);
-  const recorded = Number(match[2]);
-  if (recorded === 0) return 'unknown';
-  return alive > 0 ? 'ok' : 'warn';
 }
 
 export interface DevboxServiceCardsProps {
@@ -123,20 +82,27 @@ export function DevboxServiceCards({
           const card =
             service.id === 'gateway'
               ? gatewayVital(gateway, t(service.nameKey))
-              : findCard(cards, service.id);
+              : findVitalCard(cards, service.id);
           if (service.id === 'gateway' && card === null) return null;
-          const value = card ? String(card.value ?? '').toLowerCase() : null;
-          const up = value !== null && UP_VALUES.has(value);
-          const state =
-            (service.id === 'host_services' ? hostServicesState(card) : null) ??
-            cardState(card, up);
+          const state = card ? cardVitalState(card, service.id) : 'unknown';
           const name = card ? devboxLabel(card.title) : t(service.nameKey);
           const hint = card?.hint ? devboxLabel(card.hint) : null;
           const tip = hint ? `${t(service.tipKey)} · ${hint}` : t(service.tipKey);
           const updatedAt = card?.updatedAt;
 
+          let valueText: string;
+          if (card === null) {
+            valueText = '—';
+          } else {
+            const parsed = service.id === 'host_services' ? parseHostCount(card.value) : null;
+            valueText =
+              parsed && state !== 'unknown'
+                ? t('devboxPage.serviceHostCount', { alive: parsed.alive, total: parsed.recorded })
+                : t(vitalStateLabelKey(state));
+          }
+
           let action = null;
-          if (service.id === 'ingress' && card !== null && !up) {
+          if (service.id === 'ingress' && card !== null && state !== 'healthy') {
             action = (
               <Button
                 size="xs"
@@ -149,7 +115,7 @@ export function DevboxServiceCards({
               </Button>
             );
           }
-          if (service.id === 'runner' && card !== null && value === 'down') {
+          if (service.id === 'runner' && card !== null && state === 'down') {
             action = (
               <Button
                 size="xs"
@@ -162,7 +128,7 @@ export function DevboxServiceCards({
               </Button>
             );
           }
-          if (service.id === 'bridge' && card !== null && !up) {
+          if (service.id === 'bridge' && card !== null && state !== 'healthy') {
             action = (
               <Button
                 size="xs"
@@ -180,7 +146,7 @@ export function DevboxServiceCards({
               <Toggle
                 size="sm"
                 label=""
-                checked={up}
+                checked={state === 'healthy'}
                 disabled={busy}
                 tooltip={t('devboxPage.tipWatchdog')}
                 onChange={next => onAction(devboxWatchdogControl(next ? 'start' : 'stop'))}
@@ -193,12 +159,12 @@ export function DevboxServiceCards({
               <div
                 className={cn(
                   'flex items-center gap-2 rounded-lg border bg-white/[0.02] px-2.5 py-1.5',
-                  BORDER_CLASSES[state],
+                  STATE_BORDER[state],
                 )}
                 data-testid={`devbox-service-${service.id}`}
               >
                 <span
-                  className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_CLASSES[state])}
+                  className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATE_DOT[state])}
                   aria-hidden
                 />
                 <span className="flex min-w-0 flex-col">
@@ -206,11 +172,11 @@ export function DevboxServiceCards({
                     {name}
                   </span>
                   <span
-                    className={cn('truncate text-xs font-semibold', VALUE_CLASSES[state])}
+                    className={cn('truncate text-xs font-semibold', STATE_TEXT[state])}
                     data-testid={`devbox-service-value-${service.id}`}
                     title={card?.value}
                   >
-                    {card === null ? '—' : card.value}
+                    {valueText}
                   </span>
                   {card?.sub ? (
                     <span

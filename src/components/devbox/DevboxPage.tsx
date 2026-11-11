@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Gauge,
   Loader2,
+  MoreHorizontal,
   Play,
   Plus,
   RefreshCw,
@@ -44,8 +45,8 @@ import {
   type DevboxJobRow,
   type DevboxPermissionRow,
   type DevboxProfileRow,
-  type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
+import { STATE_DOT, stackVitalState, type VitalState } from './state';
 import { useDevboxPoll } from './useDevboxPoll';
 import { runDevboxAction } from './runAction';
 import { DEVBOX_REFRESH_MS } from './constants';
@@ -58,7 +59,6 @@ import { DevboxServiceCards } from './DevboxServiceCards';
 import { DevboxConsole } from './DevboxConsole';
 
 type PageTab = 'task' | 'infra';
-type StackState = 'ok' | 'warn' | 'down' | 'unknown';
 
 const BUSY_CHIP: Record<string, string> = {
   stack_start: 'devboxPage.stackBusyStart',
@@ -67,24 +67,14 @@ const BUSY_CHIP: Record<string, string> = {
   stack_full_down: 'devboxPage.stackBusyStop',
 };
 
-const STACK_CHIP: Record<StackState, { dot: string; key: string }> = {
-  ok: { dot: 'bg-emerald-400', key: 'devboxPage.stackOk' },
-  warn: { dot: 'bg-amber-400', key: 'devboxPage.stackDegraded' },
-  down: { dot: 'bg-red-400', key: 'devboxPage.stackStopped' },
-  unknown: { dot: 'bg-slate-500', key: 'devboxPage.stackUnknown' },
+const COMPOSITE_CHIP: Record<VitalState, string> = {
+  healthy: 'devboxPage.stackOk',
+  degraded: 'devboxPage.stackDegraded',
+  down: 'devboxPage.stackStopped',
+  unknown: 'devboxPage.stackUnknown',
+  pending: 'devboxPage.stackUnknown',
+  disabled: 'devboxPage.stackUnknown',
 };
-
-function stackState(cards: DevboxVitalCard[] | null): StackState {
-  if (!Array.isArray(cards) || cards.length === 0) return 'unknown';
-  const values = ['ingress', 'bridge', 'runner']
-    .map(id => devboxVitalValue(cards, id))
-    .filter(value => value === 'up' || value === 'down');
-  if (values.length === 0) return 'unknown';
-  const up = values.filter(value => value === 'up').length;
-  if (up === values.length) return 'ok';
-  if (up === 0) return 'down';
-  return 'warn';
-}
 
 export function DevboxPage() {
   const language = useAppStore(s => s.language);
@@ -232,6 +222,8 @@ export function DevboxPage() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const dangerRef = useRef<HTMLDivElement | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!dangerOpen) return;
@@ -242,19 +234,28 @@ export function DevboxPage() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [dangerOpen]);
 
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [moreOpen]);
+
   const activeProfileRow = useMemo(
     () => (Array.isArray(profiles) ? profiles.find(row => row.active) ?? null : null),
     [profiles],
   );
   const activeProfile = activeProfileRow?.name ?? '';
 
-  const composite = stackState(cards);
+  const composite = stackVitalState(cards);
   const ingressUp = devboxVitalValue(cards, 'ingress') === 'up';
   const current = status?.current;
   const busyAction = busy && current ? current : null;
   const chip = busyAction
     ? { dot: 'bg-slate-500', key: BUSY_CHIP[busyAction.cmd] ?? 'devboxPage.stackBusy' }
-    : STACK_CHIP[composite];
+    : { dot: STATE_DOT[composite], key: COMPOSITE_CHIP[composite] };
   const busyLabel = busyAction
     ? busyAction.cmd === 'stack_start'
       ? t('devboxPage.busyStarting')
@@ -296,6 +297,12 @@ export function DevboxPage() {
     setAddSignal(0);
     setSeedSignal(0);
     setProjectsOpen(true);
+  }, []);
+
+  const openNewProject = useCallback(() => {
+    setTab('infra');
+    setProjectsOpen(true);
+    setAddSignal(x => x + 1);
   }, []);
 
   const onMcpConfigure = useCallback(() => {
@@ -343,11 +350,7 @@ export function DevboxPage() {
         aria-label={t('devboxPage.editorCreateTitle')}
         tooltip={t('devboxPage.editorCreateTitle')}
         data-testid="devbox-new-project"
-        onClick={() => {
-          setTab('infra');
-          setProjectsOpen(true);
-          setAddSignal(x => x + 1);
-        }}
+        onClick={openNewProject}
       >
         <Plus size={16} />
       </IconButton>
@@ -361,12 +364,12 @@ export function DevboxPage() {
       <Tooltip
         content={
           busyProgress ??
-          (composite === 'ok' ? t('devboxPage.tipRestart') : t('devboxPage.tipStart'))
+          (composite === 'healthy' ? t('devboxPage.tipRestart') : t('devboxPage.tipStart'))
         }
       >
         <Button
           size="sm"
-          variant="primary"
+          variant={composite === 'healthy' ? 'ghost' : 'primary'}
           disabled={busy || activeProfile === ''}
           title={busyProgress ?? undefined}
           leftIcon={
@@ -380,35 +383,73 @@ export function DevboxPage() {
           onClick={() => onAction(devboxStackStart(activeProfile, false))}
         >
           {busyLabel ??
-            (composite === 'ok'
+            (composite === 'healthy'
               ? t('devboxPage.restart')
               : t('devboxPage.promptChipStackStart'))}
         </Button>
       </Tooltip>
-      <Tooltip content={t('devboxPage.tipDoctor')}>
-        <Button
-          size="sm"
+      <div className="relative" ref={moreRef}>
+        <IconButton
+          size="md"
           variant="ghost"
-          disabled={busy}
-          leftIcon={<Stethoscope size={14} />}
-          data-testid="devbox-control-doctor"
-          onClick={() => onAction(devboxRunDoctor())}
+          aria-label={t('devboxPage.headerMore')}
+          tooltip={t('devboxPage.headerMore')}
+          aria-expanded={moreOpen}
+          data-testid="devbox-more-toggle"
+          onClick={() => setMoreOpen(v => !v)}
         >
-          <span className="hidden min-[1400px]:inline">{t('devboxPage.controlDoctor')}</span>
-        </Button>
-      </Tooltip>
-      <Tooltip content={t('devboxPage.tipCockpit')}>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={busy}
-          leftIcon={<Gauge size={14} />}
-          data-testid="devbox-control-cockpit"
-          onClick={() => onAction(devboxCockpitOpen())}
-        >
-          <span className="hidden min-[1400px]:inline">{t('devboxPage.controlCockpit')}</span>
-        </Button>
-      </Tooltip>
+          <MoreHorizontal size={16} />
+        </IconButton>
+        {moreOpen && (
+          <div
+            role="group"
+            aria-label={t('devboxPage.headerMore')}
+            data-testid="devbox-more-menu"
+            className="absolute right-0 top-full z-50 mt-1 flex w-64 flex-col gap-2 rounded-lg border border-white/10 bg-vsc-panel/95 p-3 shadow-2xl backdrop-blur-xl"
+          >
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              leftIcon={<Stethoscope size={14} />}
+              data-testid="devbox-control-doctor"
+              onClick={() => onAction(devboxRunDoctor())}
+            >
+              {t('devboxPage.controlDoctor')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              leftIcon={<Gauge size={14} />}
+              data-testid="devbox-control-cockpit"
+              onClick={() => onAction(devboxCockpitOpen())}
+            >
+              {t('devboxPage.controlCockpit')}
+            </Button>
+            <ConfirmActionButton
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              data-testid="devbox-control-tokens"
+              tooltip={t('devboxPage.tipRotateTokens')}
+              onConfirm={() => onAction(devboxIssueTokens())}
+            >
+              {t('devboxPage.controlTokens')}
+            </ConfirmActionButton>
+            <ConfirmActionButton
+              size="sm"
+              variant="secondary"
+              disabled={busy || cards === null}
+              data-testid="devbox-control-ingress"
+              tooltip={t('devboxPage.tipIngress')}
+              onConfirm={() => onAction(devboxIngressControl(ingressUp ? 'down' : 'up'))}
+            >
+              {ingressUp ? t('devboxPage.controlIngressOn') : t('devboxPage.controlIngressOff')}
+            </ConfirmActionButton>
+          </div>
+        )}
+      </div>
       <div className="relative" ref={dangerRef}>
         <IconButton
           size="md"
@@ -447,26 +488,6 @@ export function DevboxPage() {
               onConfirm={() => onAction(devboxStackFullDown())}
             >
               {t('devboxPage.controlStopAll')}
-            </ConfirmActionButton>
-            <ConfirmActionButton
-              size="sm"
-              variant="secondary"
-              disabled={busy}
-              data-testid="devbox-control-tokens"
-              tooltip={t('devboxPage.tipRotateTokens')}
-              onConfirm={() => onAction(devboxIssueTokens())}
-            >
-              {t('devboxPage.controlTokens')}
-            </ConfirmActionButton>
-            <ConfirmActionButton
-              size="sm"
-              variant="secondary"
-              disabled={busy || cards === null}
-              data-testid="devbox-control-ingress"
-              tooltip={t('devboxPage.tipIngress')}
-              onConfirm={() => onAction(devboxIngressControl(ingressUp ? 'down' : 'up'))}
-            >
-              {ingressUp ? t('devboxPage.controlIngressOn') : t('devboxPage.controlIngressOff')}
             </ConfirmActionButton>
           </div>
         )}
@@ -517,6 +538,30 @@ export function DevboxPage() {
           data-testid="devbox-panel-task"
         >
           <div className="flex min-w-0 flex-col lg:col-span-3 lg:min-h-0">
+            {activeProfile === '' && (
+              <div
+                className="mb-3 flex shrink-0 items-center gap-3 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] px-3 py-2"
+                data-testid="devbox-onboard-project"
+              >
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-xs font-medium text-indigo-100">
+                    {t('devboxPage.onboardNeedProject')}
+                  </span>
+                  <span className="text-2xs text-slate-400">
+                    {t('devboxPage.onboardNeedProjectDesc')}
+                  </span>
+                </div>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  className="ml-auto shrink-0"
+                  data-testid="devbox-onboard-new-project"
+                  onClick={openNewProject}
+                >
+                  {t('devboxPage.projectAddOption')}
+                </Button>
+              </div>
+            )}
             <DevboxPrompt
               profiles={profiles}
               overviewCards={cards}
@@ -582,6 +627,11 @@ export function DevboxPage() {
           onAction={onAction}
           onRetry={reloadProfiles}
           onChanged={reloadProfiles}
+          onStarted={() => {
+            setTab('task');
+            setProjectsOpen(false);
+            setSeedSignal(0);
+          }}
           addSignal={addSignal}
           seedSignal={seedSignal}
         />

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   Briefcase,
   CheckCircle2,
   Circle,
@@ -31,6 +32,7 @@ const TONE_ICONS = {
   ok: CheckCircle2,
   failed: XCircle,
   running: Loader2,
+  attention: AlertTriangle,
   other: Circle,
 } as const;
 
@@ -38,6 +40,7 @@ const TONE_CLASSES = {
   ok: 'text-emerald-400',
   failed: 'text-red-400',
   running: 'text-indigo-300 animate-spin',
+  attention: 'text-amber-300',
   other: 'text-slate-500',
 } as const;
 
@@ -53,6 +56,24 @@ function startedSeconds(value: string | number): number | null {
     return Number.isNaN(parsed) ? null : parsed / 1000;
   }
   return null;
+}
+
+function dayStamp(value: string | number | null | undefined): number | null {
+  const seconds = startedSeconds(value ?? '');
+  if (seconds === null) return null;
+  const date = new Date(seconds * 1000);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function dayLabel(dayMs: number): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+  if (dayMs === today) return t('devboxPage.dateToday');
+  if (dayMs === yesterday) return t('devboxPage.dateYesterday');
+  const date = new Date(dayMs);
+  return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function formatElapsed(seconds: number): string {
@@ -288,25 +309,37 @@ export function DevboxNowRail({
               recentEvents.map((row, i) => {
                 const tone = devboxEventTone(row);
                 const Icon = TONE_ICONS[tone];
+                const day = dayStamp(row.ts);
+                const prevDay = i > 0 ? dayStamp(recentEvents[i - 1].ts) : null;
+                const showDate = day !== null && day !== prevDay;
                 return (
-                  <div
-                    key={i}
-                    data-testid="devbox-rail-event-card"
-                    className="relative flex shrink-0 items-center gap-2 py-1 text-2xs text-slate-400 after:absolute after:left-[5px] after:top-[10px] after:h-full after:w-px after:bg-white/10 last:after:hidden"
-                    title={devboxEventLine(row)}
-                  >
-                    <Icon
-                      size={12}
-                      className={cn('relative z-10 shrink-0 bg-void-base', TONE_CLASSES[tone])}
-                      data-testid="devbox-rail-event-icon"
-                      data-tone={tone}
-                      aria-hidden
-                    />
-                    <span className="shrink-0 tabular-nums text-slate-500">
-                      {devboxTime(row.ts)}
-                    </span>
-                    <span className="truncate">{devboxEventText(row)}</span>
-                  </div>
+                  <Fragment key={i}>
+                    {showDate && day !== null && (
+                      <span
+                        className="shrink-0 pt-1.5 text-2xs uppercase tracking-wider text-slate-500"
+                        data-testid="devbox-rail-event-date"
+                      >
+                        {dayLabel(day)}
+                      </span>
+                    )}
+                    <div
+                      data-testid="devbox-rail-event-card"
+                      className="relative flex shrink-0 items-center gap-2 py-1 text-2xs text-slate-400 after:absolute after:left-[5px] after:top-[10px] after:h-full after:w-px after:bg-white/10 last:after:hidden"
+                      title={devboxEventLine(row)}
+                    >
+                      <Icon
+                        size={12}
+                        className={cn('relative z-10 shrink-0 bg-void-base', TONE_CLASSES[tone])}
+                        data-testid="devbox-rail-event-icon"
+                        data-tone={tone}
+                        aria-hidden
+                      />
+                      <span className="shrink-0 tabular-nums text-slate-500">
+                        {devboxTime(row.ts)}
+                      </span>
+                      <span className="truncate">{devboxEventText(row)}</span>
+                    </div>
+                  </Fragment>
                 );
               })
             )}
