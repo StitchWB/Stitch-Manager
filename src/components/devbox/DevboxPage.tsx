@@ -627,6 +627,11 @@ export function DevboxPage() {
           onAction={onAction}
           onRetry={reloadProfiles}
           onChanged={reloadProfiles}
+          onStarted={() => {
+            setTab('task');
+            setProjectsOpen(false);
+            setSeedSignal(0);
+          }}
           addSignal={addSignal}
           seedSignal={seedSignal}
         />

@@ -60,6 +60,7 @@ async function promptReady() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  localStorage.clear();
   invokeMock.mockImplementation(promptRoutes());
   onAction = jest.fn();
   writeText = jest.fn(async () => undefined);
@@ -98,7 +99,7 @@ describe('DevboxPrompt blocking state', () => {
   it('blocks the CTA and embeds a single stack fix button when more than one service is down', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: false, ingress: false, runner: true },
+      ready: { profile: true, bridge: false, ingress: false, runner: 'up' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
@@ -124,10 +125,10 @@ describe('DevboxPrompt blocking state', () => {
     ]);
   });
 
-  it('shows only the stack fix button when runner and ingress are down', async () => {
+  it('shows only the ingress fix button when bridge is up and only ingress is blocking', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: true, ingress: false, runner: false },
+      ready: { profile: true, bridge: true, ingress: false, runner: 'down' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
@@ -136,15 +137,125 @@ describe('DevboxPrompt blocking state', () => {
     await promptReady();
 
     const warning = screen.getByTestId('devbox-prompt-stack-warning');
-    expect(screen.getByTestId('devbox-prompt-alert-stack-start')).toBeTruthy();
-    expect(screen.queryByTestId('devbox-prompt-alert-ingress-up')).toBeNull();
+    expect(screen.queryByTestId('devbox-prompt-alert-stack-start')).toBeNull();
+    expect(screen.getByTestId('devbox-prompt-alert-ingress-up')).toBeTruthy();
     expect(warning.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('shows the start stepper while the stack is starting', async () => {
+    const starting = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: false, ingress: false, runner: 'off' as const },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(starting, starting) }),
+    );
+    renderPrompt({
+      actionStatus: {
+        busy: true,
+        current: { id: 'a1', cmd: 'stack_start', startedAt: 1 },
+        recent: [],
+      },
+    });
+    await promptReady();
+
+    expect(screen.getByTestId('devbox-prompt-start-progress')).toBeTruthy();
+    expect(screen.getByText(t('devboxPage.promptStackStarting'))).toBeTruthy();
+    expect(screen.queryByTestId('devbox-prompt-alert-stack-start')).toBeNull();
+  });
+
+  it('shows the last start failure with its output', async () => {
+    const failed = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: false, ingress: false, runner: 'off' as const },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(failed, failed) }),
+    );
+    renderPrompt({
+      actionStatus: {
+        busy: false,
+        current: null,
+        recent: [
+          {
+            id: 'a1',
+            cmd: 'stack_start',
+            status: 'finished',
+            startedAt: 1,
+            finishedAt: 2,
+            exit: 1,
+            payload: { output: 'docker: no such service' },
+          },
+        ],
+      },
+    });
+    await promptReady();
+
+    expect(screen.getByTestId('devbox-prompt-start-failure').textContent).toContain('1');
+    expect(screen.getByTestId('devbox-prompt-start-output').textContent).toContain(
+      'docker: no such service',
+    );
+    expect(screen.getByTestId('devbox-prompt-alert-stack-start')).toBeTruthy();
+  });
+
+  it('labels an ingress-only blocker as ingress, not stack', async () => {
+    const ingressDown = {
+      ...maskedAgentPromptFixture,
+      ready: { profile: true, bridge: true, ingress: false, runner: 'off' as const },
+    };
+    invokeMock.mockImplementation(
+      promptRoutes({ agent_prompt: agentPromptRoute(ingressDown, ingressDown) }),
+    );
+    renderPrompt();
+    await promptReady();
+
+    const warning = screen.getByTestId('devbox-prompt-stack-warning');
+    expect(warning.textContent).toContain(t('devboxPage.promptIngressDownWarning'));
+    expect(warning.textContent).not.toContain(t('devboxPage.promptStackDownWarning'));
+    expect(screen.getByTestId('devbox-prompt-alert-ingress-up')).toBeTruthy();
+  });
+
+  it('reloads the agent prompt when a running action finishes', async () => {
+    const { rerender } = renderPrompt({
+      actionStatus: {
+        busy: true,
+        current: { id: 'a1', cmd: 'stack_start', startedAt: 1 },
+        recent: [],
+      },
+    });
+    await promptReady();
+    const before = devboxCallArgs(invokeMock, 'agent_prompt').length;
+
+    rerender(
+      <DevboxPrompt
+        profiles={profilesFixture}
+        overviewCards={overviewFixture.cards}
+        actionStatus={idleActionStatus}
+        onAction={onAction as (action: Promise<DevboxAccepted>) => void}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(devboxCallArgs(invokeMock, 'agent_prompt').length).toBeGreaterThan(before);
+    });
+  });
+
+  it('persists the task draft in localStorage', async () => {
+    localStorage.setItem('devbox.taskDraft', 'draft task');
+    renderPrompt();
+    await promptReady();
+
+    const task = screen.getByTestId('devbox-prompt-task') as HTMLTextAreaElement;
+    expect(task.value).toBe('draft task');
+
+    fireEvent.change(task, { target: { value: 'updated task' } });
+    expect(localStorage.getItem('devbox.taskDraft')).toBe('updated task');
   });
 
   it('shows only the ingress fix button when ingress is the sole blocker', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: true, ingress: false, runner: true },
+      ready: { profile: true, bridge: true, ingress: false, runner: 'up' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
@@ -169,7 +280,7 @@ describe('DevboxPrompt blocking state', () => {
   it('keeps the CTA enabled and a text-only runner hint when only the runner is down', async () => {
     const runnerDown = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: true, ingress: true, runner: false },
+      ready: { profile: true, bridge: true, ingress: true, runner: 'down' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(runnerDown, runnerDown) }),
@@ -696,7 +807,7 @@ describe('DevboxPrompt hint and warning lines', () => {
   it('renders the amber stack alert plate while copy is blocked by prereqs', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: false, ingress: false, runner: true },
+      ready: { profile: true, bridge: false, ingress: false, runner: 'up' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),
@@ -715,7 +826,7 @@ describe('DevboxPrompt hint and warning lines', () => {
   it('renders the runner micro-alert plate when copy is enabled but the runner is down', async () => {
     const runnerDown = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: true, ingress: true, runner: false },
+      ready: { profile: true, bridge: true, ingress: true, runner: 'down' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(runnerDown, runnerDown) }),
@@ -786,7 +897,7 @@ describe('DevboxPrompt gateway warning', () => {
   it('stacks the gateway plate below the runner hint when both are down', async () => {
     const runnerDown = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: true, ingress: true, runner: false },
+      ready: { profile: true, bridge: true, ingress: true, runner: 'down' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(runnerDown, runnerDown) }),
@@ -824,7 +935,7 @@ describe('DevboxPrompt editor layout', () => {
   it('orders the editor column: task textarea, acceptance, alert plate, footer', async () => {
     const blocked = {
       ...maskedAgentPromptFixture,
-      ready: { profile: true, bridge: false, ingress: false, runner: true },
+      ready: { profile: true, bridge: false, ingress: false, runner: 'up' },
     };
     invokeMock.mockImplementation(
       promptRoutes({ agent_prompt: agentPromptRoute(blocked, blocked) }),

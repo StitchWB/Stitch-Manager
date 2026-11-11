@@ -137,14 +137,117 @@ export interface DevboxFolderCheck {
 export interface DevboxProfileDefaults {
   git_name: string;
   git_email: string;
+  git_source: string;
+}
+
+export interface DevboxDetectedStack {
+  id: string;
+  markers: string[];
+  subdir?: string;
+}
+
+export interface DevboxDetectWarning {
+  code: string;
+  stacks?: string[];
+}
+
+export interface DevboxPortConflict {
+  port: number;
+}
+
+export interface DevboxProfileDetect {
+  path: string;
+  exists: boolean;
+  is_git: boolean;
+  name: string;
+  stacks: DevboxDetectedStack[];
+  suggested: Record<string, unknown> | null;
+  provenance: Record<string, string>;
+  warnings: DevboxDetectWarning[];
+  port_conflicts: DevboxPortConflict[];
+  requires_choice: boolean;
 }
 
 export function devboxFolderCheck(path: string): Promise<DevboxFolderCheck> {
   return safeInvoke<DevboxFolderCheck>(`${NS}.folder_check`, { path }, NO_CACHE);
 }
 
-export function devboxProfileDefaults(): Promise<DevboxProfileDefaults> {
-  return safeInvoke<DevboxProfileDefaults>(`${NS}.profile_defaults`, {}, NO_CACHE);
+export function devboxProfileDefaults(projectDir = ''): Promise<DevboxProfileDefaults> {
+  return safeInvoke<DevboxProfileDefaults>(
+    `${NS}.profile_defaults`,
+    projectDir === '' ? {} : { project_dir: projectDir },
+    NO_CACHE,
+  );
+}
+
+export function devboxNormalizeDetect(raw: unknown): DevboxProfileDetect {
+  const row = raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const stacks: DevboxDetectedStack[] = [];
+  if (Array.isArray(row.stacks)) {
+    for (const item of row.stacks) {
+      if (item === null || typeof item !== 'object') continue;
+      const stack = item as Record<string, unknown>;
+      if (typeof stack.id !== 'string' || stack.id === '') continue;
+      stacks.push({
+        id: stack.id,
+        markers: Array.isArray(stack.markers)
+          ? stack.markers.filter((marker): marker is string => typeof marker === 'string')
+          : [],
+        subdir: typeof stack.subdir === 'string' ? stack.subdir : undefined,
+      });
+    }
+  }
+  const warnings: DevboxDetectWarning[] = [];
+  if (Array.isArray(row.warnings)) {
+    for (const item of row.warnings) {
+      if (item === null || typeof item !== 'object') continue;
+      const warning = item as Record<string, unknown>;
+      if (typeof warning.code !== 'string') continue;
+      warnings.push({
+        code: warning.code,
+        stacks: Array.isArray(warning.stacks)
+          ? warning.stacks.filter((stack): stack is string => typeof stack === 'string')
+          : undefined,
+      });
+    }
+  }
+  const portConflicts: DevboxPortConflict[] = [];
+  if (Array.isArray(row.port_conflicts)) {
+    for (const item of row.port_conflicts) {
+      if (item === null || typeof item !== 'object') continue;
+      const conflict = item as Record<string, unknown>;
+      if (typeof conflict.port === 'number' && Number.isFinite(conflict.port)) {
+        portConflicts.push({ port: conflict.port });
+      }
+    }
+  }
+  const provenance: Record<string, string> = {};
+  if (row.provenance !== null && typeof row.provenance === 'object') {
+    for (const [key, value] of Object.entries(row.provenance as Record<string, unknown>)) {
+      if (typeof value === 'string') provenance[key] = value;
+    }
+  }
+  const suggested = row.suggested;
+  return {
+    path: typeof row.path === 'string' ? row.path : '',
+    exists: row.exists === true,
+    is_git: row.is_git === true,
+    name: typeof row.name === 'string' ? row.name : '',
+    stacks,
+    suggested:
+      suggested !== null && typeof suggested === 'object' && !Array.isArray(suggested)
+        ? (suggested as Record<string, unknown>)
+        : null,
+    provenance,
+    warnings,
+    port_conflicts: portConflicts,
+    requires_choice: row.requires_choice === true,
+  };
+}
+
+export async function devboxProfileDetect(path: string): Promise<DevboxProfileDetect> {
+  const raw = await safeInvoke<unknown>(`${NS}.profile_detect`, { path }, NO_CACHE);
+  return devboxNormalizeDetect(raw);
 }
 
 export function devboxStackStart(name: string, preview: boolean): Promise<DevboxAccepted> {
@@ -187,7 +290,7 @@ export interface DevboxAgentPromptReady {
   profile: boolean;
   bridge: boolean;
   ingress: boolean;
-  runner: boolean;
+  runner: 'off' | 'up' | 'down';
 }
 
 export interface DevboxConnectionEndpoint {

@@ -96,7 +96,7 @@ export function pendingPermissionFixture(id = 'p1'): DevboxPermissionRow {
   return { id, tool: 'shell', summary: 'rm -rf build/', startedAt: 1791536987.76 };
 }
 
-const readyAll = { profile: true, bridge: true, ingress: true, runner: true };
+const readyAll = { profile: true, bridge: true, ingress: true, runner: 'up' as const };
 
 const connectionMasked = {
   endpoints: [
