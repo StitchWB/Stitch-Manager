@@ -82,8 +82,8 @@ export const overviewFixture: {
 };
 
 export const profilesFixture: DevboxProfileRow[] = [
-  { name: 'midsai', mode: 'standard', project_dir: 'd:/work/midsai', active: true },
-  { name: 'example-simple', mode: 'readonly', project_dir: 'd:/work/example', active: false },
+{ name: 'midsai', mode: 'standard', project_dir: 'd:/work/midsai', active: true, git_placeholder: false },
+    { name: 'example-simple', mode: 'readonly', project_dir: 'd:/work/example', active: false, git_placeholder: false },
 ];
 
 export const idleActionStatus: DevboxActionStatus = { busy: false, current: null, recent: [] };

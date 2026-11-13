@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     proxy_key_flush_task = asyncio.create_task(workers.proxy_key_flush_loop())
     group_usage_flush_task = asyncio.create_task(workers.group_usage_flush_loop())
+    request_log_prune_task = asyncio.create_task(workers.request_log_prune_loop())
     sandbox_idle_task = asyncio.create_task(workers.sandbox_idle_stop_loop())
 
     await startup.emit_app_started(settings)
@@ -100,6 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await workers.stop_task(proxy_key_flush_task)
     await workers.stop_task(group_usage_flush_task)
+    await workers.stop_task(request_log_prune_task)
     await workers.stop_task(sandbox_idle_task)
     await startup.emit_app_stopping()
     await dispose_engine()

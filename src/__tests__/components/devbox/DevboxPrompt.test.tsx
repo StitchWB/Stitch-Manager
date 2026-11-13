@@ -241,7 +241,7 @@ describe('DevboxPrompt blocking state', () => {
   });
 
   it('persists the task draft in localStorage', async () => {
-    localStorage.setItem('devbox.taskDraft', 'draft task');
+    localStorage.setItem('devbox.taskDraft:midsai', 'draft task');
     renderPrompt();
     await promptReady();
 
@@ -249,7 +249,7 @@ describe('DevboxPrompt blocking state', () => {
     expect(task.value).toBe('draft task');
 
     fireEvent.change(task, { target: { value: 'updated task' } });
-    expect(localStorage.getItem('devbox.taskDraft')).toBe('updated task');
+    expect(localStorage.getItem('devbox.taskDraft:midsai')).toBe('updated task');
   });
 
   it('shows only the ingress fix button when ingress is the sole blocker', async () => {

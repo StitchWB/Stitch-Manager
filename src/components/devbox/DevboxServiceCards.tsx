@@ -90,15 +90,22 @@ export function DevboxServiceCards({
           const tip = hint ? `${t(service.tipKey)} · ${hint}` : t(service.tipKey);
           const updatedAt = card?.updatedAt;
 
-          let valueText: string;
+let valueText: string;
           if (card === null) {
             valueText = '—';
           } else {
             const parsed = service.id === 'host_services' ? parseHostCount(card.value) : null;
-            valueText =
-              parsed && state !== 'unknown'
-                ? t('devboxPage.serviceHostCount', { alive: parsed.alive, total: parsed.recorded })
-                : t(vitalStateLabelKey(state));
+            if (parsed) {
+              valueText =
+                parsed.recorded === 0
+                  ? t('devboxPage.serviceHostNone')
+                  : t('devboxPage.serviceHostCount', {
+                      alive: parsed.alive,
+                      total: parsed.recorded,
+                    });
+            } else {
+              valueText = t(vitalStateLabelKey(state));
+            }
           }
 
           let action = null;

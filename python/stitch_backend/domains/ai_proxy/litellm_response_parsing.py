@@ -9,14 +9,14 @@ if TYPE_CHECKING:
     from stitch_backend.domains.ai_proxy.litellm_gateway import JsonObject
 
 
-def _usage_tokens(response: JsonObject) -> int | None:
+def _usage_split(response: JsonObject) -> tuple[int, int] | None:
+    """(input_tokens, output_tokens) from a response body; None when absent.
+
+    Usage frames that only carry a total are returned as ``(0, total)``.
+    """
     usage = response.get("usage")
     if not isinstance(usage, dict):
         return None
-    for key in ("total_tokens", "totalTokens"):
-        total = _integer(usage.get(key))
-        if total > 0:
-            return total
     input_tokens = max(
         _integer(usage.get("input_tokens")),
         _integer(usage.get("prompt_tokens")),
@@ -25,12 +25,17 @@ def _usage_tokens(response: JsonObject) -> int | None:
         _integer(usage.get("output_tokens")),
         _integer(usage.get("completion_tokens")),
     )
-    total = input_tokens + output_tokens
-    return total if total > 0 else None
+    if input_tokens > 0 or output_tokens > 0:
+        return (input_tokens, output_tokens)
+    for key in ("total_tokens", "totalTokens"):
+        total = _integer(usage.get(key))
+        if total > 0:
+            return (0, total)
+    return None
 
 
-def _tokens_from_sse_line(line: str) -> int | None:
-    """Extract total token usage from a raw SSE ``data: {...}`` line."""
+def _usage_split_from_sse_line(line: str) -> tuple[int, int] | None:
+    """(input_tokens, output_tokens) from a raw SSE ``data: {...}`` line."""
     if not line.startswith("data:"):
         return None
     payload = line[5:].strip()
@@ -42,7 +47,7 @@ def _tokens_from_sse_line(line: str) -> int | None:
         return None
     if not isinstance(data, dict):
         return None
-    return _usage_tokens(data)
+    return _usage_split(data)
 
 
 def _anthropic_usage_from_sse_line(line: str) -> tuple[int, int] | None:

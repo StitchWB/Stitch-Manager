@@ -20,17 +20,36 @@ export interface DevboxProfileRow {
   mode: string;
   project_dir: string;
   active: boolean;
+  git_placeholder: boolean;
 }
 
 export interface DevboxProfileContent {
   json: string;
   valid: boolean;
   errors: string[];
+  git_placeholder: boolean;
 }
 
 export interface DevboxProfilePutResult {
   valid: boolean;
   errors: string[];
+}
+
+export interface DevboxMcpCandidate {
+  name: string;
+  type: string;
+  enabled: boolean;
+  source: string;
+  valid: boolean;
+  error: string | null;
+  command?: string[];
+  url?: string;
+}
+
+export interface DevboxMcpCandidates {
+  profile: string;
+  candidates: DevboxMcpCandidate[];
+  error: string | null;
 }
 
 export interface DevboxAccepted {
@@ -81,6 +100,7 @@ export type DevboxPermissionDecision = 'once' | 'reject';
 
 export interface DevboxLogSource {
   name: string;
+  files?: string[];
   lines: string[];
 }
 
@@ -127,6 +147,10 @@ export function devboxProfilePut(
 
 export function devboxProfileDelete(name: string): Promise<{ deleted: boolean }> {
   return safeInvoke<{ deleted: boolean }>(`${NS}.profile_delete`, { name });
+}
+
+export function devboxMcpCandidates(name = ''): Promise<DevboxMcpCandidates> {
+  return safeInvoke<DevboxMcpCandidates>(`${NS}.mcp_candidates`, { name }, NO_CACHE);
 }
 
 export interface DevboxFolderCheck {

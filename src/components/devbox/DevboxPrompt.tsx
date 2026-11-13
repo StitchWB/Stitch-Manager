@@ -54,17 +54,21 @@ const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', STACK_ST
 
 const TASK_DRAFT_KEY = 'devbox.taskDraft';
 
-function readTaskDraft(): string {
+function draftKey(profile: string): string {
+  return `${TASK_DRAFT_KEY}:${profile || 'none'}`;
+}
+
+function readTaskDraft(key: string): string {
   try {
-    return localStorage.getItem(TASK_DRAFT_KEY) ?? '';
+    return localStorage.getItem(key) ?? '';
   } catch {
     return '';
   }
 }
 
-function writeTaskDraft(value: string): void {
+function writeTaskDraft(key: string, value: string): void {
   try {
-    localStorage.setItem(TASK_DRAFT_KEY, value);
+    localStorage.setItem(key, value);
   } catch {
     return;
   }
@@ -171,6 +175,8 @@ export function DevboxPrompt({
   onAction,
   reloadTick = 0,
 }: DevboxPromptProps) {
+  const draftProfileName = profiles?.find(row => row.active)?.name ?? '';
+  const taskDraftKey = draftKey(draftProfileName);
   const [data, setData] = useState<DevboxAgentPromptPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -178,7 +184,7 @@ export function DevboxPrompt({
   const [tab, setTab] = useState<PromptTab>('editor');
   const [manualCopy, setManualCopy] = useState(false);
   const [acceptanceOpen, setAcceptanceOpen] = useState(false);
-  const [task, setTask] = useState(readTaskDraft);
+  const [task, setTask] = useState(() => readTaskDraft(taskDraftKey));
   const [acceptance, setAcceptance] = useState('');
   const [client, setClient] = useState('universal');
   const [authType, setAuthType] = useState('bearer');
@@ -192,6 +198,12 @@ export function DevboxPrompt({
   const acceptanceRef = useRef('');
   const clientRef = useRef('universal');
   const flashTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const stored = readTaskDraft(taskDraftKey);
+    taskRef.current = stored;
+    setTask(stored);
+  }, [taskDraftKey]);
 
   const load = useCallback((reveal: boolean) => {
     devboxAgentPrompt({
@@ -428,6 +440,7 @@ export function DevboxPrompt({
       className={cn(
         copyFlash &&
           'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:border-emerald-400/60 hover:bg-emerald-500/25 hover:text-white',
+        copyDisabled && 'opacity-50',
       )}
       leftIcon={copyFlash ? <Check size={14} /> : <Copy size={14} />}
       data-testid="devbox-prompt-copy"
@@ -556,7 +569,13 @@ export function DevboxPrompt({
     >
       {data !== null && error === null && (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div className="shrink-0" data-testid="devbox-prompt-mode">
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-2"
+            data-testid="devbox-prompt-mode"
+          >
+            <span className="text-2xs uppercase tracking-wider text-slate-400">
+              {t('devboxPage.promptModeLabel')}
+            </span>
             <SegmentedControl
               size="sm"
               value={mode}
@@ -772,7 +791,13 @@ export function DevboxPrompt({
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col gap-3">
-              <div className="shrink-0" data-testid="devbox-prompt-tabs">
+              <div
+                className="flex shrink-0 flex-wrap items-center gap-2"
+                data-testid="devbox-prompt-tabs"
+              >
+                <span className="text-2xs uppercase tracking-wider text-slate-400">
+                  {t('devboxPage.promptTabLabel')}
+                </span>
                 <SegmentedControl
                   size="sm"
                   value={tab}
@@ -808,7 +833,7 @@ export function DevboxPrompt({
                     onChange={e => {
                       taskRef.current = e.target.value;
                       setTask(e.target.value);
-                      writeTaskDraft(e.target.value);
+                      writeTaskDraft(taskDraftKey, e.target.value);
                     }}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -817,6 +842,15 @@ export function DevboxPrompt({
                       }
                     }}
                   />
+
+                  {task.trim() !== '' && (
+                    <span
+                      className="text-2xs text-slate-500"
+                      data-testid="devbox-prompt-draft-saved"
+                    >
+                      {t('devboxPage.promptDraftSaved')}
+                    </span>
+                  )}
 
                   {acceptanceOpen && (
                     <div
@@ -922,7 +956,7 @@ export function DevboxPrompt({
                     data-testid="devbox-prompt-reveal"
                     onClick={() => load(!revealed)}
                   >
-                    {t('devboxPage.promptTokens')}
+{revealed ? t('devboxPage.promptHideTokens') : t('devboxPage.promptRevealTokens')}
                   </Button>
                 </div>
                 <div className="flex flex-col items-end gap-1">

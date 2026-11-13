@@ -1,4 +1,5 @@
 import { FolderCog, RotateCw } from 'lucide-react';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { t } from '@/lib/i18n';
@@ -52,9 +53,22 @@ export function DevboxProjectStrip({
             <span className="text-2xs uppercase tracking-wider text-slate-400">
               {t('devboxPage.stripAccess')}
             </span>
-            <span className="text-slate-300" data-testid="devbox-project-strip-mode">
+            <span
+              className={activeProfile.mode === 'full' ? 'text-red-300' : 'text-slate-300'}
+              data-testid="devbox-project-strip-mode"
+            >
               {devboxModeLabel(activeProfile.mode)}
             </span>
+            {activeProfile.git_placeholder && (
+              <Badge
+                variant="danger"
+                size="sm"
+                title={t('devboxPage.gitPlaceholderHint')}
+                data-testid="devbox-project-strip-git-placeholder"
+              >
+                {t('devboxPage.gitPlaceholderBadge')}
+              </Badge>
+            )}
           </div>
         ) : (
           <span
