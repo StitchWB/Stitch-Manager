@@ -55,6 +55,7 @@ import { DevboxProfiles } from './DevboxProfiles';
 import { DevboxProjectStrip } from './DevboxProjectStrip';
 import { DevboxNowRail } from './DevboxNowRail';
 import { DevboxMcpSection } from './DevboxMcpSection';
+import { DevboxSettingsCard } from './DevboxSettingsCard';
 import { DevboxServiceCards } from './DevboxServiceCards';
 import { DevboxConsole } from './DevboxConsole';
 
@@ -309,6 +310,17 @@ export function DevboxPage() {
     openProjects();
     setSeedSignal(x => x + 1);
   }, [openProjects]);
+
+  const onSettingsRestart = useCallback(
+    (kind: 'ingress' | 'stack') => {
+      if (kind === 'ingress') {
+        onAction(devboxIngressControl('up'));
+      } else {
+        onAction(devboxStackStart(activeProfile, false));
+      }
+    },
+    [activeProfile, onAction],
+  );
 
   const projectOptions = [
     ...profileOptions,
@@ -593,6 +605,11 @@ export function DevboxPage() {
             activeProfile={activeProfile}
             busy={busy}
             onAction={onAction}
+          />
+          <DevboxSettingsCard
+            busy={busy}
+            onRestart={onSettingsRestart}
+            onSaved={refreshAll}
           />
           <DevboxMcpSection
             gateway={gateway}

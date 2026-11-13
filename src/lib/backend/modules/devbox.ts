@@ -126,6 +126,32 @@ export interface DevboxPollResult {
   events: unknown;
 }
 
+export interface DevboxEnvEntry {
+  key: string;
+  value: string;
+  secret: boolean;
+  readonly: boolean;
+  section: string;
+}
+
+export interface DevboxEnvGetResult {
+  entries: DevboxEnvEntry[];
+}
+
+export interface DevboxEnvSetResult {
+  valid: boolean;
+  errors: string[];
+  restart: string[];
+}
+
+export function devboxEnvGet(): Promise<DevboxEnvGetResult> {
+  return safeInvoke<DevboxEnvGetResult>(`${NS}.env_get`, {}, NO_CACHE);
+}
+
+export function devboxEnvSet(patch: Record<string, string>): Promise<DevboxEnvSetResult> {
+  return safeInvoke<DevboxEnvSetResult>(`${NS}.env_set`, { patch });
+}
+
 export function devboxPoll(): Promise<DevboxPollResult> {
   return safeInvoke<DevboxPollResult>(`${NS}.poll`, {}, NO_CACHE);
 }
