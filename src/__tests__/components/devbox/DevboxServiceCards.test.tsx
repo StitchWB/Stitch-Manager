@@ -219,7 +219,7 @@ describe('DevboxServiceCards inline actions', () => {
     expect(screen.getByTestId('devbox-service-value-host_services').className).toContain(
       'text-slate-400',
     );
-    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe('no data');
+    expect(screen.getByTestId('devbox-service-value-host_services').textContent).toBe('no services');
   });
 
   it('host services 1/2 renders the alive-of-total count', () => {

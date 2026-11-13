@@ -649,7 +649,7 @@ describe('Devbox page header control bar', () => {
     expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
   });
 
-  it('MCP empty CTA opens the projects modal with the seeded editor for the active profile', async () => {
+  it('MCP CTA opens the picker and the JSON escape hatch opens the seeded editor', async () => {
     mockRoutes({
       poll: devboxPollBundle({
         overview: {
@@ -657,6 +657,21 @@ describe('Devbox page header control bar', () => {
           gateway: { enabled: true, up: true, port: null, exposed_mcps: [] },
         },
       }),
+      mcp_candidates: {
+        profile: 'midsai',
+        error: null,
+        candidates: [
+          {
+            name: 'context7',
+            type: 'local',
+            enabled: true,
+            source: 'opencode.json',
+            valid: true,
+            error: null,
+            command: ['python', '-m', 'context7'],
+          },
+        ],
+      },
       profile_get: {
         json: '{"project_dir": "d:/work/midsai", "mode": "standard"}',
         valid: true,
@@ -666,6 +681,11 @@ describe('Devbox page header control bar', () => {
     render(<DevboxPage />);
 
     fireEvent.click(await screen.findByTestId('devbox-mcp-configure'));
+
+    expect(await screen.findByText('MCP servers for this project')).toBeTruthy();
+    expect(devboxCallArgs(invokeMock, 'mcp_candidates')).toEqual([{ name: 'midsai' }]);
+
+    fireEvent.click(screen.getByText('Edit JSON'));
 
     expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
     const editor = (await screen.findByTestId('devbox-profile-editor')) as HTMLTextAreaElement;

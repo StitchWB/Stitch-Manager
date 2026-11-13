@@ -61,29 +61,16 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    TypeDecorator,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from stitch_backend.database import Base
+from stitch_backend.database import Base, UtcDateTime
 from stitch_backend.security.fernet_at_rest import EncryptedText
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
-
-
-class UtcDateTime(TypeDecorator):
-    """Re-attach UTC on load: SQLite drops tzinfo, so naive values would break comparisons against aware now()."""
-
-    impl = DateTime(timezone=True)
-    cache_ok = True
-
-    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
-        if value is not None and value.tzinfo is None:
-            return value.replace(tzinfo=UTC)
-        return value
 
 
 def _uuid() -> str:

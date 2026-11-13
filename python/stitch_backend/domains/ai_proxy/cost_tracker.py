@@ -52,12 +52,27 @@ class CostTracker:
         if model in self.PRICING:
             return self.PRICING[model]
 
-        # Попробовать частичное совпадение
-        for key, pricing in self.PRICING.items():
-            if key in model:
-                return pricing
+        # Самое длинное совпадение: "gpt-4o-mini" не должен матчить "gpt-4"
+        best_key: str | None = None
+        for key in self.PRICING:
+            if key in model and (best_key is None or len(key) > len(best_key)):
+                best_key = key
+        return self.PRICING[best_key] if best_key is not None else None
 
-        return None
+    def estimate_cost(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> float:
+        """USD cost for one request; ``0.0`` when the model has no known price."""
+        pricing = self.get_pricing(model)
+        if pricing is None:
+            return 0.0
+        return (
+            input_tokens / 1000 * pricing.input_price
+            + output_tokens / 1000 * pricing.output_price
+        )
 
     async def record_usage(
         self,
@@ -67,15 +82,11 @@ class CostTracker:
         output_tokens: int,
     ):
         """Записать использование и рассчитать стоимость."""
-        pricing = self.get_pricing(model)
-        if pricing is None:
+        if self.get_pricing(model) is None:
             logger.debug("No pricing found for model %s", model)
             return
 
-        cost = (
-            (input_tokens / 1000 * pricing.input_price)
-            + (output_tokens / 1000 * pricing.output_price)
-        )
+        cost = self.estimate_cost(model, input_tokens, output_tokens)
 
         async with self.lock:
             self.costs[key_id] = self.costs.get(key_id, 0.0) + cost

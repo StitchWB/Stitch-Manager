@@ -157,7 +157,7 @@ export const aiHub: AiHubTranslations = {
       recentRequestsTitle: "Недавние запросы",
       refreshTooltip: "Обновить аналитику",
       requestsCount: "{count} запросов",
-      subtitle: "Подробный обзор трафика AI Proxy, моделей и последних вызовов.",
+      subtitle: "Подробный обзор трафика нативного AI-шлюза, моделей и последних вызовов.",
       title: "Подробная аналитика",
       todayErrors: "Ошибки сегодня",
       todayRequests: "Запросы сегодня",

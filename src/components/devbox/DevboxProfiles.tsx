@@ -553,6 +553,11 @@ export function DevboxProfiles({
           data-testid="devbox-profile-active-summary"
         >
           <span className="font-medium text-slate-200">{activeRow.name}</span>
+          {activeRow.git_placeholder && (
+            <Badge variant="danger" size="sm" data-testid="devbox-profile-git-placeholder">
+              {t('devboxPage.gitPlaceholderBadge')}
+            </Badge>
+          )}
           <span aria-hidden>·</span>
           <span className="font-mono">{activeRow.project_dir}</span>
           <span aria-hidden>·</span>
@@ -586,7 +591,14 @@ export function DevboxProfiles({
           <TableBody>
             {rows.map(row => (
               <TableRow key={row.name}>
-                <TableCell className="font-medium text-white">{row.name}</TableCell>
+                <TableCell className="font-medium text-white">
+                  {row.name}
+                  {row.git_placeholder && (
+                    <Badge variant="danger" size="sm" className="ml-1.5">
+                      {t('devboxPage.gitPlaceholderBadge')}
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>{modeTitle(row.mode)}</TableCell>
                 <TableCell className="font-mono text-2xs text-slate-400">{row.project_dir}</TableCell>
                 <TableCell>
@@ -1093,7 +1105,7 @@ export function DevboxProfiles({
                       data-testid="devbox-profile-json-toggle"
                       onClick={() => setJsonOpen(v => !v)}
                     >
-                      {t('devboxPage.editorJsonToggle')}
+                      {jsonOpen ? t('devboxPage.editorJsonHide') : t('devboxPage.editorJsonToggle')}
                     </Button>
                     {jsonOpen && (
                       <>

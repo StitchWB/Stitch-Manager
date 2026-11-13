@@ -435,7 +435,7 @@ export function DevboxPage() {
               tooltip={t('devboxPage.tipRotateTokens')}
               onConfirm={() => onAction(devboxIssueTokens())}
             >
-              {t('devboxPage.controlTokens')}
+              {t('devboxPage.controlRotateTokens')}
             </ConfirmActionButton>
             <ConfirmActionButton
               size="sm"
@@ -594,7 +594,12 @@ export function DevboxPage() {
             busy={busy}
             onAction={onAction}
           />
-          <DevboxMcpSection gateway={gateway} onConfigure={onMcpConfigure} />
+          <DevboxMcpSection
+            gateway={gateway}
+            activeProfile={activeProfile}
+            onConfigure={onMcpConfigure}
+            onSaved={refreshAll}
+          />
           <DevboxProjectStrip
             activeProfile={activeProfileRow}
             busy={busy}

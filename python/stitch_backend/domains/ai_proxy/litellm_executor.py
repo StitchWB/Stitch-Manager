@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from fastapi import HTTPException
@@ -44,6 +45,7 @@ from stitch_backend.domains.ai_proxy.litellm_streaming import (
     stream_openai_response,
     stream_openai_response_buffered,
 )
+from stitch_backend.domains.ai_proxy.request_logs import persist_request_log
 from stitch_backend.domains.ai_proxy.request_trace import (
     RequestTrace,
     get_request_trace_store,
@@ -65,6 +67,23 @@ if TYPE_CHECKING:
     from stitch_backend.domains.background_manager.schemas import BackgroundManagerConfig
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _RequestOutcome:
+    """Facts about one client request, filled across failover attempts."""
+
+    model: str
+    owner_id: int | None
+    started_at: float = field(default_factory=time.time)
+    routing_result: Any | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    ok: bool = False
+    failover_count: int = 0
+    error_class: str | None = None
+    persisted: bool = False
+
 
 __all__ = [
     "CompletionRouter",
@@ -310,6 +329,8 @@ class LiteLLMExecutor:
         config: BackgroundManagerConfig,
         invoke: Callable[[Any], Awaitable[JsonObject | Response]],
         pool: PoolScope | None = None,
+        *,
+        outcome: _RequestOutcome,
     ) -> JsonObject | Response:
         """Walk candidate models and credentials until one succeeds.
 
@@ -373,6 +394,7 @@ class LiteLLMExecutor:
                     )
                     continue
                 served_model = model
+                outcome.failover_count = failed_attempts
                 self._record_request_trace(
                     model=model,
                     routing_result=routing_result,
@@ -389,6 +411,9 @@ class LiteLLMExecutor:
                 )
                 return result
 
+        outcome.failover_count = failed_attempts
+        if outcome.routing_result is None:
+            outcome.routing_result = last_attempted
         self._record_request_trace(
             model=served_model,
             routing_result=last_attempted,
@@ -397,6 +422,27 @@ class LiteLLMExecutor:
             status="error",
         )
         raise self._final_error(requested_model, last_classified, last_routing_error)
+
+    async def _persist_outcome(self, outcome: _RequestOutcome) -> None:
+        if outcome.persisted:
+            return
+        outcome.persisted = True
+        routing_result = outcome.routing_result
+        await persist_request_log(
+            run_in_session,
+            model=outcome.model,
+            upstream_model=getattr(
+                getattr(routing_result, "upstream_model", None), "upstream_model_id", "",
+            ),
+            credential_id=getattr(getattr(routing_result, "credential", None), "id", ""),
+            status="success" if outcome.ok else "error",
+            input_tokens=outcome.input_tokens,
+            output_tokens=outcome.output_tokens,
+            latency_ms=(time.time() - outcome.started_at) * 1000.0,
+            owner_id=outcome.owner_id,
+            failover_count=outcome.failover_count,
+            error_class=outcome.error_class,
+        )
 
     def _sync_pipeline_config(self, config: BackgroundManagerConfig) -> tuple:
         """Sync HoloNe and Compression middleware config. Returns (holone_service, compression_service)."""
@@ -418,16 +464,31 @@ class LiteLLMExecutor:
 
     async def chat(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
-        return await self._run_failover(
-            payload,
-            config,
-            lambda routing_result: self._invoke_via_gateway(payload, routing_result, config, pool=pool),
-            pool=pool,
+        outcome = _RequestOutcome(
+            model=payload.model or "",
+            owner_id=pool.owner_user_id if pool else None,
         )
+        try:
+            result = await self._run_failover(
+                payload,
+                config,
+                lambda routing_result: self._invoke_via_gateway(
+                    payload, routing_result, config, pool=pool, outcome=outcome,
+                ),
+                pool=pool,
+                outcome=outcome,
+            )
+        except Exception as exc:
+            outcome.error_class = outcome.error_class or type(exc).__name__
+            await self._persist_outcome(outcome)
+            raise
+        if not payload.stream:
+            await self._persist_outcome(outcome)
+        return result
 
     async def _invoke_via_gateway(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
-        pool: PoolScope | None = None,
+        pool: PoolScope | None = None, *, outcome: _RequestOutcome | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result."""
         return await invoke_via_gateway(
@@ -435,20 +496,36 @@ class LiteLLMExecutor:
             get_metrics_tracker=get_metrics_tracker,
             get_cost_tracker=get_cost_tracker,
             run_in_session=run_in_session,
+            outcome=outcome or _RequestOutcome(model=payload.model or "", owner_id=None),
         )
 
     async def messages(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
-        return await self._run_failover(
-            payload,
-            config,
-            lambda routing_result: self._invoke_via_gateway_messages(payload, routing_result, config, pool=pool),
-            pool=pool,
+        outcome = _RequestOutcome(
+            model=payload.model or "",
+            owner_id=pool.owner_user_id if pool else None,
         )
+        try:
+            result = await self._run_failover(
+                payload,
+                config,
+                lambda routing_result: self._invoke_via_gateway_messages(
+                    payload, routing_result, config, pool=pool, outcome=outcome,
+                ),
+                pool=pool,
+                outcome=outcome,
+            )
+        except Exception as exc:
+            outcome.error_class = outcome.error_class or type(exc).__name__
+            await self._persist_outcome(outcome)
+            raise
+        if not payload.stream:
+            await self._persist_outcome(outcome)
+        return result
 
     async def _invoke_via_gateway_messages(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
-        pool: PoolScope | None = None,
+        pool: PoolScope | None = None, *, outcome: _RequestOutcome | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result (Anthropic Messages API)."""
         return await invoke_via_gateway_messages(
@@ -456,20 +533,36 @@ class LiteLLMExecutor:
             get_metrics_tracker=get_metrics_tracker,
             get_cost_tracker=get_cost_tracker,
             run_in_session=run_in_session,
+            outcome=outcome or _RequestOutcome(model=payload.model or "", owner_id=None),
         )
 
     async def responses(self, payload: GatewayRequest, pool: PoolScope | None = None) -> JsonObject | Response:
         config = await self._load_config()
-        return await self._run_failover(
-            payload,
-            config,
-            lambda routing_result: self._invoke_via_gateway_responses(payload, routing_result, config, pool=pool),
-            pool=pool,
+        outcome = _RequestOutcome(
+            model=payload.model or "",
+            owner_id=pool.owner_user_id if pool else None,
         )
+        try:
+            result = await self._run_failover(
+                payload,
+                config,
+                lambda routing_result: self._invoke_via_gateway_responses(
+                    payload, routing_result, config, pool=pool, outcome=outcome,
+                ),
+                pool=pool,
+                outcome=outcome,
+            )
+        except Exception as exc:
+            outcome.error_class = outcome.error_class or type(exc).__name__
+            await self._persist_outcome(outcome)
+            raise
+        if not payload.stream:
+            await self._persist_outcome(outcome)
+        return result
 
     async def _invoke_via_gateway_responses(
         self, payload: GatewayRequest, routing_result: Any, config: BackgroundManagerConfig,
-        pool: PoolScope | None = None,
+        pool: PoolScope | None = None, *, outcome: _RequestOutcome | None = None,
     ) -> JsonObject | Response:
         """Invoke upstream via AI Gateway routing result (Responses API)."""
         return await invoke_via_gateway_responses(
@@ -477,6 +570,7 @@ class LiteLLMExecutor:
             get_metrics_tracker=get_metrics_tracker,
             get_cost_tracker=get_cost_tracker,
             run_in_session=run_in_session,
+            outcome=outcome or _RequestOutcome(model=payload.model or "", owner_id=None),
         )
 
     async def models(self, pool: PoolScope | None = None) -> JsonObject:
@@ -571,7 +665,7 @@ class LiteLLMExecutor:
         response: Any,
         *,
         client_has_tools: bool = False,
-        on_complete: Callable[[int | None], Awaitable[None]] | None = None,
+        on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None = None,
     ) -> StreamingResponse:
         """OpenAI-shaped SSE pass-through.
 
@@ -581,8 +675,9 @@ class LiteLLMExecutor:
         chunk the stream is pass-through (real TTFB); when HoloNe stream
         inspection is enabled the stream is buffered first — redaction
         cannot happen after bytes were sent.  ``on_complete`` fires with
-        the total token count (``None`` when unknown) after the upstream
-        stream ends.
+        ``(input_tokens, output_tokens)`` (``None`` when unknown) plus an
+        ``ok`` flag after the upstream stream ends, including on client
+        disconnect.
         """
         primed = await prime_stream(response)
         return await stream_openai_response(
@@ -597,7 +692,7 @@ class LiteLLMExecutor:
         response: Any,
         *,
         client_has_tools: bool,
-        on_complete: Callable[[int | None], Awaitable[None]] | None,
+        on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None,
     ) -> StreamingResponse:
         """Buffered variant for HoloNe-enabled runs: collect, inspect/redact, emit."""
         primed = await prime_stream(response)
@@ -613,7 +708,7 @@ class LiteLLMExecutor:
         response: Any,
         *,
         client_has_tools: bool = False,
-        on_complete: Callable[[int | None], Awaitable[None]] | None = None,
+        on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None = None,
     ) -> StreamingResponse:
         """Anthropic-shaped SSE pass-through (same contract as OpenAI)."""
         primed = await prime_stream(response)
@@ -629,7 +724,7 @@ class LiteLLMExecutor:
         response: Any,
         *,
         client_has_tools: bool,
-        on_complete: Callable[[int | None], Awaitable[None]] | None,
+        on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None,
     ) -> StreamingResponse:
         """Buffered Anthropic variant for HoloNe-enabled runs."""
         primed = await prime_stream(response)

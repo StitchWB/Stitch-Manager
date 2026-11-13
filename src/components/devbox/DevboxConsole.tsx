@@ -372,18 +372,19 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
       let lines = s.lines ?? [];
       if (query !== '') lines = lines.filter(line => line.toLowerCase().includes(query));
       if (errorsOnly) lines = lines.filter(line => ERROR_LINE_RE.test(line));
-      return { name: s.name, lines };
+      return { name: s.name, files: s.files ?? [], lines };
     });
   }, [allSources, source, query, errorsOnly]);
   const hasLogLines = visibleSources.some(s => s.lines.length > 0);
 
   const logBlocks = useMemo(
     () =>
-      visibleSources.map(s => ({
-        name: s.name,
-        lines: s.lines,
-        groups: groupConsecutive(s.name, s.lines.map(parseLogLine)),
-      })),
+visibleSources.map(s => ({
+          name: s.name,
+          files: s.files,
+          lines: s.lines,
+          groups: groupConsecutive(s.name, s.lines.map(parseLogLine)),
+        })),
     [visibleSources],
   );
 
@@ -667,7 +668,14 @@ export function DevboxConsole({ events, recent, error, onRetry, className }: Dev
               {logBlocks.map(block => (
                 <div key={block.name} className="flex flex-col gap-1">
                   <div className="flex items-center justify-between gap-2 px-1">
-                    <span className="text-2xs uppercase tracking-wider text-slate-400">{block.name}</span>
+                    <span className="text-2xs uppercase tracking-wider text-slate-400">
+                      {block.name}
+                      {block.files.length > 0 && (
+                        <span className="ml-1 normal-case tracking-normal text-slate-500">
+                          {block.files.join(', ')}
+                        </span>
+                      )}
+                    </span>
                     <IconButton
                       size="sm"
                       variant="ghost"

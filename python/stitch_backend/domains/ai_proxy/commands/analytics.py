@@ -28,25 +28,25 @@ async def cmd_get_ai_proxy_account_daily_usage(db: AsyncSession, params: dict) -
 async def cmd_get_daily_stats(db: AsyncSession, params: dict) -> dict:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
-    return await AiProxyAnalytics.get_daily_stats(db)
+    return dict(await AiProxyAnalytics.get_daily_stats(db, owner_id=_alias_owner_id(params)))
 
 
 @command("get_model_usage", readonly=True)
 async def cmd_get_model_usage(db: AsyncSession, params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
-    return await AiProxyAnalytics.get_model_usage(db)
+    return await AiProxyAnalytics.get_model_usage(db, owner_id=_alias_owner_id(params))
 
 
 @command("get_cost_estimate", readonly=True)
 async def cmd_get_cost_estimate(db: AsyncSession, params: dict) -> float:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
-    return await AiProxyAnalytics.get_cost_estimate(db)
+    return await AiProxyAnalytics.get_cost_estimate(db, owner_id=_alias_owner_id(params))
 
 
 @command("get_weekly_stats", readonly=True)
 async def cmd_get_weekly_stats(db: AsyncSession, params: dict) -> list:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
 
-    return await AiProxyAnalytics.get_weekly_stats(db)
+    return await AiProxyAnalytics.get_weekly_stats(db, owner_id=_alias_owner_id(params))

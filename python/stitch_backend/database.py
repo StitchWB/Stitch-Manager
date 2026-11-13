@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from sqlalchemy import event
+from sqlalchemy import DateTime, event
 from sqlalchemy import inspect as _sa_inspect
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import (
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.types import TypeDecorator
 
 from stitch_backend.config import get_settings
 
@@ -35,6 +37,18 @@ T = TypeVar("T")
 class Base(DeclarativeBase):
     """Base class for all ORM models in the project."""
     pass
+
+
+class UtcDateTime(TypeDecorator):
+    """Re-attach UTC on load: SQLite drops tzinfo, so naive values would break comparisons against aware now()."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 # ── Engine / session factory ──────────────────────────────────────────────────
@@ -237,6 +251,7 @@ async def create_all_tables() -> None:
         # Import all model modules so Base.metadata is populated
         import stitch_backend.domains.accounts.models  # noqa: F401
         import stitch_backend.domains.ai_gateway.models  # noqa: F401
+        import stitch_backend.domains.ai_proxy.models  # noqa: F401
         import stitch_backend.domains.auth.models  # noqa: F401
         import stitch_backend.domains.community.models  # noqa: F401
         import stitch_backend.domains.community.partner_models  # noqa: F401

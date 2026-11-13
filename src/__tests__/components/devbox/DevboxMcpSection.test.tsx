@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 jest.mock('@/lib/backend/core/invoke', () => ({
   safeInvoke: jest.fn(),
@@ -23,26 +23,70 @@ jest.mock('sonner', () => ({
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import type { DevboxOverviewGateway } from '@/lib/backend/modules/devbox';
 import { DevboxMcpSection } from '@/components/devbox/DevboxMcpSection';
-import { devboxRouter, gatewayFixture, pageRoutes } from './devboxTestKit';
+import { devboxCallArgs, devboxRouter, gatewayFixture, pageRoutes } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
 function renderSection(gateway: DevboxOverviewGateway | null) {
   const onConfigure = jest.fn();
-  render(<DevboxMcpSection gateway={gateway} onConfigure={onConfigure} />);
-  return onConfigure;
+  const onSaved = jest.fn();
+  render(
+    <DevboxMcpSection
+      gateway={gateway}
+      activeProfile="midsai"
+      onConfigure={onConfigure}
+      onSaved={onSaved}
+    />,
+  );
+  return { onConfigure, onSaved };
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
-  invokeMock.mockImplementation(devboxRouter(pageRoutes()));
+  invokeMock.mockImplementation(
+    devboxRouter(
+      pageRoutes({
+        mcp_candidates: {
+          profile: 'midsai',
+          error: null,
+          candidates: [
+            {
+              name: 'codegraph',
+              type: 'local',
+              enabled: true,
+              source: 'opencode.json',
+              valid: true,
+              error: null,
+              command: ['python', '-m', 'codegraph'],
+            },
+            {
+              name: 'remote-demo',
+              type: 'remote',
+              enabled: true,
+              source: 'opencode.json',
+              valid: false,
+              error: 'remote MCP not supported',
+              url: 'https://example.test/mcp',
+            },
+          ],
+        },
+        profile_get: {
+          json: JSON.stringify({ project_dir: '/tmp/demo' }),
+          valid: true,
+          errors: [],
+          git_placeholder: false,
+        },
+        profile_put: { valid: true, errors: [] },
+      }),
+    ),
+  );
 });
 
 describe('DevboxMcpSection', () => {
   it('renders a row per exposed MCP with name, mode label and tools count', () => {
     renderSection(gatewayFixture);
 
-    expect(screen.getByTestId('devbox-mcp-section').textContent).toBe(
+    expect(screen.getByTestId('devbox-mcp-section').textContent).toContain(
       'MCP servers for the agent',
     );
     const totp = screen.getByTestId('devbox-mcp-row-stitch-totp');
@@ -51,15 +95,22 @@ describe('DevboxMcpSection', () => {
     expect(screen.getByTestId('devbox-mcp-tools-stitch-totp').textContent).toBe('2');
     expect(screen.getByTestId('devbox-mcp-mode-stitch-mail').textContent).toBe('full');
     expect(screen.getByTestId('devbox-mcp-tools-stitch-mail').textContent).toBe('2');
-    expect(screen.queryByTestId('devbox-mcp-configure')).toBeNull();
+    expect(screen.getByTestId('devbox-mcp-configure')).toBeTruthy();
   });
 
-  it('shows the empty state and fires onConfigure from the CTA', () => {
-    const onConfigure = renderSection({ ...gatewayFixture, exposed_mcps: [] });
+  it('opens the MCP picker and lists config candidates', async () => {
+    const { onConfigure } = renderSection({ ...gatewayFixture, exposed_mcps: [] });
 
     expect(screen.getByText('No MCP servers exposed to the agent')).toBeTruthy();
     fireEvent.click(screen.getByTestId('devbox-mcp-configure'));
-    expect(onConfigure).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(screen.getByText('MCP servers for this project')).toBeTruthy();
+    });
+    expect(devboxCallArgs(invokeMock, 'mcp_candidates')).toEqual([{ name: 'midsai' }]);
+    expect(screen.getByText('codegraph')).toBeTruthy();
+    expect(screen.getByText('remote MCP not supported')).toBeTruthy();
+    expect(onConfigure).not.toHaveBeenCalled();
   });
 
   it('shows the empty state when the gateway is disabled', () => {

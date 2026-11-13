@@ -32,6 +32,7 @@ export interface DevboxPageTranslations {
     controlStopServices: string;
     controlStopAll: string;
     controlTokens: string;
+    controlRotateTokens: string;
     controlDoctor: string;
     controlIngressOn: string;
     controlIngressOff: string;
@@ -52,12 +53,17 @@ export interface DevboxPageTranslations {
     promptTaskPlaceholder: string;
     promptAcceptancePlaceholder: string;
     promptCopy: string;
+    promptDraftSaved: string;
     promptCopied: string;
     promptBlockedTip: string;
     promptCriteria: string;
     promptCriteriaClose: string;
     promptCriteriaHeader: string;
     promptTokens: string;
+    promptRevealTokens: string;
+    promptHideTokens: string;
+    promptModeLabel: string;
+    promptTabLabel: string;
     promptPreviewLocked: string;
     promptTabEditor: string;
     promptTabPrompt: string;
@@ -191,6 +197,7 @@ export interface DevboxPageTranslations {
     errR42: string;
     editorSaved: string;
     editorJsonToggle: string;
+    editorJsonHide: string;
     editorJsonCaption: string;
     tipModeGroup: string;
     tipFieldGit: string;
@@ -286,6 +293,12 @@ export interface DevboxPageTranslations {
     mcpEmptyTitle: string;
     mcpEmptyDesc: string;
     mcpEmptyCta: string;
+    mcpPickerTitle: string;
+    mcpPickerSave: string;
+    mcpPickerAdvanced: string;
+    mcpPickerEmpty: string;
+    mcpPickerTools: string;
+    mcpPickerLoading: string;
     gatewayWarnChip: string;
     stateHealthy: string;
     stateDegraded: string;
@@ -294,6 +307,7 @@ export interface DevboxPageTranslations {
     statePending: string;
     stateDisabled: string;
     serviceHostCount: string;
+    serviceHostNone: string;
     headerMore: string;
     dateToday: string;
     dateYesterday: string;
@@ -333,6 +347,8 @@ export interface DevboxPageTranslations {
     nowSectionTitle: string;
     onboardNeedProject: string;
     onboardNeedProjectDesc: string;
+    gitPlaceholderBadge: string;
+    gitPlaceholderHint: string;
     promptStep2: string;
   };
 }
