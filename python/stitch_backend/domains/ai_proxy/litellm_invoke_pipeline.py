@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import HTTPException
 
+from stitch_backend.domains.ai_gateway import account_ledger
 from stitch_backend.domains.ai_gateway.adapters.error_vocab import parse_envelope
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_proxy.holone_inspector import (
@@ -80,6 +81,59 @@ def _failure_metadata(classified: Any, exc: BaseException) -> RequestLogFailureM
     )
 
 
+def _cached_tokens(response: Any) -> int:
+    usage = response.get("usage") if isinstance(response, dict) else getattr(response, "usage", None)
+    if isinstance(usage, dict):
+        details = usage.get("prompt_tokens_details")
+        value = details.get("cached_tokens") if isinstance(details, dict) else None
+    else:
+        details = getattr(usage, "prompt_tokens_details", None)
+        value = getattr(details, "cached_tokens", None)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return max(0, value)
+    return 0
+
+
+async def _record_ledger_usage(
+    run_in_session: Callable[..., Awaitable[Any]],
+    routing_result: Any,
+    input_tokens: int,
+    output_tokens: int,
+    cached_tokens: int = 0,
+) -> None:
+    try:
+        endpoint_id = routing_result.endpoint.id
+        account_group = getattr(routing_result.credential, "account_group", None)
+
+        async def _write(session):
+            await account_ledger.record_usage(
+                session,
+                endpoint_id=endpoint_id,
+                account_group=account_group,
+                requests=1,
+                tokens_in=input_tokens,
+                tokens_out=output_tokens,
+                cached_tokens=cached_tokens,
+            )
+
+        await run_in_session(_write)
+    except Exception:
+        logger.debug("Account ledger write failed", exc_info=True)
+
+
+def _remember_affinity(payload: GatewayRequest, routing_result: Any) -> None:
+    try:
+        account_ledger.put_affinity(
+            payload.model or "",
+            payload.messages or [],
+            getattr(payload, "user", None),
+            routing_result.endpoint.id,
+            getattr(routing_result.credential, "account_group", None),
+        )
+    except Exception:
+        logger.debug("Affinity write failed", exc_info=True)
+
+
 async def _record_stream_usage(
     executor: LiteLLMExecutor,
     pool: PoolScope | None,
@@ -88,10 +142,15 @@ async def _record_stream_usage(
     usage: tuple[int, int] | None,
     ok: bool,
     outcome: _RequestOutcome,
+    *,
+    run_in_session: Callable[..., Awaitable[Any]],
 ) -> None:
     input_tokens, output_tokens = usage if usage is not None else (0, 0)
     await executor._record_group_usage_for(
         pool, routing_result, payload.model, input_tokens + output_tokens,
+    )
+    await _record_ledger_usage(
+        run_in_session, routing_result, input_tokens, output_tokens,
     )
     outcome.input_tokens = input_tokens
     outcome.output_tokens = output_tokens
@@ -158,6 +217,7 @@ async def invoke_via_gateway(
                 client_has_tools=client_has_tools,
                 on_complete=lambda usage, ok: _record_stream_usage(
                     executor, pool, routing_result, payload, usage, ok, outcome,
+                    run_in_session=run_in_session,
                 ),
             )
         else:
@@ -171,6 +231,16 @@ async def invoke_via_gateway(
             await executor._record_group_usage_for(
                 pool, routing_result, payload.model, input_tokens + output_tokens,
             )
+
+        if not payload.stream:
+            await _record_ledger_usage(
+                run_in_session,
+                routing_result,
+                input_tokens,
+                output_tokens,
+                _cached_tokens(response),
+            )
+        _remember_affinity(payload, routing_result)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
@@ -307,6 +377,7 @@ async def invoke_via_gateway_messages(
                 client_has_tools=client_has_tools,
                 on_complete=lambda usage, ok: _record_stream_usage(
                     executor, pool, routing_result, payload, usage, ok, outcome,
+                    run_in_session=run_in_session,
                 ),
             )
         else:
@@ -322,6 +393,16 @@ async def invoke_via_gateway_messages(
             await executor._record_group_usage_for(
                 pool, routing_result, payload.model, input_tokens + output_tokens,
             )
+
+        if not payload.stream:
+            await _record_ledger_usage(
+                run_in_session,
+                routing_result,
+                input_tokens,
+                output_tokens,
+                _cached_tokens(response),
+            )
+        _remember_affinity(payload, routing_result)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
@@ -464,6 +545,7 @@ async def invoke_via_gateway_responses(
                 client_has_tools=client_has_tools,
                 on_complete=lambda usage, ok: _record_stream_usage(
                     executor, pool, routing_result, payload, usage, ok, outcome,
+                    run_in_session=run_in_session,
                 ),
             )
         else:
@@ -479,6 +561,16 @@ async def invoke_via_gateway_responses(
             await executor._record_group_usage_for(
                 pool, routing_result, payload.model, input_tokens + output_tokens,
             )
+
+        if not payload.stream:
+            await _record_ledger_usage(
+                run_in_session,
+                routing_result,
+                input_tokens,
+                output_tokens,
+                _cached_tokens(response),
+            )
+        _remember_affinity(payload, routing_result)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(

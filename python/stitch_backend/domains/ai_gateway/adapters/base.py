@@ -53,6 +53,9 @@ class ProbeResult:
     model_metadata: list[ModelMetadata] | None = None
     http_status: int | None = None
     error: str | None = None
+    error_body: str | None = None
+    """Redacted response body of a failed probe, so the caller can classify by
+    the vendor's machine-readable error code instead of the bare status."""
 
 
 @dataclass
@@ -195,6 +198,7 @@ class ProviderAdapter(Protocol):
         *,
         http_status: int | None = None,
         response_headers: dict[str, str] | None = None,
+        response_body: str | None = None,
     ) -> ClassifiedError:
         """Map a raised exception / HTTP status into a ``ClassifiedError``."""
         ...

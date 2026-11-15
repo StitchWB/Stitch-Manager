@@ -460,7 +460,10 @@ class RoutingEngine:
                 ]
                 if not results:
                     return None
-        return results
+        affinity = account_ledger.get_affinity(
+            request.model, request.messages, getattr(request, "user", None),
+        )
+        return _reorder_cached(results, affinity, cached.headroom)
 
     async def route(
         self,
@@ -618,9 +621,6 @@ class RoutingEngine:
                 )
                 continue
 
-            # 8. Select up to K credentials (LRU first) — one candidate per
-            # credential so the executor can fail over key→key within a
-            # single request.
             for credential, _group_id_hit in eligible:
                 if credential.id in headroom_cache:
                     continue

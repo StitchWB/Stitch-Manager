@@ -20,6 +20,7 @@ Kiro is the only provider that genuinely needs its own adapter class
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -47,6 +48,8 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 _PROBE_TIMEOUT_SECONDS = 10.0
+
+logger = logging.getLogger(__name__)
 _QUOTA_PATH = "/v1/dashboard/billing/subscription"
 
 
@@ -239,6 +242,7 @@ class ConfigurableAdapter:
         return ProbeResult(
             success=False, latency_ms=latency_ms,
             http_status=resp.status_code, error=f"HTTP {resp.status_code}",
+            error_body=_safe_response_text(resp),
         )
 
     async def list_models(
@@ -363,6 +367,8 @@ class ConfigurableAdapter:
         async with client.stream(
             "POST", url, headers=headers, json=payload, timeout=_STREAM_TIMEOUT,
         ) as resp:
+            if resp.status_code >= 400:
+                await resp.aread()
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if line:
@@ -408,6 +414,7 @@ class ConfigurableAdapter:
         *,
         http_status: int | None = None,
         response_headers: dict[str, str] | None = None,
+        response_body: str | None = None,
     ) -> ClassifiedError:
         status = http_status
         headers = response_headers
@@ -419,9 +426,12 @@ class ConfigurableAdapter:
                 status = response.status_code
             if headers is None:
                 headers = dict(response.headers)
-            body_text = _safe_response_text(response)
-        else:
+            if response_body is None:
+                body_text = _safe_response_text(response)
+        elif response_body is None:
             body_text = str(exc)
+        if response_body is not None:
+            body_text = response_body
 
         lowered_body = body_text.lower()
         retry_after = _parse_retry_after(headers)
@@ -439,6 +449,13 @@ class ConfigurableAdapter:
                 outcome_confirmed=_outcome_confirmed(envelope),
                 error_code=verdict.code,
                 gateway_attempts=envelope.attempts if envelope else None,
+            )
+
+        if envelope is not None and envelope.code and verdict is None:
+            logger.info(
+                "unclassified upstream error code %r (request_id=%s) — status fallback",
+                envelope.code,
+                envelope.request_id,
             )
 
         if status is None:

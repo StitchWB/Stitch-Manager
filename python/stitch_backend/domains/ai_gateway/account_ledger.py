@@ -157,11 +157,13 @@ def _first_user_content(messages: list[dict[str, Any]] | None) -> str | None:
         if isinstance(content, str):
             return content
         if isinstance(content, list):
-            parts = [
-                part.get("text")
-                for part in content
-                if isinstance(part, dict) and isinstance(part.get("text"), str)
-            ]
+            parts: list[str] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
             return "".join(parts) if parts else None
         return None
     return None

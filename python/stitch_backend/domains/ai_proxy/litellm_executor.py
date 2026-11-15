@@ -25,6 +25,7 @@ from stitch_backend.domains.ai_gateway.routing_engine import (
 )
 from stitch_backend.domains.ai_gateway.routing_engine import GatewayRequest as AIGatewayRequest
 from stitch_backend.domains.ai_gateway.usage_tracker import record_usage as _record_group_usage
+from stitch_backend.domains.ai_proxy import key_inflight
 from stitch_backend.domains.ai_proxy.compression.service import get_compression_service
 from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
@@ -225,6 +226,7 @@ class LiteLLMExecutor:
                 stream=payload.stream,
                 tools=payload.tools,
                 response_format=getattr(payload, "response_format", None),
+                user=getattr(payload, "user", None),
             )
 
             async def _route(session):
@@ -454,10 +456,17 @@ class LiteLLMExecutor:
                             routing_result.endpoint.id,
                         )
                         continue
-                    last_attempted = routing_result
-                    invocations += 1
-                    round_invocations += 1
+                    credential_id = routing_result.credential.id
+                    if not key_inflight.try_acquire(credential_id):
+                        logger.debug(
+                            "Skipping candidate on credential %s - at in-flight cap",
+                            credential_id[:8],
+                        )
+                        continue
                     try:
+                        last_attempted = routing_result
+                        invocations += 1
+                        round_invocations += 1
                         result = await invoke(routing_result)
                     except HTTPException as e:
                         if _is_client_error(e):
@@ -497,6 +506,8 @@ class LiteLLMExecutor:
                             used_fallback=model_index > 0,
                         )
                         return result
+                    finally:
+                        key_inflight.release(credential_id)
 
                     round_hint = _hint_seconds(last_classified)
                     if last_classified.scope == "global":

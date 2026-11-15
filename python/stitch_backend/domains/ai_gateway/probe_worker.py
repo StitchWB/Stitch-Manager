@@ -415,6 +415,7 @@ class ProbeWorker:
             classified = adapter.classify_error(
                 RuntimeError(probe.error or f"HTTP {probe.http_status}"),
                 http_status=probe.http_status,
+                response_body=probe.error_body,
             )
         else:
             # Transport error (no HTTP status)

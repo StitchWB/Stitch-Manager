@@ -72,6 +72,9 @@ from stitch_backend.domains.ai_gateway.commands.public_models import (
     cmd_unmerge_route_target,
     cmd_update_public_model,
 )
+from stitch_backend.domains.ai_gateway.commands.quota import (
+    cmd_refresh_endpoint_quota,
+)
 from stitch_backend.domains.ai_gateway.commands.route_targets import (
     cmd_create_route_target,
     cmd_delete_route_target,
@@ -127,6 +130,7 @@ __all__ = [
     "cmd_proxy_keys_list",
     "cmd_proxy_keys_revoke",
     "cmd_refresh_endpoint_models",
+    "cmd_refresh_endpoint_quota",
     "cmd_rotate_credential_secret",
     "cmd_save_connection",
     "cmd_test_credential_connection",

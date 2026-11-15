@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta, timezone, tzinfo
 
 # ── Envelope parsing ─────────────────────────────────────────────────────────
 
@@ -176,8 +176,11 @@ def _with_code(verdict: Verdict, code: str) -> Verdict:
 
 _MOSCOW_FALLBACK = timezone(timedelta(hours=3), "MSK")
 
+# quota resets at local midnight; a suspension seen within this window is stale
+_RESET_GRACE_SECONDS = 300
 
-def local_tz(name: str) -> object:
+
+def local_tz(name: str) -> tzinfo:
     """Resolve an IANA zone, falling back to a fixed offset.
 
     Windows CPython ships no tz database, so ``zoneinfo`` may raise; UTC+3 is
@@ -192,11 +195,19 @@ def local_tz(name: str) -> object:
 
 
 def next_local_midnight(name: str = "Europe/Moscow", *, now: datetime | None = None) -> datetime:
-    """Next 00:00 in *name* as an aware UTC datetime; ``now`` is injectable."""
+    """Next 00:00 in *name* as an aware UTC datetime; ``now`` is injectable.
+
+    Inside a short grace window after local midnight the daily quota has just
+    reset, so parking a full day on a stale suspension would lose a day of
+    quota; a short retry is returned instead.
+    """
     tz = local_tz(name)
-    reference = now.astimezone(tz) if now is not None else datetime.now(tz)  # type: ignore[arg-type]
+    reference = now.astimezone(tz) if now is not None else datetime.now(tz)
+    seconds_since_midnight = reference.hour * 3600 + reference.minute * 60 + reference.second
+    if seconds_since_midnight < _RESET_GRACE_SECONDS:
+        return (reference + timedelta(seconds=60)).astimezone(UTC)
     following = reference.date() + timedelta(days=1)
-    reset = datetime.combine(following, time(0, 0), tzinfo=tz)  # type: ignore[arg-type]
+    reset = datetime.combine(following, time(0, 0), tzinfo=tz)
     return reset.astimezone(UTC)
 
 

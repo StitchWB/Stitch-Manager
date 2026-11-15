@@ -342,36 +342,39 @@ class DiscoveryWorker:
             )
             return {}
 
-        cred = next(
-            (c for c, _models in per_cred if c["runtime_status"] == "active"),
-            per_cred[0][0],
-        )
-        try:
-            from stitch_backend.domains.ai_gateway.commands.probe_models import (
-                probe_models,
-            )
+        new_id_set = set(new_ids)
+        from stitch_backend.domains.ai_gateway.commands.probe_models import probe_models
 
-            adapter = get_adapter(probe["adapter_type"])
-            rows = await probe_models(
-                adapter,
-                base_url=probe["base_url"],
-                secret=cred["secret"],
-                default_headers=probe["default_headers"],
-                models=new_ids,
-                concurrency=VERIFICATION_CONCURRENCY,
-                max_tokens=VERIFICATION_MAX_TOKENS,
-                prompt=None,
-                vision_models=None,
-                include_multimodal=False,
-                budget=VERIFICATION_BUDGET_SECONDS,
-            )
-        except Exception as _exc:
-            logger.warning(
-                "DiscoveryWorker: verification failed for endpoint %s: %s",
-                probe["endpoint_id"], _exc,
-            )
-            return {}
-        return {row["model"]: row for row in rows}
+        adapter = get_adapter(probe["adapter_type"])
+        verified: dict[str, dict[str, Any]] = {}
+        for cred, models in per_cred:
+            ids = [m.id for m in models if m.id in new_id_set]
+            if not ids:
+                continue
+            try:
+                rows = await probe_models(
+                    adapter,
+                    base_url=probe["base_url"],
+                    secret=cred["secret"],
+                    default_headers=probe["default_headers"],
+                    models=ids,
+                    concurrency=VERIFICATION_CONCURRENCY,
+                    max_tokens=VERIFICATION_MAX_TOKENS,
+                    prompt=None,
+                    vision_models=None,
+                    include_multimodal=False,
+                    budget=VERIFICATION_BUDGET_SECONDS,
+                )
+            except Exception as _exc:
+                logger.warning(
+                    "DiscoveryWorker: verification failed for endpoint %s: %s",
+                    probe["endpoint_id"], _exc,
+                )
+                continue
+            for row in rows:
+                row["_credential_id"] = cred["credential_id"]
+                verified[row["model"]] = row
+        return verified
 
     @classmethod
     async def _persist_discoveries(cls, results: list[dict[str, Any]]) -> None:
@@ -423,6 +426,11 @@ class DiscoveryWorker:
                                 ),
                             )
                             upstream.last_seen_at = now
+                            if not upstream.enabled and upstream.selection_source == "auto":
+                                caps = dict(upstream.capabilities or {})
+                                if caps.pop("retired_auto", None):
+                                    upstream.enabled = True
+                                    upstream.capabilities = caps
                             upstream_rows[metadata.id] = upstream
 
                     for cred, models in item["credentials"]:
@@ -435,6 +443,18 @@ class DiscoveryWorker:
                                 present=mid in returned,
                             )
 
+                    for mid, row in verification.items():
+                        cred_id = row.get("_credential_id")
+                        upstream_row = upstream_rows.get(mid)
+                        if not cred_id or upstream_row is None or row.get("ok"):
+                            continue
+                        await access_svc.upsert_access(
+                            cred_id,
+                            upstream_row.id,
+                            status="unavailable",
+                            last_error=str(row.get("reason") or "probe_failed"),
+                        )
+
                     for mid, upstream in upstream_rows.items():
                         if mid in {m.id for _c, models in item["credentials"] for m in models}:
                             continue
@@ -445,6 +465,9 @@ class DiscoveryWorker:
                         if _as_utc(upstream.last_seen_at) >= now - RETIREMENT_TTL:
                             continue
                         upstream.enabled = False
+                        caps = dict(upstream.capabilities or {})
+                        caps["retired_auto"] = True
+                        upstream.capabilities = caps
 
                     await session.flush()
                     after = {
@@ -537,7 +560,7 @@ class DiscoveryWorker:
         if metadata_caps:
             caps.update(metadata_caps)
             caps["source"] = "provider_metadata"
-            caps["verified_at"] = _utcnow().isoformat()
+            caps["metadata_refreshed_at"] = _utcnow().isoformat()
         if verification_row is not None:
             caps["verification_status"] = (
                 "working" if verification_row.get("ok") else "failed"

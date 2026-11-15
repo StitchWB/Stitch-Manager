@@ -60,9 +60,12 @@ class VellyAdapter(ConfigurableAdapter):
         return await super().invoke_responses(**kwargs)
 
     def classify_error(self, exc: BaseException, *, http_status: int | None = None,
-                       response_headers: dict[str, str] | None = None) -> ClassifiedError:
+                       response_headers: dict[str, str] | None = None,
+                       response_body: str | None = None) -> ClassifiedError:
         status = http_status or getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
-        result = super().classify_error(exc, http_status=status, response_headers=response_headers)
+        result = super().classify_error(
+            exc, http_status=status, response_headers=response_headers, response_body=response_body
+        )
         if type(exc).__name__ in {"APIConnectionError", "Timeout", "APITimeoutError"}:
             return ClassifiedError(category="transport_error", is_endpoint_wide=True)
         # velly-ошибки по-русски: «подписк/тариф» — аккаунт целиком, «подключение упало» — весь апстрим
