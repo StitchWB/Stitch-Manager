@@ -64,6 +64,40 @@ export function isProblemStatus(status: string): boolean {
   return CRED_PROBLEM.has(status);
 }
 
+export function formatRemainingUsd(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  return `$${value.toFixed(2)}`;
+}
+
+export function formatRemainingFreshness(
+  checkedAt: string | null | undefined,
+  nowMs: number = Date.now()
+): string | null {
+  if (!checkedAt) return null;
+  const date = new Date(checkedAt);
+  const time = date.getTime();
+  if (Number.isNaN(time)) return null;
+  const diffMinutes = Math.max(0, Math.floor((nowMs - time) / 60000));
+  if (diffMinutes >= 60) return '60+ мин';
+  return `${diffMinutes} мин`;
+}
+
+export function formatResetTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+export function isFutureReset(iso: string | null | undefined, nowMs: number = Date.now()): boolean {
+  if (!iso) return false;
+  const date = new Date(iso);
+  const time = date.getTime();
+  return !Number.isNaN(time) && time > nowMs;
+}
+
 export type ProviderHealth = 'healthy' | 'degraded' | 'broken' | 'off';
 
 export const HEALTH_META: Record<ProviderHealth, { dotClass: string; labelKey: string }> = {

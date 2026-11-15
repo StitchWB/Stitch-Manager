@@ -101,6 +101,7 @@ async def cmd_test_credential_connection(db: AsyncSession, params: dict) -> dict
             classified = adapter.classify_error(
                 RuntimeError(probe.error or f"HTTP {probe.http_status}"),
                 http_status=probe.http_status,
+                response_body=probe.error_body,
             )
         else:
             classified = ClassifiedError(

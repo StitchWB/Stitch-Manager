@@ -20,7 +20,9 @@ Kiro is the only provider that genuinely needs its own adapter class
 
 from __future__ import annotations
 
+import logging
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
@@ -34,12 +36,35 @@ from stitch_backend.domains.ai_gateway.adapters.base import (
     register_adapter,
     register_adapter_capabilities,
 )
+from stitch_backend.domains.ai_gateway.adapters.error_vocab import (
+    Envelope,
+    classify_envelope,
+    next_local_midnight,
+    parse_envelope,
+)
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 _PROBE_TIMEOUT_SECONDS = 10.0
+
+logger = logging.getLogger(__name__)
+_QUOTA_PATH = "/v1/dashboard/billing/subscription"
+
+
+@dataclass(frozen=True)
+class QuotaProbeResult:
+    """Outcome of a free billing-subscription quota probe."""
+
+    ok: bool
+    http_status: int
+    remaining_usd: float | None = None
+    suspended: bool = False
+    classified: ClassifiedError | None = None
+
+# Non-streaming generation must allow long completions; 10s kills them.
+_CHAT_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=30.0)
 
 # Streaming: 30s connect, 300s total read.  Prevents hung connections
 # from blocking a coroutine indefinitely.
@@ -217,6 +242,7 @@ class ConfigurableAdapter:
         return ProbeResult(
             success=False, latency_ms=latency_ms,
             http_status=resp.status_code, error=f"HTTP {resp.status_code}",
+            error_body=_safe_response_text(resp),
         )
 
     async def list_models(
@@ -243,6 +269,50 @@ class ConfigurableAdapter:
         if not result.success:
             raise RuntimeError(result.error or f"HTTP {result.http_status}")
         return result.model_metadata or []
+
+    async def probe_quota(
+        self,
+        *,
+        base_url: str,
+        secret: str,
+        default_headers: dict[str, str] | None = None,
+    ) -> QuotaProbeResult:
+        """Read remaining credit from the free billing subscription endpoint."""
+        headers = self._build_headers(secret, default_headers)
+        url = self._build_url(base_url, secret, _QUOTA_PATH)
+        try:
+            resp = await get_http_client().get(
+                url, headers=headers, timeout=_PROBE_TIMEOUT_SECONDS,
+            )
+        except Exception:  # noqa: BLE001
+            return QuotaProbeResult(ok=False, http_status=0)
+
+        status = resp.status_code
+        if status == 200:
+            try:
+                payload = resp.json()
+            except ValueError:
+                return QuotaProbeResult(ok=False, http_status=status)
+            value = payload.get("hard_limit_usd") if isinstance(payload, dict) else None
+            try:
+                remaining = float(value) if value is not None else None
+            except (TypeError, ValueError):
+                remaining = None
+            return QuotaProbeResult(
+                ok=True, http_status=status, remaining_usd=remaining,
+            )
+
+        if status == 401:
+            error = httpx.HTTPStatusError(
+                f"HTTP {status}", request=resp.request, response=resp,
+            )
+            classified = self.classify_error(error)
+            return QuotaProbeResult(
+                ok=False, http_status=status, suspended=True,
+                classified=classified,
+            )
+
+        return QuotaProbeResult(ok=False, http_status=status)
 
     async def _discover(
         self,
@@ -282,7 +352,7 @@ class ConfigurableAdapter:
 
         if not stream:
             resp = await get_http_client().post(
-                url, headers=headers, json=payload, timeout=_PROBE_TIMEOUT_SECONDS,
+                url, headers=headers, json=payload, timeout=_CHAT_TIMEOUT,
             )
             resp.raise_for_status()
             return cast("dict[str, Any]", resp.json())
@@ -297,6 +367,8 @@ class ConfigurableAdapter:
         async with client.stream(
             "POST", url, headers=headers, json=payload, timeout=_STREAM_TIMEOUT,
         ) as resp:
+            if resp.status_code >= 400:
+                await resp.aread()
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if line:
@@ -327,7 +399,7 @@ class ConfigurableAdapter:
 
         if not stream:
             resp = await get_http_client().post(
-                url, headers=headers, json=payload, timeout=_PROBE_TIMEOUT_SECONDS,
+                url, headers=headers, json=payload, timeout=_CHAT_TIMEOUT,
             )
             resp.raise_for_status()
             return cast("dict[str, Any]", resp.json())
@@ -342,6 +414,7 @@ class ConfigurableAdapter:
         *,
         http_status: int | None = None,
         response_headers: dict[str, str] | None = None,
+        response_body: str | None = None,
     ) -> ClassifiedError:
         status = http_status
         headers = response_headers
@@ -353,20 +426,48 @@ class ConfigurableAdapter:
                 status = response.status_code
             if headers is None:
                 headers = dict(response.headers)
-            body_text = _safe_response_text(response)
-        else:
+            if response_body is None:
+                body_text = _safe_response_text(response)
+        elif response_body is None:
             body_text = str(exc)
+        if response_body is not None:
+            body_text = response_body
 
         lowered_body = body_text.lower()
+        retry_after = _parse_retry_after(headers)
+
+        envelope = parse_envelope(body_text)
+        verdict = classify_envelope(envelope)
+        if verdict is not None:
+            return ClassifiedError(
+                category=verdict.category,
+                retry_after_seconds=retry_after or verdict.retry_hint_seconds,
+                is_endpoint_wide=verdict.scope == "endpoint",
+                is_model_specific=verdict.is_model_specific,
+                retry_at=next_local_midnight() if verdict.until_local_reset else None,
+                scope=verdict.scope,
+                outcome_confirmed=_outcome_confirmed(envelope),
+                error_code=verdict.code,
+                gateway_attempts=envelope.attempts if envelope else None,
+            )
+
+        if envelope is not None and envelope.code and verdict is None:
+            logger.info(
+                "unclassified upstream error code %r (request_id=%s) — status fallback",
+                envelope.code,
+                envelope.request_id,
+            )
 
         if status is None:
             if _is_transport_failure(exc):
                 return ClassifiedError(category="transport_error", is_endpoint_wide=True)
             return ClassifiedError(
                 category=_category_from_body(lowered_body), is_endpoint_wide=False,
+                outcome_confirmed=_outcome_confirmed(envelope),
+                error_code=envelope.code if envelope else None,
+                gateway_attempts=envelope.attempts if envelope else None,
             )
 
-        retry_after = _parse_retry_after(headers)
         category, model_specific = _classify_status(status, lowered_body)
 
         return ClassifiedError(
@@ -374,6 +475,9 @@ class ConfigurableAdapter:
             retry_after_seconds=retry_after,
             is_endpoint_wide=(category == "server_error"),
             is_model_specific=model_specific,
+            outcome_confirmed=_outcome_confirmed(envelope),
+            error_code=envelope.code if envelope else None,
+            gateway_attempts=envelope.attempts if envelope else None,
         )
 
 
@@ -433,6 +537,10 @@ def _extract_capabilities(item: dict[str, Any]) -> dict[str, Any]:
     if streaming is not None:
         caps["supports_streaming"] = streaming
 
+    endpoint_types = item.get("supported_endpoint_types")
+    if isinstance(endpoint_types, list):
+        caps["endpoint_types"] = [str(t) for t in endpoint_types]
+
     return caps
 
 
@@ -469,6 +577,12 @@ def _parse_retry_after(headers: dict[str, str] | None) -> int | None:
         return int(float(raw))
     except (TypeError, ValueError):
         return None
+
+
+def _outcome_confirmed(envelope: Envelope | None) -> bool | None:
+    if envelope is None or envelope.outcome is None:
+        return None
+    return not envelope.not_executed
 
 
 def _is_transport_failure(exc: BaseException) -> bool:

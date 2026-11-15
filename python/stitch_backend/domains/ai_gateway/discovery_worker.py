@@ -1,9 +1,14 @@
 """DiscoveryWorker — periodic background task that discovers upstream models.
 
 Runs every ``interval_seconds`` (default 3600s), iterates over all enabled
-:class:`ProviderEndpoint` rows, picks one active credential per endpoint,
-calls ``adapter.list_models(...)``, and upserts :class:`UpstreamModel` +
-:class:`CredentialModelAccess` rows for every model ID returned.
+:class:`ProviderEndpoint` rows, calls ``adapter.list_models(...)`` once per
+enabled credential, and reconciles :class:`UpstreamModel` +
+:class:`CredentialModelAccess` rows per key.
+
+Per-key contract: a model is reachable through a credential only when that
+credential's own ``GET /v1/models`` returned it.  A key that stops returning a
+model gets ``status="unavailable"`` for that model only; manual denials and
+manual unavailability survive discovery.
 
 Network calls (``adapter.list_models``) happen OUTSIDE any DB session so
 the single write connection is never held hostage during HTTP I/O.  Data
@@ -26,6 +31,10 @@ from typing import TYPE_CHECKING, Any
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.ai_gateway.adapters.base import ModelMetadata, get_adapter
+from stitch_backend.domains.ai_gateway.model_catalog_service import (
+    VERIFICATION_TTL,
+    _as_utc,
+)
 from stitch_backend.domains.ai_gateway.models import _utcnow
 from stitch_backend.domains.ai_gateway.service import (
     CredentialModelAccessService,
@@ -41,6 +50,13 @@ if TYPE_CHECKING:
     from stitch_backend.domains.ai_gateway.models import ProviderEndpoint
 
 logger = logging.getLogger(__name__)
+
+RETIREMENT_TTL = VERIFICATION_TTL
+MAX_NEW_MODELS_TO_VERIFY = 20
+VERIFICATION_CONCURRENCY = 4
+VERIFICATION_BUDGET_SECONDS = 30.0
+VERIFICATION_MAX_TOKENS = 1
+NOT_RETURNED_BY_UPSTREAM = "not_returned_by_upstream"
 
 
 class DiscoveryWorker:
@@ -98,16 +114,15 @@ class DiscoveryWorker:
 
     @classmethod
     async def _discover_all(cls) -> None:
-        """Iterate over all enabled endpoints and discover their models.
+        """Discover models for every enabled endpoint, key by key.
 
         Three-phase flow:
           1. READ session  — load endpoints + credentials + secrets, close.
-          2. OUTSIDE session — call ``adapter.list_models()`` per endpoint.
+          2. OUTSIDE session — call ``adapter.list_models()`` per credential.
           3. WRITE session — batch-persist all discoveries, close.
         """
         start = time.monotonic()
 
-        # 1. Load endpoint + credential + secret data (read-only).
         probes = await cls._load_endpoints_for_discovery()
         if not probes:
             logger.debug("DiscoveryWorker: no enabled endpoints")
@@ -115,27 +130,7 @@ class DiscoveryWorker:
 
         logger.info("DiscoveryWorker: discovering models on %d endpoints", len(probes))
 
-        # 2. Probe each endpoint OUTSIDE any DB session (HTTP I/O).
-        results: list[tuple[dict[str, Any], list[ModelMetadata]]] = []
-        for probe in probes:
-            try:
-                models = await cls._discover_models(probe)
-                if models:
-                    results.append((probe, models))
-                else:
-                    logger.debug(
-                        "DiscoveryWorker: no models returned for endpoint %s",
-                        probe["endpoint_id"],
-                    )
-            except Exception as _exc:
-                logger.warning(
-                    "DiscoveryWorker: failed for endpoint %s (%s): %s",
-                    probe["endpoint_id"],
-                    probe["endpoint_name"],
-                    _exc,
-                )
-
-        # 3. Batch-persist all discoveries in one short WRITE session.
+        results = await cls._probe_endpoints(probes)
         if results:
             try:
                 await cls._persist_discoveries(results)
@@ -160,127 +155,229 @@ class DiscoveryWorker:
         credentials = await cred_svc.list_all_credentials(
             provider_endpoint_id=endpoint.id,
         )
-        probe_cred = cls._select_probe_credential(credentials)
-        if probe_cred is None:
+        usable: list[dict[str, Any]] = []
+        for cred in credentials:
+            if not cred.enabled:
+                continue
+            secret = await cred_svc.resolve_invocation_secret(cred)
+            if secret is None:
+                logger.warning(
+                    "DiscoveryWorker: no secret for credential %s on endpoint %s",
+                    cred.id, endpoint.id,
+                )
+                continue
+            usable.append({
+                "credential_id": cred.id,
+                "secret": secret,
+                "runtime_status": cred.runtime_status,
+            })
+        if not usable:
             logger.debug(
                 "DiscoveryWorker: no usable credential for endpoint %s",
                 endpoint.id,
             )
             return []
-        secret = await cred_svc.resolve_invocation_secret(probe_cred)
-        if secret is None:
-            logger.warning(
-                "DiscoveryWorker: no secret for credential %s on endpoint %s",
-                probe_cred.id, endpoint.id,
-            )
-            return []
+
+        usable.sort(key=lambda c: 0 if c["runtime_status"] == "active" else 1)
+        model_svc = UpstreamModelService(db)
+        known = {m.upstream_model_id for m in await model_svc.list_models(endpoint.id)}
         probe = {
             "endpoint_id": endpoint.id,
             "endpoint_name": endpoint.name,
             "adapter_type": endpoint.adapter_type,
             "base_url": endpoint.base_url,
             "default_headers": endpoint.default_headers,
-            "probe_cred_id": probe_cred.id,
-            "secret": secret,
-            "all_cred_ids": [c.id for c in credentials],
+            "credentials": usable,
+            "known_model_ids": known,
         }
-        models = await cls._discover_models(probe)
-        if models:
-            changed = await cls._persist_results(db, [(probe, models)])
-            if changed:
-                await event_bus.emit("endpoint.models_changed", {"endpoint_ids": changed})
-        return [m.id for m in models]
 
-    @staticmethod
-    def _select_probe_credential(credentials: list[Any]) -> Any | None:
-        probe_cred = next(
-            (c for c in credentials if c.enabled and c.runtime_status == "active"),
-            None,
+        per_cred: list[tuple[dict[str, Any], list[ModelMetadata]]] = []
+        for cred_info in usable:
+            models = await cls._discover_models(probe, cred_info)
+            per_cred.append((cred_info, models))
+
+        verification = await cls._verify_new_models(probe, per_cred)
+        changed = await cls._persist_results(
+            db,
+            [{"probe": probe, "credentials": per_cred, "verification": verification}],
         )
-        if probe_cred is None:
-            probe_cred = next((c for c in credentials if c.enabled), None)
-        return probe_cred
+        if changed:
+            await event_bus.emit("endpoint.models_changed", {"endpoint_ids": changed})
+
+        ordered: list[str] = []
+        for _cred, models in per_cred:
+            for metadata in models:
+                if metadata.id not in ordered:
+                    ordered.append(metadata.id)
+        return ordered
 
     @classmethod
     async def _load_endpoints_for_discovery(cls) -> list[dict[str, Any]]:
-        """Load enabled endpoints + one usable credential + secret per endpoint.
+        """Load enabled endpoints + every usable credential + its secret.
 
         Uses a READ session so the write pool is untouched.  All ORM data is
         extracted into plain dicts before the session closes.
         """
         async def _op(session: AsyncSession) -> list[dict[str, Any]]:
             ep_svc = ProviderEndpointService(session)
-            endpoints = await ep_svc.list_all_endpoints()
-            enabled = [e for e in endpoints if e.enabled]
-            if not enabled:
+            endpoints = [e for e in await ep_svc.list_all_endpoints() if e.enabled]
+            if not endpoints:
                 return []
 
             cred_svc = CredentialService(session)
+            model_svc = UpstreamModelService(session)
             probes: list[dict[str, Any]] = []
-            for endpoint in enabled:
+            for endpoint in endpoints:
                 credentials = await cred_svc.list_all_credentials(
                     provider_endpoint_id=endpoint.id,
                 )
-                if not credentials:
-                    logger.debug(
-                        "DiscoveryWorker: no credentials for endpoint %s",
-                        endpoint.id,
-                    )
-                    continue
-
-                # Pick one active credential, or fall back to any enabled one.
-                probe_cred = cls._select_probe_credential(credentials)
-                if probe_cred is None:
+                usable: list[dict[str, Any]] = []
+                for cred in credentials:
+                    if not cred.enabled:
+                        continue
+                    secret = await cred_svc.resolve_invocation_secret(cred)
+                    if secret is None:
+                        logger.warning(
+                            "DiscoveryWorker: no secret for credential %s on endpoint %s",
+                            cred.id, endpoint.id,
+                        )
+                        continue
+                    usable.append({
+                        "credential_id": cred.id,
+                        "secret": secret,
+                        "runtime_status": cred.runtime_status,
+                    })
+                if not usable:
                     logger.debug(
                         "DiscoveryWorker: no usable credential for endpoint %s",
                         endpoint.id,
                     )
                     continue
 
-                secret = await cred_svc.resolve_invocation_secret(probe_cred)
-                if secret is None:
-                    logger.warning(
-                        "DiscoveryWorker: no secret for credential %s on endpoint %s",
-                        probe_cred.id, endpoint.id,
-                    )
-                    continue
-
+                usable.sort(key=lambda c: 0 if c["runtime_status"] == "active" else 1)
+                known = {
+                    m.upstream_model_id
+                    for m in await model_svc.list_models(endpoint.id)
+                }
                 probes.append({
                     "endpoint_id": endpoint.id,
                     "endpoint_name": endpoint.name,
                     "adapter_type": endpoint.adapter_type,
                     "base_url": endpoint.base_url,
                     "default_headers": endpoint.default_headers,
-                    "probe_cred_id": probe_cred.id,
-                    "secret": secret,
-                    "all_cred_ids": [c.id for c in credentials],
+                    "credentials": usable,
+                    "known_model_ids": known,
                 })
             return probes
 
         return await run_in_read_session(_op)
 
     @classmethod
-    async def _discover_models(cls, probe: dict[str, Any]) -> list[ModelMetadata]:
-        """List models OUTSIDE any DB session (HTTP I/O)."""
+    async def _probe_endpoints(
+        cls, probes: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Probe every credential of every endpoint OUTSIDE any DB session."""
+        results: list[dict[str, Any]] = []
+        for probe in probes:
+            per_cred: list[tuple[dict[str, Any], list[ModelMetadata]]] = []
+            for cred in probe["credentials"]:
+                try:
+                    models = await cls._discover_models(probe, cred)
+                except Exception as _exc:
+                    logger.warning(
+                        "DiscoveryWorker: failed for endpoint %s (%s): %s",
+                        probe["endpoint_id"],
+                        probe["endpoint_name"],
+                        _exc,
+                    )
+                    continue
+                per_cred.append((cred, models))
+            if not per_cred:
+                continue
+            verification = await cls._verify_new_models(probe, per_cred)
+            results.append({
+                "probe": probe,
+                "credentials": per_cred,
+                "verification": verification,
+            })
+        return results
+
+    @classmethod
+    async def _discover_models(
+        cls, probe: dict[str, Any], cred: dict[str, Any],
+    ) -> list[ModelMetadata]:
+        """List models for one credential OUTSIDE any DB session (HTTP I/O)."""
         adapter = get_adapter(probe["adapter_type"])
         models = await adapter.list_models_detailed(
             base_url=probe["base_url"],
-            secret=probe["secret"],
+            secret=cred["secret"],
             default_headers=probe["default_headers"],
         )
-
-        if models:
-            logger.info(
-                "DiscoveryWorker: %d models on endpoint %s",
-                len(models), probe["endpoint_id"],
-            )
-
+        logger.info(
+            "DiscoveryWorker: %d models on endpoint %s for credential %s",
+            len(models), probe["endpoint_id"], cred["credential_id"],
+        )
         return models
 
     @classmethod
-    async def _persist_discoveries(
-        cls, results: list[tuple[dict[str, Any], list[ModelMetadata]]],
-    ) -> None:
+    async def _verify_new_models(
+        cls,
+        probe: dict[str, Any],
+        per_cred: list[tuple[dict[str, Any], list[ModelMetadata]]],
+    ) -> dict[str, dict[str, Any]]:
+        """Probe newly discovered models with one healthy credential.
+
+        Returns a mapping ``model id -> probe row``.  A cycle with more than
+        ``MAX_NEW_MODELS_TO_VERIFY`` new models is skipped: an upstream that
+        suddenly returns hundreds of ids is not worth a full probe sweep.
+        """
+        returned = {m.id for _cred, models in per_cred for m in models}
+        new_ids = sorted(returned - probe["known_model_ids"])
+        if not new_ids:
+            return {}
+        if len(new_ids) > MAX_NEW_MODELS_TO_VERIFY:
+            logger.warning(
+                "DiscoveryWorker: skipping verification of %d new models on endpoint %s",
+                len(new_ids), probe["endpoint_id"],
+            )
+            return {}
+
+        new_id_set = set(new_ids)
+        from stitch_backend.domains.ai_gateway.commands.probe_models import probe_models
+
+        adapter = get_adapter(probe["adapter_type"])
+        verified: dict[str, dict[str, Any]] = {}
+        for cred, models in per_cred:
+            ids = [m.id for m in models if m.id in new_id_set]
+            if not ids:
+                continue
+            try:
+                rows = await probe_models(
+                    adapter,
+                    base_url=probe["base_url"],
+                    secret=cred["secret"],
+                    default_headers=probe["default_headers"],
+                    models=ids,
+                    concurrency=VERIFICATION_CONCURRENCY,
+                    max_tokens=VERIFICATION_MAX_TOKENS,
+                    prompt=None,
+                    vision_models=None,
+                    include_multimodal=False,
+                    budget=VERIFICATION_BUDGET_SECONDS,
+                )
+            except Exception as _exc:
+                logger.warning(
+                    "DiscoveryWorker: verification failed for endpoint %s: %s",
+                    probe["endpoint_id"], _exc,
+                )
+                continue
+            for row in rows:
+                row["_credential_id"] = cred["credential_id"]
+                verified[row["model"]] = row
+        return verified
+
+    @classmethod
+    async def _persist_discoveries(cls, results: list[dict[str, Any]]) -> None:
         """Persist all discovered models in a single short WRITE transaction."""
         changed: list[str] = []
 
@@ -295,72 +392,184 @@ class DiscoveryWorker:
     async def _persist_results(
         cls,
         session: AsyncSession,
-        results: list[tuple[dict[str, Any], list[ModelMetadata]]],
+        results: list[dict[str, Any]],
     ) -> list[str]:
         model_svc = UpstreamModelService(session)
         access_svc = CredentialModelAccessService(session)
         changed_endpoints: list[str] = []
 
-        for probe, models in results:
-            # ponytail: per-endpoint savepoint so one endpoint's failure doesn't discard earlier upserts.
+        for item in results:
+            probe = item["probe"]
+            endpoint_id = probe["endpoint_id"]
             try:
                 async with session.begin_nested():
-                    for metadata in models:
-                        upstream = await model_svc.upsert_model(
-                            provider_endpoint_id=probe["endpoint_id"],
-                            upstream_model_id=metadata.id,
-                            discovery_source="probe",
-                            capabilities=cls._capabilities_for_persist(metadata.capabilities),
-                        )
-                        # ponytail: never overwrite a manual "unavailable" status — only "unknown"/None becomes "available".
-                        for cred_id in probe["all_cred_ids"]:
-                            existing_rows = await access_svc.list_access(
-                                credential_id=cred_id,
-                                upstream_model_id=upstream.id,
+                    existing = {
+                        m.upstream_model_id: m
+                        for m in await model_svc.list_models(endpoint_id)
+                    }
+                    before = {mid for mid, m in existing.items() if m.enabled}
+                    now = _utcnow()
+                    verification = item.get("verification") or {}
+
+                    upstream_rows = dict(existing)
+                    for _cred, models in item["credentials"]:
+                        for metadata in models:
+                            prior = existing.get(metadata.id)
+                            upstream = await model_svc.upsert_model(
+                                provider_endpoint_id=endpoint_id,
+                                upstream_model_id=metadata.id,
+                                discovery_source="probe",
+                                capabilities=cls._merge_capabilities(
+                                    prior.capabilities if prior else None,
+                                    metadata.capabilities,
+                                    verification.get(metadata.id),
+                                ),
                             )
-                            existing = existing_rows[0] if existing_rows else None
-                            new_status = (
-                                existing.status
-                                if existing and existing.status not in ("unknown", None)
-                                else "available"
-                            )
-                            await access_svc.upsert_access(
-                                credential_id=cred_id,
-                                upstream_model_id=upstream.id,
-                                status=new_status,
+                            upstream.last_seen_at = now
+                            if not upstream.enabled and upstream.selection_source == "auto":
+                                caps = dict(upstream.capabilities or {})
+                                if caps.pop("retired_auto", None):
+                                    upstream.enabled = True
+                                    upstream.capabilities = caps
+                            upstream_rows[metadata.id] = upstream
+
+                    for cred, models in item["credentials"]:
+                        returned = {m.id for m in models}
+                        for mid, upstream in upstream_rows.items():
+                            await cls._reconcile_access(
+                                access_svc,
+                                cred["credential_id"],
+                                upstream,
+                                present=mid in returned,
                             )
 
-                    # ponytail: GET /models success says nothing about POST /chat/completions health — never touch credential state here.
-                    logger.debug(
-                        "DiscoveryWorker: credential %s used for discovery on endpoint %s",
-                        probe["probe_cred_id"], probe["endpoint_id"],
-                    )
+                    for mid, row in verification.items():
+                        cred_id = row.get("_credential_id")
+                        upstream_row = upstream_rows.get(mid)
+                        if not cred_id or upstream_row is None or row.get("ok"):
+                            continue
+                        await access_svc.upsert_access(
+                            cred_id,
+                            upstream_row.id,
+                            status="unavailable",
+                            last_error=str(row.get("reason") or "probe_failed"),
+                        )
+
+                    for mid, upstream in upstream_rows.items():
+                        if mid in {m.id for _c, models in item["credentials"] for m in models}:
+                            continue
+                        if upstream.selection_source != "auto":
+                            continue
+                        if upstream.last_seen_at is None:
+                            continue
+                        if _as_utc(upstream.last_seen_at) >= now - RETIREMENT_TTL:
+                            continue
+                        upstream.enabled = False
+                        caps = dict(upstream.capabilities or {})
+                        caps["retired_auto"] = True
+                        upstream.capabilities = caps
 
                     await session.flush()
-                changed_endpoints.append(probe["endpoint_id"])
+                    after = {
+                        m.upstream_model_id
+                        for m in await model_svc.list_models(endpoint_id)
+                        if m.enabled
+                    }
+                    if after != before:
+                        changed_endpoints.append(endpoint_id)
             except Exception as _exc:
                 logger.warning(
                     "DiscoveryWorker: failed for endpoint %s (%s): %s",
-                    probe["endpoint_id"],
+                    endpoint_id,
                     probe["endpoint_name"],
                     _exc,
                 )
-                # savepoint auto-rolled back; outer transaction continues
 
         try:
             await ModelIdentityService(session).auto_group()
         except Exception as _exc:
             logger.warning("DiscoveryWorker: auto-group failed: %s", _exc)
 
+        try:
+            await ModelIdentityService(session).promote_verified_models()
+        except Exception as _exc:
+            logger.warning("DiscoveryWorker: model promotion failed: %s", _exc)
+
         return changed_endpoints
 
+    @classmethod
+    async def _reconcile_access(
+        cls,
+        access_svc: CredentialModelAccessService,
+        credential_id: str,
+        upstream: Any,
+        *,
+        present: bool,
+    ) -> None:
+        """Reconcile one (credential, model) access row.
+
+        ``denied`` is never overwritten, manual ``unavailable`` survives, and
+        a model the key stopped returning becomes ``unavailable`` (soft).
+        """
+        rows = await access_svc.list_access(
+            credential_id=credential_id,
+            upstream_model_id=upstream.id,
+        )
+        existing = rows[0] if rows else None
+        if existing is None:
+            if present:
+                await access_svc.upsert_access(
+                    credential_id, upstream.id, status="available", last_error=None,
+                )
+            else:
+                await access_svc.upsert_access(
+                    credential_id,
+                    upstream.id,
+                    status="unavailable",
+                    last_error=NOT_RETURNED_BY_UPSTREAM,
+                )
+            return
+        if existing.status == "denied":
+            return
+        manual_unavailable = (
+            existing.status == "unavailable"
+            and existing.last_error != NOT_RETURNED_BY_UPSTREAM
+        )
+        if manual_unavailable:
+            return
+        if present:
+            await access_svc.upsert_access(
+                credential_id, upstream.id, status="available", last_error=None,
+            )
+            return
+        await access_svc.upsert_access(
+            credential_id,
+            upstream.id,
+            status="unavailable",
+            last_error=NOT_RETURNED_BY_UPSTREAM,
+        )
+
     @staticmethod
-    def _capabilities_for_persist(capabilities: dict[str, Any]) -> dict[str, Any] | None:
-        """Stamp provider capabilities with provenance; ``None`` when empty so manual caps survive."""
-        if not capabilities:
-            return None
-        return {
-            **capabilities,
-            "source": "provider_metadata",
-            "verified_at": _utcnow().isoformat(),
-        }
+    def _merge_capabilities(
+        prior: dict[str, Any] | None,
+        metadata_caps: dict[str, Any] | None,
+        verification_row: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Merge provider metadata and probe outcome into the capability bag."""
+        caps: dict[str, Any] = dict(prior or {})
+        if metadata_caps:
+            caps.update(metadata_caps)
+            caps["source"] = "provider_metadata"
+            caps["metadata_refreshed_at"] = _utcnow().isoformat()
+        if verification_row is not None:
+            caps["verification_status"] = (
+                "working" if verification_row.get("ok") else "failed"
+            )
+            caps["verified_at"] = _utcnow().isoformat()
+            latency = verification_row.get("latencyMs")
+            if latency is not None:
+                caps["probe_latency_ms"] = int(latency)
+            reason = verification_row.get("reason")
+            if reason and not verification_row.get("ok"):
+                caps["verification_reason"] = reason
+        return caps or None

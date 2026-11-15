@@ -59,6 +59,17 @@ class CredentialUpdateRequest(BaseModel):
     id: str
     label: str | None = None
     enabled: bool | None = None
+    account_group: str | None = Field(None, alias="accountGroup")
+
+    @field_validator("account_group", mode="before")
+    @classmethod
+    def validate_account_group(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) > 200:
+            raise ValueError("account_group must be at most 200 characters")
+        return v or None
 
 
 class RotateCredentialSecretRequest(BaseModel):
@@ -113,10 +124,13 @@ class CredentialResponse(BaseModel):
     auth_type: str = Field(alias="authType")
     fingerprint: str
     enabled: bool
+    account_group: str | None = Field(None, alias="accountGroup")
     runtime_status: str = Field(alias="runtimeStatus")
     status_reason: str | None = Field(None, alias="statusReason")
     next_retry_at: datetime | None = Field(None, alias="nextRetryAt")
     quota_reset_at: datetime | None = Field(None, alias="quotaResetAt")
+    remaining_usd: float | None = Field(None, alias="remainingUsd")
+    remaining_checked_at: datetime | None = Field(None, alias="remainingCheckedAt")
     last_success_at: datetime | None = Field(None, alias="lastSuccessAt")
     last_failure_at: datetime | None = Field(None, alias="lastFailureAt")
     consecutive_failures: int = Field(alias="consecutiveFailures")
@@ -146,10 +160,13 @@ class CredentialResponse(BaseModel):
             auth_type=obj.auth_type,
             fingerprint=obj.fingerprint,
             enabled=obj.enabled,
+            account_group=obj.account_group,
             runtime_status=obj.runtime_status,
             status_reason=obj.status_reason,
             next_retry_at=obj.next_retry_at,
             quota_reset_at=obj.quota_reset_at,
+            remaining_usd=obj.remaining_usd,
+            remaining_checked_at=obj.remaining_checked_at,
             last_success_at=obj.last_success_at,
             last_failure_at=obj.last_failure_at,
             consecutive_failures=obj.consecutive_failures,

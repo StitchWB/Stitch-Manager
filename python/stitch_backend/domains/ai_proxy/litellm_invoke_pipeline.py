@@ -7,11 +7,14 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import HTTPException
 
+from stitch_backend.domains.ai_gateway import account_ledger
+from stitch_backend.domains.ai_gateway.adapters.error_vocab import parse_envelope
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_proxy.holone_inspector import (
     default_engine as _holone_default_engine,
 )
 from stitch_backend.domains.ai_proxy.litellm_response_parsing import _json_object, _usage_split
+from stitch_backend.domains.ai_proxy.request_logs import RequestLogFailureMetadata
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -60,6 +63,77 @@ def _response_usage(response: Any) -> tuple[int, int]:
     )
 
 
+def _failure_metadata(classified: Any, exc: BaseException) -> RequestLogFailureMetadata:
+    response = getattr(exc, "response", None)
+    body_text = ""
+    if response is not None:
+        try:
+            body_text = response.text
+        except Exception:  # noqa: BLE001
+            body_text = ""
+    envelope = parse_envelope(body_text)
+    return RequestLogFailureMetadata(
+        getattr(classified, "category", type(exc).__name__),
+        error_code=getattr(classified, "error_code", None),
+        outcome_confirmed=getattr(classified, "outcome_confirmed", None),
+        gateway_attempts=getattr(classified, "gateway_attempts", None),
+        upstream_request_id=envelope.request_id if envelope else None,
+    )
+
+
+def _cached_tokens(response: Any) -> int:
+    usage = response.get("usage") if isinstance(response, dict) else getattr(response, "usage", None)
+    if isinstance(usage, dict):
+        details = usage.get("prompt_tokens_details")
+        value = details.get("cached_tokens") if isinstance(details, dict) else None
+    else:
+        details = getattr(usage, "prompt_tokens_details", None)
+        value = getattr(details, "cached_tokens", None)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return max(0, value)
+    return 0
+
+
+async def _record_ledger_usage(
+    run_in_session: Callable[..., Awaitable[Any]],
+    routing_result: Any,
+    input_tokens: int,
+    output_tokens: int,
+    cached_tokens: int = 0,
+) -> None:
+    try:
+        endpoint_id = routing_result.endpoint.id
+        account_group = getattr(routing_result.credential, "account_group", None)
+
+        async def _write(session):
+            await account_ledger.record_usage(
+                session,
+                endpoint_id=endpoint_id,
+                account_group=account_group,
+                requests=1,
+                tokens_in=input_tokens,
+                tokens_out=output_tokens,
+                cached_tokens=cached_tokens,
+            )
+
+        await run_in_session(_write)
+    except Exception:
+        logger.debug("Account ledger write failed", exc_info=True)
+
+
+def _remember_affinity(payload: GatewayRequest, routing_result: Any) -> None:
+    try:
+        account_ledger.put_affinity(
+            payload.model or "",
+            payload.messages or [],
+            getattr(payload, "user", None),
+            routing_result.endpoint.id,
+            getattr(routing_result.credential, "account_group", None),
+        )
+    except Exception:
+        logger.debug("Affinity write failed", exc_info=True)
+
+
 async def _record_stream_usage(
     executor: LiteLLMExecutor,
     pool: PoolScope | None,
@@ -68,10 +142,15 @@ async def _record_stream_usage(
     usage: tuple[int, int] | None,
     ok: bool,
     outcome: _RequestOutcome,
+    *,
+    run_in_session: Callable[..., Awaitable[Any]],
 ) -> None:
     input_tokens, output_tokens = usage if usage is not None else (0, 0)
     await executor._record_group_usage_for(
         pool, routing_result, payload.model, input_tokens + output_tokens,
+    )
+    await _record_ledger_usage(
+        run_in_session, routing_result, input_tokens, output_tokens,
     )
     outcome.input_tokens = input_tokens
     outcome.output_tokens = output_tokens
@@ -138,6 +217,7 @@ async def invoke_via_gateway(
                 client_has_tools=client_has_tools,
                 on_complete=lambda usage, ok: _record_stream_usage(
                     executor, pool, routing_result, payload, usage, ok, outcome,
+                    run_in_session=run_in_session,
                 ),
             )
         else:
@@ -151,6 +231,16 @@ async def invoke_via_gateway(
             await executor._record_group_usage_for(
                 pool, routing_result, payload.model, input_tokens + output_tokens,
             )
+
+        if not payload.stream:
+            await _record_ledger_usage(
+                run_in_session,
+                routing_result,
+                input_tokens,
+                output_tokens,
+                _cached_tokens(response),
+            )
+        _remember_affinity(payload, routing_result)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
@@ -212,7 +302,7 @@ async def invoke_via_gateway(
         classified = routing_result.adapter.classify_error(exc)
         outcome.routing_result = routing_result
         outcome.ok = False
-        outcome.error_class = getattr(classified, "category", type(exc).__name__)
+        outcome.error_class = _failure_metadata(classified, exc)
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(
@@ -287,6 +377,7 @@ async def invoke_via_gateway_messages(
                 client_has_tools=client_has_tools,
                 on_complete=lambda usage, ok: _record_stream_usage(
                     executor, pool, routing_result, payload, usage, ok, outcome,
+                    run_in_session=run_in_session,
                 ),
             )
         else:
@@ -302,6 +393,16 @@ async def invoke_via_gateway_messages(
             await executor._record_group_usage_for(
                 pool, routing_result, payload.model, input_tokens + output_tokens,
             )
+
+        if not payload.stream:
+            await _record_ledger_usage(
+                run_in_session,
+                routing_result,
+                input_tokens,
+                output_tokens,
+                _cached_tokens(response),
+            )
+        _remember_affinity(payload, routing_result)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
@@ -363,7 +464,7 @@ async def invoke_via_gateway_messages(
         classified = routing_result.adapter.classify_error(exc)
         outcome.routing_result = routing_result
         outcome.ok = False
-        outcome.error_class = getattr(classified, "category", type(exc).__name__)
+        outcome.error_class = _failure_metadata(classified, exc)
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(
@@ -444,6 +545,7 @@ async def invoke_via_gateway_responses(
                 client_has_tools=client_has_tools,
                 on_complete=lambda usage, ok: _record_stream_usage(
                     executor, pool, routing_result, payload, usage, ok, outcome,
+                    run_in_session=run_in_session,
                 ),
             )
         else:
@@ -459,6 +561,16 @@ async def invoke_via_gateway_responses(
             await executor._record_group_usage_for(
                 pool, routing_result, payload.model, input_tokens + output_tokens,
             )
+
+        if not payload.stream:
+            await _record_ledger_usage(
+                run_in_session,
+                routing_result,
+                input_tokens,
+                output_tokens,
+                _cached_tokens(response),
+            )
+        _remember_affinity(payload, routing_result)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
@@ -520,7 +632,7 @@ async def invoke_via_gateway_responses(
         classified = routing_result.adapter.classify_error(exc)
         outcome.routing_result = routing_result
         outcome.ok = False
-        outcome.error_class = getattr(classified, "category", type(exc).__name__)
+        outcome.error_class = _failure_metadata(classified, exc)
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(

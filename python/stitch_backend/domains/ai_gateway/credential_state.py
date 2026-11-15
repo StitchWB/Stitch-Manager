@@ -16,14 +16,17 @@ Transition rules:
         → active  (clear consecutive_failures, set last_success_at)
 
     auth_failed
-        → auth_failed  (set status_reason, increment consecutive_failures)
+        → auth_failed  (set status_reason, increment consecutive_failures, arm a
+          5-minute self-heal retry so a misclassified key returns to routing)
 
     rate_limited
         → rate_limited  (set next_retry_at from retry_after_seconds if known)
 
     quota_exhausted
-        → quota_exhausted  (set quota_reset_at + next_retry_at from
-          retry_after_seconds if known, else a 15-minute default)
+        → quota_exhausted  (set quota_reset_at from an absolute registration
+          reset time when the classifier provides one, else retry_after_seconds,
+          else a 15-minute default; account-scoped errors fan out to the
+          credential's account group)
 
     server_error | transport_error
         → degraded  (increment consecutive_failures, exponential backoff
@@ -38,11 +41,12 @@ Transition rules:
           :func:`disable_credential` sets this, and once set,
           :func:`transition_credential` refuses to move it)
 
-    2xx success also clears quota_reset_at alongside next_retry_at.
+    2xx success also clears quota_reset_at alongside next_retry_at and clears
+    quota-exhausted marks on siblings in the same account group.
 
-``cooldown`` is a valid state in the vocabulary but is not set by any automatic
-transition here — it is reserved for a future manual/operational cooldown
-operation.  It is included in ``_VALID_STATES`` for validation only.
+    ``cooldown`` is set by :func:`set_cooldown` and recovered by a later
+    successful transition.
+
 """
 
 from __future__ import annotations
@@ -51,11 +55,14 @@ import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select, update
+
 from stitch_backend.core.event_bus import event_bus
-from stitch_backend.domains.ai_gateway.models import _utcnow
+from stitch_backend.domains.ai_gateway import account_ledger
+from stitch_backend.domains.ai_gateway.models import Credential, _utcnow
 from stitch_backend.domains.ai_gateway.service import CredentialService
 
 if TYPE_CHECKING:
@@ -78,6 +85,9 @@ _BACKOFF_CAP_SECONDS = 3600
 
 # без дефолта ProbeWorker перепробует квота-мёртвую креду каждый свой цикл (300с)
 _QUOTA_DEFAULT_RETRY = timedelta(seconds=900)
+
+# auth_failed без next_retry_at выпадает из ротации до ручного вмешательства
+_AUTH_SELF_HEAL_RETRY = timedelta(seconds=300)
 
 # Rolling health/latency window; in-memory only — predictive scoring rebuilds from live traffic after a boot.
 _METRICS_WINDOW_SECONDS = 300.0
@@ -207,6 +217,10 @@ async def _emit_state_changed(credential_id: str, runtime_status: str) -> None:
     )
 
 
+def _reason(base: str, code: str | None) -> str:
+    return f"{base} ({code})" if code else base
+
+
 def exponential_backoff(consecutive_failures: int) -> timedelta:
     """Backoff for the *n*-th consecutive failure.
 
@@ -220,6 +234,114 @@ def exponential_backoff(consecutive_failures: int) -> timedelta:
         _BACKOFF_CAP_SECONDS,
     )
     return timedelta(seconds=seconds)
+
+
+async def set_cooldown(
+    session: AsyncSession,
+    credential_id: str,
+    reason: str,
+    until: datetime,
+) -> None:
+    """Park one credential until ``until`` with an operational reason."""
+    svc = CredentialService(session)
+    credential = await svc.get_by_pk(credential_id)
+    if credential is None:
+        logger.warning("set_cooldown: credential %s not found", credential_id)
+        return
+    previous_status = credential.runtime_status
+    credential.runtime_status = "cooldown"
+    credential.status_reason = reason
+    credential.next_retry_at = until
+    credential.updated_at = _utcnow()
+    await session.flush()
+    if previous_status != "cooldown":
+        await _emit_state_changed(credential_id, "cooldown")
+
+
+async def mark_account_quota_exhausted(
+    session: AsyncSession,
+    endpoint_id: str,
+    account_group: str,
+    until: datetime,
+) -> None:
+    """Park every enabled credential in one upstream account group."""
+    if not account_group:
+        return
+    try:
+        await account_ledger.learn_cap(session, endpoint_id, account_group)
+    except Exception:
+        logger.debug("Account daily-cap learning failed", exc_info=True)
+    account_ledger.clear_affinity(endpoint_id, account_group)
+    result = await session.execute(
+        select(
+            Credential.id,
+            Credential.runtime_status,
+            Credential.quota_reset_at,
+            Credential.next_retry_at,
+        ).where(
+            Credential.provider_endpoint_id == endpoint_id,
+            Credential.account_group == account_group,
+            Credential.enabled.is_(True),
+        )
+    )
+    rows = result.all()
+    if not rows:
+        return
+    credential_ids = [row.id for row in rows]
+    changed_ids = [
+        row.id
+        for row in rows
+        if row.runtime_status != "quota_exhausted"
+        or row.quota_reset_at != until
+        or row.next_retry_at != until
+    ]
+    await session.execute(
+        update(Credential)
+        .where(Credential.id.in_(credential_ids))
+        .values(
+            runtime_status="quota_exhausted",
+            quota_reset_at=until,
+            next_retry_at=until,
+            status_reason="Quota exhausted (account)",
+            updated_at=_utcnow(),
+        )
+    )
+    await session.flush()
+    for credential_id in changed_ids:
+        await _emit_state_changed(credential_id, "quota_exhausted")
+
+
+async def _clear_account_quota_marks(
+    session: AsyncSession,
+    endpoint_id: str,
+    account_group: str,
+    credential_id: str,
+) -> None:
+    result = await session.execute(
+        select(Credential.id).where(
+            Credential.provider_endpoint_id == endpoint_id,
+            Credential.account_group == account_group,
+            Credential.id != credential_id,
+            Credential.runtime_status == "quota_exhausted",
+        )
+    )
+    sibling_ids = list(result.scalars().all())
+    if not sibling_ids:
+        return
+    await session.execute(
+        update(Credential)
+        .where(Credential.id.in_(sibling_ids))
+        .values(
+            runtime_status="active",
+            quota_reset_at=None,
+            next_retry_at=None,
+            status_reason=None,
+            updated_at=_utcnow(),
+        )
+    )
+    await session.flush()
+    for sibling_id in sibling_ids:
+        await _emit_state_changed(sibling_id, "active")
 
 
 async def transition_credential(
@@ -268,6 +390,13 @@ async def transition_credential(
         await session.flush()
         if previous_status != "active":
             await _emit_state_changed(credential_id, "active")
+        if credential.account_group:
+            await _clear_account_quota_marks(
+                session,
+                credential.provider_endpoint_id,
+                credential.account_group,
+                credential_id,
+            )
         return
 
     if error is None:
@@ -288,12 +417,13 @@ async def transition_credential(
     # ── Failure categories ────────────────────────────────────────────────
     if category == "auth_failed":
         credential.runtime_status = "auth_failed"
-        credential.status_reason = "Authentication failed"
+        credential.status_reason = _reason("Authentication failed", error.error_code)
         credential.consecutive_failures += 1
         credential.last_failure_at = now
+        credential.next_retry_at = now + _AUTH_SELF_HEAL_RETRY
     elif category == "rate_limited":
         credential.runtime_status = "rate_limited"
-        credential.status_reason = "Rate limited"
+        credential.status_reason = _reason("Rate limited", error.error_code)
         if error.retry_after_seconds is not None:
             credential.next_retry_at = now + timedelta(seconds=error.retry_after_seconds)
         else:
@@ -302,9 +432,25 @@ async def transition_credential(
             credential.next_retry_at = now + timedelta(seconds=60)
         credential.last_failure_at = now
     elif category == "quota_exhausted":
+        if (
+            error.scope == "account"
+            and credential.account_group
+        ):
+            until = error.retry_at
+            if until is None:
+                until = now + timedelta(seconds=error.retry_after_seconds or 900)
+            await mark_account_quota_exhausted(
+                session,
+                credential.provider_endpoint_id,
+                credential.account_group,
+                until,
+            )
+            return
         credential.runtime_status = "quota_exhausted"
-        credential.status_reason = "Quota exhausted"
-        if error.retry_after_seconds is not None:
+        credential.status_reason = _reason("Quota exhausted", error.error_code)
+        if error.retry_at is not None:
+            credential.quota_reset_at = error.retry_at
+        elif error.retry_after_seconds is not None:
             credential.quota_reset_at = now + timedelta(seconds=error.retry_after_seconds)
         else:
             credential.quota_reset_at = now + _QUOTA_DEFAULT_RETRY

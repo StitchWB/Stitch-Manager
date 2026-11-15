@@ -39,9 +39,21 @@ class GatewayRequest(BaseModel):
     input: JsonValue = None
     stream: bool = False
     tools: list[dict[str, JsonValue]] | None = None
+    max_wait_seconds: int | None = None
 
     def sdk_payload(self) -> JsonObject:
         return self.model_dump(mode="json", exclude_none=True)
+
+
+def _max_wait_override(request: Request) -> dict[str, int]:
+    raw = request.headers.get("X-Stitch-Max-Wait")
+    if raw is None:
+        return {}
+    try:
+        value = int(raw)
+    except ValueError:
+        return {}
+    return {"max_wait_seconds": max(0, value)}
 
 
 class NativeGatewayExecutor(Protocol):
@@ -174,6 +186,7 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
+        payload = payload.model_copy(update=_max_wait_override(request))
         try:
             return await executor_factory().chat(payload, pool=pool)
         except RoutingError as exc:
@@ -189,6 +202,7 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
+        payload = payload.model_copy(update=_max_wait_override(request))
         try:
             return await executor_factory().messages(payload, pool=pool)
         except RoutingError as exc:
@@ -204,6 +218,7 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
+        payload = payload.model_copy(update=_max_wait_override(request))
         try:
             return await executor_factory().responses(payload, pool=pool)
         except RoutingError as exc:
@@ -242,7 +257,10 @@ async def _resolve_pool(
 async def _routing_error_response(exc: RoutingError, model: str | None) -> JSONResponse:
     retry_after: int | None = None
     unavailable_models: list[str] | None = None
-    if routing_error_status(exc) == 429:
+    exc_retry = getattr(exc, "retry_after", None)
+    if isinstance(exc_retry, int):
+        retry_after = exc_retry
+    elif routing_error_status(exc) == 429:
         retry_after = await _earliest_recovery_seconds(model)
         if model:
             unavailable_models = [model]

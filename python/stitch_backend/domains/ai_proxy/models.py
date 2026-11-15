@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Float, Integer, String
+from sqlalchemy import Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stitch_backend.database import Base, UtcDateTime
@@ -54,4 +54,16 @@ class AiProxyRequestLog(Base):
     )
     error_class: Mapped[str | None] = mapped_column(
         String, comment="Classification of the final failure",
+    )
+    error_code: Mapped[str | None] = mapped_column(
+        String, comment="Machine-readable upstream error code",
+    )
+    outcome_confirmed: Mapped[bool | None] = mapped_column(
+        Boolean, comment="Whether the upstream confirmed request execution",
+    )
+    gateway_attempts: Mapped[int | None] = mapped_column(
+        Integer, comment="Upstream gateway attempts reported in the error envelope",
+    )
+    upstream_request_id: Mapped[str | None] = mapped_column(
+        String, comment="Upstream request id from the error envelope",
     )
