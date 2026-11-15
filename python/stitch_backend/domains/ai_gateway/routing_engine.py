@@ -26,6 +26,7 @@ filtering happens in memory (no per-target DB query).
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -34,7 +35,7 @@ from sqlalchemy import and_, false, or_, select
 from sqlalchemy.orm import aliased
 
 from stitch_backend.core.event_bus import Event, event_bus
-from stitch_backend.domains.ai_gateway import circuit_breaker, credential_state
+from stitch_backend.domains.ai_gateway import account_ledger, circuit_breaker, credential_state
 from stitch_backend.domains.ai_gateway.adapters.base import (
     ClassifiedError,
     ProviderAdapter,
@@ -106,6 +107,7 @@ class GatewayRequest:
     stream: bool = False
     tools: list[dict[str, Any]] | None = None
     response_format: dict[str, Any] | None = None
+    user: str | None = None
 
     def __post_init__(self) -> None:
         if not self.model or not isinstance(self.model, str):
@@ -210,6 +212,7 @@ class _CachedResolution:
 
     min_context: int | None
     results: list[RoutingResult]
+    headroom: dict[str, float] = field(default_factory=dict)
 
 
 # How many credentials (LRU-ordered) each route target contributes as
@@ -259,6 +262,54 @@ def _order_candidates(
             ),
         ),
     )
+
+
+_EPOCH = datetime.min.replace(tzinfo=UTC)
+
+
+def _balance_key(
+    credential: Credential,
+    endpoint_id: str,
+    affinity: tuple[str, str | None] | None,
+    headroom: dict[str, float],
+) -> tuple[Any, ...]:
+    group = credential.account_group
+    affinity_match = 1 if affinity is not None and affinity == (endpoint_id, group) else 0
+    return (
+        -affinity_match,
+        -headroom.get(credential.id, 1.0),
+        credential.last_success_at or _EPOCH,
+        -_score(1.0, 1.0, credential_state.metrics_store.snapshot(credential.id)),
+        random.random(),
+    )
+
+
+def _reorder_cached(
+    results: list[RoutingResult],
+    affinity: tuple[str, str | None] | None,
+    headroom: dict[str, float],
+) -> list[RoutingResult]:
+    buckets: dict[str, list[RoutingResult]] = {}
+    order: list[str] = []
+    for result in results:
+        key = result.upstream_model.id
+        if key not in buckets:
+            buckets[key] = []
+            order.append(key)
+        buckets[key].append(result)
+    ordered: list[RoutingResult] = []
+    for key in order:
+        bucket = buckets[key]
+        endpoint_id = bucket[0].endpoint.id
+        ordered.extend(
+            sorted(
+                bucket,
+                key=lambda result: _balance_key(
+                    result.credential, endpoint_id, affinity, headroom,
+                ),
+            ),
+        )
+    return ordered
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -529,6 +580,10 @@ class RoutingEngine:
         # 6. Per-target in-memory filtering + selection.
         cred_svc = CredentialService(session)
         results: list[RoutingResult] = []
+        affinity = account_ledger.get_affinity(
+            request.model, request.messages, getattr(request, "user", None),
+        )
+        headroom_cache: dict[str, float] = {}
 
         for _target, upstream in candidates:
             eligible = creds_by_upstream.get(upstream.id, [])
@@ -566,17 +621,37 @@ class RoutingEngine:
             # 8. Select up to K credentials (LRU first) — one candidate per
             # credential so the executor can fail over key→key within a
             # single request.
+            for credential, _group_id_hit in eligible:
+                if credential.id in headroom_cache:
+                    continue
+                headroom_cache[credential.id] = await account_ledger.headroom_ratio(
+                    session,
+                    upstream.provider_endpoint_id,
+                    credential.account_group,
+                    request.model,
+                )
             eligible.sort(
-                key=lambda pair: (
-                    pair[0].last_success_at or datetime.min.replace(tzinfo=UTC),
-                    -_score(
-                        1.0,
-                        1.0,
-                        credential_state.metrics_store.snapshot(pair[0].id),
-                    ),
+                key=lambda pair: _balance_key(
+                    pair[0], upstream.provider_endpoint_id, affinity, headroom_cache,
                 ),
             )
-            for cred, group_id_hit in eligible[:MAX_CANDIDATES_PER_TARGET]:
+            # квота дня сидит на аккаунте: ключи одной группы — одна квота, разводим группы
+            picked: list[tuple[Any, str | None]] = []
+            seen_groups: set[str] = set()
+            deferred: list[tuple[Any, str | None]] = []
+            for pair in eligible:
+                group = pair[0].account_group
+                if group is None or group not in seen_groups:
+                    if group is not None:
+                        seen_groups.add(group)
+                    picked.append(pair)
+                else:
+                    deferred.append(pair)
+            for pair in deferred:
+                if len(picked) >= MAX_CANDIDATES_PER_TARGET:
+                    break
+                picked.append(pair)
+            for cred, group_id_hit in picked[:MAX_CANDIDATES_PER_TARGET]:
                 secret = await cred_svc.resolve_invocation_secret(cred)
                 if secret is None:
                     continue
@@ -611,6 +686,7 @@ class RoutingEngine:
             _CachedResolution(
                 min_context=min_context,
                 results=[replace(r, secret="") for r in results],
+                headroom=dict(headroom_cache),
             ),
         )
         return results

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, or_, select
@@ -24,6 +25,16 @@ from stitch_backend.domains.ai_gateway.models import (
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+VERIFICATION_TTL = timedelta(days=7)
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Normalize a datetime to timezone-aware UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 class UpstreamModelService(BaseRepository[UpstreamModel]):
@@ -302,6 +313,94 @@ class ModelIdentityService:
             "public_models_created": created_models,
             "route_targets_created": created_targets,
         }
+
+    async def promote_verified_models(self) -> dict[str, int]:
+        """Publish verified models of auto-publish endpoints to the public catalog.
+
+        Only models whose probe verification is fresh and successful are
+        published.  Existing public models and route targets are never
+        disabled or re-prioritised.
+        """
+        stmt = (
+            select(UpstreamModel, ProviderEndpoint)
+            .join(
+                ProviderEndpoint,
+                UpstreamModel.provider_endpoint_id == ProviderEndpoint.id,
+            )
+            .where(
+                UpstreamModel.enabled == True,  # noqa: E712
+                UpstreamModel.selection_source != "manual_deny",
+                ProviderEndpoint.enabled == True,  # noqa: E712
+                ProviderEndpoint.auto_publish_models == True,  # noqa: E712
+            )
+        )
+        result = await self._db.execute(stmt)
+        rows = [(row[0], row[1]) for row in result.all()]
+
+        pub_svc = PublicModelService(self._db)
+        target_svc = RouteTargetService(self._db)
+        created_models = 0
+        created_targets = 0
+        now = _utcnow()
+
+        for upstream, endpoint in rows:
+            key = upstream.canonical_model_key or canonical_model_key(
+                upstream.upstream_model_id,
+            )
+            if not key or not is_valid_public_slug(key):
+                continue
+            if not self._is_verified_working(upstream, now):
+                continue
+
+            public = await pub_svc.get_by_pk(key)
+            if public is None:
+                public = await pub_svc.create_public_model(
+                    key,
+                    display_name=key,
+                    enabled=True,
+                    contract=reconcile_contract([upstream]),
+                    owner_id=endpoint.owner_id,
+                )
+                created_models += 1
+            elif public.owner_id != endpoint.owner_id:
+                continue
+
+            existing = {
+                t.upstream_model_id
+                for t in await target_svc.list_targets_for_public_model(key)
+            }
+            if upstream.id in existing:
+                continue
+            await target_svc.create_target(
+                key,
+                upstream.id,
+                priority=100,
+                weight=1.0,
+            )
+            created_targets += 1
+
+        await self._db.flush()
+        return {
+            "public_models_created": created_models,
+            "route_targets_created": created_targets,
+        }
+
+    @staticmethod
+    def _is_verified_working(upstream: UpstreamModel, now: datetime) -> bool:
+        """Return True when the model carries a fresh successful verification."""
+        caps = upstream.capabilities or {}
+        if caps.get("verification_status") != "working":
+            return False
+        raw = caps.get("verified_at")
+        if not raw:
+            return False
+        try:
+            verified_at = datetime.fromisoformat(str(raw))
+        except ValueError:
+            return False
+        if _as_utc(verified_at) > now:
+            return False
+        return now - _as_utc(verified_at) <= VERIFICATION_TTL
 
     async def _load_groupable_models(self) -> list[tuple[UpstreamModel, ProviderEndpoint]]:
         stmt = (

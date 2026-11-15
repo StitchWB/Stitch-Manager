@@ -15,7 +15,10 @@ async method signatures satisfies it.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Shared result types
@@ -75,6 +78,24 @@ class ClassifiedError:
     401/429 scoped to a single key)."""
 
     is_model_specific: bool = False
+
+    retry_at: datetime | None = None
+    """Absolute instant the credential may be retried, when the vendor states a
+    reset time (e.g. a daily quota that reopens at local midnight).  Takes
+    precedence over ``retry_after_seconds`` in the state machine."""
+
+    scope: str = "key"
+    """Reach of the failure: ``key`` | ``account`` | ``global`` | ``endpoint``."""
+
+    outcome_confirmed: bool | None = None
+    """``False`` when the vendor could not confirm whether the request ran, so a
+    retry may double-charge.  ``None`` when the vendor says nothing."""
+
+    error_code: str | None = None
+    """Vendor error code, kept for logs and for the credential status reason."""
+
+    gateway_attempts: int | None = None
+    """Number of upstream attempts reported by the provider gateway."""
 
 
 # ═══════════════════════════════════════════════════════════════════════════

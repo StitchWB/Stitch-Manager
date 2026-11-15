@@ -55,6 +55,7 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -102,6 +103,10 @@ class ProviderEndpoint(Base):
     )
     base_url: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    auto_publish_models: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+        comment="Publish verified models of this endpoint to the public catalog",
+    )
     default_headers: Mapped[dict | None] = mapped_column(
         JSON, comment="Extra headers sent with every request to this endpoint",
     )
@@ -197,6 +202,9 @@ class Credential(Base):
         comment="SHA256(endpoint_id + '\\0' + secret) — dedup key, never the raw secret",
     )
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    account_group: Mapped[str | None] = mapped_column(
+        String(200), nullable=True, index=True,
+    )
 
     # ── Runtime state machine ───────────────────────────────────────────────
     runtime_status: Mapped[str] = mapped_column(
@@ -211,6 +219,8 @@ class Credential(Base):
         UtcDateTime(), comment="Earliest retry time (from Retry-After, backoff, etc.)",
     )
     quota_reset_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
+    remaining_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    remaining_checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
@@ -288,6 +298,10 @@ class UpstreamModel(Base):
             "provider_endpoint_id", "upstream_model_id",
             name="uq_upstream_model_per_endpoint",
         ),
+        CheckConstraint(
+            "selection_source IN ('auto', 'manual_allow', 'manual_deny')",
+            name="ck_upstream_model_selection_source",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
@@ -314,6 +328,10 @@ class UpstreamModel(Base):
         ),
     )
     last_discovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    selection_source: Mapped[str] = mapped_column(
+        String, nullable=False, default="auto",
+    )
 
     # ── Capabilities ─────────────────────────────────────────────────────────
     # Each boolean capability is tri-state (True/False/unknown-via-NULL) and
@@ -585,4 +603,64 @@ class CredentialGroupShare(Base):
         return (
             f"<CredentialGroupShare credential_id={self.credential_id!r} "
             f"group_id={self.group_id!r}>"
+        )
+
+
+class AIGatewayAccountUsage(Base):
+    """Per-account daily usage ledger keyed by endpoint, account group and local day."""
+
+    __tablename__ = "ai_gateway_account_usage"
+
+    endpoint_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("ai_gateway_provider_endpoints.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    account_group: Mapped[str] = mapped_column(
+        String(200), primary_key=True,
+        comment="Credential.account_group, or '-' for ungrouped credentials",
+    )
+    day_local: Mapped[str] = mapped_column(
+        String(10), primary_key=True, comment="YYYY-MM-DD in the provider reset zone",
+    )
+    requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cached_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    spend_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AIGatewayAccountUsage endpoint={self.endpoint_id!r} "
+            f"group={self.account_group!r} day={self.day_local!r} "
+            f"requests={self.requests}>"
+        )
+
+
+class AIGatewayAccountCap(Base):
+    """Learned daily request ceiling per upstream account group."""
+
+    __tablename__ = "ai_gateway_account_caps"
+
+    endpoint_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("ai_gateway_provider_endpoints.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    account_group: Mapped[str] = mapped_column(String(200), primary_key=True)
+    observed_requests: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+        comment="Requests seen today when the provider first tripped its daily limit",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AIGatewayAccountCap endpoint={self.endpoint_id!r} "
+            f"group={self.account_group!r} observed={self.observed_requests!r}>"
         )

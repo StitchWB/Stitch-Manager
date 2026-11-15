@@ -27,6 +27,49 @@ RETENTION_DAYS = 30
 RequestStatus = Literal["success", "error"]
 
 
+class RequestLogFailureMetadata(str):
+    """Error class carrying machine-readable upstream failure metadata."""
+
+    error_code: str | None
+    outcome_confirmed: bool | None
+    gateway_attempts: int | None
+    upstream_request_id: str | None
+
+    def __new__(
+        cls,
+        category: str,
+        *,
+        error_code: str | None = None,
+        outcome_confirmed: bool | None = None,
+        gateway_attempts: int | None = None,
+        upstream_request_id: str | None = None,
+    ) -> RequestLogFailureMetadata:
+        instance = super().__new__(cls, category)
+        instance.error_code = error_code
+        instance.outcome_confirmed = outcome_confirmed
+        instance.gateway_attempts = gateway_attempts
+        instance.upstream_request_id = upstream_request_id
+        return instance
+
+
+def _failure_metadata(
+    error_class: str | None,
+    *,
+    error_code: str | None,
+    outcome_confirmed: bool | None,
+    gateway_attempts: int | None,
+    upstream_request_id: str | None,
+) -> tuple[str | None, bool | None, int | None, str | None]:
+    if isinstance(error_class, RequestLogFailureMetadata):
+        return (
+            error_code if error_code is not None else error_class.error_code,
+            outcome_confirmed if outcome_confirmed is not None else error_class.outcome_confirmed,
+            gateway_attempts if gateway_attempts is not None else error_class.gateway_attempts,
+            upstream_request_id if upstream_request_id is not None else error_class.upstream_request_id,
+        )
+    return error_code, outcome_confirmed, gateway_attempts, upstream_request_id
+
+
 async def record_request_log(
     session: AsyncSession,
     *,
@@ -40,8 +83,19 @@ async def record_request_log(
     owner_id: int | None = None,
     failover_count: int = 0,
     error_class: str | None = None,
+    error_code: str | None = None,
+    outcome_confirmed: bool | None = None,
+    gateway_attempts: int | None = None,
+    upstream_request_id: str | None = None,
 ) -> None:
     """Insert one usage row into the caller's session; the caller commits."""
+    error_code, outcome_confirmed, gateway_attempts, upstream_request_id = _failure_metadata(
+        error_class,
+        error_code=error_code,
+        outcome_confirmed=outcome_confirmed,
+        gateway_attempts=gateway_attempts,
+        upstream_request_id=upstream_request_id,
+    )
     session.add(AiProxyRequestLog(
         model=model,
         upstream_model=upstream_model,
@@ -57,6 +111,10 @@ async def record_request_log(
         latency_ms=latency_ms,
         failover_count=failover_count,
         error_class=error_class,
+        error_code=error_code,
+        outcome_confirmed=outcome_confirmed,
+        gateway_attempts=gateway_attempts,
+        upstream_request_id=upstream_request_id,
     ))
     await session.flush()
 
@@ -74,6 +132,10 @@ async def persist_request_log(
     owner_id: int | None = None,
     failover_count: int = 0,
     error_class: str | None = None,
+    error_code: str | None = None,
+    outcome_confirmed: bool | None = None,
+    gateway_attempts: int | None = None,
+    upstream_request_id: str | None = None,
 ) -> None:
     """Write one row in its own write session; failures never reach the caller."""
     async def _write(session: AsyncSession) -> None:
@@ -89,6 +151,10 @@ async def persist_request_log(
             owner_id=owner_id,
             failover_count=failover_count,
             error_class=error_class,
+            error_code=error_code,
+            outcome_confirmed=outcome_confirmed,
+            gateway_attempts=gateway_attempts,
+            upstream_request_id=upstream_request_id,
         )
     try:
         await run_in_session(_write)

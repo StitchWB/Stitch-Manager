@@ -24,6 +24,7 @@ jest.mock('@/lib/backend/modules/opencodeConfig', () => ({
 
 const mockSaveConnection = jest.fn();
 const mockFetchEndpoints = jest.fn();
+const mockUpdateCredential = jest.fn();
 const mockEndpoints: ProviderEndpoint[] = [];
 
 jest.mock('@/stores/aiGateway', () => {
@@ -32,6 +33,7 @@ jest.mock('@/stores/aiGateway', () => {
     credentials: [],
     saveConnection: mockSaveConnection,
     fetchEndpoints: mockFetchEndpoints,
+    updateCredential: mockUpdateCredential,
   });
   return {
     useAiGatewayStore: Object.assign(
@@ -1057,5 +1059,36 @@ describe('PasteKeysDialog unified key recognition', () => {
       ).toBe('api.reformboss.com');
     });
     expect((textarea as HTMLTextAreaElement).value).toBe('mr-live-SyntheticKeyForLocalCheck123');
+  });
+
+  it('renders account group input and updates credentials with accountGroup on save', async () => {
+    const user = userEvent.setup();
+    mockSaveConnection.mockResolvedValueOnce({
+      endpoint: createdEndpoint,
+      endpointCreated: true,
+      credentials: [{ id: 'cred-1' } as Credential, { id: 'cred-2' } as Credential],
+      credentialsCreated: 2,
+      credentialsExisting: 0,
+    });
+    mockUpdateCredential.mockResolvedValue({ id: 'cred-1', accountGroup: 'team-alpha' } as Credential);
+
+    renderDialog();
+
+    await selectPreset(user, 'OpenAI');
+
+    const textarea = screen.getByPlaceholderText('aiHub.pasteFirst.emptyHint');
+    await user.type(textarea, 'sk-live-testkey-12345678901234{Enter}sk-live-testkey-98765432109876');
+
+    const groupInput = screen.getByLabelText('aiHub.pasteFirst.accountGroupLabel');
+    expect(groupInput).toBeDefined();
+    await user.type(groupInput, '  team-alpha  ');
+
+    await user.click(screen.getByRole('button', { name: 'aiHub.pasteFirst.saveAction' }));
+
+    await waitFor(() => {
+      expect(mockSaveConnection).toHaveBeenCalled();
+      expect(mockUpdateCredential).toHaveBeenCalledWith({ id: 'cred-1', accountGroup: 'team-alpha' });
+      expect(mockUpdateCredential).toHaveBeenCalledWith({ id: 'cred-2', accountGroup: 'team-alpha' });
+    });
   });
 });

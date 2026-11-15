@@ -40,6 +40,8 @@ export interface Credential {
   statusReason?: string | null;
   nextRetryAt?: string | null;
   quotaResetAt?: string | null;
+  remainingUsd?: number | null;
+  remainingCheckedAt?: string | null;
   lastSuccessAt?: string | null;
   lastFailureAt?: string | null;
   consecutiveFailures: number;
@@ -48,6 +50,7 @@ export interface Credential {
   // ── Wave-2 scope fields (FE renders scope chips from these) ──────────────
   /** Owner user id. null = instance-shared (legacy) row. */
   ownerId?: number | null;
+  accountGroup?: string | null;
   /** Group ids the credential is shared to (camelCase wire alias). */
   sharedGroupIds?: string[];
   /** Group names matching `sharedGroupIds`, for chip labels. */
@@ -63,6 +66,8 @@ export interface UpstreamModel {
   discoverySource: string;
   canonicalModelKey?: string | null;
   lastDiscoveredAt?: string | null;
+  lastSeenAt?: string | null;
+  selectionSource?: string | null;
   capabilities?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt?: string | null;
@@ -178,6 +183,7 @@ export async function createCredential(params: {
   label?: string | null;
   authType: string;
   secret: string;
+  accountGroup?: string | null;
 }): Promise<Credential> {
   return safeInvoke('create_credential', params);
 }
@@ -196,6 +202,7 @@ export async function updateCredential(params: {
   id: string;
   label?: string | null;
   enabled?: boolean;
+  accountGroup?: string | null;
 }): Promise<Credential | null> {
   return safeInvoke('update_credential', params);
 }
@@ -480,3 +487,48 @@ export async function proxyKeysCreate(params: {
 export async function proxyKeysRevoke(id: string): Promise<{ success: boolean }> {
   return safeInvoke('proxy_keys_revoke', { id }, { noCache: true });
 }
+
+export interface ModelProbeRow {
+  model: string;
+  ok: boolean;
+  reason: string;
+  latencyMs?: number | null;
+  multimodalOk?: boolean | null;
+  text?: string | null;
+}
+
+export interface ProbeEndpointModelsRequest {
+  [key: string]: unknown;
+  credentialId?: string | null;
+  endpointId?: string | null;
+  baseUrl?: string | null;
+  apiKey?: string | null;
+  adapterType?: string | null;
+  models?: string[] | null;
+  filterPrefix?: string | null;
+  limit?: number;
+  concurrency?: number;
+  maxTokens?: number;
+  prompt?: string | null;
+  includeMultimodal?: boolean;
+  visionModels?: string[] | null;
+  budgetSeconds?: number;
+}
+
+export interface ProbeEndpointModelsResult {
+  ok: boolean;
+  endpointId?: string | null;
+  credentialId?: string | null;
+  catalogCount?: number;
+  probedCount?: number;
+  truncated?: boolean;
+  models?: ModelProbeRow[];
+  error?: string | null;
+}
+
+export async function probeEndpointModels(
+  params: ProbeEndpointModelsRequest,
+): Promise<ProbeEndpointModelsResult> {
+  return safeInvoke('probe_endpoint_models', params, { noCache: true });
+}
+

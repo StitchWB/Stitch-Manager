@@ -536,6 +536,7 @@ export default function AiProvidersPage() {
                     )}
                     {tab === 'models' && (
                       <ProviderModelsPanel
+                        endpointId={selectedEndpoint?.id}
                         models={selectedModels}
                         loading={loading.upstreamModels}
                         busy={false}
@@ -545,6 +546,7 @@ export default function AiProvidersPage() {
                         onAddModel={modelId => handleAddModel(modelId)}
                         onExposeModel={setExposeModel}
                         published={published}
+                        onPublishedChange={() => void loadPublished()}
                       />
                     )}
                     {tab === 'settings' && (

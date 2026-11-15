@@ -140,6 +140,8 @@ async def cmd_update_credential(db: AsyncSession, params: dict) -> Any:
     """
     req = CredentialUpdateRequest.model_validate(params)
     updates = req.model_dump(exclude={"id"}, exclude_none=True)
+    if "account_group" in req.model_fields_set:
+        updates["account_group"] = req.account_group
     owner_id = _caller_uid(params)
 
     result = await db.execute(

@@ -37,6 +37,7 @@ async def cmd_create_provider_endpoint(db: AsyncSession, params: dict) -> Any:
         adapter_type=req.adapter_type,
         base_url=req.base_url,
         enabled=req.enabled,
+        auto_publish_models=req.auto_publish_models,
         default_headers=req.default_headers,
         discovery_policy=req.discovery_policy,
         health_policy=req.health_policy,

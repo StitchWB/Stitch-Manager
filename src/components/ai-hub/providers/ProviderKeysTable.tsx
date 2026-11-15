@@ -1,19 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ru as dateFnsRu } from 'date-fns/locale';
-import { KeyRound, Plus, Search } from 'lucide-react';
+import { Clock, KeyRound, Plus, Search } from 'lucide-react';
 import { Badge, Button, Checkbox, EmptyState, Input, SkeletonLoader, TabButton, Toggle } from '@/components/ui';
 import { useVirtualSlice } from '@/hooks/useVirtualSlice';
 import { useAppStore } from '@/stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Credential } from '@/lib/backend/modules/aiGateway';
-import { credStatusMeta, isProblemStatus } from './viewModel';
+import {
+  credStatusMeta,
+  formatRemainingFreshness,
+  formatRemainingUsd,
+  formatResetTime,
+  isFutureReset,
+  isProblemStatus,
+} from './viewModel';
 
 const ROW_HEIGHT = 56;
 
 const ROW_GRID =
-  'grid items-center gap-3 grid-cols-[auto_minmax(7rem,1fr)_minmax(0,10rem)_minmax(0,7rem)_auto]';
+  'grid items-center gap-3 grid-cols-[auto_minmax(6.5rem,1.2fr)_minmax(0,6rem)_minmax(0,5.5rem)_minmax(0,8rem)_minmax(0,5.5rem)_auto]';
 
 type KeyFilter = 'all' | 'problems';
 
@@ -64,6 +71,7 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
     return credentials.filter(
       credential =>
         (credential.label ?? '').toLowerCase().includes(needle) ||
+        (credential.accountGroup ?? '').toLowerCase().includes(needle) ||
         credential.fingerprint.toLowerCase().includes(needle)
     );
   }, [credentials, query]);
@@ -189,6 +197,12 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
               {t('aiHub.providersPage.colKey')}
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+              {t('aiHub.providersPage.colGroup')}
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+              {t('aiHub.providersPage.colQuota')}
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 truncate">
               {t('aiHub.providersPage.colStatus')}
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 truncate">
@@ -201,6 +215,11 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
               const meta = credStatusMeta(credential.runtimeStatus);
               const checked = selectedIds.includes(credential.id);
               const hint = retryHint(credential.nextRetryAt, locale);
+              const isQuotaExhaustedWithFutureReset =
+                credential.runtimeStatus === 'quota_exhausted' && isFutureReset(credential.quotaResetAt);
+              const resetTime = isQuotaExhaustedWithFutureReset ? formatResetTime(credential.quotaResetAt) : null;
+              const formattedUsd = formatRemainingUsd(credential.remainingUsd);
+              const freshness = formatRemainingFreshness(credential.remainingCheckedAt);
 
               return (
                 <div
@@ -220,6 +239,41 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
                     title={credential.label ?? credential.fingerprint}
                   >
                     {credential.label ?? credential.fingerprint.slice(0, 12)}
+                  </span>
+                  <span className="truncate text-[11px]">
+                    {credential.accountGroup ? (
+                      <Badge size="sm" variant="slate" className="max-w-full truncate" title={credential.accountGroup}>
+                        {credential.accountGroup}
+                      </Badge>
+                    ) : (
+                      <span className="text-slate-600">—</span>
+                    )}
+                  </span>
+                  <span className="truncate text-[11px]">
+                    {isQuotaExhaustedWithFutureReset && resetTime ? (
+                      <Badge
+                        size="sm"
+                        variant="warning"
+                        className="max-w-full truncate gap-1"
+                        title={
+                          credential.quotaResetAt
+                            ? `${t('aiHub.providersPage.quotaResetTooltip')}: ${credential.quotaResetAt}`
+                            : t('aiHub.providersPage.quotaResetTooltip')
+                        }
+                      >
+                        <Clock size={10} className="shrink-0" />
+                        <span>{resetTime}</span>
+                      </Badge>
+                    ) : formattedUsd !== null ? (
+                      <span className="inline-flex items-baseline gap-1 truncate max-w-full" title={formattedUsd}>
+                        <span className="font-mono font-medium text-slate-200 truncate">{formattedUsd}</span>
+                        {freshness ? (
+                          <span className="text-[10px] text-slate-500 shrink-0 font-normal">{freshness}</span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <span className="text-slate-600">—</span>
+                    )}
                   </span>
                   <span className="flex flex-col gap-0.5 min-w-0 overflow-hidden">
                     <span className={cn('inline-flex items-center gap-1.5 min-w-0', meta.textClass)}>

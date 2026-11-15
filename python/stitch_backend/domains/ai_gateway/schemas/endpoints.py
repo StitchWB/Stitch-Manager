@@ -40,6 +40,7 @@ class ProviderEndpointCreateRequest(BaseModel):
     adapter_type: str = Field(alias="adapterType")
     base_url: str = Field(alias="baseUrl", max_length=2000)
     enabled: bool = True
+    auto_publish_models: bool = Field(False, alias="autoPublishModels")
     default_headers: dict[str, Any] | None = Field(None, alias="defaultHeaders")
     discovery_policy: dict[str, Any] | None = Field(None, alias="discoveryPolicy")
     health_policy: dict[str, Any] | None = Field(None, alias="healthPolicy")
@@ -142,6 +143,7 @@ class ProviderEndpointUpdateRequest(BaseModel):
     adapter_type: str | None = Field(None, alias="adapterType")
     base_url: str | None = Field(None, alias="baseUrl")
     enabled: bool | None = None
+    auto_publish_models: bool | None = Field(None, alias="autoPublishModels")
     default_headers: dict[str, Any] | None = Field(None, alias="defaultHeaders")
     discovery_policy: dict[str, Any] | None = Field(None, alias="discoveryPolicy")
     health_policy: dict[str, Any] | None = Field(None, alias="healthPolicy")
@@ -200,6 +202,7 @@ class ProviderEndpointResponse(BaseModel):
     adapter_type: str = Field(alias="adapterType")
     base_url: str = Field(alias="baseUrl")
     enabled: bool
+    auto_publish_models: bool = Field(alias="autoPublishModels")
     default_headers: dict[str, Any] | None = Field(None, alias="defaultHeaders")
     discovery_policy: dict[str, Any] | None = Field(None, alias="discoveryPolicy")
     health_policy: dict[str, Any] | None = Field(None, alias="healthPolicy")
@@ -217,6 +220,7 @@ class ProviderEndpointResponse(BaseModel):
             adapter_type=obj.adapter_type,
             base_url=obj.base_url,
             enabled=obj.enabled,
+            auto_publish_models=obj.auto_publish_models,
             default_headers=obj.default_headers,
             discovery_policy=obj.discovery_policy,
             health_policy=obj.health_policy,

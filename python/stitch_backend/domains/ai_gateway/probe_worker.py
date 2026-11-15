@@ -35,6 +35,7 @@ from stitch_backend.domains.ai_gateway.adapters.base import (
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialModelAccess,
+    ProviderEndpoint,
     _utcnow,
 )
 from stitch_backend.domains.ai_gateway.service import (
@@ -63,6 +64,9 @@ _PROBE_STATES = (
 
 # у non-velly кред метку temporarily_unavailable не пересчитывает никто — это односторонняя дверь
 _MODEL_MARK_TTL_SECONDS = 600
+QUOTA_PROBE_INTERVAL_SECONDS = 600
+_QUOTA_PROBE_CONCURRENCY = 4
+_QUOTA_ADAPTER_TYPE = "openai_compatible"
 
 
 class ProbeWorker:
@@ -144,33 +148,168 @@ class ProbeWorker:
 
         # 1. Load probe targets (read-only).
         targets = await cls._load_probe_targets(include_active=include_active)
-        if not targets:
+        if targets:
+            logger.info("ProbeWorker: probing %d credentials", len(targets))
+
+            # 2. Probe each credential OUTSIDE any DB session (HTTP I/O).
+            results: list[dict[str, Any]] = []
+            for target in targets:
+                try:
+                    result = await cls._probe_target(target)
+                    results.append(result)
+                except Exception:
+                    logger.exception(
+                        "ProbeWorker: failed for credential %s",
+                        target["credential_id"],
+                    )
+
+            # 3. Batch-transition all credentials in one short WRITE session.
+            if results:
+                try:
+                    await cls._persist_probe_results(results)
+                except Exception:
+                    logger.exception("ProbeWorker: failed to batch persist results")
+        else:
             logger.debug("ProbeWorker: no credentials to probe")
-            return
 
-        logger.info("ProbeWorker: probing %d credentials", len(targets))
-
-        # 2. Probe each credential OUTSIDE any DB session (HTTP I/O).
-        results: list[dict[str, Any]] = []
-        for target in targets:
-            try:
-                result = await cls._probe_target(target)
-                results.append(result)
-            except Exception:
-                logger.exception(
-                    "ProbeWorker: failed for credential %s",
-                    target["credential_id"],
-                )
-
-        # 3. Batch-transition all credentials in one short WRITE session.
-        if results:
-            try:
-                await cls._persist_probe_results(results)
-            except Exception:
-                logger.exception("ProbeWorker: failed to batch persist results")
+        await cls._probe_quota_all()
 
         elapsed = time.monotonic() - start
         logger.info("ProbeWorker: pass complete in %.1fs", elapsed)
+
+    @classmethod
+    async def _load_quota_targets(cls) -> list[dict[str, Any]]:
+        """Load enabled OpenAI-compatible credentials whose quota data is stale."""
+        async def _op(session: AsyncSession) -> list[dict[str, Any]]:
+            now = _utcnow()
+            cutoff = now - timedelta(seconds=QUOTA_PROBE_INTERVAL_SECONDS)
+            result = await session.execute(
+                select(Credential, ProviderEndpoint)
+                .join(
+                    ProviderEndpoint,
+                    Credential.provider_endpoint_id == ProviderEndpoint.id,
+                )
+                .where(
+                    Credential.enabled.is_(True),
+                    ProviderEndpoint.enabled.is_(True),
+                    ProviderEndpoint.adapter_type == _QUOTA_ADAPTER_TYPE,
+                    or_(
+                        Credential.remaining_checked_at.is_(None),
+                        Credential.remaining_checked_at < cutoff,
+                    ),
+                ),
+            )
+            cred_svc = CredentialService(session)
+            targets: list[dict[str, Any]] = []
+            for cred, endpoint in result.all():
+                secret = await cred_svc.resolve_invocation_secret(cred)
+                if secret is None:
+                    logger.warning(
+                        "ProbeWorker: no secret for credential %s", cred.id,
+                    )
+                    continue
+                targets.append({
+                    "credential_id": cred.id,
+                    "endpoint_id": endpoint.id,
+                    "base_url": endpoint.base_url,
+                    "default_headers": endpoint.default_headers,
+                    "secret": secret,
+                })
+            return targets
+
+        return await run_in_read_session(_op)
+
+    @classmethod
+    async def _probe_quota_all(cls) -> None:
+        """Refresh free billing quota data without changing healthy-key state."""
+        targets = await cls._load_quota_targets()
+        if not targets:
+            return
+
+        by_endpoint: dict[str, list[dict[str, Any]]] = {}
+        for target in targets:
+            by_endpoint.setdefault(target["endpoint_id"], []).append(target)
+
+        results: list[dict[str, Any]] = []
+        for endpoint_targets in by_endpoint.values():
+            semaphore = asyncio.Semaphore(_QUOTA_PROBE_CONCURRENCY)
+
+            async def _probe(
+                target: dict[str, Any],
+                semaphore: asyncio.Semaphore = semaphore,
+            ) -> None:
+                async with semaphore:
+                    try:
+                        result = await cls._probe_quota_target(target)
+                    except Exception:
+                        logger.exception(
+                            "ProbeWorker: quota probe failed for credential %s",
+                            target["credential_id"],
+                        )
+                        return
+                    results.append(result)
+
+            await asyncio.gather(*(_probe(target) for target in endpoint_targets))
+
+        if results:
+            await cls._persist_quota_results(results)
+
+    @classmethod
+    async def _probe_quota_target(cls, target: dict[str, Any]) -> dict[str, Any]:
+        adapter = get_adapter(_QUOTA_ADAPTER_TYPE)
+        probe_quota = getattr(adapter, "probe_quota", None)
+        if probe_quota is None:
+            return {
+                "credential_id": target["credential_id"],
+                "endpoint_id": target["endpoint_id"],
+                "ok": False,
+                "http_status": 0,
+                "remaining_usd": None,
+                "suspended": False,
+                "classified": None,
+            }
+        result = await probe_quota(
+            base_url=target["base_url"],
+            secret=target["secret"],
+            default_headers=target["default_headers"],
+        )
+        return {
+            "credential_id": target["credential_id"],
+            "endpoint_id": target["endpoint_id"],
+            "ok": result.ok,
+            "http_status": result.http_status,
+            "remaining_usd": result.remaining_usd,
+            "suspended": result.suspended,
+            "classified": result.classified,
+        }
+
+    @classmethod
+    async def _persist_quota_results(cls, results: list[dict[str, Any]]) -> None:
+        """Persist quota freshness and apply only suspension transitions."""
+        from stitch_backend.domains.ai_gateway import credential_state
+
+        async def _op(session: AsyncSession) -> None:
+            for result in results:
+                credential = await session.get(Credential, result["credential_id"])
+                if credential is None:
+                    continue
+                credential.remaining_checked_at = _utcnow()
+                if result["ok"]:
+                    credential.remaining_usd = result["remaining_usd"]
+                    await session.flush()
+                    continue
+                if result["suspended"]:
+                    classified = result["classified"]
+                    if classified is not None:
+                        await credential_state.transition_credential(
+                            session,
+                            result["credential_id"],
+                            error=classified,
+                            http_status=result["http_status"],
+                        )
+                await session.flush()
+
+        await run_in_session(_op)
 
     @classmethod
     async def _expire_stale_model_marks(cls) -> None:

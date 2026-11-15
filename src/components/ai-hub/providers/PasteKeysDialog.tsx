@@ -143,9 +143,11 @@ function groupTitle(group: ProviderGroup, url: string): string {
 export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysDialogProps) {
   const saveConnection = useAiGatewayStore(state => state.saveConnection);
   const fetchEndpoints = useAiGatewayStore(state => state.fetchEndpoints);
+  const updateCredential = useAiGatewayStore(state => state.updateCredential);
   const endpoints = useAiGatewayStore(state => state.endpoints);
 
   const [text, setText] = useState('');
+  const [accountGroup, setAccountGroup] = useState('');
   const [presetId, setPresetId] = useState(CUSTOM_PRESET_ID);
   const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -177,6 +179,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     initializedScope.current = scope;
     queueMicrotask(() => {
       setText('');
+      setAccountGroup('');
       setResults({});
       setPresetId(CUSTOM_PRESET_ID);
       setName(endpoint?.name ?? '');
@@ -480,6 +483,12 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
             auth: authType === 'none' ? { type: 'none' } : { type: 'api_key', secrets: accepted },
           };
       const result = await saveConnection(params);
+      const trimmedGroup = accountGroup.trim();
+      if (trimmedGroup && result.credentials?.length) {
+        await Promise.allSettled(
+          result.credentials.map(c => updateCredential({ id: c.id, accountGroup: trimmedGroup }))
+        );
+      }
       await fetchEndpoints();
       if (authType === 'none') {
         toast.success(t('aiHub.pasteFirst.savedToast'));
@@ -502,7 +511,7 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
     } finally {
       setSaving(false);
     }
-  }, [canSave, authType, keys, results, scopedEndpoint, name, baseUrl, adapterType, headerRows, saveConnection, fetchEndpoints, onClose, onAdded]);
+  }, [canSave, authType, keys, results, scopedEndpoint, name, baseUrl, adapterType, headerRows, accountGroup, saveConnection, updateCredential, fetchEndpoints, onClose, onAdded]);
 
   const addHeaderRow = useCallback(() => {
     setHeaderRows(prev => [...prev, { id: Date.now() + prev.length, name: '', value: '' }]);
@@ -876,6 +885,13 @@ export function PasteKeysDialog({ open, endpoint, onClose, onAdded }: PasteKeysD
             />
 
             <p className="text-[11px] text-slate-500">{t('aiHub.pasteFirst.modelsHint')}</p>
+
+            <Input
+              label={t('aiHub.pasteFirst.accountGroupLabel')}
+              value={accountGroup}
+              onChange={event => setAccountGroup(event.target.value)}
+              placeholder={t('aiHub.pasteFirst.accountGroupPlaceholder')}
+            />
 
             {keys.length > 0 && (
               <div className="max-h-48 space-y-1 overflow-auto rounded-md border border-white/[0.06] bg-black/20 p-2">

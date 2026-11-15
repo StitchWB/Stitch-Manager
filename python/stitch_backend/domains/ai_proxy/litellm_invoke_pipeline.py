@@ -7,11 +7,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import HTTPException
 
+from stitch_backend.domains.ai_gateway.adapters.error_vocab import parse_envelope
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_proxy.holone_inspector import (
     default_engine as _holone_default_engine,
 )
 from stitch_backend.domains.ai_proxy.litellm_response_parsing import _json_object, _usage_split
+from stitch_backend.domains.ai_proxy.request_logs import RequestLogFailureMetadata
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -57,6 +59,24 @@ def _response_usage(response: Any) -> tuple[int, int]:
     return (
         max(getattr(usage, "prompt_tokens", 0), getattr(usage, "input_tokens", 0)),
         max(getattr(usage, "completion_tokens", 0), getattr(usage, "output_tokens", 0)),
+    )
+
+
+def _failure_metadata(classified: Any, exc: BaseException) -> RequestLogFailureMetadata:
+    response = getattr(exc, "response", None)
+    body_text = ""
+    if response is not None:
+        try:
+            body_text = response.text
+        except Exception:  # noqa: BLE001
+            body_text = ""
+    envelope = parse_envelope(body_text)
+    return RequestLogFailureMetadata(
+        getattr(classified, "category", type(exc).__name__),
+        error_code=getattr(classified, "error_code", None),
+        outcome_confirmed=getattr(classified, "outcome_confirmed", None),
+        gateway_attempts=getattr(classified, "gateway_attempts", None),
+        upstream_request_id=envelope.request_id if envelope else None,
     )
 
 
@@ -212,7 +232,7 @@ async def invoke_via_gateway(
         classified = routing_result.adapter.classify_error(exc)
         outcome.routing_result = routing_result
         outcome.ok = False
-        outcome.error_class = getattr(classified, "category", type(exc).__name__)
+        outcome.error_class = _failure_metadata(classified, exc)
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(
@@ -363,7 +383,7 @@ async def invoke_via_gateway_messages(
         classified = routing_result.adapter.classify_error(exc)
         outcome.routing_result = routing_result
         outcome.ok = False
-        outcome.error_class = getattr(classified, "category", type(exc).__name__)
+        outcome.error_class = _failure_metadata(classified, exc)
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(
@@ -520,7 +540,7 @@ async def invoke_via_gateway_responses(
         classified = routing_result.adapter.classify_error(exc)
         outcome.routing_result = routing_result
         outcome.ok = False
-        outcome.error_class = getattr(classified, "category", type(exc).__name__)
+        outcome.error_class = _failure_metadata(classified, exc)
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from fastapi import HTTPException
@@ -27,6 +30,7 @@ from stitch_backend.domains.ai_proxy.cost_tracker import get_cost_tracker
 from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
 from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
 from stitch_backend.domains.ai_proxy.litellm_errors import is_managed_routing_error
+from stitch_backend.domains.ai_proxy.litellm_gateway import _earliest_recovery_seconds
 from stitch_backend.domains.ai_proxy.litellm_invoke_pipeline import (
     invoke_via_gateway,
     invoke_via_gateway_messages,
@@ -94,6 +98,13 @@ __all__ = [
 ]
 
 
+_HOLD_BUDGET_STREAM_S = 45.0
+_HOLD_BUDGET_NONSTREAM_S = 15.0
+_HOLD_BUDGET_MAX_S = 120.0
+_MAX_UPSTREAM_INVOCATIONS = 8
+_ROUND_BACKOFF_CAP_S = 10.0
+
+
 _STATUS_BY_CATEGORY: dict[str, int] = {
     "quota_exhausted": 429,
     "rate_limited": 429,
@@ -129,6 +140,31 @@ def _canonical_failure_message(model: str, category: str) -> str:
 def _is_client_error(exc: HTTPException) -> bool:
     status = exc.status_code
     return 400 <= status < 500 and status != 429
+
+
+class _BudgetExhaustedError(UpstreamFailureError):
+    def __init__(self, message: str, *, reason: str, retry_after: int | None) -> None:
+        super().__init__(message, reason=reason, status_code=503)
+        self.retry_after = retry_after
+
+
+def _hint_seconds(error: ClassifiedError | None) -> float:
+    if error is None:
+        return 0.0
+    if error.retry_after_seconds is not None:
+        return max(0.0, float(error.retry_after_seconds))
+    if error.retry_at is not None:
+        retry_at = error.retry_at
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())
+    return 0.0
+
+
+def _backoff_seconds(round_no: int, hint: float) -> float:
+    exponent = min(round_no - 1, 4)
+    draw = random.uniform(0.0, min(2.0 ** exponent, _ROUND_BACKOFF_CAP_S))
+    return max(hint, draw)
 
 
 class CompletionRouter(Protocol):
@@ -308,7 +344,17 @@ class LiteLLMExecutor:
         model: str,
         last_classified: ClassifiedError | None,
         last_routing_error: RoutingError | None,
+        *,
+        retry_after: int | None = None,
     ) -> RoutingError:
+        if retry_after is not None:
+            reason = last_classified.category if last_classified is not None else "no_route"
+            message = (
+                _canonical_failure_message(model, reason)
+                if last_classified is not None
+                else f"No route available for model: {model}"
+            )
+            return _BudgetExhaustedError(message, reason=reason, retry_after=retry_after)
         if last_classified is not None:
             return UpstreamFailureError(
                 _canonical_failure_message(model, last_classified.category),
@@ -323,6 +369,21 @@ class LiteLLMExecutor:
             status_code=503,
         )
 
+    def _hold_budget(self, payload: GatewayRequest, max_wait_seconds: int | None) -> float:
+        if max_wait_seconds is None:
+            budget = _HOLD_BUDGET_STREAM_S if payload.stream else _HOLD_BUDGET_NONSTREAM_S
+        else:
+            budget = float(max_wait_seconds)
+        return min(max(budget, 0.0), _HOLD_BUDGET_MAX_S)
+
+    async def _final_retry_after(self, model: str, budget_expired: bool) -> int | None:
+        if not budget_expired:
+            return None
+        recovery = await _earliest_recovery_seconds(model)
+        if recovery is None:
+            return None
+        return min(max(int(recovery), 1), 3600)
+
     async def _run_failover(
         self,
         payload: GatewayRequest,
@@ -331,85 +392,151 @@ class LiteLLMExecutor:
         pool: PoolScope | None = None,
         *,
         outcome: _RequestOutcome,
+        max_wait_seconds: int | None = None,
     ) -> JsonObject | Response:
-        """Walk candidate models and credentials until one succeeds.
+        """Walk candidate models and credentials in budgeted rounds.
 
         On total failure raises a canonical :class:`RoutingError` (never a raw
         upstream error), so the HTTP layer answers with one stable envelope.
         """
         requested_model = payload.model or ""
         start_time = time.time()
+        budget = self._hold_budget(payload, max_wait_seconds)
+        deadline = start_time + budget
+        parking_enabled = budget > 0
+        model_chain = self._model_chain(requested_model)
         failed_attempts = 0
+        invocations = 0
+        round_no = 0
         last_attempted: Any | None = None
         last_classified: ClassifiedError | None = None
         last_routing_error: RoutingError | None = None
         served_model = requested_model
+        budget_expired = False
 
-        for model_index, model in enumerate(self._model_chain(requested_model)):
-            route_payload = (
-                payload
-                if model == requested_model
-                else payload.model_copy(update={"model": model})
-            )
-            try:
-                routing_results = await self._try_ai_gateway_route(route_payload, pool=pool)
-            except (QuotaExceededError, ContextLengthExceededError):
-                raise
-            except RoutingError as exc:
-                last_routing_error = exc
-                continue
-            if routing_results is None:
-                continue
+        while True:
+            round_no += 1
+            round_invocations = 0
+            round_hint = 0.0
+            stop_round = False
+            blocked_groups: set[str] = set()
 
-            for routing_result in routing_results:
-                if not await self._is_endpoint_available(routing_result.endpoint.id):
-                    logger.debug(
-                        "Skipping candidate on endpoint %s — circuit open",
-                        routing_result.endpoint.id,
-                    )
-                    continue
-                last_attempted = routing_result
+            for model_index, model in enumerate(model_chain):
+                route_payload = (
+                    payload
+                    if model == requested_model
+                    else payload.model_copy(update={"model": model})
+                )
                 try:
-                    result = await invoke(routing_result)
-                except HTTPException as e:
-                    if _is_client_error(e):
-                        raise
-                    failed_attempts += 1
-                    last_classified = routing_result.adapter.classify_error(
-                        e, http_status=e.status_code,
-                    )
-                    logger.warning(
-                        "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
-                        model, routing_result.credential.id[:8],
-                        _sanitize_error(e, secret=routing_result.secret),
-                    )
+                    routing_results = await self._try_ai_gateway_route(route_payload, pool=pool)
+                except (QuotaExceededError, ContextLengthExceededError):
+                    raise
+                except RoutingError as exc:
+                    last_routing_error = exc
                     continue
-                except Exception as e:
-                    failed_attempts += 1
-                    last_classified = routing_result.adapter.classify_error(e)
-                    logger.warning(
-                        "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
-                        model, routing_result.credential.id[:8],
-                        _sanitize_error(e, secret=routing_result.secret),
-                    )
+                if routing_results is None:
                     continue
-                served_model = model
-                outcome.failover_count = failed_attempts
-                self._record_request_trace(
-                    model=model,
-                    routing_result=routing_result,
-                    latency_ms=(time.time() - start_time) * 1000.0,
-                    failover_count=failed_attempts,
-                    status="success",
-                )
-                await self._emit_failover_event(
-                    requested=requested_model,
-                    served=served_model,
-                    routing_result=routing_result,
-                    failover_count=failed_attempts,
-                    used_fallback=model_index > 0,
-                )
-                return result
+
+                for routing_result in routing_results:
+                    group = getattr(routing_result.credential, "account_group", None)
+                    if group is not None and group in blocked_groups:
+                        continue
+                    if invocations >= _MAX_UPSTREAM_INVOCATIONS:
+                        stop_round = True
+                        break
+                    if parking_enabled and invocations > 0 and time.time() >= deadline:
+                        budget_expired = True
+                        stop_round = True
+                        break
+                    if not await self._is_endpoint_available(routing_result.endpoint.id):
+                        logger.debug(
+                            "Skipping candidate on endpoint %s — circuit open",
+                            routing_result.endpoint.id,
+                        )
+                        continue
+                    last_attempted = routing_result
+                    invocations += 1
+                    round_invocations += 1
+                    try:
+                        result = await invoke(routing_result)
+                    except HTTPException as e:
+                        if _is_client_error(e):
+                            raise
+                        failed_attempts += 1
+                        last_classified = routing_result.adapter.classify_error(
+                            e, http_status=e.status_code,
+                        )
+                        logger.warning(
+                            "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
+                            model, routing_result.credential.id[:8],
+                            _sanitize_error(e, secret=routing_result.secret),
+                        )
+                    except Exception as e:
+                        failed_attempts += 1
+                        last_classified = routing_result.adapter.classify_error(e)
+                        logger.warning(
+                            "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
+                            model, routing_result.credential.id[:8],
+                            _sanitize_error(e, secret=routing_result.secret),
+                        )
+                    else:
+                        served_model = model
+                        outcome.failover_count = failed_attempts
+                        self._record_request_trace(
+                            model=model,
+                            routing_result=routing_result,
+                            latency_ms=(time.time() - start_time) * 1000.0,
+                            failover_count=failed_attempts,
+                            status="success",
+                        )
+                        await self._emit_failover_event(
+                            requested=requested_model,
+                            served=served_model,
+                            routing_result=routing_result,
+                            failover_count=failed_attempts,
+                            used_fallback=model_index > 0,
+                        )
+                        return result
+
+                    round_hint = _hint_seconds(last_classified)
+                    if last_classified.scope == "global":
+                        stop_round = True
+                        break
+                    if last_classified.scope == "account" and group is not None:
+                        blocked_groups.add(group)
+
+                if stop_round:
+                    break
+
+            if round_invocations == 0:
+                recovery = await _earliest_recovery_seconds(requested_model)
+                remaining = deadline - time.time()
+                if (
+                    parking_enabled
+                    and recovery is not None
+                    and 0 < recovery <= remaining
+                ):
+                    await asyncio.sleep(recovery)
+                    if time.time() >= deadline:
+                        budget_expired = True
+                        break
+                    continue
+                budget_expired = parking_enabled
+                break
+
+            if stop_round and invocations >= _MAX_UPSTREAM_INVOCATIONS:
+                budget_expired = True
+                break
+            if not parking_enabled:
+                break
+            if stop_round and budget_expired:
+                break
+
+            delay = _backoff_seconds(round_no, round_hint)
+            if time.time() + delay > deadline:
+                budget_expired = True
+                break
+            await asyncio.sleep(delay)
 
         outcome.failover_count = failed_attempts
         if outcome.routing_result is None:
@@ -421,7 +548,10 @@ class LiteLLMExecutor:
             failover_count=failed_attempts,
             status="error",
         )
-        raise self._final_error(requested_model, last_classified, last_routing_error)
+        retry_after = await self._final_retry_after(requested_model, budget_expired)
+        raise self._final_error(
+            requested_model, last_classified, last_routing_error, retry_after=retry_after,
+        )
 
     async def _persist_outcome(self, outcome: _RequestOutcome) -> None:
         if outcome.persisted:
@@ -477,6 +607,7 @@ class LiteLLMExecutor:
                 ),
                 pool=pool,
                 outcome=outcome,
+                max_wait_seconds=payload.max_wait_seconds,
             )
         except Exception as exc:
             outcome.error_class = outcome.error_class or type(exc).__name__
@@ -514,6 +645,7 @@ class LiteLLMExecutor:
                 ),
                 pool=pool,
                 outcome=outcome,
+                max_wait_seconds=payload.max_wait_seconds,
             )
         except Exception as exc:
             outcome.error_class = outcome.error_class or type(exc).__name__
@@ -551,6 +683,7 @@ class LiteLLMExecutor:
                 ),
                 pool=pool,
                 outcome=outcome,
+                max_wait_seconds=payload.max_wait_seconds,
             )
         except Exception as exc:
             outcome.error_class = outcome.error_class or type(exc).__name__
