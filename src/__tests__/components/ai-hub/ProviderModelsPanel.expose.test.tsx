@@ -272,3 +272,26 @@ describe('ProviderModelsPanel batch actions', () => {
     });
   });
 });
+
+
+describe('ProviderModelsPanel model search', () => {
+  it('filters rows by id and display name', () => {
+    render(<ProviderModelsPanel models={[model, model2]} loading={false} busy={false} />);
+
+    const search = screen.getByLabelText('aiHub.providersPage.searchModels');
+    fireEvent.change(search, { target: { value: 'claude' } });
+
+    expect(screen.getByText('claude-3-5-sonnet')).toBeTruthy();
+    expect(screen.queryByText('gpt-4o-mini-2024')).toBeNull();
+  });
+
+  it('shows a no-match empty state', () => {
+    render(<ProviderModelsPanel models={[model]} loading={false} busy={false} />);
+
+    fireEvent.change(screen.getByLabelText('aiHub.providersPage.searchModels'), {
+      target: { value: 'zzz' },
+    });
+
+    expect(screen.getByText(/modelsNoMatch/)).toBeTruthy();
+  });
+});

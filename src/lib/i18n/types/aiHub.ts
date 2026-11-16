@@ -705,6 +705,10 @@ export interface AiHubTranslations {
       modelId: string;
       modelDisplay: string;
       modelSource: string;
+      searchModels: string;
+      modelsFound: string;
+      modelsNoMatch: string;
+      modelsNoMatchHint: string;
       addModelPlaceholder: string;
       addModelAction: string;
       modelAdded: string;
