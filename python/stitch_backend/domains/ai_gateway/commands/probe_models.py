@@ -146,16 +146,30 @@ async def probe_models(
                     "text": None,
                 }
             wants_image = include_multimodal or model in vision
-            return await _probe_one(
-                adapter,
-                base_url=base_url,
-                secret=secret,
-                default_headers=default_headers,
-                model=model,
-                max_tokens=max_tokens,
-                prompt=prompt,
-                image_url=VISION_PROBE_IMAGE if wants_image else None,
-            )
+            remaining = deadline - time.monotonic()
+            try:
+                return await asyncio.wait_for(
+                    _probe_one(
+                        adapter,
+                        base_url=base_url,
+                        secret=secret,
+                        default_headers=default_headers,
+                        model=model,
+                        max_tokens=max_tokens,
+                        prompt=prompt,
+                        image_url=VISION_PROBE_IMAGE if wants_image else None,
+                    ),
+                    timeout=max(remaining, 0.1),
+                )
+            except TimeoutError:
+                return {
+                    "model": model,
+                    "ok": False,
+                    "reason": "budget_exhausted",
+                    "latencyMs": None,
+                    "multimodalOk": None,
+                    "text": None,
+                }
 
     outcomes = await asyncio.gather(*(_one(m) for m in models), return_exceptions=True)
     rows: list[dict[str, Any]] = []

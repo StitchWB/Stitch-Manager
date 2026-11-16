@@ -54,6 +54,15 @@ class UpstreamModelUpdateRequest(BaseModel):
     enabled: bool | None = None
     discovery_source: str | None = Field(None, alias="discoverySource")
     capabilities: dict[str, Any] | None = None
+    selection_source: str | None = Field(None, alias="selectionSource")
+
+    @field_validator("selection_source")
+    @classmethod
+    def validate_selection_source(cls, v: str | None) -> str | None:
+        allowed = {"auto", "manual_allow", "manual_deny"}
+        if v is not None and v not in allowed:
+            raise ValueError(f"selectionSource must be one of {sorted(allowed)}")
+        return v
 
     @field_validator("capabilities")
     @classmethod
@@ -92,6 +101,8 @@ class UpstreamModelResponse(BaseModel):
     discovery_source: str = Field(alias="discoverySource")
     canonical_model_key: str | None = Field(None, alias="canonicalModelKey")
     last_discovered_at: datetime | None = Field(None, alias="lastDiscoveredAt")
+    last_seen_at: datetime | None = Field(None, alias="lastSeenAt")
+    selection_source: str = Field("auto", alias="selectionSource")
     capabilities: dict[str, Any] | None = None
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime | None = Field(None, alias="updatedAt")
@@ -107,6 +118,8 @@ class UpstreamModelResponse(BaseModel):
             discovery_source=obj.discovery_source,
             canonical_model_key=obj.canonical_model_key,
             last_discovered_at=obj.last_discovered_at,
+            last_seen_at=obj.last_seen_at,
+            selection_source=obj.selection_source or "auto",
             capabilities=obj.capabilities,
             created_at=obj.created_at,
             updated_at=obj.updated_at,

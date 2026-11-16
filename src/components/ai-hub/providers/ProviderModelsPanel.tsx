@@ -134,20 +134,36 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
     }
   };
 
+  const selectedAllDisabled =
+    selectedIds.size > 0 && visibleModels.every(m => !selectedIds.has(m.id) || !m.enabled);
+
   const handleBatchDisable = async () => {
-    const targets = visibleModels.filter(m => selectedIds.has(m.id) && m.enabled);
+    const selected = visibleModels.filter(m => selectedIds.has(m.id));
+    const enabling = selected.length > 0 && selected.every(m => !m.enabled);
+    const targets = selected.filter(m => (enabling ? !m.enabled : m.enabled));
     if (targets.length === 0) return;
     setBatchBusy(true);
-    let disabledCount = 0;
+    let changedCount = 0;
     try {
       for (const model of targets) {
         try {
-          await updateUpstreamModel({ id: model.id, enabled: false });
-          disabledCount += 1;
+          await updateUpstreamModel({
+            id: model.id,
+            enabled: enabling,
+            selectionSource: enabling ? 'auto' : 'manual_deny',
+          });
+          changedCount += 1;
         } catch {
         }
       }
-      toast.success(t('aiHub.providersPage.batchDisableSuccess', { count: disabledCount }));
+      toast.success(
+        t(
+          enabling
+            ? 'aiHub.providersPage.batchEnableSuccess'
+            : 'aiHub.providersPage.batchDisableSuccess',
+          { count: changedCount }
+        )
+      );
       setSelectedIds(new Set());
     } finally {
       setBatchBusy(false);
@@ -273,7 +289,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             onClick={() => void handleBatchDisable()}
             disabled={isActionsDisabled}
           >
-            {t('aiHub.providersPage.batchDisable')}
+            {selectedAllDisabled ? t('aiHub.providersPage.batchEnable') : t('aiHub.providersPage.batchDisable')}
           </Button>
           <Button
             type="button"
@@ -367,7 +383,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                     </TableCell>
                     <TableCell className="max-w-[240px] truncate font-mono text-slate-300">
                       <div className="flex items-center gap-2">
-                        <span className="truncate">{model.upstreamModelId}</span>
+                        <span className="truncate" title={model.upstreamModelId}>{model.upstreamModelId}</span>
                         {probe && (
                           <Badge
                             size="sm"
@@ -389,7 +405,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate">
+                    <TableCell className="max-w-[200px] truncate" title={model.displayName ?? undefined}>
                       {model.displayName || '—'}
                     </TableCell>
                     <TableCell className="text-slate-400">{model.discoverySource}</TableCell>

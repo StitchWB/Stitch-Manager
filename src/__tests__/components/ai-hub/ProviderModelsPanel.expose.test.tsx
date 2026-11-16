@@ -223,7 +223,11 @@ describe('ProviderModelsPanel batch actions', () => {
     fireEvent.click(disableBtn);
 
     await waitFor(() => {
-      expect(mockUpdateUpstreamModel).toHaveBeenCalledWith({ id: model.id, enabled: false });
+      expect(mockUpdateUpstreamModel).toHaveBeenCalledWith({
+        id: model.id,
+        enabled: false,
+        selectionSource: 'manual_deny',
+      });
     });
 
     expect(screen.queryByTestId('selection-toolbar')).toBeNull();

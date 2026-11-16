@@ -7,7 +7,7 @@ import { useVirtualSlice } from '@/hooks/useVirtualSlice';
 import { useAppStore } from '@/stores/app';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import type { Credential } from '@/lib/backend/modules/aiGateway';
+import type { Credential, CredentialProbeResult } from '@/lib/backend/modules/aiGateway';
 import {
   credStatusMeta,
   formatRemainingFreshness,
@@ -28,10 +28,12 @@ export interface ProviderKeysTableProps {
   credentials: Credential[];
   loading: boolean;
   busy: boolean;
+  testResults: Record<string, CredentialProbeResult>;
   onAddKeys: () => void;
-  onTestSelected: (ids: string[]) => void;
+  onTestSelected: (ids: string[]) => Promise<void>;
+  onRefreshQuotaSelected: (ids: string[]) => Promise<void>;
   onToggleEnabled: (id: string, enabled: boolean) => void;
-  onDeleteSelected: (ids: string[]) => void;
+  onDeleteSelected: (ids: string[]) => Promise<void>;
 }
 
 function formatLastSuccess(value: string | null | undefined, locale: typeof dateFnsRu | undefined): string {
@@ -52,11 +54,22 @@ function retryHint(
 }
 
 export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
-  const { credentials, loading, busy, onAddKeys, onTestSelected, onToggleEnabled, onDeleteSelected } = props;
+  const {
+    credentials,
+    loading,
+    busy,
+    testResults,
+    onAddKeys,
+    onTestSelected,
+    onRefreshQuotaSelected,
+    onToggleEnabled,
+    onDeleteSelected,
+  } = props;
   const language = useAppStore(state => state.language);
   const locale = language === 'ru' ? dateFnsRu : undefined;
   const [filter, setFilter] = useState<KeyFilter>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -101,6 +114,18 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
       }
       return prev.filter(item => item !== id);
     });
+  };
+
+  const runSelection = async (action: (ids: string[]) => Promise<void>) => {
+    const ids = selectedIds;
+    if (ids.length === 0 || running) return;
+    setRunning(true);
+    try {
+      await action(ids);
+    } finally {
+      setRunning(false);
+      setSelectedIds([]);
+    }
   };
 
   return (
@@ -156,14 +181,27 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
               <span className="text-[11px] font-medium text-indigo-200">
                 {t('aiHub.providersPage.selectedCount', { count: selectedCount })}
               </span>
-              <Button size="xs" variant="ghost" disabled={busy} onClick={() => onTestSelected(selectedIds)}>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={busy || running}
+                onClick={() => void runSelection(onTestSelected)}
+              >
                 {t('aiHub.providersPage.testSelected')}
               </Button>
               <Button
                 size="xs"
+                variant="ghost"
+                disabled={busy || running}
+                onClick={() => void runSelection(onRefreshQuotaSelected)}
+              >
+                {t('aiHub.providersPage.refreshQuota')}
+              </Button>
+              <Button
+                size="xs"
                 variant="outline"
-                disabled={busy}
-                onClick={() => onDeleteSelected(selectedIds)}
+                disabled={busy || running}
+                onClick={() => void runSelection(onDeleteSelected)}
                 className="text-red-400 hover:text-red-300 hover:border-red-400/40"
               >
                 {t('aiHub.providersPage.deleteSelected')}
@@ -215,11 +253,16 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
               const meta = credStatusMeta(credential.runtimeStatus);
               const checked = selectedIds.includes(credential.id);
               const hint = retryHint(credential.nextRetryAt, locale);
+              const probe = testResults[credential.id];
               const isQuotaExhaustedWithFutureReset =
                 credential.runtimeStatus === 'quota_exhausted' && isFutureReset(credential.quotaResetAt);
               const resetTime = isQuotaExhaustedWithFutureReset ? formatResetTime(credential.quotaResetAt) : null;
               const formattedUsd = formatRemainingUsd(credential.remainingUsd);
-              const freshness = formatRemainingFreshness(credential.remainingCheckedAt);
+              const freshness = formatRemainingFreshness(
+                credential.remainingCheckedAt,
+                Date.now(),
+                t('aiHub.providersPage.quotaMinutes')
+              );
 
               return (
                 <div
@@ -268,7 +311,9 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
                       <span className="inline-flex items-baseline gap-1 truncate max-w-full" title={formattedUsd}>
                         <span className="font-mono font-medium text-slate-200 truncate">{formattedUsd}</span>
                         {freshness ? (
-                          <span className="text-[10px] text-slate-500 shrink-0 font-normal">{freshness}</span>
+                          <span className="text-[10px] text-slate-500 shrink-0 font-normal" title={freshness}>
+                            {freshness}
+                          </span>
                         ) : null}
                       </span>
                     ) : (
@@ -278,14 +323,46 @@ export function ProviderKeysTable(props: ProviderKeysTableProps): JSX.Element {
                   <span className="flex flex-col gap-0.5 min-w-0 overflow-hidden">
                     <span className={cn('inline-flex items-center gap-1.5 min-w-0', meta.textClass)}>
                       <span className={cn('h-1.5 w-1.5 rounded-full', meta.dotClass)} />
-                      <span className="text-[11px] font-medium truncate">{t(meta.labelKey)}</span>
+                      <span className="text-[11px] font-medium truncate" title={t(meta.labelKey)}>
+                        {t(meta.labelKey)}
+                      </span>
                     </span>
-                    {hint ? <span className="text-[10px] text-amber-400/70 truncate">{hint}</span> : null}
+                    {probe ? (
+                      probe.success ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 min-w-0 text-[10px] text-emerald-300/80"
+                          title={probe.latency_ms != null ? `${probe.latency_ms} ms` : undefined}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                          <span className="truncate tabular-nums">
+                            {probe.latency_ms != null ? `${probe.latency_ms} ms` : t('common.success')}
+                          </span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1.5 min-w-0 text-[10px] text-red-300/80"
+                          title={probe.error ?? undefined}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-400 shrink-0" />
+                          <span className="truncate">{probe.error ?? t('common.error')}</span>
+                        </span>
+                      )
+                    ) : null}
+                    {hint ? (
+                      <span className="text-[10px] text-amber-400/70 truncate" title={hint}>
+                        {hint}
+                      </span>
+                    ) : null}
                     {isProblemStatus(credential.runtimeStatus) && credential.statusReason ? (
-                      <span className="text-[10px] text-red-300/60 truncate">{credential.statusReason}</span>
+                      <span className="text-[10px] text-red-300/60 truncate" title={credential.statusReason}>
+                        {credential.statusReason}
+                      </span>
                     ) : null}
                   </span>
-                  <span className="text-[11px] text-slate-400 truncate">
+                  <span
+                    className="text-[11px] text-slate-400 truncate"
+                    title={formatLastSuccess(credential.lastSuccessAt, locale)}
+                  >
                     {formatLastSuccess(credential.lastSuccessAt, locale)}
                   </span>
                   <Toggle

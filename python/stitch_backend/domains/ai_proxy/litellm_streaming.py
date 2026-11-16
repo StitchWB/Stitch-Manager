@@ -59,6 +59,8 @@ async def prime_stream(response: Any) -> AsyncIterator[str]:
 
     if first is not None and _is_error_frame(first):
         raise RuntimeError(first)
+    if first is None:
+        raise RuntimeError("upstream returned an empty stream")
 
     async def _replay() -> AsyncIterator[str]:
         if first is not None:

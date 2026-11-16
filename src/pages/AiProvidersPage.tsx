@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ClipboardPaste, Pencil, Server, Trash2, TriangleAlert, Zap } from 'lucide-react';
+import { ArrowLeft, ClipboardPaste, Pencil, RefreshCw, Server, Trash2, TriangleAlert, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,9 +11,10 @@ import {
   importOpencodeProviders,
   listPublicModels,
   listRouteTargetsForPublicModel,
+  refreshEndpointQuota,
   testCredentialConnection,
 } from '@/lib/backend/modules/aiGateway';
-import type { UpstreamModel } from '@/lib/backend/modules/aiGateway';
+import type { CredentialProbeResult, UpstreamModel } from '@/lib/backend/modules/aiGateway';
 import { PublicModelForm } from '@/components/ai-gateway/PublicModelForm';
 import { getCustomProviders } from '@/lib/backend/modules/customProviders';
 import { useAiProvidersController } from './hooks/useAiProvidersController';
@@ -84,6 +85,8 @@ export default function AiProvidersPage() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<DetailTab>('keys');
   const [keyBusy, setKeyBusy] = useState(false);
+  const [keyTestResults, setKeyTestResults] = useState<Record<string, CredentialProbeResult>>({});
+  const [refreshingProvider, setRefreshingProvider] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [migrating, setMigrating] = useState(false);
@@ -175,27 +178,63 @@ export default function AiProvidersPage() {
     async (ids: string[]) => {
       if (ids.length === 0) return;
       setKeyBusy(true);
+      const results: Record<string, CredentialProbeResult> = {};
       let okCount = 0;
       try {
-        await runPool(ids, 8, async id => {
-          const report = await testCredentialConnection(id);
-          if (report.success) okCount += 1;
+        await runPool(ids, 4, async id => {
+          try {
+            const report = await testCredentialConnection(id);
+            results[id] = report;
+            if (report.success) okCount += 1;
+          } catch (error) {
+            results[id] = {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
         });
+        setKeyTestResults(results);
         if (okCount === ids.length) {
-          toast.success(t('aiHub.controller.toasts.connectionOk'));
+          toast.success(t('aiHub.providersPage.testSelectedSuccess', { count: ids.length }));
         } else {
           toast.error(
             t('aiHub.providersPage.discoverySomeFailed', { ok: okCount, total: ids.length })
           );
         }
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : String(error));
       } finally {
         setKeyBusy(false);
         await fetchCredentials();
       }
     },
     [fetchCredentials]
+  );
+
+  const handleRefreshQuotaSelected = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0 || !selectedEndpoint) return;
+      setKeyBusy(true);
+      let checkedTotal = 0;
+      let suspendedTotal = 0;
+      try {
+        await runPool(ids, 4, async id => {
+          const report = await refreshEndpointQuota({ credentialId: id });
+          checkedTotal += report.checked;
+          suspendedTotal += report.suspended;
+        });
+        toast.success(
+          t('aiHub.providersPage.refreshQuotaDone', {
+            checked: checkedTotal,
+            suspended: suspendedTotal,
+          })
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      } finally {
+        setKeyBusy(false);
+        await fetchCredentials(selectedEndpoint.id);
+      }
+    },
+    [selectedEndpoint, fetchCredentials]
   );
 
   const handleToggleCredential = useCallback(
@@ -246,6 +285,36 @@ export default function AiProvidersPage() {
     },
     [selectedEndpoint, updateEndpoint]
   );
+
+  const handleRefreshProvider = useCallback(async () => {
+    if (!selectedEndpoint) return;
+    setRefreshingProvider(true);
+    try {
+      try {
+        const quotaReport = await refreshEndpointQuota({ endpointId: selectedEndpoint.id });
+        if (quotaReport.checked > 0) {
+          toast.success(
+            t('aiHub.providersPage.refreshQuotaDone', {
+              checked: quotaReport.checked,
+              suspended: quotaReport.suspended,
+            })
+          );
+        }
+      } catch {
+      }
+      await Promise.all([
+        fetchEndpoints(),
+        fetchCredentials(selectedEndpoint.id),
+        fetchUpstreamModels(selectedEndpoint.id),
+        loadPublished(),
+      ]);
+      toast.success(t('aiHub.providersPage.refreshDone'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRefreshingProvider(false);
+    }
+  }, [selectedEndpoint, fetchEndpoints, fetchCredentials, fetchUpstreamModels, loadPublished]);
 
   const handleDeleteEndpoint = useCallback(async () => {
     if (!selectedEndpoint) return;
@@ -482,6 +551,18 @@ export default function AiProvidersPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-1">
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        data-testid="provider-refresh"
+                        isLoading={refreshingProvider}
+                        disabled={refreshingProvider}
+                        leftIcon={<RefreshCw size={12} className={refreshingProvider ? 'animate-spin' : undefined} />}
+                        onClick={() => void handleRefreshProvider()}
+                        title={t('aiHub.providersPage.refresh')}
+                      >
+                        {t('aiHub.providersPage.refresh')}
+                      </Button>
                       <ButtonBase
                         type="button"
                         onClick={() => setEditEndpointOpen(true)}
@@ -528,10 +609,12 @@ export default function AiProvidersPage() {
                         credentials={selectedCredentials}
                         loading={loading.credentials}
                         busy={keyBusy}
+                        testResults={keyTestResults}
                         onAddKeys={() => setPasteMode('scoped')}
-                        onTestSelected={ids => void handleTestSelected(ids)}
+                        onTestSelected={handleTestSelected}
+                        onRefreshQuotaSelected={handleRefreshQuotaSelected}
                         onToggleEnabled={(id, enabled) => void handleToggleCredential(id, enabled)}
-                        onDeleteSelected={ids => void handleDeleteSelected(ids)}
+                        onDeleteSelected={handleDeleteSelected}
                       />
                     )}
                     {tab === 'models' && (

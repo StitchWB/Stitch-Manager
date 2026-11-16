@@ -221,6 +221,9 @@ class _CachedResolution:
 # key B) instead of failing the whole request.
 MAX_CANDIDATES_PER_TARGET = 3
 
+# ниже этого остатка ключ не выбираем: одного запроса может не хватить
+_MIN_REMAINING_USD = 0.5
+
 # Predictive scoring: _MIN_HEALTH floors a fully-dead target so it sorts last, not to zero.
 _REFERENCE_LATENCY_MS = 1000.0
 _MIN_HEALTH = 0.05
@@ -880,6 +883,10 @@ async def _fetch_pool_credentials(
             CredentialModelAccess.status == "available",
             Credential.enabled == True,  # noqa: E712
             Credential.runtime_status.in_(("active", "unknown")),
+            or_(
+                Credential.remaining_usd.is_(None),
+                Credential.remaining_usd >= _MIN_REMAINING_USD,
+            ),
             _pool_predicate_for_credentials(pool, Credential, cgs_alias),
         )
     )

@@ -43,6 +43,7 @@ from stitch_backend.domains.ai_gateway.adapters.error_vocab import (
     parse_envelope,
 )
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
+from stitch_backend.domains.ai_gateway.pricing_cache import normalize_origin
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -313,6 +314,31 @@ class ConfigurableAdapter:
             )
 
         return QuotaProbeResult(ok=False, http_status=status)
+
+    async def fetch_pricing(
+        self,
+        base_url: str,
+        default_headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Fetch the free, unauthenticated ``/api/pricing`` table at the origin."""
+        origin = normalize_origin(base_url)
+        if not origin:
+            return None
+        try:
+            resp = await get_http_client().get(
+                f"{origin}/api/pricing",
+                headers=default_headers,
+                timeout=_PROBE_TIMEOUT_SECONDS,
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        if resp.status_code != 200:
+            return None
+        try:
+            payload = resp.json()
+        except ValueError:
+            return None
+        return payload if isinstance(payload, dict) else None
 
     async def _discover(
         self,

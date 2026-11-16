@@ -106,6 +106,7 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
   })),
   discoverModelsForEndpoint: jest.fn(async () => ({ models_count: 0 })),
   testCredentialConnection: jest.fn(async () => ({ success: true })),
+  refreshEndpointQuota: jest.fn(async () => ({ checked: 0, suspended: 0 })),
   proxyKeysList: jest.fn(async () => ({
     baseUrl: '',
     keys: [],
@@ -227,6 +228,38 @@ describe('AiProvidersPage (unified master-detail)', () => {
     await user.click(screen.getByText('OpenAI'));
 
     await waitFor(() => expect(gw.discoverModelsForEndpoint).toHaveBeenCalledWith('ep-openai'));
+  });
+
+  it('refreshes quota and refetches gateway data from the provider header', async () => {
+    const user = userEvent.setup();
+    gw.refreshEndpointQuota.mockResolvedValue({ checked: 2, suspended: 1 } as never);
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(await screen.findByTestId('provider-refresh'));
+
+    await waitFor(() =>
+      expect(gw.refreshEndpointQuota).toHaveBeenCalledWith({ endpointId: 'ep-openai' })
+    );
+    await waitFor(() => expect(gw.listCredentials).toHaveBeenCalledWith('ep-openai'));
+    await waitFor(() => expect(gw.listUpstreamModels).toHaveBeenCalledWith('ep-openai'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Quota checked: 2, suspended: 1'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Data refreshed'));
+  });
+
+  it('still refetches and reports success when the quota probe fails', async () => {
+    const user = userEvent.setup();
+    gw.refreshEndpointQuota.mockRejectedValueOnce(new Error('gateway down') as never);
+    renderPage();
+
+    await screen.findByText('OpenAI');
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(await screen.findByTestId('provider-refresh'));
+
+    await waitFor(() => expect(gw.listCredentials).toHaveBeenCalledWith('ep-openai'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Data refreshed'));
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('reports rejected keys instead of a success toast', async () => {

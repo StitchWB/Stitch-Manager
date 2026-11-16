@@ -63,6 +63,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -104,7 +105,7 @@ class ProviderEndpoint(Base):
     base_url: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     auto_publish_models: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False,
+        Boolean, default=False, nullable=False, server_default=text("0"),
         comment="Publish verified models of this endpoint to the public catalog",
     )
     default_headers: Mapped[dict | None] = mapped_column(
@@ -330,7 +331,7 @@ class UpstreamModel(Base):
     last_discovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     selection_source: Mapped[str] = mapped_column(
-        String, nullable=False, default="auto",
+        String, nullable=False, default="auto", server_default=text("'auto'"),
     )
 
     # ── Capabilities ─────────────────────────────────────────────────────────

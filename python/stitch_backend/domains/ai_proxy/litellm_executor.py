@@ -15,6 +15,7 @@ from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway import circuit_breaker
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
+from stitch_backend.domains.ai_gateway.pricing_cache import estimate_usd, get_pricing_cache
 from stitch_backend.domains.ai_gateway.routing_engine import (
     ContextLengthExceededError,
     PoolScope,
@@ -104,6 +105,9 @@ _HOLD_BUDGET_NONSTREAM_S = 15.0
 _HOLD_BUDGET_MAX_S = 120.0
 _MAX_UPSTREAM_INVOCATIONS = 8
 _ROUND_BACKOFF_CAP_S = 10.0
+_COST_RESERVE_USD = 0.5
+_DEFAULT_COMPLETION_TOKENS = 512
+_UNKNOWN_PRICING_LOGGED: set[tuple[str, str]] = set()
 
 
 _STATUS_BY_CATEGORY: dict[str, int] = {
@@ -166,6 +170,22 @@ def _backoff_seconds(round_no: int, hint: float) -> float:
     exponent = min(round_no - 1, 4)
     draw = random.uniform(0.0, min(2.0 ** exponent, _ROUND_BACKOFF_CAP_S))
     return max(hint, draw)
+
+
+def _estimate_prompt_tokens(messages: list[dict[str, Any]] | None) -> int:
+    chars = sum(
+        len(str(message.get("content")))
+        for message in (messages or [])
+        if isinstance(message, dict)
+    )
+    return max(int(chars / 4), 1)
+
+
+def _completion_token_budget(payload: Any) -> int:
+    value = getattr(payload, "max_tokens", None)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return _DEFAULT_COMPLETION_TOKENS
 
 
 class CompletionRouter(Protocol):
@@ -278,6 +298,48 @@ class LiteLLMExecutor:
         async def _check(session):
             return await circuit_breaker.is_endpoint_available(session, endpoint_id)
         return await run_in_session(_check)
+
+    async def _skip_insufficient_balance(
+        self, payload: Any, routing_result: Any, model: str,
+    ) -> bool:
+        credential = routing_result.credential
+        remaining = getattr(credential, "remaining_usd", None)
+        if remaining is None:
+            return False
+        base_url = getattr(routing_result.endpoint, "base_url", None)
+        if not base_url:
+            return False
+        endpoint_id = getattr(routing_result.endpoint, "id", base_url)
+        upstream_model = getattr(
+            getattr(routing_result, "upstream_model", None), "upstream_model_id", None,
+        )
+        price_model = upstream_model or model
+        price = await get_pricing_cache().price_for(base_url, price_model)
+        if price is None:
+            key = (endpoint_id, price_model)
+            if key not in _UNKNOWN_PRICING_LOGGED:
+                _UNKNOWN_PRICING_LOGGED.add(key)
+                logger.info(
+                    "pricing_unknown endpoint=%s model=%s - cost guard passes candidate through",
+                    endpoint_id,
+                    price_model,
+                )
+            return False
+        estimate = estimate_usd(
+            price,
+            _estimate_prompt_tokens(payload.messages),
+            _completion_token_budget(payload),
+        )
+        if estimate <= float(remaining) - _COST_RESERVE_USD:
+            return False
+        logger.debug(
+            "Skipping candidate %s - estimated $%.6f exceeds remaining $%.2f minus $%.2f reserve",
+            credential.id[:8],
+            estimate,
+            float(remaining),
+            _COST_RESERVE_USD,
+        )
+        return True
 
     def _record_request_trace(
         self,
@@ -455,6 +517,8 @@ class LiteLLMExecutor:
                             "Skipping candidate on endpoint %s — circuit open",
                             routing_result.endpoint.id,
                         )
+                        continue
+                    if await self._skip_insufficient_balance(payload, routing_result, model):
                         continue
                     credential_id = routing_result.credential.id
                     if not key_inflight.try_acquire(credential_id):
