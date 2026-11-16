@@ -443,18 +443,6 @@ class DiscoveryWorker:
                                 present=mid in returned,
                             )
 
-                    for mid, row in verification.items():
-                        cred_id = row.get("_credential_id")
-                        upstream_row = upstream_rows.get(mid)
-                        if not cred_id or upstream_row is None or row.get("ok"):
-                            continue
-                        await access_svc.upsert_access(
-                            cred_id,
-                            upstream_row.id,
-                            status="unavailable",
-                            last_error=str(row.get("reason") or "probe_failed"),
-                        )
-
                     for mid, upstream in upstream_rows.items():
                         if mid in {m.id for _c, models in item["credentials"] for m in models}:
                             continue

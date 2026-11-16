@@ -669,6 +669,11 @@ export interface AiHubTranslations {
       adapterLabel: string;
       baseUrlLabel: string;
       addConnection: string;
+      refresh: string;
+      refreshDone: string;
+      refreshQuotaDone: string;
+      refreshQuota: string;
+      testSelectedSuccess: string;
       discover: string;
       discovering: string;
       discoveryFailed: string;
@@ -709,10 +714,13 @@ export interface AiHubTranslations {
       exposePublished: string;
       batchPublish: string;
       batchDisable: string;
+      batchEnable: string;
+      batchEnableSuccess: string;
       batchProbe: string;
       batchProbeProgress: string;
       batchPublishSuccess: string;
       batchDisableSuccess: string;
+      quotaMinutes: string;
       batchProbeSuccess: string;
       batchProbeFailed: string;
       endpointSettings: string;

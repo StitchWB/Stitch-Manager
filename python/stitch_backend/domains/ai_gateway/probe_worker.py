@@ -457,6 +457,7 @@ class ProbeWorker:
                             session, result["credential_id"],
                             error=classified,
                             http_status=result["http_status"],
+                            source="probe",
                         )
 
                         if result["success"]:

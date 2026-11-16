@@ -43,8 +43,23 @@ def _required_messages(payload: GatewayRequest) -> list[dict[str, JsonValue]]:
 
 def _adapter_options(payload: GatewayRequest) -> dict[str, Any]:
     return payload.model_dump(mode="json", exclude_none=True, exclude={
-        "model", "provider", "messages", "input", "stream", "base_url", "secret", "default_headers",
+        "model", "provider", "messages", "input", "stream", "base_url", "secret",
+        "default_headers", "max_wait_seconds",
     })
+
+
+def _reject_empty_completion(result: Any) -> None:
+    if not isinstance(result, dict):
+        return
+    choices = result.get("choices")
+    if isinstance(choices, list) and not choices:
+        raise RuntimeError("upstream returned an empty completion")
+    output = result.get("output")
+    if isinstance(output, list) and not output and "object" in result:
+        raise RuntimeError("upstream returned an empty completion")
+    content = result.get("content")
+    if isinstance(content, list) and not content and "stop_reason" in result:
+        raise RuntimeError("upstream returned an empty completion")
 
 
 def _response_usage(response: Any) -> tuple[int, int]:
@@ -222,6 +237,7 @@ async def invoke_via_gateway(
             )
         else:
             result = cast("Any", _json_object(response))
+            _reject_empty_completion(result)
             if holone_service.config.enabled:
                 result, findings, blocked = holone_service.inspect_response_openai(
                     result, client_has_tools=client_has_tools
@@ -382,6 +398,7 @@ async def invoke_via_gateway_messages(
             )
         else:
             result = cast("Any", _json_object(response))
+            _reject_empty_completion(result)
             if compression_service.config.enabled:
                 result = compression_service.compress_output(result)
             if holone_service.config.enabled:
@@ -550,6 +567,7 @@ async def invoke_via_gateway_responses(
             )
         else:
             result = cast("Any", _json_object(response))
+            _reject_empty_completion(result)
             if compression_service.config.enabled:
                 result = compression_service.compress_output(result)
             if holone_service.config.enabled:

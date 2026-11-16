@@ -221,6 +221,25 @@ def _reason(base: str, code: str | None) -> str:
     return f"{base} ({code})" if code else base
 
 
+# вендорский "кэш шлюза" даёт ложный 401: аккаунт паркуем только со второго подтверждения
+_SUSPECT_COOLDOWN = timedelta(seconds=60)
+_CONFIRM_WINDOW_SECONDS = 600.0
+
+_account_quota_hits: dict[tuple[str, str], float] = {}
+
+
+def _account_quota_confirmed(endpoint_id: str, account_group: str) -> bool:
+    key = (endpoint_id, account_group)
+    now = time.monotonic()
+    last = _account_quota_hits.get(key)
+    _account_quota_hits[key] = now
+    return last is not None and (now - last) <= _CONFIRM_WINDOW_SECONDS
+
+
+def _clear_account_quota_hit(endpoint_id: str, account_group: str) -> None:
+    _account_quota_hits.pop((endpoint_id, account_group), None)
+
+
 def exponential_backoff(consecutive_failures: int) -> timedelta:
     """Backoff for the *n*-th consecutive failure.
 
@@ -282,6 +301,7 @@ async def mark_account_quota_exhausted(
             Credential.provider_endpoint_id == endpoint_id,
             Credential.account_group == account_group,
             Credential.enabled.is_(True),
+            Credential.runtime_status != "disabled",
         )
     )
     rows = result.all()
@@ -349,6 +369,8 @@ async def transition_credential(
     credential_id: str,
     error: ClassifiedError | None,
     http_status: int | None,
+    *,
+    source: str = "request",
 ) -> None:
     """Apply a state transition to a credential based on a call outcome.
 
@@ -439,6 +461,14 @@ async def transition_credential(
             until = error.retry_at
             if until is None:
                 until = now + timedelta(seconds=error.retry_after_seconds or 900)
+            if source == "request" and not _account_quota_confirmed(
+                credential.provider_endpoint_id, credential.account_group,
+            ):
+                await set_cooldown(
+                    session, credential_id, "Quota suspect (verifying)", now + _SUSPECT_COOLDOWN,
+                )
+                return
+            _clear_account_quota_hit(credential.provider_endpoint_id, credential.account_group)
             await mark_account_quota_exhausted(
                 session,
                 credential.provider_endpoint_id,

@@ -248,6 +248,7 @@ export async function updateUpstreamModel(params: {
   displayName?: string | null;
   enabled?: boolean;
   capabilities?: Record<string, unknown> | null;
+  selectionSource?: 'auto' | 'manual_allow' | 'manual_deny';
 }): Promise<UpstreamModel | null> {
   return safeInvoke('update_upstream_model', params);
 }
@@ -531,4 +532,17 @@ export async function probeEndpointModels(
 ): Promise<ProbeEndpointModelsResult> {
   return safeInvoke('probe_endpoint_models', params, { noCache: true });
 }
+
+export interface RefreshEndpointQuotaResult {
+  checked: number;
+  suspended: number;
+}
+
+export async function refreshEndpointQuota(params: {
+  endpointId?: string;
+  credentialId?: string;
+}): Promise<RefreshEndpointQuotaResult> {
+  return safeInvoke('refresh_endpoint_quota', params, { noCache: true });
+}
+
 

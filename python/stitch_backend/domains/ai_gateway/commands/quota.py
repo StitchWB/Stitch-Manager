@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import and_, select
+from sqlalchemy import select
 
 from stitch_backend.core.command_decorator import command
-from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.adapters.base import get_adapter
 from stitch_backend.domains.ai_gateway.adapters.configurable import QuotaProbeResult
 from stitch_backend.domains.ai_gateway.commands._common import (
@@ -64,7 +63,6 @@ async def cmd_refresh_endpoint_quota(db: AsyncSession, params: dict) -> dict[str
     ep_svc = ProviderEndpointService(db)
     cred_svc = CredentialService(db)
 
-    # Cache endpoints
     endpoint_ids = {c.provider_endpoint_id for c in credentials}
     endpoints_map: dict[str, ProviderEndpoint | None] = {}
     for ep_id in endpoint_ids:
@@ -108,12 +106,12 @@ async def cmd_refresh_endpoint_quota(db: AsyncSession, params: dict) -> dict[str
             asyncio.gather(*probe_coros, return_exceptions=True),
             timeout=20.0,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         results = []
 
     checked = 0
     suspended = 0
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     for item in results:
         if not isinstance(item, tuple) or len(item) != 2:
@@ -135,6 +133,7 @@ async def cmd_refresh_endpoint_quota(db: AsyncSession, params: dict) -> dict[str
                     cred.id,
                     error=probe_res.classified,
                     http_status=401,
+                    source="probe",
                 )
 
     await db.flush()

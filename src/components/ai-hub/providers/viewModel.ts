@@ -71,15 +71,16 @@ export function formatRemainingUsd(value: number | null | undefined): string | n
 
 export function formatRemainingFreshness(
   checkedAt: string | null | undefined,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  minutesLabel: string = 'мин'
 ): string | null {
   if (!checkedAt) return null;
   const date = new Date(checkedAt);
   const time = date.getTime();
   if (Number.isNaN(time)) return null;
   const diffMinutes = Math.max(0, Math.floor((nowMs - time) / 60000));
-  if (diffMinutes >= 60) return '60+ мин';
-  return `${diffMinutes} мин`;
+  if (diffMinutes >= 60) return `60+ ${minutesLabel}`;
+  return `${diffMinutes} ${minutesLabel}`;
 }
 
 export function formatResetTime(iso: string | null | undefined): string | null {

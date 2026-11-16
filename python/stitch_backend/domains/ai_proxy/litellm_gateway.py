@@ -42,7 +42,7 @@ class GatewayRequest(BaseModel):
     max_wait_seconds: int | None = None
 
     def sdk_payload(self) -> JsonObject:
-        return self.model_dump(mode="json", exclude_none=True)
+        return self.model_dump(mode="json", exclude_none=True, exclude={"max_wait_seconds"})
 
 
 def _max_wait_override(request: Request) -> dict[str, int]:
