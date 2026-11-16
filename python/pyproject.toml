@@ -236,8 +236,9 @@ pythonpath = ["."]
 # timeout it dumps stacks and calls os._exit(1), killing the WHOLE pytest
 # process with no summary — one slow test nuked the entire CI run.
 timeout = 90
-# flaky marker: subprocess-spawning tests retried to absorb full-suite load jitter
-addopts = "--reruns 2 --reruns-delay 3 --only-rerun flaky"
+# one retry absorbs full-suite load jitter; more retries of a hanging test blow the CI job budget
+addopts = "--reruns 1 --reruns-delay 1"
 markers = [
     "flaky: test timing-sensitive under full-suite load (subprocess / threading / port coordination)",
+    "slow: spawns a real browser/CLI/HTTP server or waits on multi-second lifecycle (opt-in CI job)",
 ]

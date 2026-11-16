@@ -72,6 +72,7 @@ def test_cleans_up_on_assertion_failure():
     assert backend.rows == {}
 
 
+@pytest.mark.slow
 def test_real_isolated_backend():
     result = subprocess.run(
         [sys.executable, str(Path(smoke.__file__))],
