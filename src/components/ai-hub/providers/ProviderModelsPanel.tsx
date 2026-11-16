@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Boxes, Check, EyeOff, Globe, Loader2, Plus, Radio, RefreshCw, TriangleAlert, X } from 'lucide-react';
+import { Boxes, Check, EyeOff, Globe, Loader2, Plus, Radio, RefreshCw, Search, TriangleAlert, X } from 'lucide-react';
 import type { ModelProbeRow, UpstreamModel } from '@/lib/backend/modules/aiGateway';
 import { probeEndpointModels } from '@/lib/backend/modules/aiGateway';
 import { useAiGatewayStore } from '@/stores/aiGateway';
@@ -53,6 +53,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
     onPublishedChange,
   } = props;
   const [modelIdInput, setModelIdInput] = useState('');
+  const [query, setQuery] = useState('');
   const [addingModel, setAddingModel] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
@@ -63,8 +64,15 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
   const createRouteTarget = useAiGatewayStore(state => state.createRouteTarget);
   const updateUpstreamModel = useAiGatewayStore(state => state.updateUpstreamModel);
 
-  const visibleModels = models.slice(0, RENDER_CAP);
-  const hiddenCount = models.length - visibleModels.length;
+  const needle = query.trim().toLowerCase();
+  const filteredModels = needle
+    ? models.filter(model => {
+        const haystack = `${model.upstreamModelId} ${model.displayName ?? ''}`.toLowerCase();
+        return haystack.includes(needle);
+      })
+    : models;
+  const visibleModels = filteredModels.slice(0, RENDER_CAP);
+  const hiddenCount = filteredModels.length - visibleModels.length;
 
   const allVisibleSelected =
     visibleModels.length > 0 && visibleModels.every(model => selectedIds.has(model.id));
@@ -236,6 +244,25 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
         </Button>
       </div>
 
+      <div className="flex shrink-0 items-center gap-2 pb-2">
+        <Input
+          aria-label={t('aiHub.providersPage.searchModels')}
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+          placeholder={t('aiHub.providersPage.searchModels')}
+          leftIcon={<Search size={12} />}
+          className="flex-1"
+        />
+        {query.trim() !== '' && (
+          <span className="shrink-0 text-[11px] text-slate-500">
+            {t('aiHub.providersPage.modelsFound', {
+              shown: filteredModels.length,
+              total: models.length,
+            })}
+          </span>
+        )}
+      </div>
+
       {onAddModel && (
         <form
           className="flex shrink-0 items-center gap-2 pb-2"
@@ -346,6 +373,14 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             icon={Boxes}
             title={t('aiHub.providersPage.modelsEmpty')}
             description={t('aiHub.providersPage.modelsEmptyHint')}
+          />
+        </div>
+      ) : filteredModels.length === 0 ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <EmptyState
+            icon={Search}
+            title={t('aiHub.providersPage.modelsNoMatch', { query: query.trim() })}
+            description={t('aiHub.providersPage.modelsNoMatchHint')}
           />
         </div>
       ) : (
