@@ -18,14 +18,16 @@ import { devboxCallArgs, devboxRouter, pageRoutes } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
-const sampleEntries = [
-  {
-    key: 'INGRESS_MODE',
-    value: 'cloudflare',
-    secret: false,
-    readonly: false,
-    section: 'ingress',
-  },
+const STANDARD_PERMISSIONS = JSON.stringify({
+  edit: 'ask',
+  write: 'ask',
+  apply_patch: 'ask',
+  bash: 'ask',
+  webfetch: 'allow',
+});
+
+const entries = [
+  { key: 'INGRESS_MODE', value: 'relay', secret: false, readonly: false, section: 'ingress' },
   {
     key: 'RELAY_SUBDOMAIN',
     value: 'my-relay',
@@ -34,16 +36,24 @@ const sampleEntries = [
     section: 'ingress',
   },
   {
-    key: 'TUNNEL_TOKEN',
-    value: 'abcd...wxyz',
-    secret: true,
+    key: 'PUBLIC_URL',
+    value: 'https://old.example.test',
+    secret: false,
     readonly: false,
     section: 'ingress',
   },
+  { key: 'TUNNEL_TOKEN', value: 'abcd...wxyz', secret: true, readonly: false, section: 'ingress' },
   {
     key: 'EGRESS_CONTAINER',
     value: 'rdm-egress',
     secret: false,
+    readonly: false,
+    section: 'egress',
+  },
+  {
+    key: 'VLESS_SUB_URL',
+    value: 'https://subs...',
+    secret: true,
     readonly: false,
     section: 'egress',
   },
@@ -56,134 +66,128 @@ const sampleEntries = [
   },
   {
     key: 'OPENCODE_MCP_PERMISSIONS',
-    value: 'auto-allow',
+    value: STANDARD_PERMISSIONS,
     secret: false,
     readonly: true,
     section: 'managed',
   },
 ];
 
-beforeEach(() => {
-  jest.clearAllMocks();
+const connectionOk = { ok: true, url: 'https://my-relay.loca.lt', tools: 16, latency_ms: 120 };
+
+function wire(routes: Record<string, unknown>) {
   invokeMock.mockImplementation(
     devboxRouter(
       pageRoutes({
-        env_get: { entries: sampleEntries },
-        env_set: { valid: true, errors: [], restart: ['ingress', 'stack'] },
+        env_get: { entries },
+        connection_check: connectionOk,
+        ...routes,
       }),
     ),
   );
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  wire({ env_set: { valid: true, errors: [], restart: [] } });
 });
 
 describe('DevboxSettingsCard', () => {
-  it('loads and renders entries grouped by section, masks secrets, and marks readonly fields disabled', async () => {
-    render(<DevboxSettingsCard />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('devbox-settings')).toBeTruthy();
-    });
-
-    expect(screen.getByTestId('devbox-settings-group-ingress')).toBeTruthy();
-    expect(screen.getByTestId('devbox-settings-group-egress')).toBeTruthy();
-    expect(screen.getByTestId('devbox-settings-group-runtime')).toBeTruthy();
-    expect(screen.getByTestId('devbox-settings-group-managed')).toBeTruthy();
-
-    const ingressInput = screen.getByTestId(
-      'devbox-settings-input-INGRESS_MODE',
-    ) as HTMLInputElement;
-    expect(ingressInput.value).toBe('cloudflare');
-    expect(ingressInput.disabled).toBe(false);
-
-    const secretInput = screen.getByTestId(
-      'devbox-settings-input-TUNNEL_TOKEN',
-    ) as HTMLInputElement;
-    expect(secretInput.type).toBe('password');
-    expect(secretInput.value).toBe('abcd...wxyz');
-
-    const toggleBtn = screen.getByTestId('devbox-settings-toggle-TUNNEL_TOKEN');
-    fireEvent.click(toggleBtn);
-    expect(secretInput.type).toBe('text');
-    fireEvent.click(toggleBtn);
-    expect(secretInput.type).toBe('password');
-
-    const readonlyInput = screen.getByTestId(
-      'devbox-settings-input-OPENCODE_MCP_PERMISSIONS',
-    ) as HTMLInputElement;
-    expect(readonlyInput.disabled).toBe(true);
-    expect(screen.getByTestId('devbox-settings-readonly-OPENCODE_MCP_PERMISSIONS')).toBeTruthy();
-
-    const saveBtn = screen.getByTestId('devbox-settings-save') as HTMLButtonElement;
-    expect(saveBtn.disabled).toBe(true);
-  });
-
-  it('enables save on changes, sends only changed patch to env_set, and triggers restart callbacks', async () => {
-    const onRestart = jest.fn();
-    const onSaved = jest.fn();
-
-    render(<DevboxSettingsCard onRestart={onRestart} onSaved={onSaved} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('devbox-settings-input-RELAY_SUBDOMAIN')).toBeTruthy();
-    });
-
-    const relayInput = screen.getByTestId('devbox-settings-input-RELAY_SUBDOMAIN');
-    fireEvent.change(relayInput, { target: { value: 'new-subdomain' } });
-
-    const saveBtn = screen.getByTestId('devbox-settings-save') as HTMLButtonElement;
-    expect(saveBtn.disabled).toBe(false);
-
-    fireEvent.click(saveBtn);
-
-    await waitFor(() => {
-      const calls = devboxCallArgs(invokeMock, 'env_set');
-      expect(calls.length).toBe(1);
-      expect(calls[0]).toEqual({
-        patch: {
-          RELAY_SUBDOMAIN: 'new-subdomain',
-        },
-      });
-    });
-
-    await waitFor(() => {
-      expect(onSaved).toHaveBeenCalledTimes(1);
-      expect(screen.getByTestId('devbox-settings-saved-badge')).toBeTruthy();
-      expect(screen.getByTestId('devbox-settings-restart-banner')).toBeTruthy();
-    });
-
-    const restartIngressBtn = screen.getByTestId('devbox-settings-restart-ingress');
-    fireEvent.click(restartIngressBtn);
-    expect(onRestart).toHaveBeenCalledWith('ingress');
-
-    const restartStackBtn = screen.getByTestId('devbox-settings-restart-stack');
-    fireEvent.click(restartStackBtn);
-    expect(onRestart).toHaveBeenCalledWith('stack');
-  });
-
-  it('displays backend validation errors when env_set fails', async () => {
-    invokeMock.mockImplementation(
-      devboxRouter(
-        pageRoutes({
-          env_get: { entries: sampleEntries },
-          env_set: { valid: false, errors: ['Invalid subdomain format', 'Invalid token'], restart: [] },
-        }),
-      ),
-    );
-
+  it('shows the relay input only and reports the live entry status', async () => {
     render(<DevboxSettingsCard />);
 
     await waitFor(() => {
       expect(screen.getByTestId('devbox-settings-input-RELAY_SUBDOMAIN')).toBeTruthy();
     });
 
-    const relayInput = screen.getByTestId('devbox-settings-input-RELAY_SUBDOMAIN');
-    fireEvent.change(relayInput, { target: { value: 'bad subdomain!' } });
+    expect(screen.queryByTestId('devbox-settings-input-PUBLIC_URL')).toBeNull();
+    expect(screen.getByTestId('devbox-settings-access-hint').textContent).toContain('Standard');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-status').textContent).toContain('16');
+    });
+  });
+
+  it('switches to cloudflare and saves only the changed mode', async () => {
+    render(<DevboxSettingsCard />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-ingress')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Cloudflare'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-input-PUBLIC_URL')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('devbox-settings-input-RELAY_SUBDOMAIN')).toBeNull();
 
     fireEvent.click(screen.getByTestId('devbox-settings-save'));
 
     await waitFor(() => {
-      const errorsBox = screen.getByTestId('devbox-settings-errors');
-      expect(errorsBox.textContent).toContain('Invalid subdomain format');
-      expect(errorsBox.textContent).toContain('Invalid token');
+      const calls = devboxCallArgs(invokeMock, 'env_set');
+      expect(calls.length).toBe(1);
+      expect(calls[0]).toEqual({ patch: { INGRESS_MODE: 'cloudflare' } });
+    });
+  });
+
+  it('keeps advanced collapsed until opened', async () => {
+    render(<DevboxSettingsCard />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-advanced-toggle')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('devbox-settings-select-EGRESS_CONTAINER')).toBeNull();
+    fireEvent.click(screen.getByTestId('devbox-settings-advanced-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-select-EGRESS_CONTAINER')).toBeTruthy();
+    });
+  });
+
+  it('saves the timeout and offers the restart actions', async () => {
+    const onRestart = jest.fn();
+    wire({ env_set: { valid: true, errors: [], restart: ['stack'] } });
+
+    render(<DevboxSettingsCard onRestart={onRestart} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-input-JOB_TIMEOUT_SECONDS')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByTestId('devbox-settings-input-JOB_TIMEOUT_SECONDS'), {
+      target: { value: '600' },
+    });
+    fireEvent.click(screen.getByTestId('devbox-settings-save'));
+
+    await waitFor(() => {
+      const calls = devboxCallArgs(invokeMock, 'env_set');
+      expect(calls[0]).toEqual({ patch: { JOB_TIMEOUT_SECONDS: '600' } });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-restart-banner')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('devbox-settings-restart-stack'));
+    expect(onRestart).toHaveBeenCalledWith('stack');
+  });
+
+  it('renders backend validation errors', async () => {
+    wire({ env_set: { valid: false, errors: ['RELAY_SUBDOMAIN: expected a dns label'], restart: [] } });
+
+    render(<DevboxSettingsCard />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-input-RELAY_SUBDOMAIN')).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByTestId('devbox-settings-input-RELAY_SUBDOMAIN'), {
+      target: { value: 'Bad Name' },
+    });
+    fireEvent.click(screen.getByTestId('devbox-settings-save'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-errors').textContent).toContain('dns label');
     });
   });
 });
