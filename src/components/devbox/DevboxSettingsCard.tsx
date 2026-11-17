@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Lock, RefreshCw, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Tooltip } from '@/components/ui/Tooltip';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Select } from '@/components/ui/Select';
 import { t } from '@/lib/i18n';
 import {
+  devboxConnectionCheck,
   devboxEnvGet,
   devboxEnvSet,
   type DevboxEnvEntry,
@@ -17,26 +19,65 @@ export interface DevboxSettingsCardProps {
   onSaved?: () => void;
 }
 
-const SECTION_ORDER = ['ingress', 'egress', 'runtime', 'managed'] as const;
+const MODE_CLOUDFLARE = 'cloudflare';
+const MODE_RELAY = 'relay';
 
-const SECTION_TITLE_KEYS: Record<string, string> = {
-  ingress: 'devboxPage.settingsSectionIngress',
-  egress: 'devboxPage.settingsSectionEgress',
-  runtime: 'devboxPage.settingsSectionRuntime',
-  managed: 'devboxPage.settingsSectionManaged',
+const ACCESS_PRESETS: Record<string, Record<string, string>> = {
+  readonly: {
+    edit: 'deny',
+    write: 'deny',
+    apply_patch: 'deny',
+    bash: 'deny',
+    webfetch: 'deny',
+  },
+  standard: {
+    edit: 'ask',
+    write: 'ask',
+    apply_patch: 'ask',
+    bash: 'ask',
+    webfetch: 'allow',
+  },
+  full: {
+    edit: 'allow',
+    write: 'allow',
+    apply_patch: 'allow',
+    bash: 'allow',
+    webfetch: 'allow',
+  },
 };
 
-const FIELD_LABEL_KEYS: Record<string, string> = {
-  INGRESS_MODE: 'devboxPage.settingsFieldIngressMode',
-  RELAY_SUBDOMAIN: 'devboxPage.settingsFieldRelaySubdomain',
-  TUNNEL_TOKEN: 'devboxPage.settingsFieldTunnelToken',
-  PUBLIC_URL: 'devboxPage.settingsFieldPublicUrl',
-  EGRESS_CONTAINER: 'devboxPage.settingsFieldEgressContainer',
-  VLESS_SUB_URL: 'devboxPage.settingsFieldVlessSubUrl',
-  JOB_TIMEOUT_SECONDS: 'devboxPage.settingsFieldJobTimeoutSeconds',
-  OPENCODE_MCP_PERMISSIONS: 'devboxPage.settingsFieldOpencodeMcpPermissions',
-  TUNNEL_TAIL: 'devboxPage.settingsFieldTunnelTail',
+const ACCESS_LABEL_KEYS: Record<string, string> = {
+  readonly: 'devboxPage.settingsAccessReadonly',
+  standard: 'devboxPage.settingsAccessStandard',
+  full: 'devboxPage.settingsAccessFull',
 };
+
+function normalizePermissions(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const keys = Object.keys(ACCESS_PRESETS.full).sort();
+    const picked: Record<string, string> = {};
+    for (const key of keys) picked[key] = String(parsed[key] ?? '');
+    return JSON.stringify(picked);
+  } catch {
+    return '';
+  }
+}
+
+function detectAccessPreset(raw: string): string {
+  const normalized = normalizePermissions(raw);
+  if (!normalized) return 'custom';
+  for (const [name, preset] of Object.entries(ACCESS_PRESETS)) {
+    if (normalizePermissions(JSON.stringify(preset)) === normalized) return name;
+  }
+  return 'custom';
+}
+
+type CheckState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'ok'; tools: number; latency: number }
+  | { kind: 'fail'; error: string };
 
 export function DevboxSettingsCard({
   busy = false,
@@ -50,8 +91,10 @@ export function DevboxSettingsCard({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [restartKinds, setRestartKinds] = useState<string[]>([]);
-  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, boolean>>({});
-  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [saved, setSaved] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [check, setCheck] = useState<CheckState>({ kind: 'idle' });
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -61,12 +104,10 @@ export function DevboxSettingsCard({
       const res = await devboxEnvGet();
       const list = Array.isArray(res?.entries) ? res.entries : [];
       setEntries(list);
-      const initialDraft: Record<string, string> = {};
-      for (const entry of list) {
-        initialDraft[entry.key] = entry.value;
-      }
-      setDraft(initialDraft);
-      setSavedSuccess(false);
+      const initial: Record<string, string> = {};
+      for (const entry of list) initial[entry.key] = entry.value;
+      setDraft(initial);
+      setSaved(false);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
       setEntries([]);
@@ -76,32 +117,54 @@ export function DevboxSettingsCard({
     }
   }, []);
 
+  const runCheck = useCallback(async () => {
+    setCheck({ kind: 'checking' });
+    try {
+      const res = await devboxConnectionCheck();
+      if (res?.ok) {
+        setCheck({
+          kind: 'ok',
+          tools: Number(res.tools ?? 0),
+          latency: Number(res.latency_ms ?? 0),
+        });
+      } else {
+        setCheck({ kind: 'fail', error: res?.error || t('devboxPage.settingsStatusFail') });
+      }
+    } catch (err) {
+      setCheck({
+        kind: 'fail',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, []);
+
   useEffect(() => {
     void loadSettings();
-  }, [loadSettings]);
+    void runCheck();
+  }, [loadSettings, runCheck]);
 
   const patch = useMemo(() => {
     const diff: Record<string, string> = {};
     for (const entry of entries) {
       if (entry.readonly) continue;
       const current = draft[entry.key] ?? '';
-      if (current !== entry.value) {
-        diff[entry.key] = current;
-      }
+      if (current !== entry.value) diff[entry.key] = current;
     }
     return diff;
   }, [entries, draft]);
 
   const hasChanges = Object.keys(patch).length > 0;
+  const mode = (draft.INGRESS_MODE ?? '') === MODE_RELAY ? MODE_RELAY : MODE_CLOUDFLARE;
+  const access = detectAccessPreset(draft.OPENCODE_MCP_PERMISSIONS ?? '');
 
-  const handleFieldChange = (key: string, value: string) => {
+  const setField = (key: string, value: string) => {
     setDraft(prev => ({ ...prev, [key]: value }));
-    setSavedSuccess(false);
+    setSaved(false);
     if (errors.length > 0) setErrors([]);
   };
 
-  const toggleSecretReveal = (key: string) => {
-    setRevealedSecrets(prev => ({ ...prev, [key]: !prev[key] }));
+  const selectMode = (next: string) => {
+    setField('INGRESS_MODE', next);
   };
 
   const handleSave = async () => {
@@ -112,48 +175,60 @@ export function DevboxSettingsCard({
       const res = await devboxEnvSet(patch);
       if (!res.valid) {
         setErrors(Array.isArray(res.errors) && res.errors.length > 0 ? res.errors : ['Save failed']);
-        setSavedSuccess(false);
+        setSaved(false);
         return;
       }
       setRestartKinds(Array.isArray(res.restart) ? res.restart : []);
-      setSavedSuccess(true);
+      setSaved(true);
       setEntries(prev =>
         prev.map(entry => (entry.key in patch ? { ...entry, value: patch[entry.key] } : entry)),
       );
       onSaved?.();
+      void runCheck();
     } catch (err) {
       setErrors([err instanceof Error ? err.message : String(err)]);
-      setSavedSuccess(false);
+      setSaved(false);
     } finally {
       setSaving(false);
     }
   };
 
-  const groupedEntries = useMemo(() => {
-    const groups: Record<string, DevboxEnvEntry[]> = {};
-    for (const entry of entries) {
-      const sec = entry.section || 'runtime';
-      if (!groups[sec]) groups[sec] = [];
-      groups[sec].push(entry);
+  const secretToggle = (key: string) => (
+    <button
+      type="button"
+      className="pr-2 text-slate-400 hover:text-white transition-colors"
+      data-testid={`devbox-settings-toggle-${key}`}
+      aria-label={revealed[key] ? t('devboxPage.settingsHideSecret') : t('devboxPage.settingsShowSecret')}
+      onClick={() => setRevealed(prev => ({ ...prev, [key]: !prev[key] }))}
+    >
+      {revealed[key] ? <EyeOff size={13} /> : <Eye size={13} />}
+    </button>
+  );
+
+  const statusLine = (() => {
+    const url =
+      mode === MODE_RELAY
+        ? draft.RELAY_SUBDOMAIN
+          ? `https://${draft.RELAY_SUBDOMAIN}.loca.lt`
+          : ''
+        : draft.PUBLIC_URL ?? '';
+    if (check.kind === 'checking') {
+      return { dot: 'bg-slate-400 animate-pulse', text: `${url || '—'} · ${t('devboxPage.settingsChecking')}` };
     }
-    const result: { section: string; title: string; entries: DevboxEnvEntry[] }[] = [];
-    for (const sec of SECTION_ORDER) {
-      if (groups[sec] && groups[sec].length > 0) {
-        const titleKey = SECTION_TITLE_KEYS[sec];
-        result.push({
-          section: sec,
-          title: titleKey ? t(titleKey as never) : sec,
-          entries: groups[sec],
-        });
-      }
+    if (check.kind === 'ok') {
+      return {
+        dot: 'bg-emerald-400',
+        text: `${url || '—'} · ${t('devboxPage.settingsStatusOk', {
+          tools: check.tools,
+          ms: check.latency,
+        })}`,
+      };
     }
-    for (const [sec, items] of Object.entries(groups)) {
-      if (!(SECTION_ORDER as readonly string[]).includes(sec) && items.length > 0) {
-        result.push({ section: sec, title: sec, entries: items });
-      }
+    if (check.kind === 'fail') {
+      return { dot: 'bg-red-400', text: `${url || '—'} · ${check.error}` };
     }
-    return result;
-  }, [entries]);
+    return { dot: 'bg-slate-500', text: `${url || '—'} · ${t('devboxPage.settingsStatusIdle')}` };
+  })();
 
   return (
     <DevboxSection
@@ -163,7 +238,7 @@ export function DevboxSettingsCard({
       onRetry={loadSettings}
       actions={
         <div className="flex items-center gap-2">
-          {savedSuccess && (
+          {saved && (
             <span
               className="text-2xs text-emerald-400 font-medium"
               data-testid="devbox-settings-saved-badge"
@@ -200,7 +275,7 @@ export function DevboxSettingsCard({
           {t('devboxPage.settingsEmpty')}
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4" data-testid="devbox-settings-body">
           {errors.length > 0 && (
             <div
               className="rounded border border-red-500/30 bg-red-500/10 p-2.5 text-2xs text-red-200"
@@ -252,67 +327,147 @@ export function DevboxSettingsCard({
             </div>
           )}
 
-          {groupedEntries.map(group => (
-            <div
-              key={group.section}
-              className="space-y-2"
-              data-testid={`devbox-settings-group-${group.section}`}
-            >
-              <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
-                {group.title}
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {group.entries.map(entry => {
-                  const labelKey = FIELD_LABEL_KEYS[entry.key];
-                  const labelText = labelKey ? t(labelKey as never) : entry.key;
-                  const isRevealed = Boolean(revealedSecrets[entry.key]);
-                  const isSecret = entry.secret;
-                  const inputType = isSecret && !isRevealed ? 'password' : 'text';
-
-                  const rightElement = entry.readonly ? (
-                    <Tooltip content={t('devboxPage.settingsReadonlyHint')}>
-                      <span
-                        className="pr-2 text-slate-500 flex items-center"
-                        data-testid={`devbox-settings-readonly-${entry.key}`}
-                      >
-                        <Lock size={13} />
-                      </span>
-                    </Tooltip>
-                  ) : isSecret ? (
-                    <button
-                      type="button"
-                      className="pr-2 text-slate-400 hover:text-white transition-colors"
-                      data-testid={`devbox-settings-toggle-${entry.key}`}
-                      aria-label={
-                        isRevealed
-                          ? t('devboxPage.settingsHideSecret')
-                          : t('devboxPage.settingsShowSecret')
-                      }
-                      onClick={() => toggleSecretReveal(entry.key)}
-                    >
-                      {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
-                    </button>
-                  ) : undefined;
-
-                  return (
-                    <div key={entry.key} className="space-y-0.5">
-                      <Input
-                        label={labelText}
-                        id={`devbox-settings-${entry.key}`}
-                        data-testid={`devbox-settings-input-${entry.key}`}
-                        type={inputType}
-                        value={draft[entry.key] ?? ''}
-                        disabled={entry.readonly || saving || busy}
-                        onChange={e => handleFieldChange(entry.key, e.target.value)}
-                        rightElement={rightElement}
-                        containerClassName="space-y-1"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+          <div className="space-y-2.5" data-testid="devbox-settings-ingress">
+            <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
+              {t('devboxPage.settingsIngressTitle')}
+            </h4>
+            <SegmentedControl
+              size="sm"
+              options={[
+                { label: t('devboxPage.settingsModeCloudflare'), value: MODE_CLOUDFLARE },
+                { label: t('devboxPage.settingsModeRelay'), value: MODE_RELAY },
+              ]}
+              value={mode}
+              onChange={selectMode}
+              disabled={saving || busy}
+            />
+            <p className="text-2xs text-slate-400">
+              {mode === MODE_RELAY
+                ? t('devboxPage.settingsModeRelayHint')
+                : t('devboxPage.settingsModeCloudflareHint')}
+            </p>
+            {mode === MODE_RELAY ? (
+              <Input
+                label={t('devboxPage.settingsRelaySubdomainLabel')}
+                hint={t('devboxPage.settingsRelaySubdomainHint')}
+                id="devbox-settings-RELAY_SUBDOMAIN"
+                data-testid="devbox-settings-input-RELAY_SUBDOMAIN"
+                value={draft.RELAY_SUBDOMAIN ?? ''}
+                placeholder="ide-account-manager"
+                disabled={saving || busy}
+                onChange={e => setField('RELAY_SUBDOMAIN', e.target.value)}
+                containerClassName="space-y-1"
+              />
+            ) : (
+              <Input
+                label={t('devboxPage.settingsPublicUrlLabel')}
+                hint={t('devboxPage.settingsPublicUrlHint')}
+                id="devbox-settings-PUBLIC_URL"
+                data-testid="devbox-settings-input-PUBLIC_URL"
+                value={draft.PUBLIC_URL ?? ''}
+                placeholder="https://devbox.example.com"
+                disabled={saving || busy}
+                onChange={e => setField('PUBLIC_URL', e.target.value)}
+                containerClassName="space-y-1"
+              />
+            )}
+            <div className="flex flex-wrap items-center gap-2" data-testid="devbox-settings-status">
+              <span className={`h-2 w-2 rounded-full ${statusLine.dot}`} />
+              <span className="text-2xs text-slate-300">{statusLine.text}</span>
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => void runCheck()}
+                disabled={check.kind === 'checking'}
+                data-testid="devbox-settings-check"
+              >
+                <ShieldCheck size={12} className="mr-1" />
+                {t('devboxPage.settingsCheck')}
+              </Button>
             </div>
-          ))}
+          </div>
+
+          <div className="space-y-2.5" data-testid="devbox-settings-access">
+            <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
+              {t('devboxPage.settingsAccessTitle')}
+            </h4>
+            <div className="flex flex-wrap items-center gap-2" data-testid="devbox-settings-access-hint">
+              <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-2xs text-slate-200">
+                {access === 'custom'
+                  ? t('devboxPage.settingsAccessCustom')
+                  : t(ACCESS_LABEL_KEYS[access] as never)}
+              </span>
+              <span className="text-2xs text-slate-400">{t('devboxPage.settingsAccessHint')}</span>
+            </div>
+            <Input
+              label={t('devboxPage.settingsTimeoutLabel')}
+              hint={t('devboxPage.settingsTimeoutHint')}
+              id="devbox-settings-JOB_TIMEOUT_SECONDS"
+              data-testid="devbox-settings-input-JOB_TIMEOUT_SECONDS"
+              type="number"
+              min={60}
+              max={3600}
+              value={draft.JOB_TIMEOUT_SECONDS ?? ''}
+              disabled={saving || busy}
+              onChange={e => setField('JOB_TIMEOUT_SECONDS', e.target.value)}
+              containerClassName="space-y-1"
+            />
+          </div>
+
+          <div className="border-t border-white/5 pt-2" data-testid="devbox-settings-advanced">
+            <button
+              type="button"
+              className="flex w-full items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-colors"
+              onClick={() => setAdvancedOpen(open => !open)}
+              aria-expanded={advancedOpen}
+              data-testid="devbox-settings-advanced-toggle"
+            >
+              {advancedOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              {t('devboxPage.settingsAdvanced')}
+            </button>
+            {advancedOpen && (
+              <div className="mt-2.5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Select
+                  label={t('devboxPage.settingsEgressLabel')}
+                  hint={t('devboxPage.settingsEgressHint')}
+                  id="devbox-settings-EGRESS_CONTAINER"
+                  data-testid="devbox-settings-select-EGRESS_CONTAINER"
+                  value={draft.EGRESS_CONTAINER ?? 'rdm-egress'}
+                  options={[
+                    { value: 'rdm-egress', label: 'rdm-egress' },
+                    { value: 'rdm-vpn', label: 'rdm-vpn' },
+                  ]}
+                  onValueChange={value => setField('EGRESS_CONTAINER', value)}
+                  disabled={saving || busy}
+                  containerClassName="space-y-1"
+                />
+                <Input
+                  label={t('devboxPage.settingsVlessLabel')}
+                  id="devbox-settings-VLESS_SUB_URL"
+                  data-testid="devbox-settings-input-VLESS_SUB_URL"
+                  type={revealed.VLESS_SUB_URL ? 'text' : 'password'}
+                  value={draft.VLESS_SUB_URL ?? ''}
+                  disabled={saving || busy}
+                  onChange={e => setField('VLESS_SUB_URL', e.target.value)}
+                  rightElement={secretToggle('VLESS_SUB_URL')}
+                  containerClassName="space-y-1"
+                />
+                {mode === MODE_CLOUDFLARE && (
+                  <Input
+                    label={t('devboxPage.settingsTunnelTokenLabel')}
+                    id="devbox-settings-TUNNEL_TOKEN"
+                    data-testid="devbox-settings-input-TUNNEL_TOKEN"
+                    type={revealed.TUNNEL_TOKEN ? 'text' : 'password'}
+                    value={draft.TUNNEL_TOKEN ?? ''}
+                    disabled={saving || busy}
+                    onChange={e => setField('TUNNEL_TOKEN', e.target.value)}
+                    rightElement={secretToggle('TUNNEL_TOKEN')}
+                    containerClassName="space-y-1"
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </DevboxSection>
