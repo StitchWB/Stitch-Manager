@@ -832,7 +832,12 @@ def _kill_tree(proc: subprocess.Popen[bytes]) -> None:
             pass
     else:
         try:
-            os.killpg(os.getpgid(pid), signal.SIGKILL)
+            pgid = os.getpgid(pid)
+            # A child spawned without its own session shares our group; killpg would take the CLI down with it.
+            if pgid == os.getpgrp():
+                proc.kill()
+            else:
+                os.killpg(pgid, signal.SIGKILL)
         except OSError:
             pass
     try:
