@@ -11,7 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from stitch_backend.domains.ai_gateway.schemas._common import _validate_dict_size
 
 if TYPE_CHECKING:
-    from stitch_backend.domains.ai_gateway.models import PublicModel
+    from collections.abc import Sequence
+
+    from stitch_backend.domains.ai_gateway.models import PublicModel, RouteTarget
 
 
 class PublicModelCreateRequest(BaseModel):
@@ -91,6 +93,34 @@ class UnmergeRouteTargetRequest(BaseModel):
         return PublicModelCreateRequest.validate_id(v)
 
 
+class PublicModelRouteTarget(BaseModel):
+    """Route target embedded in :class:`PublicModelResponse`."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    upstream_model_id: str = Field(alias="upstreamModelId")
+    provider_endpoint_id: str = Field(alias="providerEndpointId")
+    enabled: bool
+    priority: int
+    weight: float
+    cost_modifier: float = Field(alias="costModifier")
+
+    @classmethod
+    def from_parts(
+        cls, target: RouteTarget, provider_endpoint_id: str,
+    ) -> PublicModelRouteTarget:
+        return cls(
+            id=target.id,
+            upstream_model_id=target.upstream_model_id,
+            provider_endpoint_id=provider_endpoint_id,
+            enabled=target.enabled,
+            priority=target.priority,
+            weight=target.weight,
+            cost_modifier=target.cost_modifier,
+        )
+
+
 class PublicModelResponse(BaseModel):
     """Wire DTO for :class:`PublicModel`."""
 
@@ -100,16 +130,26 @@ class PublicModelResponse(BaseModel):
     display_name: str | None = Field(None, alias="displayName")
     enabled: bool
     contract: dict[str, Any] | None = None
+    owner_id: int | None = Field(None, alias="ownerId")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime | None = Field(None, alias="updatedAt")
+    route_targets: list[PublicModelRouteTarget] = Field(
+        default_factory=list, alias="routeTargets",
+    )
 
     @classmethod
-    def from_orm_model(cls, obj: PublicModel) -> PublicModelResponse:
+    def from_orm_model(
+        cls,
+        obj: PublicModel,
+        route_targets: Sequence[PublicModelRouteTarget] | None = None,
+    ) -> PublicModelResponse:
         return cls(
             id=obj.id,
             display_name=obj.display_name,
             enabled=obj.enabled,
             contract=obj.contract,
+            owner_id=obj.owner_id,
             created_at=obj.created_at,
             updated_at=obj.updated_at,
+            route_targets=list(route_targets or []),
         )

@@ -13,7 +13,7 @@ from sqlalchemy import exc as sqlalchemy_exc
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_session
-from stitch_backend.domains.ai_gateway import circuit_breaker
+from stitch_backend.domains.ai_gateway import circuit_breaker, model_throughput
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.pricing_cache import estimate_usd, get_pricing_cache
 from stitch_backend.domains.ai_gateway.routing_engine import (
@@ -89,6 +89,12 @@ class _RequestOutcome:
     failover_count: int = 0
     error_class: str | None = None
     persisted: bool = False
+
+
+@dataclass
+class _StreamTiming:
+    first_chunk_at: float | None = None
+    last_chunk_at: float | None = None
 
 
 __all__ = [
@@ -364,6 +370,101 @@ class LiteLLMExecutor:
                 timestamp=time.time(),
             )
         )
+
+    def _record_model_throughput(
+        self,
+        *,
+        model: str | None,
+        routing_result: Any,
+        latency_ms: float,
+        prompt_tokens: int,
+        completion_tokens: int,
+        generation_ms: float,
+    ) -> None:
+        if not model or routing_result is None:
+            return
+        try:
+            endpoint = getattr(routing_result, "endpoint", None)
+            upstream = getattr(routing_result, "upstream_model", None)
+            model_throughput.model_throughput_registry.record(
+                model,
+                endpoint_id=getattr(endpoint, "id", "") or "",
+                upstream_model_id=getattr(upstream, "upstream_model_id", "") or "",
+                latency_ms=latency_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                generation_ms=generation_ms,
+            )
+        except Exception:
+            logger.debug("Model throughput record failed", exc_info=True)
+
+    def _record_outcome_throughput(
+        self,
+        model: str | None,
+        outcome: _RequestOutcome,
+    ) -> None:
+        routing_result = outcome.routing_result
+        if not outcome.ok or routing_result is None:
+            return
+        latency_ms = max((time.time() - outcome.started_at) * 1000.0, 0.0)
+        self._record_model_throughput(
+            model=model,
+            routing_result=routing_result,
+            latency_ms=latency_ms,
+            prompt_tokens=outcome.input_tokens,
+            completion_tokens=outcome.output_tokens,
+            generation_ms=latency_ms,
+        )
+
+    def _timed_stream(self, stream: Any, timing: _StreamTiming) -> Any:
+        async def _iterate() -> Any:
+            async for line in stream:
+                if line:
+                    now = time.perf_counter()
+                    if timing.first_chunk_at is None:
+                        timing.first_chunk_at = now
+                    timing.last_chunk_at = now
+                yield line
+
+        return _iterate()
+
+    def _throughput_on_complete(
+        self,
+        on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None,
+        *,
+        model: str | None,
+        routing_result: Any,
+        timing: _StreamTiming,
+        request_started_at: float | None,
+    ) -> Callable[[tuple[int, int] | None, bool], Awaitable[None]]:
+        async def _callback(usage: tuple[int, int] | None, ok: bool) -> None:
+            if on_complete is not None:
+                await on_complete(usage, ok)
+            if not ok:
+                return
+            prompt_tokens, completion_tokens = usage if usage is not None else (0, 0)
+            first = timing.first_chunk_at
+            last = timing.last_chunk_at
+            generation_ms = (
+                (last - first) * 1000.0
+                if first is not None and last is not None
+                else 0.0
+            )
+            latency_ms = (
+                max((time.time() - request_started_at) * 1000.0, 0.0)
+                if request_started_at is not None
+                else generation_ms
+            )
+            self._record_model_throughput(
+                model=model,
+                routing_result=routing_result,
+                latency_ms=latency_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                generation_ms=generation_ms,
+            )
+
+        return _callback
 
     def _model_chain(self, primary: str) -> list[str]:
         """Ordered models to attempt: the requested one, then the fallback chain."""
@@ -689,6 +790,7 @@ class LiteLLMExecutor:
             await self._persist_outcome(outcome)
             raise
         if not payload.stream:
+            self._record_outcome_throughput(payload.model, outcome)
             await self._persist_outcome(outcome)
         return result
 
@@ -727,6 +829,7 @@ class LiteLLMExecutor:
             await self._persist_outcome(outcome)
             raise
         if not payload.stream:
+            self._record_outcome_throughput(payload.model, outcome)
             await self._persist_outcome(outcome)
         return result
 
@@ -765,6 +868,7 @@ class LiteLLMExecutor:
             await self._persist_outcome(outcome)
             raise
         if not payload.stream:
+            self._record_outcome_throughput(payload.model, outcome)
             await self._persist_outcome(outcome)
         return result
 
@@ -874,6 +978,9 @@ class LiteLLMExecutor:
         *,
         client_has_tools: bool = False,
         on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None = None,
+        model: str | None = None,
+        routing_result: Any | None = None,
+        request_started_at: float | None = None,
     ) -> StreamingResponse:
         """OpenAI-shaped SSE pass-through.
 
@@ -887,6 +994,16 @@ class LiteLLMExecutor:
         ``ok`` flag after the upstream stream ends, including on client
         disconnect.
         """
+        timing = _StreamTiming()
+        if model is not None and routing_result is not None:
+            response = self._timed_stream(response, timing)
+            on_complete = self._throughput_on_complete(
+                on_complete,
+                model=model,
+                routing_result=routing_result,
+                timing=timing,
+                request_started_at=request_started_at,
+            )
         primed = await prime_stream(response)
         return await stream_openai_response(
             primed,
@@ -917,8 +1034,21 @@ class LiteLLMExecutor:
         *,
         client_has_tools: bool = False,
         on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None = None,
+        model: str | None = None,
+        routing_result: Any | None = None,
+        request_started_at: float | None = None,
     ) -> StreamingResponse:
         """Anthropic-shaped SSE pass-through (same contract as OpenAI)."""
+        timing = _StreamTiming()
+        if model is not None and routing_result is not None:
+            response = self._timed_stream(response, timing)
+            on_complete = self._throughput_on_complete(
+                on_complete,
+                model=model,
+                routing_result=routing_result,
+                timing=timing,
+                request_started_at=request_started_at,
+            )
         primed = await prime_stream(response)
         return await stream_anthropic_response(
             primed,

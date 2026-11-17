@@ -84,13 +84,25 @@ export interface CredentialModelAccess {
   updatedAt?: string | null;
 }
 
+export interface PublicModelRouteTarget {
+  id: number;
+  upstreamModelId: string;
+  providerEndpointId: string;
+  enabled: boolean;
+  priority: number;
+  weight: number;
+  costModifier: number;
+}
+
 export interface PublicModel {
   id: string;
   displayName?: string | null;
   enabled: boolean;
   contract?: Record<string, unknown> | null;
+  ownerId?: number | null;
   createdAt: string;
   updatedAt?: string | null;
+  routeTargets?: PublicModelRouteTarget[];
 }
 
 export interface RouteTarget {
@@ -233,10 +245,33 @@ export async function createUpstreamModel(params: {
   return safeInvoke('create_upstream_model', params);
 }
 
+export interface UpstreamModelsQuery {
+  q?: string;
+  aliveWithinMinutes?: number;
+  enabled?: boolean;
+  orderBy?: 'last_seen' | 'id' | 'display_name';
+  limit?: number;
+  offset?: number;
+}
+
+export interface UpstreamModelPage {
+  models: UpstreamModel[];
+  total: number;
+}
+
+export async function listUpstreamModelsPage(
+  providerEndpointId?: string,
+  query: UpstreamModelsQuery = {},
+): Promise<UpstreamModelPage> {
+  return safeInvoke('list_upstream_models', { providerEndpointId, ...query });
+}
+
 export async function listUpstreamModels(
-  providerEndpointId?: string
+  providerEndpointId?: string,
+  query: UpstreamModelsQuery = {},
 ): Promise<UpstreamModel[]> {
-  return safeInvoke('list_upstream_models', { providerEndpointId });
+  const page = await listUpstreamModelsPage(providerEndpointId, query);
+  return page.models;
 }
 
 export async function getUpstreamModel(id: string): Promise<UpstreamModel | null> {
@@ -543,6 +578,66 @@ export async function refreshEndpointQuota(params: {
   credentialId?: string;
 }): Promise<RefreshEndpointQuotaResult> {
   return safeInvoke('refresh_endpoint_quota', params, { noCache: true });
+}
+
+export interface ModelHealthRow {
+  endpointId: string;
+  model: string;
+  canonical: string;
+  status: string;
+  alive: boolean;
+  usable: boolean;
+  reason: string;
+  vision?: boolean | null;
+  tools?: boolean | null;
+  latencyMs?: number | null;
+  lastVerifiedAt?: string | null;
+}
+
+export interface ModelHealthPage {
+  total: number;
+  count: number;
+  models: ModelHealthRow[];
+}
+
+export async function listModelHealth(params: {
+  endpointId?: string;
+  prefix?: string;
+  alive?: boolean;
+  usable?: boolean;
+  vision?: boolean;
+  tools?: boolean;
+  changedSince?: string;
+  sort?: 'model' | 'latency';
+  topK?: number;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<ModelHealthPage> {
+  return safeInvoke('list_model_health', params);
+}
+
+export interface ModelThroughputRow {
+  model: string;
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  avgTps: number;
+  p50Tps: number;
+  maxTps: number;
+  lastUsedAt: string;
+}
+
+export interface ModelThroughputPage {
+  totalModels: number;
+  count: number;
+  models: ModelThroughputRow[];
+}
+
+export async function listModelThroughput(params: {
+  windowMinutes?: number;
+  limit?: number;
+} = {}): Promise<ModelThroughputPage> {
+  return safeInvoke('list_model_throughput', params);
 }
 
 

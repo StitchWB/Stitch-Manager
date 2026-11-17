@@ -20,6 +20,7 @@ from stitch_backend.domains.ai_gateway.schemas import (
     PublicModelCreateRequest,
     PublicModelIdRequest,
     PublicModelResponse,
+    PublicModelRouteTarget,
     PublicModelUpdateRequest,
     UnmergeRouteTargetRequest,
 )
@@ -54,7 +55,18 @@ async def cmd_list_public_models(db: AsyncSession, params: dict) -> Any:
 
     svc = PublicModelService(db)
     models = await svc.list_public_models(owner_id=owner_id)
-    return [PublicModelResponse.from_orm_model(m) for m in models]
+    targets = await RouteTargetService(db).list_targets_for_public_models(
+        [m.id for m in models]
+    )
+    by_model: dict[str, list[PublicModelRouteTarget]] = {}
+    for target, provider_endpoint_id in targets:
+        by_model.setdefault(target.public_model_id, []).append(
+            PublicModelRouteTarget.from_parts(target, provider_endpoint_id)
+        )
+    return [
+        PublicModelResponse.from_orm_model(m, route_targets=by_model.get(m.id))
+        for m in models
+    ]
 
 
 @command("get_public_model", readonly=True)

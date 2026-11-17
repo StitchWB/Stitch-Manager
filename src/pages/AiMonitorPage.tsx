@@ -5,13 +5,20 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Header from '../components/layout/Header';
 import AiAnalytics from './AiAnalytics';
 import { MonitorOverview } from '../components/ai-proxy/sections/MonitorOverview';
+import { ModelThroughputSection } from '../components/ai-proxy/sections/ModelThroughputSection';
 import { ProxyDebugDrawer } from '../components/ai-proxy/ProxyDebugDrawer';
 import { useAiProvidersController } from './hooks/useAiProvidersController';
-import { Button, IconButton, OverflowMenu, PageHeader, Tooltip } from '@/components/ui';
+import { Button, IconButton, OverflowMenu, PageHeader, TabButton, Tooltip } from '@/components/ui';
 import { t } from '../lib/i18n';
 
-const MONITOR_TABS = ['overview', 'analytics'] as const;
+const MONITOR_TABS = ['overview', 'throughput', 'analytics'] as const;
 type MonitorTab = (typeof MONITOR_TABS)[number];
+
+const TAB_LABEL_KEY: Record<MonitorTab, string> = {
+  overview: 'aiHub.tabs.overview',
+  throughput: 'aiHub.tabs.throughput',
+  analytics: 'aiHub.tabs.analytics',
+};
 
 export default function AiMonitorPage() {
   const navigate = useNavigate();
@@ -103,7 +110,26 @@ export default function AiMonitorPage() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 space-y-4 overflow-auto p-4 md:p-6">
-          {monitorTab === 'overview' ? (
+          <div className="flex flex-wrap gap-1">
+            {MONITOR_TABS.map(tabId => (
+              <TabButton
+                key={tabId}
+                active={monitorTab === tabId}
+                size="sm"
+                label={t(TAB_LABEL_KEY[tabId])}
+                onClick={() =>
+                  setSearchParams(
+                    prev => {
+                      prev.set('tab', tabId);
+                      return prev;
+                    },
+                    { replace: true },
+                  )
+                }
+              />
+            ))}
+          </div>
+          {monitorTab === 'overview' && (
             <MonitorOverview
               proxyStatus={proxyStatus}
               proxySettings={proxySettings}
@@ -116,9 +142,9 @@ export default function AiMonitorPage() {
               onOpenAnalytics={() => navigate('/ai/monitor?tab=analytics')}
               onOpenDebugChat={() => setShowDebugDrawer(true)}
             />
-          ) : (
-            <AiAnalytics />
           )}
+          {monitorTab === 'throughput' && <ModelThroughputSection />}
+          {monitorTab === 'analytics' && <AiAnalytics />}
         </div>
       </div>
 

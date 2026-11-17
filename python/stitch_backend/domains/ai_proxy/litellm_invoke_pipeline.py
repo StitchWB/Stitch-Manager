@@ -234,6 +234,9 @@ async def invoke_via_gateway(
                     executor, pool, routing_result, payload, usage, ok, outcome,
                     run_in_session=run_in_session,
                 ),
+                model=payload.model,
+                routing_result=routing_result,
+                request_started_at=start_time,
             )
         else:
             result = cast("Any", _json_object(response))
@@ -395,6 +398,9 @@ async def invoke_via_gateway_messages(
                     executor, pool, routing_result, payload, usage, ok, outcome,
                     run_in_session=run_in_session,
                 ),
+                model=payload.model,
+                routing_result=routing_result,
+                request_started_at=start_time,
             )
         else:
             result = cast("Any", _json_object(response))
@@ -564,6 +570,9 @@ async def invoke_via_gateway_responses(
                     executor, pool, routing_result, payload, usage, ok, outcome,
                     run_in_session=run_in_session,
                 ),
+                model=payload.model,
+                routing_result=routing_result,
+                request_started_at=start_time,
             )
         else:
             result = cast("Any", _json_object(response))

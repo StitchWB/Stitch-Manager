@@ -74,6 +74,8 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
   listProviderEndpoints: jest.fn(async () => []),
   listCredentials: jest.fn(async () => []),
   listUpstreamModels: jest.fn(async () => []),
+  listUpstreamModelsPage: jest.fn(async () => ({ models: [], total: 0 })),
+  listModelHealth: jest.fn(async () => ({ total: 0, count: 0, models: [] })),
   createProviderEndpoint: jest.fn(),
   saveConnection: jest.fn(),
   updateProviderEndpoint: jest.fn(),

@@ -27,7 +27,7 @@ class CredentialModelAccessUpsertRequest(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, v: str) -> str:
-        allowed = {"unknown", "available", "unavailable"}
+        allowed = {"unknown", "available", "unavailable", "denied", "temporarily_unavailable"}
         if v not in allowed:
             raise ValueError(f"status must be one of {allowed}")
         return v

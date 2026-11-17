@@ -24,6 +24,14 @@ _SEPARATORS = re.compile(r"[-_]+")
 
 _SLUG_RE = re.compile(r"[A-Za-z0-9._-]+")
 
+_HUMAN_TOKEN_SPLIT = re.compile(r"[-_.:\s]+")
+
+_ACRONYMS = frozenset({"ai", "api", "asr", "gpt", "llm", "moe", "ocr", "sdxl", "tts", "vae", "vl"})
+
+_SIZE_SUFFIXES = frozenset({"b", "k", "m", "t"})
+
+_DIGITS_THEN_SUFFIX = re.compile(r"^(\d+(?:\.\d+)*)([a-z]*)$")
+
 
 def canonical_model_key(model_id: str) -> str:
     """Normalize an upstream model id to a provider-independent identity key.
@@ -44,6 +52,31 @@ def canonical_model_key(model_id: str) -> str:
         parts.pop()
     normalized = "-".join(parts)
     return normalized or key
+
+
+def humanize_model_id(model_id: str) -> str:
+    """Derive a display label from an upstream id without dropping version suffixes.
+
+    ``Qwen/qwen3-8b`` -> ``Qwen3 8B``; the org/path prefix is dropped because
+    it repeats across every model of the same provider.
+    """
+    stripped = model_id.strip()
+    tail = stripped.rsplit("/", 1)[-1]
+    if not tail:
+        return stripped
+    words = [_humanize_token(token) for token in _HUMAN_TOKEN_SPLIT.split(tail) if token]
+    return " ".join(words) or tail
+
+
+def _humanize_token(token: str) -> str:
+    lowered = token.lower()
+    if lowered in _ACRONYMS:
+        return lowered.upper()
+    match = _DIGITS_THEN_SUFFIX.match(lowered)
+    if match is not None:
+        digits, suffix = match.groups()
+        return f"{digits}{suffix.upper() if suffix in _SIZE_SUFFIXES else suffix}"
+    return lowered[:1].upper() + lowered[1:]
 
 
 def is_valid_public_slug(value: str) -> bool:
@@ -71,7 +104,11 @@ def reconcile_contract(models: list[Any]) -> dict[str, Any]:
             mods.add("image")
         modalities = mods if modalities is None else (modalities & mods)
 
-        if caps.get("supports_function_calling") is False or caps.get("supports_tools") is False:
+        if (
+            caps.get("supports_tool_calling") is False
+            or caps.get("supports_function_calling") is False
+            or caps.get("supports_tools") is False
+        ):
             tools = False
         if caps.get("supports_streaming") is False:
             streaming = False

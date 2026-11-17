@@ -8,6 +8,7 @@ from sqlalchemy import and_, select
 
 from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway.commands._common import (
     _caller_uid,
@@ -97,6 +98,8 @@ async def cmd_update_provider_endpoint(db: AsyncSession, params: dict) -> Any:
         endpoint.updated_at = _utcnow()
     await db.flush()
     await db.refresh(endpoint)
+    if "enabled" in updates:
+        await event_bus.emit("endpoint.models_changed", {"endpoint_ids": [endpoint.id]})
     return ProviderEndpointResponse.from_orm_model(endpoint)
 
 

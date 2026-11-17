@@ -132,8 +132,12 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
   fetchUpstreamModels: async (endpointId?: string) => {
     set(s => ({ loading: { ...s.loading, upstreamModels: true }, errors: { ...s.errors, upstreamModels: null } }));
     try {
-      const upstreamModels = await api.listUpstreamModels(endpointId);
-      set({ upstreamModels });
+      const fetched = await api.listUpstreamModels(endpointId);
+      set(s => ({
+        upstreamModels: endpointId
+          ? [...s.upstreamModels.filter(m => m.providerEndpointId !== endpointId), ...fetched]
+          : fetched,
+      }));
     } catch (e) {
       set(s => ({ errors: { ...s.errors, upstreamModels: e instanceof Error ? e.message : String(e) } }));
     } finally {

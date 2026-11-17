@@ -350,6 +350,14 @@ def derive_requirements(request: GatewayRequest) -> dict[str, bool]:
     return reqs
 
 
+def _cap_value(capabilities: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = capabilities.get(key)
+        if value is not None:
+            return value
+    return None
+
+
 def _model_satisfies(capabilities: dict[str, Any] | None, requirements: dict[str, bool]) -> bool:
     """Check if an upstream model's capabilities satisfy the request requirements."""
     if not capabilities:
@@ -358,7 +366,12 @@ def _model_satisfies(capabilities: dict[str, Any] | None, requirements: dict[str
 
     cap_map = {
         "vision": capabilities.get("supports_vision"),
-        "tools": capabilities.get("supports_function_calling") or capabilities.get("supports_tools"),
+        "tools": _cap_value(
+            capabilities,
+            "supports_tool_calling",
+            "supports_function_calling",
+            "supports_tools",
+        ),
         "json_mode": capabilities.get("supports_json_mode") or capabilities.get("supports_json_schema"),
         "streaming": capabilities.get("supports_streaming"),
     }
@@ -445,6 +458,8 @@ class RoutingEngine:
         now = _utcnow()
         results: list[RoutingResult] = []
         for cached_result in cached.results:
+            if cached_result.endpoint.enabled is False:
+                continue
             credential = cached_result.credential
             if credential.next_retry_at is not None and credential.next_retry_at > now:
                 continue
@@ -533,9 +548,10 @@ class RoutingEngine:
         if not enabled_targets:
             raise RoutingError(f"No enabled route targets for {request.model!r}")
 
-        # 4. Filter by capability.
+        # 4. Filter by capability and endpoint availability.
         model_svc = UpstreamModelService(session)
         candidates: list[tuple[RouteTarget, UpstreamModel]] = []
+        endpoint_ids: set[str] = set()
         for target in enabled_targets:
             upstream = await model_svc.get_by_pk(target.upstream_model_id)
             if upstream is None or not upstream.enabled:
@@ -543,11 +559,29 @@ class RoutingEngine:
             if not _model_satisfies(upstream.capabilities, requirements):
                 continue
             candidates.append((target, upstream))
+            endpoint_ids.add(upstream.provider_endpoint_id)
 
         if not candidates:
             raise RoutingError(
                 f"No route targets satisfy requirements {requirements} for {request.model!r}",
             )
+
+        enabled_endpoint_ids = set(
+            (
+                await session.execute(
+                    select(ProviderEndpoint.id).where(
+                        ProviderEndpoint.id.in_(endpoint_ids),
+                        ProviderEndpoint.enabled.is_(True),
+                    ),
+                )
+            ).scalars().all(),
+        )
+        candidates = [
+            pair for pair in candidates
+            if pair[1].provider_endpoint_id in enabled_endpoint_ids
+        ]
+        if not candidates:
+            raise RoutingError(f"No enabled route targets for {request.model!r}")
 
         candidates = _order_candidates(candidates, rotation_strategy)
 
@@ -611,7 +645,7 @@ class RoutingEngine:
             from stitch_backend.domains.ai_gateway.service import ProviderEndpointService
             ep_svc = ProviderEndpointService(session)
             endpoint = await ep_svc.get_by_pk(upstream.provider_endpoint_id)
-            if endpoint is None:
+            if endpoint is None or not endpoint.enabled:
                 continue
 
             try:
@@ -740,7 +774,8 @@ class RoutingEngine:
 
         Applies the same pool predicate as :meth:`route` — fixes the prior
         bug where ``owner_id=None`` saw ONLY NULL rows (per-user public
-        models were invisible).
+        models were invisible).  Models whose route targets all sit on
+        disabled endpoints are excluded, matching :meth:`route`.
         """
         if pool is None:
             pool = PoolScope(owner_user_id=None)
@@ -749,8 +784,24 @@ class RoutingEngine:
         where_clauses = [_pool_predicate_for_public_model(pool)]
         stmt = stmt.where(and_(*where_clauses))
         result = await session.execute(stmt)
-        all_models = list(result.scalars().all())
-        return [m for m in all_models if m.enabled]
+        enabled_models = [m for m in result.scalars().all() if m.enabled]
+        if not enabled_models:
+            return []
+
+        ids = [m.id for m in enabled_models]
+        rows = await session.execute(
+            select(RouteTarget.public_model_id, ProviderEndpoint.enabled)
+            .join(UpstreamModel, UpstreamModel.id == RouteTarget.upstream_model_id)
+            .join(ProviderEndpoint, ProviderEndpoint.id == UpstreamModel.provider_endpoint_id)
+            .where(RouteTarget.public_model_id.in_(ids)),
+        )
+        endpoint_enabled: dict[str, list[bool]] = {}
+        for public_model_id, enabled in rows.all():
+            endpoint_enabled.setdefault(public_model_id, []).append(bool(enabled))
+        return [
+            m for m in enabled_models
+            if m.id not in endpoint_enabled or any(endpoint_enabled[m.id])
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

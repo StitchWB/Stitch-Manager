@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select
 from stitch_backend.core.base_repository import BaseRepository
 from stitch_backend.domains.ai_gateway.model_identity import (
     canonical_model_key,
+    humanize_model_id,
     is_valid_public_slug,
     reconcile_contract,
 )
@@ -24,10 +25,14 @@ from stitch_backend.domains.ai_gateway.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
 VERIFICATION_TTL = timedelta(days=7)
+
+PRESERVED_DISCOVERY_SOURCES = frozenset({"manual", "opencode_import", "autoreg_hook"})
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -35,6 +40,10 @@ def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class UpstreamModelService(BaseRepository[UpstreamModel]):
@@ -75,11 +84,15 @@ class UpstreamModelService(BaseRepository[UpstreamModel]):
         if existing is not None:
             if display_name is not None:
                 existing.display_name = display_name
-            # ponytail: keep operator's enabled/disabled intent — discovery must not re-enable disabled models
-            existing.discovery_source = discovery_source
+            elif not existing.display_name:
+                existing.display_name = humanize_model_id(upstream_model_id)
+            if existing.discovery_source not in PRESERVED_DISCOVERY_SOURCES:
+                existing.discovery_source = discovery_source
             existing.canonical_model_key = canonical_model_key(upstream_model_id)
             if capabilities is not None:
-                existing.capabilities = capabilities
+                merged = dict(existing.capabilities or {})
+                merged.update(capabilities)
+                existing.capabilities = merged
             existing.last_discovered_at = _utcnow()
             existing.updated_at = _utcnow()
             await self._db.flush()
@@ -88,7 +101,7 @@ class UpstreamModelService(BaseRepository[UpstreamModel]):
         record = UpstreamModel(
             provider_endpoint_id=provider_endpoint_id,
             upstream_model_id=upstream_model_id,
-            display_name=display_name,
+            display_name=display_name or humanize_model_id(upstream_model_id),
             enabled=enabled,
             discovery_source=discovery_source,
             canonical_model_key=canonical_model_key(upstream_model_id),
@@ -104,6 +117,75 @@ class UpstreamModelService(BaseRepository[UpstreamModel]):
         self, provider_endpoint_id: str | None = None,
     ) -> list[UpstreamModel]:
         return list(await self.find_by(provider_endpoint_id=provider_endpoint_id))
+
+    async def list_models_filtered(
+        self,
+        *,
+        provider_endpoint_id: str | None = None,
+        owner_id: int | None = None,
+        query: str | None = None,
+        alive_since: datetime | None = None,
+        enabled: bool | None = None,
+        order_by: str = "last_seen",
+        limit: int = 0,
+        offset: int = 0,
+    ) -> tuple[list[UpstreamModel], int]:
+        """Owner-scoped page of upstream models plus the unpaged match count.
+
+        ``owner_id`` is resolved through the parent endpoint: only models of
+        endpoints owned by ``owner_id`` or shared (``owner_id IS NULL``) are
+        visible. ``last_seen`` orders ``last_seen_at DESC`` with
+        ``upstream_model_id ASC`` as the deterministic tie-break.
+        """
+        join = UpstreamModel.provider_endpoint_id == ProviderEndpoint.id
+        conditions = [
+            or_(
+                ProviderEndpoint.owner_id.is_(None),
+                ProviderEndpoint.owner_id == owner_id,
+            )
+        ]
+        if provider_endpoint_id is not None:
+            conditions.append(UpstreamModel.provider_endpoint_id == provider_endpoint_id)
+        needle = (query or "").strip()
+        if needle:
+            pattern = f"%{_escape_like(needle)}%"
+            conditions.append(
+                or_(
+                    UpstreamModel.upstream_model_id.ilike(pattern, escape="\\"),
+                    UpstreamModel.display_name.ilike(pattern, escape="\\"),
+                )
+            )
+        if alive_since is not None:
+            conditions.append(UpstreamModel.last_seen_at >= alive_since)
+        if enabled is not None:
+            conditions.append(UpstreamModel.enabled == enabled)
+
+        count_stmt = (
+            select(func.count())
+            .select_from(UpstreamModel)
+            .join(ProviderEndpoint, join)
+            .where(*conditions)
+        )
+        total = int((await self._db.execute(count_stmt)).scalar_one())
+
+        stmt = select(UpstreamModel).join(ProviderEndpoint, join).where(*conditions)
+        if order_by == "id":
+            stmt = stmt.order_by(UpstreamModel.id.asc())
+        elif order_by == "display_name":
+            stmt = stmt.order_by(
+                UpstreamModel.display_name.asc(), UpstreamModel.upstream_model_id.asc(),
+            )
+        else:
+            stmt = stmt.order_by(
+                UpstreamModel.last_seen_at.desc(), UpstreamModel.upstream_model_id.asc(),
+            )
+        if limit > 0:
+            stmt = stmt.limit(limit)
+        if offset > 0:
+            stmt = stmt.offset(offset)
+
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all()), total
 
 
 class CredentialModelAccessService(BaseRepository[CredentialModelAccess]):
@@ -240,6 +322,25 @@ class RouteTargetService(BaseRepository[RouteTarget]):
             .order_by(RouteTarget.priority.asc(), RouteTarget.weight.desc()),
         )
         return list(result.scalars().all())
+
+    async def list_targets_for_public_models(
+        self, public_model_ids: Sequence[str],
+    ) -> list[tuple[RouteTarget, str]]:
+        """Load targets for many public models in one query.
+
+        Each item pairs the target with its upstream model's
+        ``provider_endpoint_id``; ordering is ``priority ASC, id ASC`` so
+        callers can group by ``public_model_id`` without re-sorting.
+        """
+        if not public_model_ids:
+            return []
+        result = await self._db.execute(
+            select(RouteTarget, UpstreamModel.provider_endpoint_id)
+            .join(UpstreamModel, UpstreamModel.id == RouteTarget.upstream_model_id)
+            .where(RouteTarget.public_model_id.in_(public_model_ids))
+            .order_by(RouteTarget.priority.asc(), RouteTarget.id.asc()),
+        )
+        return [(row[0], row[1]) for row in result.all()]
 
 
 class ModelIdentityService:
