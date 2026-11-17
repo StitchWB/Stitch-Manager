@@ -379,6 +379,8 @@ export interface DevboxPageTranslations {
     settingsVlessLabel: string;
     settingsTunnelTokenLabel: string;
     settingsSave: string;
+    settingsSaveFailed: string;
+    settingsRelaySubdomainRequired: string;
     settingsSaving: string;
     settingsSaved: string;
     settingsRestartHint: string;

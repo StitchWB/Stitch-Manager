@@ -22,6 +22,8 @@ export interface DevboxSettingsCardProps {
 const MODE_CLOUDFLARE = 'cloudflare';
 const MODE_RELAY = 'relay';
 
+const PROBE_KEYS = new Set(['RELAY_SUBDOMAIN', 'PUBLIC_URL', 'INGRESS_MODE']);
+
 const ACCESS_PRESETS: Record<string, Record<string, string>> = {
   readonly: {
     edit: 'deny',
@@ -75,9 +77,9 @@ function detectAccessPreset(raw: string): string {
 
 type CheckState =
   | { kind: 'idle' }
-  | { kind: 'checking' }
-  | { kind: 'ok'; tools: number; latency: number; url?: string }
-  | { kind: 'fail'; error: string; url?: string };
+  | { kind: 'checking'; mode: string }
+  | { kind: 'ok'; mode: string; tools: number; latency: number; url?: string }
+  | { kind: 'fail'; mode: string; error: string; url?: string };
 
 export function DevboxSettingsCard({
   busy = false,
@@ -96,6 +98,39 @@ export function DevboxSettingsCard({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [check, setCheck] = useState<CheckState>({ kind: 'idle' });
 
+  const mode = (draft.INGRESS_MODE ?? '') === MODE_RELAY ? MODE_RELAY : MODE_CLOUDFLARE;
+
+  const access = detectAccessPreset(draft.OPENCODE_MCP_PERMISSIONS ?? '');
+
+  const runCheck = useCallback(async (checkMode: string) => {
+    setCheck({ kind: 'checking', mode: checkMode });
+    try {
+      const res = await devboxConnectionCheck();
+      if (res?.ok) {
+        setCheck({
+          kind: 'ok',
+          mode: checkMode,
+          tools: Number(res.tools ?? 0),
+          latency: Number(res.latency_ms ?? 0),
+          url: res.url,
+        });
+      } else {
+        setCheck({
+          kind: 'fail',
+          mode: checkMode,
+          error: res?.error || t('devboxPage.settingsStatusFail'),
+          url: res?.url,
+        });
+      }
+    } catch (err) {
+      setCheck({
+        kind: 'fail',
+        mode: checkMode,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, []);
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -108,6 +143,7 @@ export function DevboxSettingsCard({
       for (const entry of list) initial[entry.key] = entry.value;
       setDraft(initial);
       setSaved(false);
+      void runCheck(initial.INGRESS_MODE === MODE_RELAY ? MODE_RELAY : MODE_CLOUDFLARE);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
       setEntries([]);
@@ -115,57 +151,31 @@ export function DevboxSettingsCard({
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  const runCheck = useCallback(async () => {
-    setCheck({ kind: 'checking' });
-    try {
-      const res = await devboxConnectionCheck();
-      if (res?.ok) {
-        setCheck({
-          kind: 'ok',
-          tools: Number(res.tools ?? 0),
-          latency: Number(res.latency_ms ?? 0),
-          url: res.url,
-        });
-      } else {
-        setCheck({
-          kind: 'fail',
-          error: res?.error || t('devboxPage.settingsStatusFail'),
-          url: res?.url,
-        });
-      }
-    } catch (err) {
-      setCheck({
-        kind: 'fail',
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }, []);
+  }, [runCheck]);
 
   useEffect(() => {
     void loadSettings();
-    void runCheck();
-  }, [loadSettings, runCheck]);
+  }, [loadSettings]);
 
   const patch = useMemo(() => {
     const diff: Record<string, string> = {};
     for (const entry of entries) {
       if (entry.readonly) continue;
+      if (entry.key === 'RELAY_SUBDOMAIN' && mode !== MODE_RELAY) continue;
+      if (entry.key === 'PUBLIC_URL' && mode !== MODE_CLOUDFLARE) continue;
       const current = draft[entry.key] ?? '';
       if (current !== entry.value) diff[entry.key] = current;
     }
     return diff;
-  }, [entries, draft]);
+  }, [entries, draft, mode]);
 
   const hasChanges = Object.keys(patch).length > 0;
-  const mode = (draft.INGRESS_MODE ?? '') === MODE_RELAY ? MODE_RELAY : MODE_CLOUDFLARE;
-  const access = detectAccessPreset(draft.OPENCODE_MCP_PERMISSIONS ?? '');
 
   const setField = (key: string, value: string) => {
     setDraft(prev => ({ ...prev, [key]: value }));
     setSaved(false);
     if (errors.length > 0) setErrors([]);
+    if (PROBE_KEYS.has(key)) setCheck({ kind: 'idle' });
   };
 
   const selectMode = (next: string) => {
@@ -174,12 +184,21 @@ export function DevboxSettingsCard({
 
   const handleSave = async () => {
     if (!hasChanges || saving || busy) return;
+    if (mode === MODE_RELAY && !(draft.RELAY_SUBDOMAIN ?? '').trim()) {
+      setErrors([t('devboxPage.settingsRelaySubdomainRequired')]);
+      setSaved(false);
+      return;
+    }
     setSaving(true);
     setErrors([]);
     try {
       const res = await devboxEnvSet(patch);
       if (!res.valid) {
-        setErrors(Array.isArray(res.errors) && res.errors.length > 0 ? res.errors : ['Save failed']);
+        setErrors(
+          Array.isArray(res.errors) && res.errors.length > 0
+            ? res.errors
+            : [t('devboxPage.settingsSaveFailed')],
+        );
         setSaved(false);
         return;
       }
@@ -189,7 +208,7 @@ export function DevboxSettingsCard({
         prev.map(entry => (entry.key in patch ? { ...entry, value: patch[entry.key] } : entry)),
       );
       onSaved?.();
-      void runCheck();
+      void runCheck(mode);
     } catch (err) {
       setErrors([err instanceof Error ? err.message : String(err)]);
       setSaved(false);
@@ -210,31 +229,34 @@ export function DevboxSettingsCard({
     </button>
   );
 
-  const statusLine = (() => {
-    const fallback =
-      mode === MODE_RELAY
-        ? draft.RELAY_SUBDOMAIN
-          ? `https://${draft.RELAY_SUBDOMAIN}.loca.lt`
-          : ''
-        : draft.PUBLIC_URL ?? '';
-    const url = (check.kind === 'ok' || check.kind === 'fail' ? check.url : undefined) || fallback;
-    if (check.kind === 'checking') {
-      return { dot: 'bg-slate-400 animate-pulse', text: `${url || '—'} · ${t('devboxPage.settingsChecking')}` };
-    }
-    if (check.kind === 'ok') {
+  const activeCheck: CheckState =
+    check.kind !== 'idle' && check.mode === mode ? check : { kind: 'idle' };
+
+  const statusLine: { dot: string; url?: string; message: string } = (() => {
+    if (activeCheck.kind === 'checking') {
       return {
-        dot: 'bg-emerald-400',
-        text: `${url || '—'} · ${t('devboxPage.settingsStatusOk', {
-          tools: check.tools,
-          ms: check.latency,
-        })}`,
+        dot: 'bg-slate-400 animate-pulse',
+        message: t('devboxPage.settingsChecking'),
       };
     }
-    if (check.kind === 'fail') {
-      return { dot: 'bg-red-400', text: `${url || '—'} · ${check.error}` };
+    if (activeCheck.kind === 'ok') {
+      return {
+        dot: 'bg-emerald-400',
+        url: activeCheck.url,
+        message: t('devboxPage.settingsStatusOk', {
+          tools: activeCheck.tools,
+          ms: activeCheck.latency,
+        }),
+      };
     }
-    return { dot: 'bg-slate-500', text: `${url || '—'} · ${t('devboxPage.settingsStatusIdle')}` };
+    if (activeCheck.kind === 'fail') {
+      return { dot: 'bg-red-400', url: activeCheck.url, message: activeCheck.error };
+    }
+    return { dot: 'bg-slate-500', message: t('devboxPage.settingsStatusIdle') };
   })();
+
+  const egressValue = draft.EGRESS_CONTAINER ?? 'rdm-egress';
+  const advancedSummary = `${egressValue} · tunnel ${draft.TUNNEL_TOKEN ? '✓' : '—'} · VLESS ${draft.VLESS_SUB_URL ? '✓' : '—'}`;
 
   return (
     <DevboxSection
@@ -275,13 +297,49 @@ export function DevboxSettingsCard({
         </div>
       ) : entries.length === 0 ? (
         <div
-          className="p-4 text-center text-2xs text-slate-400"
+          className="flex flex-col items-center gap-2 p-4 text-center"
           data-testid="devbox-settings-empty"
         >
-          {t('devboxPage.settingsEmpty')}
+          <p className="text-2xs text-slate-400">{t('devboxPage.settingsEmpty')}</p>
+          <Button size="xs" variant="secondary" onClick={() => void loadSettings()}>
+            {t('common.retry')}
+          </Button>
         </div>
       ) : (
         <div className="flex flex-col gap-4" data-testid="devbox-settings-body">
+          {restartKinds.length > 0 && (
+            <div
+              className="flex flex-wrap items-center justify-start gap-2 rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-2xs text-amber-200"
+              data-testid="devbox-settings-restart-banner"
+            >
+              <span>{t('devboxPage.settingsRestartHint')}</span>
+              {restartKinds.includes('ingress') && (
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={busy}
+                  data-testid="devbox-settings-restart-ingress"
+                  onClick={() => onRestart?.('ingress')}
+                >
+                  <RefreshCw size={12} className="mr-1" />
+                  {t('devboxPage.settingsRestartIngress')}
+                </Button>
+              )}
+              {restartKinds.includes('stack') && (
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  disabled={busy}
+                  data-testid="devbox-settings-restart-stack"
+                  onClick={() => onRestart?.('stack')}
+                >
+                  <RefreshCw size={12} className="mr-1" />
+                  {t('devboxPage.settingsRestartStack')}
+                </Button>
+              )}
+            </div>
+          )}
+
           {errors.length > 0 && (
             <div
               className="rounded border border-red-500/30 bg-red-500/10 p-2.5 text-2xs text-red-200"
@@ -298,60 +356,32 @@ export function DevboxSettingsCard({
             </div>
           )}
 
-          {restartKinds.length > 0 && (
-            <div
-              className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-2xs text-amber-200"
-              data-testid="devbox-settings-restart-banner"
-            >
-              <span>{t('devboxPage.settingsRestartHint')}</span>
-              <div className="flex items-center gap-2">
-                {restartKinds.includes('ingress') && (
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    disabled={busy}
-                    data-testid="devbox-settings-restart-ingress"
-                    onClick={() => onRestart?.('ingress')}
-                  >
-                    <RefreshCw size={12} className="mr-1" />
-                    {t('devboxPage.settingsRestartIngress')}
-                  </Button>
-                )}
-                {restartKinds.includes('stack') && (
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    disabled={busy}
-                    data-testid="devbox-settings-restart-stack"
-                    onClick={() => onRestart?.('stack')}
-                  >
-                    <RefreshCw size={12} className="mr-1" />
-                    {t('devboxPage.settingsRestartStack')}
-                  </Button>
-                )}
-              </div>
+          <div
+            className="grid grid-cols-1 gap-3 md:grid-cols-2"
+            data-testid="devbox-settings-ingress"
+          >
+            <div className="space-y-1">
+              <span className="block text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                {t('devboxPage.settingsIngressTitle')}
+              </span>
+              <SegmentedControl
+                size="sm"
+                stretch={false}
+                className="w-fit"
+                options={[
+                  { label: t('devboxPage.settingsModeCloudflare'), value: MODE_CLOUDFLARE },
+                  { label: t('devboxPage.settingsModeRelay'), value: MODE_RELAY },
+                ]}
+                value={mode}
+                onChange={selectMode}
+                disabled={saving || busy}
+              />
+              <p className="text-2xs text-slate-400">
+                {mode === MODE_RELAY
+                  ? t('devboxPage.settingsModeRelayHint')
+                  : t('devboxPage.settingsModeCloudflareHint')}
+              </p>
             </div>
-          )}
-
-          <div className="space-y-2.5" data-testid="devbox-settings-ingress">
-            <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
-              {t('devboxPage.settingsIngressTitle')}
-            </h4>
-            <SegmentedControl
-              size="sm"
-              options={[
-                { label: t('devboxPage.settingsModeCloudflare'), value: MODE_CLOUDFLARE },
-                { label: t('devboxPage.settingsModeRelay'), value: MODE_RELAY },
-              ]}
-              value={mode}
-              onChange={selectMode}
-              disabled={saving || busy}
-            />
-            <p className="text-2xs text-slate-400">
-              {mode === MODE_RELAY
-                ? t('devboxPage.settingsModeRelayHint')
-                : t('devboxPage.settingsModeCloudflareHint')}
-            </p>
             {mode === MODE_RELAY ? (
               <Input
                 label={t('devboxPage.settingsRelaySubdomainLabel')}
@@ -377,14 +407,21 @@ export function DevboxSettingsCard({
                 containerClassName="space-y-1"
               />
             )}
-            <div className="flex flex-wrap items-center gap-2" data-testid="devbox-settings-status">
-              <span className={`h-2 w-2 rounded-full ${statusLine.dot}`} />
-              <span className="text-2xs text-slate-300">{statusLine.text}</span>
+            <div
+              className="flex min-w-0 items-center gap-2 md:col-span-2"
+              data-testid="devbox-settings-status"
+            >
+              <span className={`h-2 w-2 shrink-0 rounded-full ${statusLine.dot}`} />
+              {statusLine.url && (
+                <span className="truncate min-w-0 text-2xs text-slate-300">{statusLine.url}</span>
+              )}
+              <span className="truncate text-2xs text-slate-400">{statusLine.message}</span>
               <Button
                 size="xs"
                 variant="ghost"
-                onClick={() => void runCheck()}
-                disabled={check.kind === 'checking'}
+                className="ml-auto shrink-0"
+                onClick={() => void runCheck(mode)}
+                disabled={activeCheck.kind === 'checking'}
                 data-testid="devbox-settings-check"
               >
                 <ShieldCheck size={12} className="mr-1" />
@@ -393,34 +430,41 @@ export function DevboxSettingsCard({
             </div>
           </div>
 
-          <div className="space-y-2.5" data-testid="devbox-settings-access">
-            <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
-              {t('devboxPage.settingsAccessTitle')}
-            </h4>
-            <div className="flex flex-wrap items-center gap-2" data-testid="devbox-settings-access-hint">
-              <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-2xs text-slate-200">
-                {access === 'custom'
-                  ? t('devboxPage.settingsAccessCustom')
-                  : t(ACCESS_LABEL_KEYS[access] as never)}
-              </span>
-              <span className="text-2xs text-slate-400">{t('devboxPage.settingsAccessHint')}</span>
+          <div
+            className="grid grid-cols-1 gap-3 md:grid-cols-2"
+            data-testid="devbox-settings-access"
+          >
+            <div className="space-y-1">
+              <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                {t('devboxPage.settingsAccessTitle')}
+              </h4>
+              <div className="flex items-center gap-2" data-testid="devbox-settings-access-hint">
+                <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-2xs text-slate-200">
+                  {access === 'custom'
+                    ? t('devboxPage.settingsAccessCustom')
+                    : t(ACCESS_LABEL_KEYS[access] as never)}
+                </span>
+                <span className="text-2xs text-slate-400">{t('devboxPage.settingsAccessHint')}</span>
+              </div>
             </div>
-            <Input
-              label={t('devboxPage.settingsTimeoutLabel')}
-              hint={t('devboxPage.settingsTimeoutHint')}
-              id="devbox-settings-JOB_TIMEOUT_SECONDS"
-              data-testid="devbox-settings-input-JOB_TIMEOUT_SECONDS"
-              type="number"
-              min={60}
-              max={3600}
-              value={draft.JOB_TIMEOUT_SECONDS ?? ''}
-              disabled={saving || busy}
-              onChange={e => setField('JOB_TIMEOUT_SECONDS', e.target.value)}
-              containerClassName="space-y-1"
-            />
+            <div className="max-w-[8rem]">
+              <Input
+                label={t('devboxPage.settingsTimeoutLabel')}
+                hint={t('devboxPage.settingsTimeoutHint')}
+                id="devbox-settings-JOB_TIMEOUT_SECONDS"
+                data-testid="devbox-settings-input-JOB_TIMEOUT_SECONDS"
+                type="number"
+                min={60}
+                max={3600}
+                value={draft.JOB_TIMEOUT_SECONDS ?? ''}
+                disabled={saving || busy}
+                onChange={e => setField('JOB_TIMEOUT_SECONDS', e.target.value)}
+                containerClassName="space-y-1"
+              />
+            </div>
           </div>
 
-          <div className="border-t border-white/5 pt-2" data-testid="devbox-settings-advanced">
+          <div className="border-t border-white/5" data-testid="devbox-settings-advanced">
             <button
               type="button"
               className="flex w-full items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-colors"
@@ -429,10 +473,13 @@ export function DevboxSettingsCard({
               data-testid="devbox-settings-advanced-toggle"
             >
               {advancedOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              {t('devboxPage.settingsAdvanced')}
+              <span>{t('devboxPage.settingsAdvanced')}</span>
+              <span className="ml-auto truncate text-2xs font-normal normal-case tracking-normal text-slate-500">
+                {advancedSummary}
+              </span>
             </button>
             {advancedOpen && (
-              <div className="mt-2.5 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Select
                   label={t('devboxPage.settingsEgressLabel')}
                   hint={t('devboxPage.settingsEgressHint')}
