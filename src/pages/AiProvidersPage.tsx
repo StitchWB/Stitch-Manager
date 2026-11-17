@@ -10,7 +10,6 @@ import {
   discoverModelsForEndpoint,
   importOpencodeProviders,
   listPublicModels,
-  listRouteTargetsForPublicModel,
   refreshEndpointQuota,
   testCredentialConnection,
 } from '@/lib/backend/modules/aiGateway';
@@ -26,7 +25,7 @@ import { ProviderRoster } from '@/components/ai-hub/providers/ProviderRoster';
 import { AddProviderMenu } from '@/components/ai-hub/providers/AddProviderMenu';
 import { LegacyMigrationBanner } from '@/components/ai-hub/providers/LegacyMigrationBanner';
 import { ProviderKeysTable } from '@/components/ai-hub/providers/ProviderKeysTable';
-import { ProviderModelsPanel } from '@/components/ai-hub/providers/ProviderModelsPanel';
+import { ProviderModelsPanel, type PublishedModelRef } from '@/components/ai-hub/providers/ProviderModelsPanel';
 import { ProviderSettingsPanel } from '@/components/ai-hub/providers/ProviderSettingsPanel';
 import { PasteKeysDialog } from '@/components/ai-hub/providers/PasteKeysDialog';
 import { ProvidersOverview } from '@/components/ai-hub/providers/ProvidersOverview';
@@ -94,19 +93,21 @@ export default function AiProvidersPage() {
   const [editEndpointOpen, setEditEndpointOpen] = useState(false);
   const [pasteMode, setPasteMode] = useState<'closed' | 'new' | 'scoped'>('closed');
   const [exposeModel, setExposeModel] = useState<UpstreamModel | null>(null);
-  const [published, setPublished] = useState<Record<string, string>>({});
+  const [published, setPublished] = useState<Record<string, PublishedModelRef>>({});
   const autoDiscovered = useRef<Set<string>>(new Set());
 
   const loadPublished = useCallback(async () => {
     try {
       const publicModels = await listPublicModels();
-      const targets = await Promise.all(
-        publicModels.map(publicModel => listRouteTargetsForPublicModel(publicModel.id)),
-      );
-      const map: Record<string, string> = {};
-      publicModels.forEach((publicModel, index) => {
-        for (const target of targets[index]) map[target.upstreamModelId] = publicModel.id;
-      });
+      const map: Record<string, PublishedModelRef> = {};
+      for (const publicModel of publicModels) {
+        for (const target of publicModel.routeTargets ?? []) {
+          map[target.upstreamModelId] = {
+            publicModelId: publicModel.id,
+            enabled: publicModel.enabled && target.enabled,
+          };
+        }
+      }
       setPublished(map);
     } catch {
       setPublished({});
@@ -620,8 +621,6 @@ export default function AiProvidersPage() {
                     {tab === 'models' && (
                       <ProviderModelsPanel
                         endpointId={selectedEndpoint?.id}
-                        models={selectedModels}
-                        loading={loading.upstreamModels}
                         busy={false}
                         discovering={discovering}
                         error={discoveryError}

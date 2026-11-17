@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
@@ -19,6 +20,7 @@ from stitch_backend.domains.ai_gateway.schemas import (
     ListUpstreamModelsRequest,
     UpstreamModelCreateRequest,
     UpstreamModelIdRequest,
+    UpstreamModelListResponse,
     UpstreamModelResponse,
     UpstreamModelUpdateRequest,
 )
@@ -67,10 +69,28 @@ async def cmd_create_upstream_model(db: AsyncSession, params: dict) -> Any:
 async def cmd_list_upstream_models(db: AsyncSession, params: dict) -> Any:
     """List upstream models discovered for a provider endpoint."""
     req = ListUpstreamModelsRequest.model_validate(params)
+    owner_id = _caller_uid(params)
+    alive_since = (
+        datetime.now(UTC) - timedelta(minutes=req.alive_within_minutes)
+        if req.alive_within_minutes is not None
+        else None
+    )
 
     svc = UpstreamModelService(db)
-    models = await svc.list_models(req.provider_endpoint_id)
-    return [UpstreamModelResponse.from_orm_model(m) for m in models]
+    models, total = await svc.list_models_filtered(
+        provider_endpoint_id=req.provider_endpoint_id,
+        owner_id=owner_id,
+        query=req.q,
+        alive_since=alive_since,
+        enabled=req.enabled,
+        order_by=req.order_by,
+        limit=req.limit,
+        offset=req.offset,
+    )
+    return UpstreamModelListResponse(
+        models=[UpstreamModelResponse.from_orm_model(m) for m in models],
+        total=total,
+    )
 
 
 @command("get_upstream_model", readonly=True)

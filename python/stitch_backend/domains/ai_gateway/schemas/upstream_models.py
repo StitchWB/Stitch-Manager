@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 — pydantic resolves annotations at runtime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -81,11 +81,23 @@ class UpstreamModelIdRequest(BaseModel):
 
 
 class ListUpstreamModelsRequest(BaseModel):
-    """Request body for ``list_upstream_models``."""
+    """Request body for ``list_upstream_models``.
+
+    ``limit=0`` means unlimited, and every filter is ``None`` by default, so
+    an empty body returns the same unfiltered, untruncated row set.
+    """
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     provider_endpoint_id: str | None = Field(None, alias="providerEndpointId")
+    q: str | None = None
+    alive_within_minutes: int | None = Field(None, alias="aliveWithinMinutes", ge=0)
+    enabled: bool | None = None
+    order_by: Literal["last_seen", "id", "display_name"] = Field(
+        "last_seen", alias="orderBy",
+    )
+    limit: int = Field(0, ge=0)
+    offset: int = Field(0, ge=0)
 
 
 class UpstreamModelResponse(BaseModel):
@@ -124,3 +136,15 @@ class UpstreamModelResponse(BaseModel):
             created_at=obj.created_at,
             updated_at=obj.updated_at,
         )
+
+
+class UpstreamModelListResponse(BaseModel):
+    """Response for ``list_upstream_models``.
+
+    ``total`` counts every matching row, i.e. before ``limit``/``offset``.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    models: list[UpstreamModelResponse]
+    total: int

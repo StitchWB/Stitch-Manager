@@ -36,6 +36,10 @@ from stitch_backend.domains.ai_gateway.model_catalog_service import (
     _as_utc,
 )
 from stitch_backend.domains.ai_gateway.models import _utcnow
+from stitch_backend.domains.ai_gateway.pricing_cache import (
+    PRICING_TTL_SECONDS,
+    normalize_origin,
+)
 from stitch_backend.domains.ai_gateway.service import (
     CredentialModelAccessService,
     CredentialService,
@@ -57,6 +61,94 @@ VERIFICATION_CONCURRENCY = 4
 VERIFICATION_BUDGET_SECONDS = 30.0
 VERIFICATION_MAX_TOKENS = 1
 NOT_RETURNED_BY_UPSTREAM = "not_returned_by_upstream"
+
+_ENDPOINT_CLASS_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("rerank", ("rerank",)),
+    ("embed", ("embed",)),
+    ("video", ("video", "sora")),
+    ("image", ("image",)),
+    ("audio", ("audio", "tts", "speech", "transcri")),
+    ("3d", ("3d",)),
+    ("vision", ("vision",)),
+)
+
+_ID_CLASS_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("rerank", ("rerank",)),
+    ("embed", ("embed",)),
+    ("video", ("sora", "video", "wan2", "wan-", "i2v", "t2v", "veo")),
+    ("image", ("flux", "dall", "image", "sd3", "sdxl", "midjourney", "imagen")),
+    ("audio", ("whisper", "tts", "audio", "speech", "asr")),
+    ("3d", ("3d", "trellis")),
+    ("vision", ("vision", "llava", "-vl", "vl-", "omni")),
+)
+
+_PRICING_CACHE: dict[str, tuple[float, dict[str, dict[str, Any]]]] = {}
+
+
+def _derive_model_class(model_id: str, endpoint_types: list[str] | None = None) -> str:
+    declared = " ".join(str(t).lower() for t in endpoint_types or ())
+    for model_class, needles in _ENDPOINT_CLASS_HINTS:
+        if any(needle in declared for needle in needles):
+            return model_class
+    lowered = model_id.lower()
+    for model_class, needles in _ID_CLASS_HINTS:
+        if any(needle in lowered for needle in needles):
+            return model_class
+    return "chat"
+
+
+def _parse_pricing_table(payload: dict[str, Any] | None) -> dict[str, dict[str, Any]] | None:
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data")
+    if not isinstance(data, list):
+        return None
+    table: dict[str, dict[str, Any]] = {}
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("model_name")
+        if isinstance(name, str) and name:
+            table[name] = item
+    return table
+
+
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _model_enrichment(
+    model_id: str,
+    pricing_row: dict[str, Any] | None,
+    fallback_endpoint_types: list[str] | None = None,
+) -> dict[str, Any]:
+    row = pricing_row or {}
+    declared = row.get("supported_endpoint_types")
+    endpoint_types = declared if isinstance(declared, list) else fallback_endpoint_types
+    enrichment: dict[str, Any] = {
+        "model_class": _derive_model_class(model_id, endpoint_types),
+    }
+    vendor = row.get("vendor_id")
+    if vendor is not None:
+        enrichment["vendor"] = vendor
+    quota_type = row.get("quota_type")
+    if isinstance(quota_type, int | float) and not isinstance(quota_type, bool):
+        enrichment["quota_type"] = int(quota_type)
+    for key in ("model_ratio", "completion_ratio", "model_price"):
+        if key not in row:
+            continue
+        parsed = _as_float(row[key])
+        if parsed is not None:
+            enrichment[key] = parsed
+    groups = row.get("enable_groups")
+    if isinstance(groups, list):
+        enrichment["groups"] = [str(group) for group in groups]
+    return enrichment
 
 
 class DiscoveryWorker:
@@ -197,9 +289,15 @@ class DiscoveryWorker:
             per_cred.append((cred_info, models))
 
         verification = await cls._verify_new_models(probe, per_cred)
+        pricing = await cls._load_pricing(probe)
         changed = await cls._persist_results(
             db,
-            [{"probe": probe, "credentials": per_cred, "verification": verification}],
+            [{
+                "probe": probe,
+                "credentials": per_cred,
+                "verification": verification,
+                "pricing": pricing,
+            }],
         )
         if changed:
             await event_bus.emit("endpoint.models_changed", {"endpoint_ids": changed})
@@ -279,6 +377,7 @@ class DiscoveryWorker:
         """Probe every credential of every endpoint OUTSIDE any DB session."""
         results: list[dict[str, Any]] = []
         for probe in probes:
+            pricing = await cls._load_pricing(probe)
             per_cred: list[tuple[dict[str, Any], list[ModelMetadata]]] = []
             for cred in probe["credentials"]:
                 try:
@@ -299,8 +398,35 @@ class DiscoveryWorker:
                 "probe": probe,
                 "credentials": per_cred,
                 "verification": verification,
+                "pricing": pricing,
             })
         return results
+
+    @classmethod
+    async def _load_pricing(cls, probe: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Fetch ``/api/pricing`` once per origin, cached for ``PRICING_TTL_SECONDS``."""
+        origin = normalize_origin(probe["base_url"])
+        if not origin:
+            return {}
+        cached = _PRICING_CACHE.get(origin)
+        now = time.monotonic()
+        if cached is not None and now - cached[0] < PRICING_TTL_SECONDS:
+            return cached[1]
+        try:
+            fetch = getattr(get_adapter(probe["adapter_type"]), "fetch_pricing", None)
+            if fetch is None:
+                return {}
+            payload = await fetch(probe["base_url"], probe["default_headers"])
+        except Exception as _exc:
+            logger.debug(
+                "DiscoveryWorker: pricing fetch failed for %s: %s", origin, _exc,
+            )
+            return {}
+        table = _parse_pricing_table(payload)
+        if table is None:
+            return {}
+        _PRICING_CACHE[origin] = (now, table)
+        return table
 
     @classmethod
     async def _discover_models(
@@ -410,11 +536,17 @@ class DiscoveryWorker:
                     before = {mid for mid, m in existing.items() if m.enabled}
                     now = _utcnow()
                     verification = item.get("verification") or {}
+                    pricing = item.get("pricing") or {}
 
                     upstream_rows = dict(existing)
                     for _cred, models in item["credentials"]:
                         for metadata in models:
                             prior = existing.get(metadata.id)
+                            enrichment = _model_enrichment(
+                                metadata.id,
+                                pricing.get(metadata.id),
+                                (metadata.capabilities or {}).get("endpoint_types"),
+                            )
                             upstream = await model_svc.upsert_model(
                                 provider_endpoint_id=endpoint_id,
                                 upstream_model_id=metadata.id,
@@ -423,6 +555,7 @@ class DiscoveryWorker:
                                     prior.capabilities if prior else None,
                                     metadata.capabilities,
                                     verification.get(metadata.id),
+                                    enrichment,
                                 ),
                             )
                             upstream.last_seen_at = now
@@ -542,13 +675,16 @@ class DiscoveryWorker:
         prior: dict[str, Any] | None,
         metadata_caps: dict[str, Any] | None,
         verification_row: dict[str, Any] | None,
+        enrichment: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        """Merge provider metadata and probe outcome into the capability bag."""
+        """Merge provider metadata, pricing enrichment and probe outcome into the capability bag."""
         caps: dict[str, Any] = dict(prior or {})
         if metadata_caps:
             caps.update(metadata_caps)
             caps["source"] = "provider_metadata"
             caps["metadata_refreshed_at"] = _utcnow().isoformat()
+        if enrichment:
+            caps.update(enrichment)
         if verification_row is not None:
             caps["verification_status"] = (
                 "working" if verification_row.get("ok") else "failed"

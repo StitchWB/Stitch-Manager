@@ -9,6 +9,7 @@ export interface ToggleProps {
   tooltip?: string;
   className?: string;
   size?: 'md' | 'sm';
+  ariaLabel?: string;
 }
 
 export function Toggle({
@@ -19,6 +20,7 @@ export function Toggle({
   tooltip,
   className,
   size = 'md',
+  ariaLabel,
 }: ToggleProps) {
   const compact = size === 'sm';
 
@@ -67,6 +69,7 @@ export function Toggle({
         checked={checked}
         onChange={e => onChange(e.target.checked)}
         disabled={disabled}
+        aria-label={ariaLabel}
         className="sr-only"
       />
     </label>

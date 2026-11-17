@@ -49,6 +49,9 @@ from stitch_backend.domains.ai_gateway.schemas.model_access import (
 from stitch_backend.domains.ai_gateway.schemas.model_health import (
     ListModelHealthRequest,
 )
+from stitch_backend.domains.ai_gateway.schemas.model_throughput import (
+    ListModelThroughputRequest,
+)
 from stitch_backend.domains.ai_gateway.schemas.probe import (
     ProbeEndpointRequest,
 )
@@ -70,6 +73,7 @@ from stitch_backend.domains.ai_gateway.schemas.public_models import (
     PublicModelCreateRequest,
     PublicModelIdRequest,
     PublicModelResponse,
+    PublicModelRouteTarget,
     PublicModelUpdateRequest,
     UnmergeRouteTargetRequest,
 )
@@ -84,6 +88,7 @@ from stitch_backend.domains.ai_gateway.schemas.upstream_models import (
     ListUpstreamModelsRequest,
     UpstreamModelCreateRequest,
     UpstreamModelIdRequest,
+    UpstreamModelListResponse,
     UpstreamModelResponse,
     UpstreamModelUpdateRequest,
 )
@@ -102,6 +107,7 @@ __all__ = [
     "ListCredentialModelAccessRequest",
     "ListCredentialsRequest",
     "ListModelHealthRequest",
+    "ListModelThroughputRequest",
     "ListPublicModelsRequest",
     "ListRouteTargetsForPublicModelRequest",
     "ListUpstreamModelsRequest",
@@ -121,6 +127,7 @@ __all__ = [
     "PublicModelCreateRequest",
     "PublicModelIdRequest",
     "PublicModelResponse",
+    "PublicModelRouteTarget",
     "PublicModelUpdateRequest",
     "RefreshEndpointModelsRequest",
     "RotateCredentialSecretRequest",
@@ -134,6 +141,7 @@ __all__ = [
     "UnmergeRouteTargetRequest",
     "UpstreamModelCreateRequest",
     "UpstreamModelIdRequest",
+    "UpstreamModelListResponse",
     "UpstreamModelResponse",
     "UpstreamModelUpdateRequest",
 ]

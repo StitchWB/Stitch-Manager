@@ -343,7 +343,7 @@ class UpstreamModel(Base):
         JSON,
         comment=(
             "Capability bag, e.g. {"
-            '"supports_vision": true, "supports_function_calling": true, '
+            '"supports_vision": true, "supports_tool_calling": true, '
             '"supports_reasoning": false, "supports_streaming": true, '
             '"supports_json_mode": true, "max_input_tokens": 128000, '
             '"max_output_tokens": 8192, '
