@@ -377,7 +377,7 @@ export const devboxPage: DevboxPageTranslations = {
     settingsModeRelayHint: "Адрес без регистрации; работает, когда провайдер режет Cloudflare-туннели",
     settingsModeCloudflareHint: "Постоянный домен; нужен рабочий Cloudflare-туннель",
     settingsRelaySubdomainLabel: "Поддомен",
-    settingsRelaySubdomainHint: "Свободное имя даёт постоянный адрес вида <имя>.loca.lt",
+    settingsRelaySubdomainHint: "Генерируется при установке (у каждого devbox свой); меняй только если нужен фиксированный адрес",
     settingsPublicUrlLabel: "Публичный домен",
     settingsPublicUrlHint: "Hostname именованного туннеля Cloudflare",
     settingsCheck: "Проверить",

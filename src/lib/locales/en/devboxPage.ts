@@ -375,7 +375,7 @@ export const devboxPage: DevboxPageTranslations = {
     settingsModeRelayHint: "No signup; works when your ISP blocks Cloudflare tunnels",
     settingsModeCloudflareHint: "Stable domain; needs a working Cloudflare tunnel",
     settingsRelaySubdomainLabel: "Subdomain",
-    settingsRelaySubdomainHint: "A free name gives a stable <name>.loca.lt address",
+    settingsRelaySubdomainHint: "Generated per install (each devbox gets its own); override only if you need a fixed name",
     settingsPublicUrlLabel: "Public domain",
     settingsPublicUrlHint: "Hostname of the named Cloudflare tunnel",
     settingsCheck: "Check",

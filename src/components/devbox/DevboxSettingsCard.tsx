@@ -76,8 +76,8 @@ function detectAccessPreset(raw: string): string {
 type CheckState =
   | { kind: 'idle' }
   | { kind: 'checking' }
-  | { kind: 'ok'; tools: number; latency: number }
-  | { kind: 'fail'; error: string };
+  | { kind: 'ok'; tools: number; latency: number; url?: string }
+  | { kind: 'fail'; error: string; url?: string };
 
 export function DevboxSettingsCard({
   busy = false,
@@ -126,9 +126,14 @@ export function DevboxSettingsCard({
           kind: 'ok',
           tools: Number(res.tools ?? 0),
           latency: Number(res.latency_ms ?? 0),
+          url: res.url,
         });
       } else {
-        setCheck({ kind: 'fail', error: res?.error || t('devboxPage.settingsStatusFail') });
+        setCheck({
+          kind: 'fail',
+          error: res?.error || t('devboxPage.settingsStatusFail'),
+          url: res?.url,
+        });
       }
     } catch (err) {
       setCheck({
@@ -206,12 +211,13 @@ export function DevboxSettingsCard({
   );
 
   const statusLine = (() => {
-    const url =
+    const fallback =
       mode === MODE_RELAY
         ? draft.RELAY_SUBDOMAIN
           ? `https://${draft.RELAY_SUBDOMAIN}.loca.lt`
           : ''
         : draft.PUBLIC_URL ?? '';
+    const url = (check.kind === 'ok' || check.kind === 'fail' ? check.url : undefined) || fallback;
     if (check.kind === 'checking') {
       return { dot: 'bg-slate-400 animate-pulse', text: `${url || '—'} · ${t('devboxPage.settingsChecking')}` };
     }
