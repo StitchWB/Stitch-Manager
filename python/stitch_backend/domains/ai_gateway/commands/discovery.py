@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import and_, select
 
 from stitch_backend.core.command_decorator import command
-from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError, get_adapter
+from stitch_backend.domains.ai_gateway.adapters.base import (
+    ClassifiedError,
+    ProbeResult,
+    get_adapter,
+    get_adapter_capabilities,
+)
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.commands._common import (
     _caller_uid,
@@ -15,7 +22,11 @@ from stitch_backend.domains.ai_gateway.commands._common import (
 )
 from stitch_backend.domains.ai_gateway.credential_state import transition_credential
 from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
-from stitch_backend.domains.ai_gateway.models import Credential, ProviderEndpoint
+from stitch_backend.domains.ai_gateway.models import (
+    Credential,
+    ProviderEndpoint,
+    UpstreamModel,
+)
 from stitch_backend.domains.ai_gateway.schemas import (
     CredentialIdRequest,
     ProviderEndpointIdRequest,
@@ -28,6 +39,51 @@ from stitch_backend.domains.ai_gateway.service import (
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from stitch_backend.domains.ai_gateway.adapters.base import ProviderAdapter
+
+_CHAT_FALLBACK_PROMPT = "ping"
+_CHAT_FALLBACK_TIMEOUT_SECONDS = 10.0
+
+
+def _model_list_unusable(status: int | None) -> bool:
+    return status is not None and (status in {404, 405} or status >= 500)
+
+
+async def _first_enabled_model(db: AsyncSession, endpoint_id: str) -> str | None:
+    result = await db.execute(
+        select(UpstreamModel.upstream_model_id)
+        .where(
+            UpstreamModel.provider_endpoint_id == endpoint_id,
+            UpstreamModel.enabled.is_(True),
+        )
+        .order_by(UpstreamModel.created_at)
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+async def _chat_fallback_probe(
+    adapter: ProviderAdapter, *, endpoint: ProviderEndpoint, secret: str, model: str,
+) -> ProbeResult | None:
+    start = time.monotonic()
+    try:
+        await asyncio.wait_for(
+            adapter.invoke(
+                base_url=endpoint.base_url,
+                secret=secret,
+                model=model,
+                messages=[{"role": "user", "content": _CHAT_FALLBACK_PROMPT}],
+                stream=False,
+                max_tokens=1,
+            ),
+            timeout=_CHAT_FALLBACK_TIMEOUT_SECONDS,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    return ProbeResult(
+        success=True, latency_ms=(time.monotonic() - start) * 1000, http_status=200,
+    )
 
 
 @command("discover_models_for_endpoint")
@@ -94,6 +150,18 @@ async def cmd_test_credential_connection(db: AsyncSession, params: dict) -> dict
         secret=secret,
         default_headers=endpoint.default_headers,
     )
+    if (
+        not probe.success
+        and _model_list_unusable(probe.http_status)
+        and get_adapter_capabilities(endpoint.adapter_type).supports_chat
+    ):
+        fallback_model = await _first_enabled_model(db, endpoint.id)
+        if fallback_model:
+            fallback = await _chat_fallback_probe(
+                adapter, endpoint=endpoint, secret=secret, model=fallback_model,
+            )
+            if fallback is not None:
+                probe = fallback
 
     classified: ClassifiedError | None = None
     if not probe.success:

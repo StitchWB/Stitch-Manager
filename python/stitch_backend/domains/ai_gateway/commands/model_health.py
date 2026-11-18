@@ -8,9 +8,14 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from stitch_backend.core.command_decorator import command
+from stitch_backend.domains.ai_gateway.commands._common import (
+    _caller_uid,
+    _owner_filter,
+)
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialModelAccess,
+    ProviderEndpoint,
     UpstreamModel,
 )
 from stitch_backend.domains.ai_gateway.schemas.model_health import (
@@ -151,8 +156,12 @@ def _shape(rows: list[dict[str, Any]], req: ListModelHealthRequest) -> list[dict
     return [{key: row.get(key) for key in DEFAULT_FIELDS} for row in page]
 
 
-async def _collect(db: AsyncSession, req: ListModelHealthRequest) -> list[dict[str, Any]]:
-    stmt = select(UpstreamModel)
+async def _collect(
+    db: AsyncSession, req: ListModelHealthRequest, owner_id: int | None
+) -> list[dict[str, Any]]:
+    stmt = select(UpstreamModel).join(
+        ProviderEndpoint, UpstreamModel.provider_endpoint_id == ProviderEndpoint.id
+    ).where(_owner_filter(ProviderEndpoint, owner_id))
     if req.endpoint_id:
         stmt = stmt.where(UpstreamModel.provider_endpoint_id == req.endpoint_id)
     models = list((await db.execute(stmt)).scalars().all())
@@ -204,10 +213,9 @@ async def _collect(db: AsyncSession, req: ListModelHealthRequest) -> list[dict[s
 @command(
     "list_model_health",
     readonly=True,
-    request=ListModelHealthRequest,
     timeout=-1,
 )
-async def cmd_list_model_health(db: AsyncSession, req: ListModelHealthRequest) -> dict:
+async def cmd_list_model_health(db: AsyncSession, params: dict) -> dict:
     """Query the model-health registry: alive/usable, vision/tools, latency.
 
     Reads what ``refresh_endpoint_models`` persisted — one call replaces
@@ -215,6 +223,7 @@ async def cmd_list_model_health(db: AsyncSession, req: ListModelHealthRequest) -
     changedSince; rank with sort=latency + topK. ``usable`` is stricter than
     ``alive``: the model answers AND its credential is not disabled/exhausted.
     """
-    rows = await _collect(db, req)
+    req = ListModelHealthRequest.model_validate(params)
+    rows = await _collect(db, req, _caller_uid(params))
     shaped = _shape(rows, req)
     return {"total": len(rows), "count": len(shaped), "models": shaped}

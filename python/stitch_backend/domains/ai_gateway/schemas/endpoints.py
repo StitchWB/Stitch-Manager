@@ -198,6 +198,7 @@ class ProviderEndpointResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str
+    owner_id: int | None = Field(None, alias="ownerId")
     name: str
     adapter_type: str = Field(alias="adapterType")
     base_url: str = Field(alias="baseUrl")
@@ -216,6 +217,7 @@ class ProviderEndpointResponse(BaseModel):
     def from_orm_model(cls, obj: ProviderEndpoint) -> ProviderEndpointResponse:
         return cls(
             id=obj.id,
+            owner_id=obj.owner_id,
             name=obj.name,
             adapter_type=obj.adapter_type,
             base_url=obj.base_url,

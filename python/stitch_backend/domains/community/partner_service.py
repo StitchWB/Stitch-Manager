@@ -162,7 +162,9 @@ async def seed_partner_channels() -> None:
     base = server_url()
     created = 0
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+        async with httpx.AsyncClient(
+            timeout=_REQUEST_TIMEOUT, verify=shared_ssl_context()
+        ) as client:
             resp = await client.get(f"{base}/admin/partner-channels", headers=headers)
             resp.raise_for_status()
             body = resp.json()

@@ -53,6 +53,9 @@ _PROBE_TIMEOUT_SECONDS = 10.0
 logger = logging.getLogger(__name__)
 _QUOTA_PATH = "/v1/dashboard/billing/subscription"
 
+# Chat-only endpoints (Cloudflare Workers AI, bare relays) answer 404/405 for the list route.
+_MODEL_LIST_UNSERVED_STATUSES = frozenset({404, 405})
+
 
 @dataclass(frozen=True)
 class QuotaProbeResult:
@@ -242,9 +245,23 @@ class ConfigurableAdapter:
             )
         return ProbeResult(
             success=False, latency_ms=latency_ms,
-            http_status=resp.status_code, error=f"HTTP {resp.status_code}",
+            http_status=resp.status_code,
+            error=self._probe_failure_message(resp.status_code),
             error_body=_safe_response_text(resp),
         )
+
+    def _probe_failure_message(self, status: int) -> str:
+        if status in _MODEL_LIST_UNSERVED_STATUSES:
+            return (
+                f"provider does not serve GET {self._models_path} (HTTP {status}) - "
+                "the base URL path is wrong or the endpoint is not OpenAI-compatible"
+            )
+        if status >= 500:
+            return (
+                f"upstream unavailable (HTTP {status}) - the provider failed "
+                f"GET {self._models_path}; check the base URL and that it is reachable"
+            )
+        return f"HTTP {status}"
 
     async def list_models(
         self,
