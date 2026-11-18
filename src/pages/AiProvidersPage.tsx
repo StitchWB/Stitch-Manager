@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
 import Header from '../components/layout/Header';
-import { Button, PageHeader, ButtonBase, EmptyState, StatusBadge, askConfirm } from '@/components/ui';
+import { Badge, Button, PageHeader, ButtonBase, EmptyState, StatusBadge, askConfirm } from '@/components/ui';
+import { cn } from '@/lib/utils';
 import { useAiGatewayStore } from '@/stores/aiGateway';
 import {
   discoverModelsForEndpoint,
@@ -472,7 +473,7 @@ export default function AiProvidersPage() {
 
       <div className="flex min-h-0 flex-1 gap-4 p-4 md:p-6">
         {endpoints.length === 0 && !loading.endpoints ? (
-          <div className="flex flex-1 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02]">
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03]">
             <EmptyState
               icon={Server}
               title={t('aiHub.providersPage.rosterEmpty')}
@@ -506,7 +507,14 @@ export default function AiProvidersPage() {
               />
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            <div
+              className={cn(
+                'flex min-h-0 min-w-0 flex-1 flex-col rounded-xl border',
+                selectedEndpoint
+                  ? 'border-white/[0.06] bg-white/[0.02]'
+                  : 'border-white/[0.08] bg-white/[0.03]'
+              )}
+            >
               {selectedEndpoint ? (
                 <>
                   <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] px-4 py-3">
@@ -526,32 +534,34 @@ export default function AiProvidersPage() {
                           withDot
                           size="sm"
                         />
-                        <span className="flex items-center gap-1 text-[11px] tabular-nums text-slate-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                          {selectedActiveCount} {t('aiHub.providersPage.detail.activeChip')}
-                        </span>
-                        {selectedFailingCount > 0 && (
-                          <span className="flex items-center gap-1 text-[11px] tabular-nums text-amber-300">
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                            {selectedFailingCount} {t('aiHub.providersPage.detail.failingChip')}
+                        <span className="flex items-center gap-3">
+                          <span className="flex items-center gap-1.5 text-xs tabular-nums text-slate-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            {selectedActiveCount} {t('aiHub.providersPage.detail.activeChip')}
                           </span>
-                        )}
-                        <span className="flex items-center gap-1 text-[11px] tabular-nums text-slate-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-                          {selectedModels.length} {t('aiHub.providersPage.detail.modelsChip')}
+                          {selectedFailingCount > 0 && (
+                            <span className="flex items-center gap-1.5 text-xs tabular-nums text-amber-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                              {selectedFailingCount} {t('aiHub.providersPage.detail.failingChip')}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1.5 text-xs tabular-nums text-slate-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                            {selectedModels.length} {t('aiHub.providersPage.detail.modelsChip')}
+                          </span>
                         </span>
                       </div>
-                      <div className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
+                      <div className="mt-1 truncate font-mono text-[11px] text-slate-500">
                         {selectedEndpoint.baseUrl} · {selectedEndpoint.adapterType}
                       </div>
                       {selectedInvalidAddress && (
-                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-amber-300">
-                          <TriangleAlert size={11} className="shrink-0" />
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-amber-300">
+                          <TriangleAlert size={12} className="shrink-0" />
                           {t('aiHub.providersPage.invalidAddressFlag')}
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="ml-auto flex shrink-0 items-center gap-1.5">
                       <Button
                         variant="secondary"
                         size="xs"
@@ -586,6 +596,12 @@ export default function AiProvidersPage() {
                   <div className="flex items-center gap-1 border-b border-white/[0.06] px-3 py-2">
                     {tabs.map(item => {
                       const active = tab === item.id;
+                      const count =
+                        item.id === 'keys'
+                          ? selectedCredentials.length
+                          : item.id === 'models'
+                            ? selectedModels.length
+                            : null;
                       return (
                         <ButtonBase
                           key={item.id}
@@ -594,17 +610,22 @@ export default function AiProvidersPage() {
                           aria-current={active ? 'true' : undefined}
                           className={
                             active
-                              ? 'rounded-md bg-indigo-500/12 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-inset ring-indigo-400/20'
-                              : 'rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200'
+                              ? 'inline-flex items-center gap-1.5 rounded-md bg-indigo-500/12 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-inset ring-indigo-400/20'
+                              : 'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200'
                           }
                         >
-                          {item.label}
+                          <span>{item.label}</span>
+                          {count !== null && (
+                            <Badge size="sm" variant="slate" className="tabular-nums">
+                              {count}
+                            </Badge>
+                          )}
                         </ButtonBase>
                       );
                     })}
                   </div>
 
-                  <div className="min-h-0 flex-1 overflow-hidden p-3">
+                  <div className="min-h-0 flex-1 overflow-hidden p-4">
                     {tab === 'keys' && (
                       <ProviderKeysTable
                         credentials={selectedCredentials}

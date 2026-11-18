@@ -216,8 +216,8 @@ describe('AiProvidersPage (unified master-detail)', () => {
     await screen.findByText('OpenAI');
     await user.click(screen.getByText('OpenAI'));
 
-    expect(await screen.findByRole('button', { name: 'Keys' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Models' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Keys 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Models 0' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
     expect(screen.getByText('https://api.openai.com/v1 · openai_compatible')).toBeTruthy();
   });
@@ -289,7 +289,7 @@ describe('AiProvidersPage (unified master-detail)', () => {
 
     await screen.findByText('OpenAI');
     await user.click(screen.getByText('OpenAI'));
-    await user.click(screen.getByRole('button', { name: 'Models' }));
+    await user.click(screen.getByRole('button', { name: 'Models 0' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('Model discovery failed');
@@ -386,7 +386,7 @@ describe('AiProvidersPage (unified master-detail)', () => {
 
     await screen.findByText('OpenAI');
     await user.click(screen.getByText('OpenAI'));
-    await user.click(screen.getByRole('button', { name: 'Models' }));
+    await user.click(screen.getByRole('button', { name: 'Models 0' }));
 
     await user.type(
       screen.getByPlaceholderText('model id, e.g. gpt-4o'),
@@ -462,7 +462,7 @@ describe('AiProvidersPage (unified master-detail)', () => {
 
     await screen.findByText('OpenAI');
     await user.click(screen.getByText('OpenAI'));
-    await user.click(screen.getByRole('button', { name: 'Models' }));
+    await user.click(screen.getByRole('button', { name: 'Models 0' }));
 
     expect(await screen.findByRole('button', { name: 'Discover models' })).toBeTruthy();
   });
