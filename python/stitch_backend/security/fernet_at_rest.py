@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 
 _KEY_FILE_NAME = ".db_key"
 
+# Every Fernet token is base64url of a payload starting with the 0x80 version byte.
+_FERNET_TOKEN_PREFIX = "gAAAAA"
+
 
 class FernetKeyError(RuntimeError):
     """Raised when the Fernet key is missing, invalid, or unpersistable."""
@@ -236,22 +239,16 @@ async def migrate_plaintext_to_encrypted() -> None:
                     text(
                         f'SELECT rowid, "{column_name}" '
                         f'FROM "{table_name}" '
-                        f'WHERE "{column_name}" IS NOT NULL',
+                        f'WHERE "{column_name}" IS NOT NULL '
+                        f"AND substr(\"{column_name}\", 1, 6) <> :token_prefix",
                     ),
+                    {"token_prefix": _FERNET_TOKEN_PREFIX},
                 )
             ).fetchall()
 
             for row_id, raw_value in rows:
                 if not isinstance(raw_value, str) or raw_value == "":
                     continue
-                try:
-                    decrypt(raw_value)
-                except InvalidToken:
-                    pass  # Plaintext — needs encryption
-                except Exception:  # noqa: BLE001 — skip non-string/unexpected
-                    continue
-                else:
-                    continue  # Already encrypted — skip
 
                 encrypted = encrypt(raw_value)
                 await conn.execute(

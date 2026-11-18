@@ -26,7 +26,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import delete, select
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_read_session, run_in_session
@@ -35,7 +38,12 @@ from stitch_backend.domains.ai_gateway.model_catalog_service import (
     VERIFICATION_TTL,
     _as_utc,
 )
-from stitch_backend.domains.ai_gateway.models import _utcnow
+from stitch_backend.domains.ai_gateway.models import (
+    CredentialModelAccess,
+    RouteTarget,
+    UpstreamModel,
+    _utcnow,
+)
 from stitch_backend.domains.ai_gateway.pricing_cache import (
     PRICING_TTL_SECONDS,
     normalize_origin,
@@ -56,6 +64,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 RETIREMENT_TTL = VERIFICATION_TTL
+PRUNE_STALE_AFTER = timedelta(days=30)
+PRUNE_INTERVAL_SECONDS = 86400
 MAX_NEW_MODELS_TO_VERIFY = 20
 VERIFICATION_CONCURRENCY = 4
 VERIFICATION_BUDGET_SECONDS = 30.0
@@ -156,6 +166,7 @@ class DiscoveryWorker:
 
     _task: asyncio.Task[None] | None = None
     _interval_seconds: int = 3600
+    _last_prune_at: float = 0.0
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -197,10 +208,62 @@ class DiscoveryWorker:
             try:
                 await asyncio.sleep(cls._interval_seconds)
                 await cls._discover_all()
+                await cls._maybe_prune_stale()
             except asyncio.CancelledError:
                 raise
             except Exception as _exc:
                 logger.warning("DiscoveryWorker loop error — will retry: %s", _exc)
+
+    @classmethod
+    async def _maybe_prune_stale(cls) -> None:
+        now = time.monotonic()
+        if cls._last_prune_at and now - cls._last_prune_at < PRUNE_INTERVAL_SECONDS:
+            return
+        cls._last_prune_at = now
+        await cls._prune_stale_models()
+
+    @classmethod
+    async def _prune_stale_models(cls) -> int:
+        cutoff = _utcnow() - PRUNE_STALE_AFTER
+        deleted = 0
+
+        async def _op(session: AsyncSession) -> None:
+            nonlocal deleted
+            routed = (
+                select(RouteTarget.id)
+                .where(RouteTarget.upstream_model_id == UpstreamModel.id)
+                .exists()
+            )
+            accessible = (
+                select(CredentialModelAccess.id)
+                .where(CredentialModelAccess.upstream_model_id == UpstreamModel.id)
+                .exists()
+            )
+            stmt = select(UpstreamModel).where(
+                UpstreamModel.enabled.is_(False),
+                UpstreamModel.discovery_source == "probe",
+                UpstreamModel.selection_source == "auto",
+                UpstreamModel.last_seen_at.is_not(None),
+                ~routed,
+                ~accessible,
+            )
+            candidates = list((await session.execute(stmt)).scalars().all())
+            ids = [
+                model.id
+                for model in candidates
+                if model.last_seen_at is not None
+                and _as_utc(model.last_seen_at) < cutoff
+            ]
+            if not ids:
+                return
+            await session.execute(delete(UpstreamModel).where(UpstreamModel.id.in_(ids)))
+            await session.flush()
+            deleted = len(ids)
+
+        await run_in_session(_op)
+        if deleted:
+            logger.info("DiscoveryWorker: pruned %d stale upstream models", deleted)
+        return deleted
 
     # ── Core discovery logic ─────────────────────────────────────────────────
 

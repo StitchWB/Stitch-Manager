@@ -266,26 +266,31 @@ async def create_all_tables() -> None:
         import stitch_backend.domains.proxy_library.models  # noqa: F401
         import stitch_backend.domains.settings.models  # noqa: F401
         import stitch_backend.domains.totp.models  # noqa: F401
+        existing_tables = await conn.run_sync(
+            lambda sync_conn: set(_sa_inspect(sync_conn).get_table_names())
+        )
         await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(_add_missing_columns)
+        await conn.run_sync(_add_missing_columns, existing_tables)
 
 
-def _add_missing_columns(sync_conn: Any) -> None:
-    """Add ORM-declared columns missing from existing SQLite tables.
+def _add_missing_columns(sync_conn: Any, existing_tables: set[str] | None = None) -> None:
+    """Add ORM-declared columns missing from tables that predate this call.
 
     Runs inside ``conn.run_sync`` so it operates on a synchronous connection.
     Only adds columns — never drops or alters existing ones — so it is safe to
-    run on every startup.
+    run on every startup.  ``existing_tables`` skips the inspector pass for
+    tables this call just created.
     """
     from sqlalchemy.schema import CreateColumn
 
     inspector = _sa_inspect(sync_conn)
-    existing_tables = set(inspector.get_table_names())
+    if existing_tables is None:
+        existing_tables = set(inspector.get_table_names())
     dialect = sync_conn.dialect
 
     for table in Base.metadata.sorted_tables:
         if table.name not in existing_tables:
-            continue  # create_all already handled brand-new tables
+            continue
 
         db_columns = {col["name"] for col in inspector.get_columns(table.name)}
 
