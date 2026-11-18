@@ -1,6 +1,6 @@
 import { Search, Server } from 'lucide-react';
 
-import { Button, ButtonBase, EmptyState, Input, ProviderLogo } from '@/components/ui';
+import { Badge, Button, ButtonBase, EmptyState, Input, ProviderLogo } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { HEALTH_META } from './viewModel';
@@ -30,6 +30,7 @@ export function ProviderRoster(props: ProviderRosterProps): JSX.Element {
       <div className="p-3 border-b border-white/[0.06]">
         <Input
           leftIcon={<Search size={14} />}
+          className="text-xs"
           value={search}
           onChange={event => onSearchChange(event.target.value)}
           placeholder={t('aiHub.providersPage.searchProviders')}
@@ -38,7 +39,7 @@ export function ProviderRoster(props: ProviderRosterProps): JSX.Element {
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
         {loading && items.length === 0
           ? [0, 1, 2].map(row => (
-              <div key={row} className="h-14 rounded-lg bg-white/[0.03] animate-pulse" />
+              <div key={row} className="h-16 rounded-lg bg-white/[0.03] animate-pulse" />
             ))
           : items.length === 0
             ? (
@@ -63,24 +64,35 @@ export function ProviderRoster(props: ProviderRosterProps): JSX.Element {
                     onClick={() => onSelect(item.endpoint.id)}
                     aria-current={selected ? 'true' : undefined}
                     className={cn(
-                      'w-full h-14 flex items-center gap-3 px-3 rounded-lg text-left transition-colors',
+                      'w-full flex items-center gap-3 px-3 py-3.5 rounded-lg text-left transition-colors',
                       selected
-                        ? 'bg-indigo-500/12 ring-1 ring-inset ring-indigo-400/20 text-white'
-                        : 'text-slate-300 hover:bg-white/[0.04]'
+                        ? 'bg-indigo-500/10 ring-1 ring-inset ring-indigo-400/20'
+                        : 'hover:bg-white/[0.03]'
                     )}
                   >
                     <ProviderLogo provider={item.logoKey} size={16} colored />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{item.endpoint.name}</p>
-                      <p className="text-[11px] text-slate-500 truncate">
-                        {item.credentialCount} {t('aiHub.providersPage.keysShort')}
-                        {item.problemCount > 0 && (
-                          <>
-                            {' · '}
-                            {item.problemCount} {t('aiHub.providersPage.failingShort')}
-                          </>
+                      <p
+                        className={cn(
+                          'text-xs font-medium truncate',
+                          selected ? 'text-white' : 'text-slate-200'
                         )}
+                      >
+                        {item.endpoint.name}
                       </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1 font-mono text-[11px] text-slate-500">
+                        <Badge size="sm" variant="slate" className="shrink-0">
+                          {item.credentialCount} {t('aiHub.providersPage.keysShort')}
+                        </Badge>
+                        <Badge size="sm" variant="default" className="shrink-0">
+                          {item.modelCount} {t('aiHub.providersPage.modelsShort')}
+                        </Badge>
+                        {item.problemCount > 0 && (
+                          <Badge size="sm" variant="danger" className="shrink-0">
+                            {item.problemCount} {t('aiHub.providersPage.failingShort')}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <span
                       title={t(meta.labelKey)}
@@ -90,25 +102,37 @@ export function ProviderRoster(props: ProviderRosterProps): JSX.Element {
                 );
               })}
       </div>
-      <div className="shrink-0 border-t border-white/[0.06] px-3 py-2">
-        <p className="text-[11px] tabular-nums text-slate-400">
-          {allItems.length} {t('aiHub.providersPage.roster.footerProviders')} · {totalKeys}{' '}
-          {t('aiHub.providersPage.roster.footerKeys')}
-        </p>
-        <p className="mt-0.5 flex items-center gap-2 text-[10px] tabular-nums text-slate-500">
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            {healthyCount} {t('aiHub.providersPage.roster.footerHealthy')}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-            {problemCount} {t('aiHub.providersPage.roster.footerProblems')}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-600" />
-            {offCount} {t('aiHub.providersPage.roster.footerOff')}
-          </span>
-        </p>
+      <div className="shrink-0 border-t border-white/[0.06] px-3 py-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[11px] tabular-nums text-slate-400">
+              {allItems.length} {t('aiHub.providersPage.roster.footerProviders')} · {totalKeys}{' '}
+              {t('aiHub.providersPage.roster.footerKeys')}
+            </p>
+            <p className="mt-1 flex items-center gap-2 text-[11px] tabular-nums text-slate-500">
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                {healthyCount} {t('aiHub.providersPage.roster.footerHealthy')}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                {problemCount} {t('aiHub.providersPage.roster.footerProblems')}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-600" />
+                {offCount} {t('aiHub.providersPage.roster.footerOff')}
+              </span>
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="xs"
+            className="shrink-0"
+            onClick={onAddProvider}
+          >
+            {t('aiHub.providersPage.addConnection')}
+          </Button>
+        </div>
       </div>
     </div>
   );

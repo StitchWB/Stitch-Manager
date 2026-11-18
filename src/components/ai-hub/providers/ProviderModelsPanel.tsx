@@ -150,7 +150,7 @@ function healthView(row: ModelHealthRow | undefined): HealthView {
 
 function chipClass(active: boolean): string {
   return cn(
-    'inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-medium transition-colors',
+    'inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition-colors',
     active
       ? 'border-indigo-500/35 bg-indigo-500/12 text-indigo-200'
       : 'border-white/10 bg-white/[0.02] text-slate-400 hover:bg-white/5 hover:text-slate-200'
@@ -568,6 +568,14 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 pb-2">
+        <Input
+          aria-label={t('aiHub.providersPage.searchModels')}
+          value={queryInput}
+          onChange={event => setQueryInput(event.target.value)}
+          placeholder={t('aiHub.providersPage.searchModels')}
+          leftIcon={<Search size={12} />}
+          className="min-w-[180px] flex-1"
+        />
         <SegmentedControl
           size="sm"
           stretch={false}
@@ -585,31 +593,6 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             },
           ]}
         />
-        <span className="text-[11px] tabular-nums text-slate-500">
-          {t('aiHub.providersPage.modelsFound', { shown: filteredRows.length, total })}
-        </span>
-        <span className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          leftIcon={<RefreshCw size={12} className={discovering ? 'animate-spin' : undefined} />}
-          onClick={onDiscover}
-          disabled={busy || discovering || batchBusy}
-        >
-          {discovering ? t('aiHub.providersPage.discovering') : t('aiHub.providersPage.discover')}
-        </Button>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2 pb-2">
-        <Input
-          aria-label={t('aiHub.providersPage.searchModels')}
-          value={queryInput}
-          onChange={event => setQueryInput(event.target.value)}
-          placeholder={t('aiHub.providersPage.searchModels')}
-          leftIcon={<Search size={12} />}
-          className="flex-1"
-        />
         <FilterDropdown
           value={orderBy}
           onChange={value =>
@@ -618,6 +601,20 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
           options={sortOptions}
           icon={<ArrowUpDown size={12} />}
         />
+        <span className="shrink-0 text-xs tabular-nums text-slate-500">
+          {t('aiHub.providersPage.modelsFound', { shown: filteredRows.length, total })}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className="ml-auto shrink-0 text-xs"
+          leftIcon={<RefreshCw size={12} className={discovering ? 'animate-spin' : undefined} />}
+          onClick={onDiscover}
+          disabled={busy || discovering || batchBusy}
+        >
+          {discovering ? t('aiHub.providersPage.discovering') : t('aiHub.providersPage.discover')}
+        </Button>
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 pb-2">
@@ -644,7 +641,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
           options={vendorOptions}
           placeholder={t('aiHub.providersPage.vendorFilter')}
           showActiveState
-          triggerClassName="h-7 text-[11px]"
+          triggerClassName="h-7 text-xs"
         />
         <ButtonBase
           type="button"
@@ -670,34 +667,34 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
         >
           {t('aiHub.providersPage.problemsOnly')}
         </ButtonBase>
-      </div>
-
-      {onAddModel && (
-        <form
-          className="flex shrink-0 items-center gap-2 pb-2"
-          onSubmit={event => {
-            event.preventDefault();
-            void handleAddModel();
-          }}
-        >
-          <Input
-            aria-label={t('aiHub.providersPage.addModelPlaceholder')}
-            value={modelIdInput}
-            onChange={event => setModelIdInput(event.target.value)}
-            placeholder={t('aiHub.providersPage.addModelPlaceholder')}
-            className="w-56"
-          />
-          <Button
-            type="submit"
-            variant="outline"
-            size="xs"
-            leftIcon={addingModel ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-            disabled={modelIdInput.trim() === '' || addingModel || busy || batchBusy}
+        {onAddModel && (
+          <form
+            className="ml-auto flex items-center gap-1.5"
+            onSubmit={event => {
+              event.preventDefault();
+              void handleAddModel();
+            }}
           >
-            {t('aiHub.providersPage.addModelAction')}
-          </Button>
-        </form>
-      )}
+            <Input
+              aria-label={t('aiHub.providersPage.addModelPlaceholder')}
+              value={modelIdInput}
+              onChange={event => setModelIdInput(event.target.value)}
+              placeholder={t('aiHub.providersPage.addModelPlaceholder')}
+              className="w-44"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              className="px-2 text-xs"
+              aria-label={t('aiHub.providersPage.addModelAction')}
+              title={t('aiHub.providersPage.addModelAction')}
+              leftIcon={addingModel ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+              disabled={modelIdInput.trim() === '' || addingModel || busy || batchBusy}
+            />
+          </form>
+        )}
+      </div>
 
       {selectedCount > 0 && (
         <div
@@ -711,6 +708,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             type="button"
             variant="outline"
             size="xs"
+            className="text-xs"
             leftIcon={<Globe size={12} />}
             onClick={() => void handleBatchPublish()}
             disabled={isActionsDisabled}
@@ -721,6 +719,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             type="button"
             variant="outline"
             size="xs"
+            className="text-xs"
             leftIcon={<EyeOff size={12} />}
             onClick={() => void handleBatchDisable()}
             disabled={isActionsDisabled}
@@ -731,6 +730,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             type="button"
             variant="outline"
             size="xs"
+            className="text-xs"
             leftIcon={
               probeProgress ? (
                 <Loader2 size={12} className="animate-spin" />
@@ -765,6 +765,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             type="button"
             variant="outline"
             size="xs"
+            className="shrink-0 text-xs"
             leftIcon={<RefreshCw size={12} />}
             onClick={onDiscover}
             disabled={busy || discovering || batchBusy}
@@ -781,8 +782,8 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/[0.06]">
           <Table>
-            <TableHeader>
-              <TableRow>
+            <TableHeader className="sticky top-0 z-10 bg-vsc-panel-solid">
+              <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10">
                   <Checkbox
                     aria-label={t('aiHub.providersPage.selectAllPage')}
@@ -791,12 +792,12 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                     disabled={filteredRows.length === 0 || isActionsDisabled}
                   />
                 </TableHead>
-                <TableHead>{t('aiHub.providersPage.modelId')}</TableHead>
-                <TableHead>{t('aiHub.providersPage.colClass')}</TableHead>
-                <TableHead className="w-28">{t('aiHub.providersPage.colPricing')}</TableHead>
-                <TableHead className="w-32">{t('aiHub.providersPage.colHealth')}</TableHead>
-                <TableHead className="w-16">{t('aiHub.providersPage.enabled')}</TableHead>
-                <TableHead className="w-48">{t('aiHub.providersPage.colPublish')}</TableHead>
+                <TableHead className="text-xs">{t('aiHub.providersPage.modelId')}</TableHead>
+                <TableHead className="text-xs">{t('aiHub.providersPage.colClass')}</TableHead>
+                <TableHead className="w-32 text-right text-xs">{t('aiHub.providersPage.colPricing')}</TableHead>
+                <TableHead className="w-28 text-xs">{t('aiHub.providersPage.colHealth')}</TableHead>
+                <TableHead className="w-16 text-xs">{t('aiHub.providersPage.enabled')}</TableHead>
+                <TableHead className="w-24 text-xs">{t('aiHub.providersPage.colPublish')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -811,7 +812,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                 const ref = published?.[model.id];
                 const displayName = model.displayName || model.upstreamModelId;
                 return (
-                  <TableRow key={model.id}>
+                  <TableRow key={model.id} className="hover:bg-white/[0.02]">
                     <TableCell className="w-10">
                       <Checkbox
                         aria-label={t('aiHub.providersPage.selectModelAria', { model: model.upstreamModelId })}
@@ -837,27 +838,27 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                         {vendorName && <Badge size="sm" variant="outline">{vendorName}</Badge>}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-right">
                       {quotaType === 1 ? (
                         <Tooltip content={t('aiHub.providersPage.priceTooltip')}>
                           <Badge size="sm" variant="warning">
                             {t('aiHub.providersPage.perCall')}
-                            {price != null ? ` · ${price}` : ''}
+                            {price != null ? ` · $${price.toFixed(2)}` : ''}
                           </Badge>
                         </Tooltip>
                       ) : ratio != null || completionRatio != null ? (
                         <Tooltip content={t('aiHub.providersPage.ratioTooltip')}>
-                          <span className="font-mono text-[11px] tabular-nums text-slate-400">
-                            {ratio ?? '—'} / {completionRatio ?? '—'}
+                          <span className="font-mono text-xs tabular-nums text-slate-300">
+                            {ratio != null ? `$${ratio.toFixed(2)}` : '—'} / {completionRatio != null ? `$${completionRatio.toFixed(2)}` : '—'}
                           </span>
                         </Tooltip>
                       ) : (
-                        <span className="text-[11px] text-slate-600">—</span>
+                        <span className="text-xs text-slate-600">—</span>
                       )}
                     </TableCell>
                     <TableCell>
                       <Tooltip content={view.tooltip}>
-                        <span className="inline-flex items-center gap-1.5 text-[11px] tabular-nums text-slate-400">
+                        <span className="inline-flex items-center gap-1.5 text-xs tabular-nums text-slate-400">
                           <span className={cn('h-2 w-2 shrink-0 rounded-full', HEALTH_DOT[view.state])} />
                           {view.state === 'unchecked'
                             ? t('aiHub.providersPage.healthNotChecked')
@@ -890,7 +891,7 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                             disabled={isActionsDisabled}
                           />
                           <span
-                            className="max-w-[110px] truncate font-mono text-[11px] text-indigo-300"
+                            className="max-w-[160px] truncate font-mono text-[11px] text-indigo-300"
                             title={ref.publicModelId}
                           >
                             {ref.publicModelId}
@@ -913,14 +914,14 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
                         <ButtonBase
                           type="button"
                           onClick={() => onExposeModel(model)}
-                          title={t('aiHub.providersPage.publishHint')}
-                          className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
+                          aria-label={t('aiHub.providersPage.publishModel')}
+                          title={t('aiHub.providersPage.publishModel')}
+                          className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-indigo-300"
                         >
-                          <Globe size={12} className="shrink-0 text-indigo-300" />
-                          {t('aiHub.providersPage.publishModel')}
+                          <Globe size={14} className="shrink-0" />
                         </ButtonBase>
                       ) : (
-                        <span className="text-[11px] text-slate-600">—</span>
+                        <span className="text-xs text-slate-600">—</span>
                       )}
                     </TableCell>
                   </TableRow>
