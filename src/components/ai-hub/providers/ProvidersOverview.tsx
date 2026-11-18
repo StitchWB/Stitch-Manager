@@ -1,6 +1,6 @@
 import { ChevronRight, ClipboardPaste, Download, Route } from 'lucide-react';
 
-import { ButtonBase, MetricStrip, ProviderLogo } from '@/components/ui';
+import { Badge, Button, ButtonBase, ProviderLogo } from '@/components/ui';
 import type { MetricSegment } from '@/components/ui';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -16,8 +16,18 @@ export interface ProvidersOverviewProps {
   onOpenRouting: () => void;
 }
 
-const ACTION_TILE =
-  'flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-white/[0.05] hover:text-white';
+const TONE_DOT: Record<NonNullable<MetricSegment['tone']>, string> = {
+  neutral: 'bg-slate-500',
+  success: 'bg-emerald-400',
+  warning: 'bg-amber-400',
+  danger: 'bg-red-400',
+  info: 'bg-indigo-400',
+};
+
+const SECTION_SURFACE = 'rounded-xl border border-white/[0.08] bg-white/[0.03]';
+
+const SECTION_HEADER =
+  'border-b border-white/[0.06] px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400';
 
 export function ProvidersOverview(props: ProvidersOverviewProps): JSX.Element {
   const { items, onSelectProvider, onAddConnection, onImportOpencode, onOpenRouting } = props;
@@ -58,10 +68,22 @@ export function ProvidersOverview(props: ProvidersOverviewProps): JSX.Element {
       </div>
 
       <div className="flex flex-col gap-3 p-3">
-        <MetricStrip segments={segments} density="compact" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {segments.map(seg => (
+            <div key={seg.id} className={cn(SECTION_SURFACE, 'p-4')}>
+              <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+                <span
+                  className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TONE_DOT[seg.tone ?? 'neutral'])}
+                />
+                <span className="truncate">{seg.label}</span>
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-white">{seg.value}</p>
+            </div>
+          ))}
+        </div>
 
-        <section className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
-          <h3 className="border-b border-white/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        <section className={SECTION_SURFACE}>
+          <h3 className={SECTION_HEADER}>
             {t('aiHub.providersPage.overview.needsAttention')}
           </h3>
           {attention.length === 0 ? (
@@ -78,15 +100,15 @@ export function ProvidersOverview(props: ProvidersOverviewProps): JSX.Element {
                     key={item.endpoint.id}
                     type="button"
                     onClick={() => onSelectProvider(item.endpoint.id)}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
                   >
                     <ProviderLogo provider={item.logoKey} size={16} colored />
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200">
                       {item.endpoint.name}
                     </span>
-                    <span className="shrink-0 text-[11px] tabular-nums text-red-300">
+                    <Badge size="sm" variant="danger" className="shrink-0 font-mono">
                       {item.problemCount} {t('aiHub.providersPage.failingShort')}
-                    </span>
+                    </Badge>
                     <span
                       title={t(meta.labelKey)}
                       className={cn('h-1.5 w-1.5 shrink-0 rounded-full', meta.dotClass)}
@@ -99,23 +121,35 @@ export function ProvidersOverview(props: ProvidersOverviewProps): JSX.Element {
           )}
         </section>
 
-        <section className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
-          <h3 className="border-b border-white/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        <section className={SECTION_SURFACE}>
+          <h3 className={SECTION_HEADER}>
             {t('aiHub.providersPage.overview.actions')}
           </h3>
-          <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2">
-            <ButtonBase type="button" onClick={onAddConnection} className={ACTION_TILE}>
-              <ClipboardPaste size={15} className="shrink-0 text-indigo-300" />
+          <div className="flex flex-wrap gap-2 p-3">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<ClipboardPaste size={14} />}
+              onClick={onAddConnection}
+            >
               {t('aiHub.providersPage.addConnection')}
-            </ButtonBase>
-            <ButtonBase type="button" onClick={onImportOpencode} className={ACTION_TILE}>
-              <Download size={15} className="shrink-0 text-indigo-300" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Download size={14} />}
+              onClick={onImportOpencode}
+            >
               {t('aiHub.providersPage.importOpencode')}
-            </ButtonBase>
-            <ButtonBase type="button" onClick={onOpenRouting} className={ACTION_TILE}>
-              <Route size={15} className="shrink-0 text-indigo-300" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Route size={14} />}
+              onClick={onOpenRouting}
+            >
               {t('aiHub.tabs.routing')}
-            </ButtonBase>
+            </Button>
           </div>
         </section>
 
