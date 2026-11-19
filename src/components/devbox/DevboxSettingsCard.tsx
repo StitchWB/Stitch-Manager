@@ -306,7 +306,7 @@ export function DevboxSettingsCard({
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-4" data-testid="devbox-settings-body">
+        <div className="max-w-2xl space-y-4" data-testid="devbox-settings-body">
           {restartKinds.length > 0 && (
             <div
               className="flex flex-wrap items-center justify-start gap-2 rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-2xs text-amber-200"
@@ -356,26 +356,25 @@ export function DevboxSettingsCard({
             </div>
           )}
 
-          <div
-            className="grid grid-cols-1 gap-3 md:grid-cols-2"
-            data-testid="devbox-settings-ingress"
-          >
-            <div className="space-y-1">
-              <span className="block text-2xs font-semibold uppercase tracking-wider text-slate-400">
-                {t('devboxPage.settingsIngressTitle')}
-              </span>
-              <SegmentedControl
-                size="sm"
-                stretch={false}
-                className="w-fit"
-                options={[
-                  { label: t('devboxPage.settingsModeCloudflare'), value: MODE_CLOUDFLARE },
-                  { label: t('devboxPage.settingsModeRelay'), value: MODE_RELAY },
-                ]}
-                value={mode}
-                onChange={selectMode}
-                disabled={saving || busy}
-              />
+          <div className="space-y-2" data-testid="devbox-settings-ingress">
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <span className="block text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                  {t('devboxPage.settingsIngressTitle')}
+                </span>
+                <SegmentedControl
+                  size="sm"
+                  stretch={false}
+                  className="w-fit"
+                  options={[
+                    { label: t('devboxPage.settingsModeCloudflare'), value: MODE_CLOUDFLARE },
+                    { label: t('devboxPage.settingsModeRelay'), value: MODE_RELAY },
+                  ]}
+                  value={mode}
+                  onChange={selectMode}
+                  disabled={saving || busy}
+                />
+              </div>
               <p className="text-2xs text-slate-400">
                 {mode === MODE_RELAY
                   ? t('devboxPage.settingsModeRelayHint')
@@ -383,43 +382,53 @@ export function DevboxSettingsCard({
               </p>
             </div>
             {mode === MODE_RELAY ? (
-              <Input
-                label={t('devboxPage.settingsRelaySubdomainLabel')}
-                hint={t('devboxPage.settingsRelaySubdomainHint')}
-                id="devbox-settings-RELAY_SUBDOMAIN"
-                data-testid="devbox-settings-input-RELAY_SUBDOMAIN"
-                value={draft.RELAY_SUBDOMAIN ?? ''}
-                placeholder="ide-account-manager"
-                disabled={saving || busy}
-                onChange={e => setField('RELAY_SUBDOMAIN', e.target.value)}
-                containerClassName="space-y-1"
-              />
+              <div className="space-y-2">
+                <Input
+                  label={t('devboxPage.settingsRelaySubdomainLabel')}
+                  id="devbox-settings-RELAY_SUBDOMAIN"
+                  aria-describedby="devbox-settings-RELAY_SUBDOMAIN-hint"
+                  data-testid="devbox-settings-input-RELAY_SUBDOMAIN"
+                  value={draft.RELAY_SUBDOMAIN ?? ''}
+                  placeholder="ide-account-manager"
+                  disabled={saving || busy}
+                  onChange={e => setField('RELAY_SUBDOMAIN', e.target.value)}
+                  containerClassName="space-y-1"
+                />
+                <p id="devbox-settings-RELAY_SUBDOMAIN-hint" className="px-0.5 text-xs text-slate-400">
+                  {t('devboxPage.settingsRelaySubdomainHint')}
+                </p>
+              </div>
             ) : (
-              <Input
-                label={t('devboxPage.settingsPublicUrlLabel')}
-                hint={t('devboxPage.settingsPublicUrlHint')}
-                id="devbox-settings-PUBLIC_URL"
-                data-testid="devbox-settings-input-PUBLIC_URL"
-                value={draft.PUBLIC_URL ?? ''}
-                placeholder="https://devbox.example.com"
-                disabled={saving || busy}
-                onChange={e => setField('PUBLIC_URL', e.target.value)}
-                containerClassName="space-y-1"
-              />
+              <div className="space-y-2">
+                <Input
+                  label={t('devboxPage.settingsPublicUrlLabel')}
+                  id="devbox-settings-PUBLIC_URL"
+                  aria-describedby="devbox-settings-PUBLIC_URL-hint"
+                  data-testid="devbox-settings-input-PUBLIC_URL"
+                  value={draft.PUBLIC_URL ?? ''}
+                  placeholder="https://devbox.example.com"
+                  disabled={saving || busy}
+                  onChange={e => setField('PUBLIC_URL', e.target.value)}
+                  containerClassName="space-y-1"
+                />
+                <p id="devbox-settings-PUBLIC_URL-hint" className="px-0.5 text-xs text-slate-400">
+                  {t('devboxPage.settingsPublicUrlHint')}
+                </p>
+              </div>
             )}
             <div
-              className="flex min-w-0 items-center gap-2 md:col-span-2"
+              className="flex flex-wrap items-center gap-2"
               data-testid="devbox-settings-status"
             >
               <span className={`h-2 w-2 shrink-0 rounded-full ${statusLine.dot}`} />
               {statusLine.url && (
-                <span className="truncate min-w-0 text-2xs text-slate-300">{statusLine.url}</span>
+                <span className="min-w-0 truncate text-2xs text-slate-300">{statusLine.url}</span>
               )}
-              <span className="truncate text-2xs text-slate-400">{statusLine.message}</span>
+              <span className="min-w-0 truncate text-2xs text-slate-400">{statusLine.message}</span>
               <Button
                 size="xs"
                 variant="ghost"
-                className="ml-auto shrink-0"
+                className="shrink-0"
                 onClick={() => void runCheck(mode)}
                 disabled={activeCheck.kind === 'checking'}
                 data-testid="devbox-settings-check"
@@ -430,28 +439,23 @@ export function DevboxSettingsCard({
             </div>
           </div>
 
-          <div
-            className="grid grid-cols-1 gap-3 md:grid-cols-2"
-            data-testid="devbox-settings-access"
-          >
-            <div className="space-y-1">
-              <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
-                {t('devboxPage.settingsAccessTitle')}
-              </h4>
-              <div className="flex items-center gap-2" data-testid="devbox-settings-access-hint">
-                <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-2xs text-slate-200">
-                  {access === 'custom'
-                    ? t('devboxPage.settingsAccessCustom')
-                    : t(ACCESS_LABEL_KEYS[access] as never)}
-                </span>
-                <span className="text-2xs text-slate-400">{t('devboxPage.settingsAccessHint')}</span>
-              </div>
+          <div className="space-y-2" data-testid="devbox-settings-access">
+            <h4 className="text-2xs font-semibold uppercase tracking-wider text-slate-400">
+              {t('devboxPage.settingsAccessTitle')}
+            </h4>
+            <div className="flex flex-wrap items-center gap-2" data-testid="devbox-settings-access-hint">
+              <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-2xs text-slate-200">
+                {access === 'custom'
+                  ? t('devboxPage.settingsAccessCustom')
+                  : t(ACCESS_LABEL_KEYS[access] as never)}
+              </span>
+              <span className="text-2xs text-slate-400">{t('devboxPage.settingsAccessHint')}</span>
             </div>
-            <div className="max-w-[8rem]">
+            <div className="w-32 space-y-2">
               <Input
                 label={t('devboxPage.settingsTimeoutLabel')}
-                hint={t('devboxPage.settingsTimeoutHint')}
                 id="devbox-settings-JOB_TIMEOUT_SECONDS"
+                aria-describedby="devbox-settings-JOB_TIMEOUT_SECONDS-hint"
                 data-testid="devbox-settings-input-JOB_TIMEOUT_SECONDS"
                 type="number"
                 min={60}
@@ -461,10 +465,13 @@ export function DevboxSettingsCard({
                 onChange={e => setField('JOB_TIMEOUT_SECONDS', e.target.value)}
                 containerClassName="space-y-1"
               />
+              <p id="devbox-settings-JOB_TIMEOUT_SECONDS-hint" className="px-0.5 text-xs text-slate-400">
+                {t('devboxPage.settingsTimeoutHint')}
+              </p>
             </div>
           </div>
 
-          <div className="border-t border-white/5" data-testid="devbox-settings-advanced">
+          <div className="border-t border-white/5 pt-3" data-testid="devbox-settings-advanced">
             <button
               type="button"
               className="flex w-full items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-colors"
@@ -479,21 +486,26 @@ export function DevboxSettingsCard({
               </span>
             </button>
             {advancedOpen && (
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Select
-                  label={t('devboxPage.settingsEgressLabel')}
-                  hint={t('devboxPage.settingsEgressHint')}
-                  id="devbox-settings-EGRESS_CONTAINER"
-                  data-testid="devbox-settings-select-EGRESS_CONTAINER"
-                  value={draft.EGRESS_CONTAINER ?? 'rdm-egress'}
-                  options={[
-                    { value: 'rdm-egress', label: 'rdm-egress' },
-                    { value: 'rdm-vpn', label: 'rdm-vpn' },
-                  ]}
-                  onValueChange={value => setField('EGRESS_CONTAINER', value)}
-                  disabled={saving || busy}
-                  containerClassName="space-y-1"
-                />
+              <div className="mt-3 space-y-3">
+                <div className="space-y-2">
+                  <Select
+                    label={t('devboxPage.settingsEgressLabel')}
+                    id="devbox-settings-EGRESS_CONTAINER"
+                    aria-describedby="devbox-settings-EGRESS_CONTAINER-hint"
+                    data-testid="devbox-settings-select-EGRESS_CONTAINER"
+                    value={draft.EGRESS_CONTAINER ?? 'rdm-egress'}
+                    options={[
+                      { value: 'rdm-egress', label: 'rdm-egress' },
+                      { value: 'rdm-vpn', label: 'rdm-vpn' },
+                    ]}
+                    onValueChange={value => setField('EGRESS_CONTAINER', value)}
+                    disabled={saving || busy}
+                    containerClassName="space-y-1"
+                  />
+                  <p id="devbox-settings-EGRESS_CONTAINER-hint" className="px-0.5 text-xs text-slate-400">
+                    {t('devboxPage.settingsEgressHint')}
+                  </p>
+                </div>
                 <Input
                   label={t('devboxPage.settingsVlessLabel')}
                   id="devbox-settings-VLESS_SUB_URL"
