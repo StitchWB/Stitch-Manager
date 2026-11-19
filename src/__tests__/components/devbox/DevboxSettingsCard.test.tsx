@@ -108,6 +108,30 @@ describe('DevboxSettingsCard', () => {
     });
   });
 
+  it('switches to manual and shows the public URL input', async () => {
+    render(<DevboxSettingsCard />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-ingress')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Manual / own tunnel'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-input-PUBLIC_URL')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('devbox-settings-input-RELAY_SUBDOMAIN')).toBeNull();
+    expect(screen.getByTestId('devbox-settings-input-PUBLIC_URL').getAttribute('placeholder')).toContain('my-vps');
+
+    fireEvent.click(screen.getByTestId('devbox-settings-save'));
+
+    await waitFor(() => {
+      const calls = devboxCallArgs(invokeMock, 'env_set');
+      expect(calls.length).toBe(1);
+      expect(calls[0]).toEqual({ patch: { INGRESS_MODE: 'manual' } });
+    });
+  });
+
   it('re-runs the connection check when the window regains focus', async () => {
     render(<DevboxSettingsCard />);
 

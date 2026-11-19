@@ -354,7 +354,9 @@ export interface DevboxPageTranslations {
     settingsIngressTitle: string;
     settingsModeCloudflare: string;
     settingsModeRelay: string;
+  settingsModeManual: string;
     settingsModeRelayHint: string;
+  settingsModeManualHint: string;
     settingsModeCloudflareHint: string;
     settingsRelaySubdomainLabel: string;
     settingsRelaySubdomainHint: string;
@@ -381,6 +383,7 @@ export interface DevboxPageTranslations {
     settingsSave: string;
     settingsSaveFailed: string;
     settingsRelaySubdomainRequired: string;
+  settingsRelayUrlLabel: string;
     settingsSaving: string;
     settingsSaved: string;
     settingsRestartHint: string;
