@@ -352,7 +352,9 @@ export interface DevboxPageTranslations {
     promptStep2: string;
     settingsTitle: string;
     settingsIngressTitle: string;
-    settingsModeCloudflare: string;
+    settingsModeAuto: string;
+  settingsModeAutoHint: string;
+  settingsModeCloudflare: string;
     settingsModeRelay: string;
   settingsModeManual: string;
     settingsModeRelayHint: string;

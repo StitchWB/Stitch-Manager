@@ -19,6 +19,7 @@ export interface DevboxSettingsCardProps {
   onSaved?: () => void;
 }
 
+const MODE_AUTO = 'auto';
 const MODE_CLOUDFLARE = 'cloudflare';
 const MODE_RELAY = 'relay';
 const MODE_MANUAL = 'manual';
@@ -103,6 +104,7 @@ export function DevboxSettingsCard({
     const value = (draft.INGRESS_MODE ?? '').trim();
     if (value === MODE_RELAY) return MODE_RELAY;
     if (value === MODE_MANUAL) return MODE_MANUAL;
+    if (value === MODE_AUTO) return MODE_AUTO;
     return MODE_CLOUDFLARE;
   })();
 
@@ -156,7 +158,12 @@ export function DevboxSettingsCard({
       for (const entry of list) initial[entry.key] = entry.value;
       setDraft(initial);
       setSaved(false);
-      void runCheck(initial.INGRESS_MODE === MODE_RELAY ? MODE_RELAY : initial.INGRESS_MODE === MODE_MANUAL ? MODE_MANUAL : MODE_CLOUDFLARE);
+      void runCheck(
+        initial.INGRESS_MODE === MODE_RELAY ? MODE_RELAY
+        : initial.INGRESS_MODE === MODE_MANUAL ? MODE_MANUAL
+        : initial.INGRESS_MODE === MODE_AUTO ? MODE_AUTO
+        : MODE_CLOUDFLARE
+      );
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
       setEntries([]);
@@ -392,6 +399,7 @@ export function DevboxSettingsCard({
                   stretch={false}
                   className="w-fit"
                   options={[
+                    { label: t('devboxPage.settingsModeAuto'), value: MODE_AUTO },
                     { label: t('devboxPage.settingsModeCloudflare'), value: MODE_CLOUDFLARE },
                     { label: t('devboxPage.settingsModeRelay'), value: MODE_RELAY },
                     { label: t('devboxPage.settingsModeManual'), value: MODE_MANUAL },
@@ -406,7 +414,9 @@ export function DevboxSettingsCard({
                   ? t('devboxPage.settingsModeRelayHint')
                   : mode === MODE_MANUAL
                     ? t('devboxPage.settingsModeManualHint')
-                    : t('devboxPage.settingsModeCloudflareHint')}
+                    : mode === MODE_AUTO
+                      ? t('devboxPage.settingsModeAutoHint')
+                      : t('devboxPage.settingsModeCloudflareHint')}
               </p>
             </div>
             {mode === MODE_RELAY ? (
@@ -425,6 +435,15 @@ export function DevboxSettingsCard({
                 <p id="devbox-settings-RELAY_SUBDOMAIN-hint" className="px-0.5 text-xs text-slate-400">
                   {t('devboxPage.settingsRelaySubdomainHint')}
                 </p>
+                {draft.RELAY_URL && (
+                  <div className="flex items-center gap-2 px-0.5">
+                    <span className="text-2xs text-slate-500">{t('devboxPage.settingsRelayUrlLabel')}:</span>
+                    <span className="truncate text-2xs text-slate-400" data-testid="devbox-settings-relay-url">{draft.RELAY_URL}</span>
+                  </div>
+                )}
+              </div>
+            ) : mode === MODE_AUTO ? (
+              <div className="space-y-2">
                 {draft.RELAY_URL && (
                   <div className="flex items-center gap-2 px-0.5">
                     <span className="text-2xs text-slate-500">{t('devboxPage.settingsRelayUrlLabel')}:</span>
