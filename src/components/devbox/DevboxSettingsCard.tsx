@@ -21,6 +21,7 @@ export interface DevboxSettingsCardProps {
 
 const MODE_CLOUDFLARE = 'cloudflare';
 const MODE_RELAY = 'relay';
+const MODE_MANUAL = 'manual';
 
 const PROBE_KEYS = new Set(['RELAY_SUBDOMAIN', 'PUBLIC_URL', 'INGRESS_MODE']);
 
@@ -98,7 +99,12 @@ export function DevboxSettingsCard({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [check, setCheck] = useState<CheckState>({ kind: 'idle' });
 
-  const mode = (draft.INGRESS_MODE ?? '') === MODE_RELAY ? MODE_RELAY : MODE_CLOUDFLARE;
+  const mode = (() => {
+    const value = (draft.INGRESS_MODE ?? '').trim();
+    if (value === MODE_RELAY) return MODE_RELAY;
+    if (value === MODE_MANUAL) return MODE_MANUAL;
+    return MODE_CLOUDFLARE;
+  })();
 
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -150,7 +156,7 @@ export function DevboxSettingsCard({
       for (const entry of list) initial[entry.key] = entry.value;
       setDraft(initial);
       setSaved(false);
-      void runCheck(initial.INGRESS_MODE === MODE_RELAY ? MODE_RELAY : MODE_CLOUDFLARE);
+      void runCheck(initial.INGRESS_MODE === MODE_RELAY ? MODE_RELAY : initial.INGRESS_MODE === MODE_MANUAL ? MODE_MANUAL : MODE_CLOUDFLARE);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
       setEntries([]);
@@ -181,7 +187,7 @@ export function DevboxSettingsCard({
     for (const entry of entries) {
       if (entry.readonly) continue;
       if (entry.key === 'RELAY_SUBDOMAIN' && mode !== MODE_RELAY) continue;
-      if (entry.key === 'PUBLIC_URL' && mode !== MODE_CLOUDFLARE) continue;
+      if (entry.key === 'PUBLIC_URL' && mode === MODE_RELAY) continue;
       const current = draft[entry.key] ?? '';
       if (current !== entry.value) diff[entry.key] = current;
     }
@@ -388,6 +394,7 @@ export function DevboxSettingsCard({
                   options={[
                     { label: t('devboxPage.settingsModeCloudflare'), value: MODE_CLOUDFLARE },
                     { label: t('devboxPage.settingsModeRelay'), value: MODE_RELAY },
+                    { label: t('devboxPage.settingsModeManual'), value: MODE_MANUAL },
                   ]}
                   value={mode}
                   onChange={selectMode}
@@ -397,7 +404,9 @@ export function DevboxSettingsCard({
               <p className="text-2xs text-slate-400">
                 {mode === MODE_RELAY
                   ? t('devboxPage.settingsModeRelayHint')
-                  : t('devboxPage.settingsModeCloudflareHint')}
+                  : mode === MODE_MANUAL
+                    ? t('devboxPage.settingsModeManualHint')
+                    : t('devboxPage.settingsModeCloudflareHint')}
               </p>
             </div>
             {mode === MODE_RELAY ? (
@@ -416,6 +425,12 @@ export function DevboxSettingsCard({
                 <p id="devbox-settings-RELAY_SUBDOMAIN-hint" className="px-0.5 text-xs text-slate-400">
                   {t('devboxPage.settingsRelaySubdomainHint')}
                 </p>
+                {draft.RELAY_URL && (
+                  <div className="flex items-center gap-2 px-0.5">
+                    <span className="text-2xs text-slate-500">{t('devboxPage.settingsRelayUrlLabel')}:</span>
+                    <span className="truncate text-2xs text-slate-400" data-testid="devbox-settings-relay-url">{draft.RELAY_URL}</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
@@ -425,13 +440,15 @@ export function DevboxSettingsCard({
                   aria-describedby="devbox-settings-PUBLIC_URL-hint"
                   data-testid="devbox-settings-input-PUBLIC_URL"
                   value={draft.PUBLIC_URL ?? ''}
-                  placeholder="https://devbox.example.com"
+                  placeholder={mode === MODE_MANUAL ? 'https://my-vps.example.com' : 'https://devbox.example.com'}
                   disabled={saving || busy}
                   onChange={e => setField('PUBLIC_URL', e.target.value)}
                   containerClassName="space-y-1"
                 />
                 <p id="devbox-settings-PUBLIC_URL-hint" className="px-0.5 text-xs text-slate-400">
-                  {t('devboxPage.settingsPublicUrlHint')}
+                  {mode === MODE_MANUAL
+                    ? t('devboxPage.settingsModeManualHint')
+                    : t('devboxPage.settingsPublicUrlHint')}
                 </p>
               </div>
             )}
