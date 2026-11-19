@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -100,9 +100,14 @@ export function DevboxSettingsCard({
 
   const mode = (draft.INGRESS_MODE ?? '') === MODE_RELAY ? MODE_RELAY : MODE_CLOUDFLARE;
 
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const checkBusyRef = useRef(false);
+
   const access = detectAccessPreset(draft.OPENCODE_MCP_PERMISSIONS ?? '');
 
   const runCheck = useCallback(async (checkMode: string) => {
+    checkBusyRef.current = true;
     setCheck({ kind: 'checking', mode: checkMode });
     try {
       const res = await devboxConnectionCheck();
@@ -128,6 +133,8 @@ export function DevboxSettingsCard({
         mode: checkMode,
         error: err instanceof Error ? err.message : String(err),
       });
+    } finally {
+      checkBusyRef.current = false;
     }
   }, []);
 
@@ -156,6 +163,18 @@ export function DevboxSettingsCard({
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (!checkBusyRef.current) void runCheck(modeRef.current);
+    };
+    window.addEventListener('focus', refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.clearInterval(timer);
+    };
+  }, [runCheck]);
 
   const patch = useMemo(() => {
     const diff: Record<string, string> = {};

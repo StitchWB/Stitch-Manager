@@ -14,7 +14,7 @@ jest.mock('sonner', () => ({
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
 import { DevboxSettingsCard } from '@/components/devbox/DevboxSettingsCard';
-import { devboxCallArgs, devboxRouter, pageRoutes } from './devboxTestKit';
+import { devboxCallArgs, devboxCalls, devboxRouter, pageRoutes } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
 
@@ -108,8 +108,22 @@ describe('DevboxSettingsCard', () => {
     });
   });
 
-  it('switches to cloudflare and saves only the changed mode', async () => {
+  it('re-runs the connection check when the window regains focus', async () => {
     render(<DevboxSettingsCard />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('devbox-settings-status').textContent).toContain('16');
+    });
+    const before = devboxCalls(invokeMock, 'connection_check').length;
+
+    window.dispatchEvent(new Event('focus'));
+
+    await waitFor(() => {
+      expect(devboxCalls(invokeMock, 'connection_check').length).toBeGreaterThan(before);
+    });
+  });
+
+  it('switches to cloudflare and saves only the changed mode', async () => {    render(<DevboxSettingsCard />);
 
     await waitFor(() => {
       expect(screen.getByTestId('devbox-settings-ingress')).toBeTruthy();
