@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import logging
+import os
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from sqlalchemy import DateTime, event
 from sqlalchemy import inspect as _sa_inspect
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -236,6 +242,59 @@ async def run_in_read_session(
 
 # ── Table creation (dev / first run) ──────────────────────────────────────────
 
+# Fresh-DB template: Base.metadata snapshot, built once per process (mkstemp + atexit unlink).
+_DB_TEMPLATE: Path | None = None
+
+
+def _sqlite_db_path(url: str) -> Path | None:
+    """File path of a file-backed SQLite URL; None for :memory:/non-sqlite."""
+    database = make_url(url).database if url.startswith("sqlite") else None
+    if not database or database.startswith((":memory:", "file:memorydb")):
+        return None
+    return Path(database)
+
+
+def _import_all_models() -> None:
+    """Import every model module so Base.metadata is fully populated."""
+    import stitch_backend.domains.accounts.models  # noqa: F401
+    import stitch_backend.domains.ai_gateway.models  # noqa: F401
+    import stitch_backend.domains.ai_proxy.models  # noqa: F401
+    import stitch_backend.domains.auth.models  # noqa: F401
+    import stitch_backend.domains.community.models  # noqa: F401
+    import stitch_backend.domains.community.partner_models  # noqa: F401
+    import stitch_backend.domains.composed_flows.models  # noqa: F401
+    import stitch_backend.domains.email_inbox.models  # noqa: F401
+    import stitch_backend.domains.groups.models  # noqa: F401
+    import stitch_backend.domains.icloud_email_pool.models  # noqa: F401
+    import stitch_backend.domains.key_health.models  # noqa: F401
+    import stitch_backend.domains.logging.models  # noqa: F401
+    import stitch_backend.domains.plugin_distribution.models  # noqa: F401
+    import stitch_backend.domains.profiles.models  # noqa: F401
+    import stitch_backend.domains.proxy_library.models  # noqa: F401
+    import stitch_backend.domains.settings.models  # noqa: F401
+    import stitch_backend.domains.totp.models  # noqa: F401
+
+
+def _build_db_template(template_path: Path) -> None:
+    """Build the fresh-DB template from Base.metadata (sync, once per process)."""
+    from sqlalchemy import create_engine
+
+    _import_all_models()
+    engine = create_engine(f"sqlite:///{template_path}")
+    try:
+        with engine.begin() as conn:
+            Base.metadata.create_all(conn)
+    finally:
+        engine.dispose()
+
+
+def _remove_db_template(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 async def create_all_tables() -> None:
     """Create missing tables and add missing columns to existing ones.
 
@@ -245,27 +304,28 @@ async def create_all_tables() -> None:
     with a lightweight, non-destructive column migration that ``ALTER TABLE
     ADD COLUMN`` for any column the ORM expects but the DB lacks.  Use Alembic
     for anything more involved.
+
+    A never-touched SQLite file gets the once-per-process template snapshot
+    instead of DDL: same metadata, same create_all, one file copy instead of
+    hundreds of DDL runs (test suites boot a fresh DB per fixture).
     """
+    global _DB_TEMPLATE  # noqa: PLW0603
+    db_path = _sqlite_db_path(get_settings().database_url)
+    if db_path is not None and not db_path.exists():
+        if _DB_TEMPLATE is None:
+            fd, template_name = tempfile.mkstemp(
+                prefix="stitch-db-template-", suffix=".db"
+            )
+            os.close(fd)
+            _DB_TEMPLATE = Path(template_name)
+            _build_db_template(_DB_TEMPLATE)
+            atexit.register(_remove_db_template, _DB_TEMPLATE)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(_DB_TEMPLATE, db_path)
+        return
     engine = _get_write_engine()
     async with engine.begin() as conn:
-        # Import all model modules so Base.metadata is populated
-        import stitch_backend.domains.accounts.models  # noqa: F401
-        import stitch_backend.domains.ai_gateway.models  # noqa: F401
-        import stitch_backend.domains.ai_proxy.models  # noqa: F401
-        import stitch_backend.domains.auth.models  # noqa: F401
-        import stitch_backend.domains.community.models  # noqa: F401
-        import stitch_backend.domains.community.partner_models  # noqa: F401
-        import stitch_backend.domains.composed_flows.models  # noqa: F401
-        import stitch_backend.domains.email_inbox.models  # noqa: F401
-        import stitch_backend.domains.groups.models  # noqa: F401
-        import stitch_backend.domains.icloud_email_pool.models  # noqa: F401
-        import stitch_backend.domains.key_health.models  # noqa: F401
-        import stitch_backend.domains.logging.models  # noqa: F401
-        import stitch_backend.domains.plugin_distribution.models  # noqa: F401
-        import stitch_backend.domains.profiles.models  # noqa: F401
-        import stitch_backend.domains.proxy_library.models  # noqa: F401
-        import stitch_backend.domains.settings.models  # noqa: F401
-        import stitch_backend.domains.totp.models  # noqa: F401
+        _import_all_models()
         existing_tables = await conn.run_sync(
             lambda sync_conn: set(_sa_inspect(sync_conn).get_table_names())
         )

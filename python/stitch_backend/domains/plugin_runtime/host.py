@@ -185,7 +185,7 @@ class ServicePluginHost:
                 return {"status": "error", "error": "expected Popen process",
                         "port": None, "pid": None, "uptimeSeconds": None}
             try:
-                self._attach_rpc(proc)
+                await asyncio.to_thread(self._attach_rpc, proc)
             except (RpcTimeoutError, RpcProtocolError) as exc:
                 await self.supervisor.stop(self.sidecar_name)
                 return {"status": "error", "error": str(exc),
@@ -396,7 +396,7 @@ class ServicePluginHost:
         host_resources.read_resource_usage_at_death(self, proc)
 
     def _attach_rpc(
-        self, proc: subprocess.Popen[bytes], timeout: float = 10.0
+        self, proc: subprocess.Popen[bytes], timeout: float = 30.0
     ) -> Any:
         return host_attach.attach_rpc(self, proc, timeout)
 
