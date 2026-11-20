@@ -21,6 +21,7 @@ Zone-2: depends on ``stitch_backend`` (plugin_runtime, sidecar) and
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import TYPE_CHECKING, Any
@@ -102,20 +103,33 @@ async def start_service_plugins() -> None:
         logger.info("No service plugins discovered")
         return
 
-    started = 0
-    for manifest, package_dir, source in discovered:
-        try:
-            ok = await _start_one(
-                manifest, package_dir, source=source, loader=loader,
-            )
-            if ok:
-                started += 1
-        except Exception as exc:  # noqa: BLE001 — never crash startup
-            logger.warning(
-                "Service plugin %s failed to start: %s",
-                manifest.id, exc,
-            )
+    results = await asyncio.gather(
+        *(
+            _start_one_guarded(manifest, package_dir, source, loader)
+            for manifest, package_dir, source in discovered
+        )
+    )
+    started = sum(1 for ok in results if ok)
     logger.info("Started %d/%d service plugin(s)", started, len(discovered))
+
+
+async def _start_one_guarded(
+    manifest: PluginManifest,
+    package_dir: Path,
+    source: str,
+    loader: PluginLoader,
+) -> bool:
+    """_start_one with the per-plugin never-crash-startup guard."""
+    try:
+        return await _start_one(
+            manifest, package_dir, source=source, loader=loader,
+        )
+    except Exception as exc:  # noqa: BLE001 — never crash startup
+        logger.warning(
+            "Service plugin %s failed to start: %s",
+            manifest.id, exc,
+        )
+        return False
 
 
 def build_child_env(manifest: PluginManifest, source: str = "local") -> dict[str, str]:

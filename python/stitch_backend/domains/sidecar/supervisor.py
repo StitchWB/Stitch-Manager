@@ -202,16 +202,7 @@ class SidecarSupervisor:
             try:
                 if plan.stdio == "pipes":
                     # stdio=pipes: RPC plugins need sync PIPE handles for line-delimited JSON-RPC.
-                    proc = subprocess.Popen(
-                        plan.command,
-                        cwd=plan.cwd,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        env=_child_env(plan.env, name, host_driver=plan.host_driver),
-                        **_subprocess_isolation_kwargs(),
-                        **_privilege_drop_kwargs(),
-                    )
+                    proc = await asyncio.to_thread(self._spawn_pipes, plan, name)
                     st.process = proc
                     self._record_tree_identity(st, proc.pid, name)
                     st.port = plan.port
@@ -260,6 +251,20 @@ class SidecarSupervisor:
                     st.error = str(exc)
                 logger.error("[Sidecar:%s] failed to start: %s", name, exc, exc_info=True)
             return self.status(name)
+
+    def _spawn_pipes(
+        self, plan: LaunchPlan, name: str
+    ) -> subprocess.Popen[bytes]:
+        return subprocess.Popen(
+            plan.command,
+            cwd=plan.cwd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_child_env(plan.env, name, host_driver=plan.host_driver),
+            **_subprocess_isolation_kwargs(),
+            **_privilege_drop_kwargs(),
+        )
 
     async def _wait_for_ready(self, st: _State, plan: LaunchPlan) -> bool:
         if not plan.health_url:

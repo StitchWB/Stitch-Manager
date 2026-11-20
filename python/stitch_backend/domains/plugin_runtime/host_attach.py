@@ -40,7 +40,7 @@ def _pump_stderr(host: ServicePluginHost, proc: subprocess.Popen[bytes]) -> None
 
 
 def attach_rpc(
-    host: ServicePluginHost, proc: subprocess.Popen[bytes], timeout: float = 10.0
+    host: ServicePluginHost, proc: subprocess.Popen[bytes], timeout: float = 30.0
 ) -> Any:
     """Attach RpcPluginClient to an already-spawned Popen and handshake.
 
