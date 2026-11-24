@@ -88,12 +88,12 @@ export function devboxEventPhrase(row: DevboxEventRow): string {
     const key = ACTION_LABEL_KEY[tool];
     return key ? t(key) : tool || t('devboxPage.eventKindAction');
   }
-  if (kind === 'mcp_request') {
+  if (kind === 'mcp_request' || kind === 'tool_call') {
     const label = tool ? devboxEventToolLabel(tool) : null;
     return label ?? (tool || t('devboxPage.eventKindRequest'));
   }
-  if (kind === 'mcp_response') {
-    if (status === 'awaiting_permission') {
+  if (kind === 'mcp_response' || kind === 'permission_request') {
+    if (status === 'awaiting_permission' || kind === 'permission_request') {
       return permission
         ? t('devboxPage.eventPermissionRequest', { tool: permission })
         : t('devboxPage.eventStatusAwaitingPermission');

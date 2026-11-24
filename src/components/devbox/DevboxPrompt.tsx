@@ -45,7 +45,13 @@ const STALE_COMMAND_RE = /method not found|-32601/i;
 
 const STACK_START_CMD = 'stack_start';
 
-const STALE_ROTATION_CMDS = new Set(['issue_tokens', 'ingress_control', STACK_START_CMD]);
+const STALE_ROTATION_CMDS = new Set([
+  'issue_tokens',
+  'ingress_control',
+  STACK_START_CMD,
+  'stack_down',
+  'profile_use',
+]);
 
 const TASK_DRAFT_KEY = 'devbox.taskDraft';
 

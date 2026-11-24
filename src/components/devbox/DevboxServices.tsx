@@ -163,11 +163,6 @@ export function DevboxServices({
   onChanged,
 }: DevboxServicesProps) {
   const { activeProfile, profileModel } = connect;
-  const exposedRef = useRef<Record<string, unknown> | null>(profileModel);
-  useEffect(() => {
-    exposedRef.current = profileModel;
-  }, [profileModel]);
-
   const [gatewayRows, setGatewayRows] = useState<GatewayRowState[]>(lockedGatewayRows);
   const [gatewayLoading, setGatewayLoading] = useState(false);
   const [gatewaySaving, setGatewaySaving] = useState(false);
@@ -183,8 +178,13 @@ export function DevboxServices({
     setGatewayLoading(true);
     setGatewayError(null);
     try {
-      const payload = await devboxMcpCandidates(activeProfile);
-      const model = exposedRef.current;
+      // profileModel отстаёт от activeProfile (loadProfile асинхронный) —
+      // читаем профиль напрямую, иначе экспозиции льются из чужого профиля
+      const [payload, profilePayload] = await Promise.all([
+        devboxMcpCandidates(activeProfile),
+        devboxProfileGet(activeProfile),
+      ]);
+      const model = parseRecord(profilePayload.json);
       const exposed = Array.isArray(model?.exposed_mcps) ? model.exposed_mcps : [];
       const current = new Map<string, { mode: 'readonly' | 'full'; allow: string }>();
       for (const item of exposed) {

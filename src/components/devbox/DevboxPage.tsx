@@ -21,7 +21,7 @@ import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAppStore } from '@/stores/app';
-import {
+import {devboxActionFinished,
   devboxIngressControl,
   devboxNormalizeCards,
   devboxNormalizeEventRows,
@@ -164,7 +164,7 @@ export function DevboxPage() {
   const lastDoctorId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const rows = status?.recent ?? [];
-    const done = [...rows].reverse().find(r => r.cmd === 'run_doctor' && r.status === 'finished');
+    const done = [...rows].reverse().find(r => r.cmd === 'run_doctor' && devboxActionFinished(r));
     if (!done) return;
     if (lastDoctorId.current === undefined) {
       lastDoctorId.current = done.id;
@@ -179,7 +179,7 @@ export function DevboxPage() {
   const lastCockpitId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const rows = status?.recent ?? [];
-    const done = [...rows].reverse().find(r => r.cmd === 'cockpit_open' && r.status === 'finished');
+    const done = [...rows].reverse().find(r => r.cmd === 'cockpit_open' && devboxActionFinished(r));
     if (!done) return;
     if (lastCockpitId.current === undefined) {
       lastCockpitId.current = done.id;
