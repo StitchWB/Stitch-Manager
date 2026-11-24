@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Gauge,
   Loader2,
-  MoreHorizontal,
   Play,
   Plus,
   RefreshCw,
@@ -11,11 +9,11 @@ import {
   Terminal,
 } from 'lucide-react';
 import Header from '@/components/layout/Header';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { IconButton } from '@/components/ui/IconButton';
-import { Modal } from '@/components/ui/Modal';
+import { OverflowMenu } from '@/components/ui/OverflowMenu';
 import { Select } from '@/components/ui/Select';
 import { TabButton } from '@/components/ui/TabButton';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24,9 +22,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAppStore } from '@/stores/app';
 import {
-  devboxCockpitOpen,
   devboxIngressControl,
-  devboxIssueTokens,
   devboxNormalizeCards,
   devboxNormalizeEventRows,
   devboxNormalizeGateway,
@@ -50,16 +46,13 @@ import { STATE_DOT, stackVitalState, type VitalState } from './state';
 import { useDevboxPoll } from './useDevboxPoll';
 import { runDevboxAction } from './runAction';
 import { DEVBOX_REFRESH_MS } from './constants';
-import { DevboxPrompt } from './DevboxPrompt';
-import { DevboxProfiles } from './DevboxProfiles';
-import { DevboxProjectStrip } from './DevboxProjectStrip';
-import { DevboxNowRail } from './DevboxNowRail';
-import { DevboxMcpSection } from './DevboxMcpSection';
-import { DevboxSettingsCard } from './DevboxSettingsCard';
-import { DevboxServiceCards } from './DevboxServiceCards';
-import { DevboxConsole } from './DevboxConsole';
-
-type PageTab = 'task' | 'infra';
+import { DevboxAgent } from './DevboxAgent';
+import { DevboxConnect } from './DevboxConnect';
+import { DevboxLogs } from './DevboxLogs';
+import { DevboxOverview } from './DevboxOverview';
+import { DevboxProjects } from './DevboxProjects';
+import { DevboxServices } from './DevboxServices';
+import { useDevboxConnect, type DevboxTab } from './useDevboxConnect';
 
 const BUSY_CHIP: Record<string, string> = {
   stack_start: 'devboxPage.stackBusyStart',
@@ -75,6 +68,26 @@ const COMPOSITE_CHIP: Record<VitalState, string> = {
   unknown: 'devboxPage.stackUnknown',
   pending: 'devboxPage.stackUnknown',
   disabled: 'devboxPage.stackUnknown',
+};
+
+const TABS: DevboxTab[] = ['overview', 'connect', 'agent', 'services', 'projects', 'logs'];
+
+const TAB_LABEL_KEYS: Record<DevboxTab, string> = {
+  overview: 'devboxPage.tabOverview',
+  connect: 'devboxPage.tabConnect',
+  agent: 'devboxPage.tabAgent',
+  services: 'devboxPage.tabServices',
+  projects: 'devboxPage.tabProjects',
+  logs: 'devboxPage.tabLogs',
+};
+
+const INITIAL_MOUNTED: Record<DevboxTab, boolean> = {
+  overview: true,
+  connect: false,
+  agent: false,
+  services: false,
+  projects: false,
+  logs: false,
 };
 
 export function DevboxPage() {
@@ -115,6 +128,7 @@ export function DevboxPage() {
   const [pending, setPending] = useState(false);
   const [promptTick, setPromptTick] = useState(0);
   const [dismissedPermissions, setDismissedPermissions] = useState<string[]>([]);
+
   const onAction = useCallback(
     (action: Promise<DevboxAccepted>) => {
       setPending(true);
@@ -187,10 +201,8 @@ export function DevboxPage() {
         : undefined,
     );
   }, [status]);
-  const jobs = useMemo(
-    () => devboxObservedRows<DevboxJobRow>(poll.data?.jobs),
-    [poll.data],
-  );
+
+  const jobs = useMemo(() => devboxObservedRows<DevboxJobRow>(poll.data?.jobs), [poll.data]);
   const permissions = useMemo(() => {
     const observed = devboxObservedRows<DevboxPermissionRow>(poll.data?.permissions);
     const rows = dismissedPermissions.length
@@ -199,56 +211,42 @@ export function DevboxPage() {
     return { rows, bridge: observed.bridge };
   }, [poll.data, dismissedPermissions]);
 
-  useEffect(() => {
-    if (dismissedPermissions.length === 0) return;
-    const live = new Set(
-      devboxObservedRows<DevboxPermissionRow>(poll.data?.permissions).rows.map(row => row.id),
-    );
-    const kept = dismissedPermissions.filter(id => live.has(id));
-    if (kept.length !== dismissedPermissions.length) setDismissedPermissions(kept);
-  }, [poll.data, dismissedPermissions]);
+  
 
   const events = useMemo(() => devboxNormalizeEventRows(poll.data?.events), [poll.data]);
   const busy = status?.busy === true || pending;
 
-  const refreshAll = () => {
+  const refreshAll = useCallback(() => {
     reloadPoll();
     reloadProfiles();
-  };
+  }, [reloadPoll, reloadProfiles]);
 
-  const [tab, setTab] = useState<PageTab>('task');
+  const [tab, setTab] = useState<DevboxTab>('overview');
+  const [mounted, setMounted] = useState<Record<DevboxTab, boolean>>(INITIAL_MOUNTED);
   const [addSignal, setAddSignal] = useState(0);
   const [seedSignal, setSeedSignal] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
-  const [projectsOpen, setProjectsOpen] = useState(false);
-  const [dangerOpen, setDangerOpen] = useState(false);
-  const dangerRef = useRef<HTMLDivElement | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (!dangerOpen) return;
-    const onDown = (event: MouseEvent) => {
-      if (!dangerRef.current?.contains(event.target as Node)) setDangerOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [dangerOpen]);
-
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onDown = (event: MouseEvent) => {
-      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [moreOpen]);
+  const openTab = useCallback((next: DevboxTab) => {
+    setTab(next);
+    setMounted(prev => (prev[next] ? prev : { ...prev, [next]: true }));
+  }, []);
 
   const activeProfileRow = useMemo(
     () => (Array.isArray(profiles) ? profiles.find(row => row.active) ?? null : null),
     [profiles],
   );
   const activeProfile = activeProfileRow?.name ?? '';
+
+  const connect = useDevboxConnect({
+    activeProfile,
+    cards,
+    actionStatus: status,
+    envVersion: poll.data?.env_version,
+    busy,
+    onAction,
+    onChanged: refreshAll,
+  });
 
   const composite = stackVitalState(cards);
   const ingressUp = devboxVitalValue(cards, 'ingress') === 'up';
@@ -297,30 +295,18 @@ export function DevboxPage() {
   const openProjects = useCallback(() => {
     setAddSignal(0);
     setSeedSignal(0);
-    setProjectsOpen(true);
-  }, []);
+    openTab('projects');
+  }, [openTab]);
 
   const openNewProject = useCallback(() => {
-    setTab('infra');
-    setProjectsOpen(true);
+    openTab('projects');
     setAddSignal(x => x + 1);
-  }, []);
+  }, [openTab]);
 
   const onMcpConfigure = useCallback(() => {
-    openProjects();
+    openTab('projects');
     setSeedSignal(x => x + 1);
-  }, [openProjects]);
-
-  const onSettingsRestart = useCallback(
-    (kind: 'ingress' | 'stack') => {
-      if (kind === 'ingress') {
-        onAction(devboxIngressControl('up'));
-      } else {
-        onAction(devboxStackStart(activeProfile, false));
-      }
-    },
-    [activeProfile, onAction],
-  );
+  }, [openTab]);
 
   const projectOptions = [
     ...profileOptions,
@@ -331,9 +317,7 @@ export function DevboxPage() {
   const onProjectSelect = useCallback(
     (value: string) => {
       if (value === '__add') {
-        setTab('infra');
-        setProjectsOpen(true);
-        setAddSignal(x => x + 1);
+        openNewProject();
         return;
       }
       if (value === '__manage') {
@@ -342,14 +326,14 @@ export function DevboxPage() {
       }
       onProfileSelect(value);
     },
-    [onProfileSelect, openProjects],
+    [onProfileSelect, openProjects, openNewProject],
   );
 
   const controlBar = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Select
         aria-label={t('devboxPage.headerProjectLabel')}
-        containerClassName="w-56"
+        containerClassName="w-24 sm:w-56"
         options={projectOptions}
         placeholder={activeProfile ? undefined : t('devboxPage.profileSelectEmpty')}
         value={selectedProfile ?? activeProfile}
@@ -359,6 +343,7 @@ export function DevboxPage() {
       <IconButton
         size="md"
         variant="ghost"
+        className="hidden sm:inline-flex"
         aria-label={t('devboxPage.editorCreateTitle')}
         tooltip={t('devboxPage.editorCreateTitle')}
         data-testid="devbox-new-project"
@@ -384,130 +369,86 @@ export function DevboxPage() {
           variant={composite === 'healthy' ? 'ghost' : 'primary'}
           disabled={busy || activeProfile === ''}
           title={busyProgress ?? undefined}
-          leftIcon={
-            busyAction ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Play size={14} />
-            )
-          }
+          leftIcon={busyAction ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
           data-testid="devbox-stack-start"
           onClick={() => onAction(devboxStackStart(activeProfile, false))}
         >
           {busyLabel ??
-            (composite === 'healthy'
-              ? t('devboxPage.restart')
-              : t('devboxPage.promptChipStackStart'))}
+            (composite === 'healthy' ? t('devboxPage.restart') : t('devboxPage.promptChipStackStart'))}
         </Button>
       </Tooltip>
-      <div className="relative" ref={moreRef}>
-        <IconButton
-          size="md"
-          variant="ghost"
-          aria-label={t('devboxPage.headerMore')}
-          tooltip={t('devboxPage.headerMore')}
-          aria-expanded={moreOpen}
-          data-testid="devbox-more-toggle"
-          onClick={() => setMoreOpen(v => !v)}
-        >
-          <MoreHorizontal size={16} />
-        </IconButton>
-        {moreOpen && (
-          <div
-            role="group"
-            aria-label={t('devboxPage.headerMore')}
-            data-testid="devbox-more-menu"
-            className="absolute right-0 top-full z-50 mt-1 flex w-64 flex-col gap-2 rounded-lg border border-white/10 bg-vsc-panel/95 p-3 shadow-2xl backdrop-blur-xl"
-          >
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              leftIcon={<Stethoscope size={14} />}
-              data-testid="devbox-control-doctor"
-              onClick={() => onAction(devboxRunDoctor())}
-            >
-              {t('devboxPage.controlDoctor')}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              leftIcon={<Gauge size={14} />}
-              data-testid="devbox-control-cockpit"
-              onClick={() => onAction(devboxCockpitOpen())}
-            >
-              {t('devboxPage.controlCockpit')}
-            </Button>
-            <ConfirmActionButton
-              size="sm"
-              variant="secondary"
-              disabled={busy}
-              data-testid="devbox-control-tokens"
-              tooltip={t('devboxPage.tipRotateTokens')}
-              onConfirm={() => onAction(devboxIssueTokens())}
-            >
-              {t('devboxPage.controlRotateTokens')}
-            </ConfirmActionButton>
-            <ConfirmActionButton
-              size="sm"
-              variant="secondary"
-              disabled={busy || cards === null}
-              data-testid="devbox-control-ingress"
-              tooltip={t('devboxPage.tipIngress')}
-              onConfirm={() => onAction(devboxIngressControl(ingressUp ? 'down' : 'up'))}
-            >
-              {ingressUp ? t('devboxPage.controlIngressOn') : t('devboxPage.controlIngressOff')}
-            </ConfirmActionButton>
-          </div>
-        )}
-      </div>
-      <div className="relative" ref={dangerRef}>
-        <IconButton
-          size="md"
-          variant="ghost"
-          aria-label={t('devboxPage.dangerZone')}
-          tooltip={t('devboxPage.dangerZone')}
-          aria-expanded={dangerOpen}
-          data-testid="devbox-danger-toggle"
-          onClick={() => setDangerOpen(v => !v)}
-        >
-          <ShieldAlert size={16} />
-        </IconButton>
-        {dangerOpen && (
-          <div
-            role="group"
-            aria-label={t('devboxPage.dangerZone')}
-            data-testid="devbox-danger-menu"
-            className="absolute right-0 top-full z-50 mt-1 flex w-64 flex-col gap-2 rounded-lg border border-white/10 bg-vsc-panel/95 p-3 shadow-2xl backdrop-blur-xl"
-          >
-            <ConfirmActionButton
-              size="sm"
-              variant="secondary"
-              disabled={busy}
-              data-testid="devbox-control-stop-services"
-              tooltip={t('devboxPage.tipStopServices')}
-              onConfirm={() => onAction(devboxStackDown())}
-            >
-              {t('devboxPage.controlStopServices')}
-            </ConfirmActionButton>
-            <ConfirmActionButton
-              size="sm"
-              variant="danger"
-              disabled={busy}
-              data-testid="devbox-control-stop-all"
-              tooltip={t('devboxPage.tipStopAll')}
-              onConfirm={() => onAction(devboxStackFullDown())}
-            >
-              {t('devboxPage.controlStopAll')}
-            </ConfirmActionButton>
-          </div>
-        )}
-      </div>
+      <OverflowMenu
+        triggerLabel={t('devboxPage.headerMore')}
+        triggerTestId="devbox-more-toggle"
+        items={[
+          {
+            id: 'doctor',
+            label: t('devboxPage.controlDoctor'),
+            icon: <Stethoscope size={14} />,
+            testId: 'devbox-control-doctor',
+            disabled: busy,
+            onSelect: () => onAction(devboxRunDoctor()),
+          },
+          {
+            id: 'ingress',
+            label: ingressUp ? t('devboxPage.controlIngressOn') : t('devboxPage.controlIngressOff'),
+            testId: 'devbox-control-ingress',
+            disabled: busy || cards === null,
+            onSelect: () =>
+              void askConfirm({
+                title: ingressUp
+                  ? t('devboxPage.controlIngressOn')
+                  : t('devboxPage.controlIngressOff'),
+                message: t('devboxPage.tipIngress'),
+                confirmText: t('common.confirm'),
+                cancelText: t('common.cancel'),
+                variant: 'warning',
+              }).then(confirmed => {
+                if (confirmed) onAction(devboxIngressControl(ingressUp ? 'down' : 'up'));
+              }),
+          },
+          {
+            id: 'stop-services',
+            label: t('devboxPage.controlStopServices'),
+            icon: <ShieldAlert size={14} />,
+            testId: 'devbox-control-stop-services',
+            disabled: busy,
+            onSelect: () =>
+              void askConfirm({
+                title: t('devboxPage.controlStopServices'),
+                message: t('devboxPage.tipStopServices'),
+                confirmText: t('common.confirm'),
+                cancelText: t('common.cancel'),
+                variant: 'warning',
+              }).then(confirmed => {
+                if (confirmed) onAction(devboxStackDown());
+              }),
+          },
+          {
+            id: 'stop-all',
+            label: t('devboxPage.controlStopAll'),
+            icon: <ShieldAlert size={14} />,
+            tone: 'danger',
+            testId: 'devbox-control-stop-all',
+            disabled: busy,
+            onSelect: () =>
+              void askConfirm({
+                title: t('devboxPage.controlStopAll'),
+                message: t('devboxPage.tipStopAll'),
+                confirmText: t('common.confirm'),
+                cancelText: t('common.cancel'),
+                variant: 'danger',
+              }).then(confirmed => {
+                if (confirmed) onAction(devboxStackFullDown());
+              }),
+          },
+        ]}
+      />
       <IconButton
         onClick={refreshAll}
         size="md"
         variant="ghost"
+        className="hidden sm:inline-flex"
         aria-label={t('devboxPage.refresh')}
         tooltip={t('devboxPage.refresh')}
         data-testid="devbox-refresh"
@@ -521,143 +462,161 @@ export function DevboxPage() {
     <div className="flex flex-col h-full overflow-hidden bg-void-base">
       <Header title={t('devboxPage.title')} icon={<Terminal size={18} />} actions={controlBar} />
       <div
-        className="flex items-center gap-1 border-b border-white/[0.06] px-4 pt-1.5"
+        className="flex items-center gap-1 overflow-x-auto border-b border-white/[0.06] px-4 pt-1.5"
         data-testid="devbox-tabs"
       >
-        <TabButton
-          size="sm"
-          appearance="workspace"
-          active={tab === 'task'}
-          label={t('devboxPage.tabTask')}
-          data-testid="devbox-tab-task"
-          onClick={() => setTab('task')}
-        />
-        <TabButton
-          size="sm"
-          appearance="workspace"
-          active={tab === 'infra'}
-          label={t('devboxPage.tabInfra')}
-          data-testid="devbox-tab-infra"
-          onClick={() => setTab('infra')}
-        />
+        {TABS.map(id => (
+          <TabButton
+            key={id}
+            size="sm"
+            appearance="workspace"
+            active={tab === id}
+            label={
+              id === 'agent' && permissions.rows.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {t(TAB_LABEL_KEYS[id])}
+                  <Badge size="sm" variant="warning" data-testid="devbox-tab-agent-count">
+                    {permissions.rows.length}
+                  </Badge>
+                </span>
+              ) : (
+                t(TAB_LABEL_KEYS[id])
+              )
+            }
+            data-testid={`devbox-tab-${id}`}
+            onClick={() => openTab(id)}
+          />
+        ))}
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        <div
-          className={cn(
-            'grid gap-4 lg:h-full lg:grid-cols-5 lg:grid-rows-1',
-            tab !== 'task' && 'hidden',
-          )}
-          data-testid="devbox-panel-task"
-        >
-          <div className="flex min-w-0 flex-col lg:col-span-3 lg:min-h-0">
-            {activeProfile === '' && (
-              <div
-                className="mb-3 flex shrink-0 items-center gap-3 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] px-3 py-2"
-                data-testid="devbox-onboard-project"
-              >
-                <div className="flex min-w-0 flex-col">
-                  <span className="text-xs font-medium text-indigo-100">
-                    {t('devboxPage.onboardNeedProject')}
-                  </span>
-                  <span className="text-2xs text-slate-400">
-                    {t('devboxPage.onboardNeedProjectDesc')}
-                  </span>
-                </div>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  className="ml-auto shrink-0"
-                  data-testid="devbox-onboard-new-project"
-                  onClick={openNewProject}
-                >
-                  {t('devboxPage.projectAddOption')}
-                </Button>
-              </div>
-            )}
-            <DevboxPrompt
+      <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto p-4">
+        {activeProfile === '' && (
+          <div
+            className="flex shrink-0 items-center gap-3 rounded-lg border border-indigo-500/25 bg-indigo-500/[0.06] px-3 py-2"
+            data-testid="devbox-onboard-project"
+          >
+            <div className="flex min-w-0 flex-col">
+              <span className="text-xs font-medium text-indigo-100">
+                {t('devboxPage.onboardNeedProject')}
+              </span>
+              <span className="text-2xs text-slate-400">
+                {t('devboxPage.onboardNeedProjectDesc')}
+              </span>
+            </div>
+            <Button
+              size="xs"
+              variant="secondary"
+              className="ml-auto shrink-0"
+              data-testid="devbox-onboard-new-project"
+              onClick={openNewProject}
+            >
+              {t('devboxPage.projectAddOption')}
+            </Button>
+          </div>
+        )}
+
+        {mounted.overview && (
+          <div className={cn(tab !== 'overview' && 'hidden')} data-testid="devbox-panel-overview">
+            <DevboxOverview
+              connect={connect}
+              gateway={gateway}
+              permissions={permissions}
+              events={events}
+              busy={busy}
+              pollError={poll.error}
+              onOpenTab={openTab}
+              onConfigureMcp={onMcpConfigure}
+              onRefresh={refreshAll}
+            />
+          </div>
+        )}
+
+        {mounted.connect && (
+          <div className={cn(tab !== 'connect' && 'hidden')} data-testid="devbox-panel-connect">
+            <DevboxConnect connect={connect} busy={busy} />
+          </div>
+        )}
+
+        {mounted.agent && (
+          <div
+            className={cn('flex w-full flex-col gap-4', tab !== 'agent' && 'hidden')}
+            data-testid="devbox-panel-agent"
+          >
+            <DevboxAgent
+              connect={connect}
               profiles={profiles}
               overviewCards={cards}
               gateway={gateway}
               actionStatus={status}
-              onAction={onAction}
-              reloadTick={promptTick}
-            />
-          </div>
-          <div className="flex min-w-0 flex-col lg:col-span-2 lg:min-h-0">
-            <DevboxNowRail
               jobs={jobs}
               permissions={permissions}
               events={events}
               busy={busy}
               onAction={onAction}
+              onOpenTab={openTab}
               onPermissionReply={onPermissionReply}
-              onGoInfra={() => setTab('infra')}
+              reloadTick={promptTick}
             />
           </div>
-        </div>
-        <div
-          className={cn('flex w-full flex-col gap-4 lg:h-full', tab !== 'infra' && 'hidden')}
-          data-testid="devbox-panel-infra"
-        >
-          <DevboxServiceCards
-            cards={cards}
-            gateway={gateway}
-            activeProfile={activeProfile}
-            busy={busy}
-            onAction={onAction}
-          />
-          <DevboxSettingsCard
-            busy={busy}
-            onRestart={onSettingsRestart}
-            onSaved={refreshAll}
-          />
-          <DevboxMcpSection
-            gateway={gateway}
-            activeProfile={activeProfile}
-            onConfigure={onMcpConfigure}
-            onSaved={refreshAll}
-          />
-          <DevboxProjectStrip
-            activeProfile={activeProfileRow}
-            busy={busy}
-            onAction={onAction}
-            onOpenProjects={openProjects}
-          />
-          <DevboxConsole
-            className="min-h-[50vh] lg:flex-1"
-            events={events}
-            recent={status?.recent ?? null}
-            error={poll.error}
-            onRetry={reloadPoll}
-          />
-        </div>
+        )}
+
+        {mounted.services && (
+          <div
+            className={cn('flex w-full flex-col gap-4', tab !== 'services' && 'hidden')}
+            data-testid="devbox-panel-services"
+          >
+            <DevboxServices
+              connect={connect}
+              cards={cards}
+              gateway={gateway}
+              busy={busy}
+              pendingPermissions={permissions.rows.length}
+              onAction={onAction}
+              onOpenTab={openTab}
+              onConfigureMcp={onMcpConfigure}
+              onChanged={refreshAll}
+            />
+          </div>
+        )}
+
+        {mounted.projects && (
+          <div
+            className={cn('flex w-full flex-col gap-4', tab !== 'projects' && 'hidden')}
+            data-testid="devbox-panel-projects"
+          >
+            <DevboxProjects
+              connect={connect}
+              profiles={profiles}
+              overviewCards={cards}
+              error={profilesError}
+              busy={busy}
+              onAction={onAction}
+              onRetry={reloadProfiles}
+              onChanged={() => {
+                reloadProfiles();
+                connect.reload();
+              }}
+              onStarted={() => openTab('agent')}
+              onCreate={openNewProject}
+              addSignal={addSignal}
+              seedSignal={seedSignal}
+            />
+          </div>
+        )}
+
+        {mounted.logs && (
+          <div
+            className={cn('flex w-full flex-col gap-4 lg:h-full', tab !== 'logs' && 'hidden')}
+            data-testid="devbox-panel-logs"
+          >
+            <DevboxLogs
+              events={events}
+              recent={status?.recent ?? null}
+              error={poll.error}
+              onRetry={reloadPoll}
+            />
+          </div>
+        )}
       </div>
-      <Modal
-        isOpen={projectsOpen}
-        onClose={() => {
-          setProjectsOpen(false);
-          setSeedSignal(0);
-        }}
-        title={t('devboxPage.sectionProfiles')}
-        size="lg"
-      >
-        <DevboxProfiles
-          profiles={profiles}
-          overviewCards={cards}
-          error={profilesError}
-          busy={busy}
-          onAction={onAction}
-          onRetry={reloadProfiles}
-          onChanged={reloadProfiles}
-          onStarted={() => {
-            setTab('task');
-            setProjectsOpen(false);
-            setSeedSignal(0);
-          }}
-          addSignal={addSignal}
-          seedSignal={seedSignal}
-        />
-      </Modal>
     </div>
   );
 }

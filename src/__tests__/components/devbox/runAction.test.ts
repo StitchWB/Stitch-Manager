@@ -77,7 +77,7 @@ describe('runDevboxAction rejection surfacing', () => {
     const ok = await runDevboxAction(accepted, onAccepted);
 
     expect(ok).toBe(true);
-    expect(toast.info).toHaveBeenCalledWith('Command accepted into the queue');
+    expect(toast.info).toHaveBeenCalledWith('Command queued');
     expect(onAccepted).toHaveBeenCalledTimes(1);
   });
 

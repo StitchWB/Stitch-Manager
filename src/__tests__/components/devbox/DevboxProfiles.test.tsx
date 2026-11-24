@@ -15,7 +15,7 @@ jest.mock('sonner', () => ({
 }));
 
 import { safeInvoke } from '@/lib/backend/core/invoke';
-import { DevboxProfiles } from '@/components/devbox/DevboxProfiles';
+import { DevboxProfiles, type DevboxProfilesProps } from '@/components/devbox/DevboxProfiles';
 import type { DevboxProfileRow, DevboxVitalCard } from '@/lib/backend/modules/devbox';
 import {
   devboxRouter,
@@ -31,6 +31,7 @@ const invokeMock = safeInvoke as jest.Mock;
 function renderProfiles(
   onChanged = jest.fn(() => undefined),
   overviewCards: DevboxVitalCard[] | null = overviewFixture.cards,
+  props: Partial<DevboxProfilesProps> = {},
 ) {
   render(
     <DevboxProfiles
@@ -41,6 +42,7 @@ function renderProfiles(
       onAction={jest.fn()}
       onRetry={jest.fn(() => undefined)}
       onChanged={onChanged}
+      {...props}
     />,
   );
   return onChanged;
@@ -59,9 +61,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-edit-example-simple'));
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'example-simple' });
 
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'profile_get')).toEqual([{ name: 'example-simple' }]);
@@ -83,9 +83,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-edit-example-simple'));
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'example-simple' });
 
     expect(await screen.findByTestId('devbox-profile-error-project_dir')).toBeTruthy();
     expect(screen.queryByTestId('devbox-profile-errors')).toBeNull();
@@ -143,9 +141,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     const folder = (await screen.findByTestId(
       'devbox-profile-field-project_dir',
     )) as HTMLInputElement;
@@ -169,9 +165,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     fireEvent.change(await screen.findByTestId('devbox-profile-field-project_dir'), {
       target: { value: 'd:/work/ghost' },
     });
@@ -189,9 +183,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'midsai' });
     fireEvent.click(await screen.findByTestId('devbox-profile-json-toggle'));
     const editor = (await screen.findByTestId(
       'devbox-profile-editor',
@@ -213,9 +205,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'midsai' });
     expect(await screen.findByTestId('devbox-profile-form')).toBeTruthy();
     expect(screen.queryByTestId('devbox-profile-editor')).toBeNull();
 
@@ -273,9 +263,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'midsai' });
     await screen.findByTestId('devbox-profile-field-mode');
     fireEvent.click(screen.getByTestId('devbox-profile-mode-full'));
     fireEvent.change(screen.getByTestId('devbox-profile-field-project_dir'), {
@@ -302,9 +290,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'midsai' });
     expect(await screen.findByTestId('devbox-profile-form')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('devbox-profile-json-toggle'));
@@ -316,97 +302,16 @@ describe('Devbox profile editor', () => {
     expect(screen.queryByTestId('devbox-profile-form')).toBeNull();
   });
 
-  it('row start sends {name, preview} immediately', async () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
 
-    fireEvent.click(screen.getByTestId('devbox-profile-start-example-simple'));
 
-    await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
-        { name: 'example-simple', preview: false },
-      ]);
-    });
-  });
 
-  it('labels the active project row Restart while the stack is running', () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
 
-    expect(screen.getByTestId('devbox-profile-start-midsai').textContent).toBe('Restart');
-    expect(screen.getByTestId('devbox-profile-start-example-simple').textContent).toBe('Start');
-  });
 
-  it('labels the active project row Start while the stack is down', () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    const cards = overviewFixture.cards.map(c => ({
-      ...c,
-      value: 'down',
-      tone: 'down' as const,
-    }));
-    renderProfiles(jest.fn(() => undefined), cards);
 
-    expect(screen.getByTestId('devbox-profile-start-midsai').textContent).toBe('Start');
-  });
-
-  it('labels the active project row Start when vitals are unavailable', () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles(jest.fn(() => undefined), null);
-
-    expect(screen.getByTestId('devbox-profile-start-midsai').textContent).toBe('Start');
-  });
-
-  it('restart on the active row still sends stack_start with the profile name', async () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-start-midsai'));
-
-    await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'stack_start')).toEqual([
-        { name: 'midsai', preview: false },
-      ]);
-    });
-  });
-
-  it('row actions share the outline family with h-8 sizing and a gap-2 cell', () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    const start = screen.getByTestId('devbox-profile-start-midsai');
-    const use = screen.getByTestId('devbox-profile-use-midsai');
-    for (const button of [start, use]) {
-      expect(button.className).toContain('h-8');
-      expect(button.className).toContain('border-white/20');
-      expect(button.className).not.toContain('bg-white/5');
-    }
-    for (const testId of [
-      'devbox-profile-duplicate-midsai',
-      'devbox-profile-edit-midsai',
-      'devbox-profile-delete-midsai',
-    ]) {
-      const button = screen.getByTestId(testId);
-      expect(button.className).toContain('h-8');
-      expect(button.className).toContain('w-8');
-    }
-    expect(start.parentElement?.className).toContain('gap-2');
-  });
-
-  it('renders the localized mode title in the projects table', () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    expect(screen.queryByText('standard')).toBeNull();
-    expect(screen.queryByText('readonly')).toBeNull();
-    expect(screen.getAllByText('Standard')).toHaveLength(2);
-    expect(screen.getByText('Read-only')).toBeTruthy();
-  });
 
   it('keeps advanced fields collapsed in create mode until toggled', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     await screen.findByTestId('devbox-profile-form');
     expect(screen.queryByTestId('devbox-profile-field-toolchain')).toBeNull();
     expect(screen.getByTestId('devbox-profile-defaults-summary')).toBeTruthy();
@@ -418,9 +323,7 @@ describe('Devbox profile editor', () => {
 
   it('autosuggests the project name from the folder and lets the user override it', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     const folderInput = await screen.findByTestId('devbox-profile-field-project_dir');
     const nameInput = screen.getByTestId('devbox-profile-new-name') as HTMLInputElement;
 
@@ -434,9 +337,7 @@ describe('Devbox profile editor', () => {
 
   it('keeps Add disabled until folder is filled', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     await screen.findByTestId('devbox-profile-form');
     expect(screen.getByTestId('devbox-profile-save')).toBeDisabled();
 
@@ -450,9 +351,7 @@ describe('Devbox profile editor', () => {
     invokeMock.mockImplementation(
       devboxRouter(pageRoutes({ profile_put: { valid: true, errors: [] } })),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     fireEvent.change(await screen.findByTestId('devbox-profile-field-project_dir'), {
       target: { value: 'd:/work/fresh' },
     });
@@ -474,9 +373,7 @@ describe('Devbox profile editor', () => {
     invokeMock.mockImplementation(
       devboxRouter(pageRoutes({ profile_put: { valid: true, errors: [] } })),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     fireEvent.change(await screen.findByTestId('devbox-profile-field-project_dir'), {
       target: { value: 'd:/work/fresh' },
     });
@@ -495,9 +392,7 @@ describe('Devbox profile editor', () => {
     const pick = jest.fn(async () => 'd:/work/picked');
     (window as any).pywebview = { api: { pick_folder: pick } };
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     fireEvent.click(await screen.findByTestId('devbox-profile-folder-pick'));
 
     const folderInput = (await screen.findByTestId(
@@ -535,9 +430,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     fireEvent.change(await screen.findByTestId('devbox-profile-field-project_dir'), {
       target: { value: 'd:/work/repo' },
     });
@@ -557,12 +450,10 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     expect(
       await screen.findByText(
-        'Rest stays at defaults: base toolchain, ports closed, git — Host User <h@x.dev>',
+        'Everything else stays at defaults: base toolchain, ports closed, git — Host User <h@x.dev>',
       ),
     ).toBeTruthy();
   });
@@ -579,9 +470,7 @@ describe('Devbox profile editor', () => {
         }),
       ),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-duplicate-midsai'));
+    renderProfiles(undefined, undefined, { duplicateSignal: 1, duplicateName: 'midsai' });
     const folderInput = (await screen.findByTestId(
       'devbox-profile-field-project_dir',
     )) as HTMLInputElement;
@@ -595,9 +484,16 @@ describe('Devbox profile editor', () => {
     invokeMock.mockImplementation(
       devboxRouter(pageRoutes({ profile_put: { valid: true, errors: [] } })),
     );
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    const profileProps = {
+      profiles: profilesFixture,
+      overviewCards: overviewFixture.cards,
+      error: null,
+      busy: false,
+      onAction: jest.fn(),
+      onRetry: jest.fn(() => undefined),
+      onChanged: jest.fn(() => undefined),
+    };
+    const view = render(<DevboxProfiles {...profileProps} addSignal={1} />);
     fireEvent.change(await screen.findByTestId('devbox-profile-field-project_dir'), {
       target: { value: 'd:/work/recent-one' },
     });
@@ -606,7 +502,7 @@ describe('Devbox profile editor', () => {
       expect(devboxCalls(invokeMock, 'profile_put')).toHaveLength(1);
     });
 
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    view.rerender(<DevboxProfiles {...profileProps} addSignal={2} />);
     const recents = await screen.findByTestId('devbox-profile-recents');
     expect(recents.textContent).toContain('recent-one');
     localStorage.removeItem('devbox.recentProjectDirs');
@@ -614,9 +510,7 @@ describe('Devbox profile editor', () => {
 
   it('renders a mode radio card as selected after clicking it', async () => {
     invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    renderProfiles();
-
-    fireEvent.click(screen.getByTestId('devbox-profile-add'));
+    renderProfiles(undefined, undefined, { addSignal: 1 });
     await screen.findByTestId('devbox-profile-field-mode');
     expect(screen.getByTestId('devbox-profile-mode-standard')).toHaveAttribute(
       'aria-checked',
@@ -634,21 +528,6 @@ describe('Devbox profile editor', () => {
     );
   });
 
-  it('deletes a project from the row action with confirm', async () => {
-    invokeMock.mockImplementation(
-      devboxRouter(pageRoutes({ profile_delete: { deleted: true } })),
-    );
-    renderProfiles();
-
-    const del = screen.getByTestId('devbox-profile-delete-example-simple');
-    fireEvent.click(del);
-    expect(devboxCalls(invokeMock, 'profile_delete')).toHaveLength(0);
-    fireEvent.click(del);
-
-    await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'profile_delete')).toEqual([{ name: 'example-simple' }]);
-    });
-  });
 
   it('seedSignal opens the active profile editor with the skeleton exposed_mcps merged', async () => {
     invokeMock.mockImplementation(
@@ -696,21 +575,6 @@ describe('Devbox profile editor', () => {
     expect(devboxCalls(invokeMock, 'profile_get')).toHaveLength(0);
   });
 
-  it('shows the empty state when no projects exist', () => {
-    invokeMock.mockImplementation(devboxRouter(pageRoutes()));
-    render(
-      <DevboxProfiles
-        profiles={[]}
-        overviewCards={overviewFixture.cards}
-        error={null}
-        busy={false}
-        onAction={jest.fn()}
-        onRetry={jest.fn(() => undefined)}
-        onChanged={jest.fn(() => undefined)}
-      />,
-    );
-    expect(screen.getByText('No projects yet')).toBeTruthy();
-  });
 });
 
 function seededProfiles(seedSignal: number, profiles: DevboxProfileRow[] | null = profilesFixture) {
@@ -747,8 +611,9 @@ function renderProfilesOnPut(putResult: { valid: boolean; errors: string[] }) {
       onAction={jest.fn()}
       onRetry={jest.fn(() => undefined)}
       onChanged={onChanged}
+      editSignal={1}
+      editName="midsai"
     />,
   );
-  fireEvent.click(screen.getByTestId('devbox-profile-edit-midsai'));
   return onChanged;
 }

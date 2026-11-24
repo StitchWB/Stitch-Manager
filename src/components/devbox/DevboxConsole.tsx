@@ -486,7 +486,7 @@ visibleSources.map(s => ({
           />
         </div>
         {(failedCount > 0 || attentionCount > 0) && (
-          <div className="flex items-center gap-2" data-testid="devbox-console-counts">
+          <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="devbox-console-counts">
             {failedCount > 0 && (
               <span className="text-2xs text-red-300">
                 {t('devboxPage.consoleCountErrors', { count: failedCount })}
@@ -634,7 +634,7 @@ visibleSources.map(s => ({
             <span className="text-2xs text-slate-500">{t('devboxPage.logsCaption')}</span>
           </div>
           {logsError && (
-            <div className="flex items-center gap-2" data-testid="devbox-console-logs-error">
+            <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="devbox-console-logs-error">
               <p className="min-w-0 truncate text-2xs text-red-300">{logsError}</p>
               <IconButton
                 size="sm"

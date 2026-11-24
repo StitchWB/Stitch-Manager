@@ -124,6 +124,7 @@ export interface DevboxPollResult {
   jobs: unknown;
   permissions: unknown;
   events: unknown;
+  env_version?: number;
 }
 
 export interface DevboxEnvEntry {
@@ -332,8 +333,12 @@ export function devboxWatchdogControl(action: 'start' | 'stop'): Promise<DevboxA
   return safeInvoke<DevboxAccepted>(`${NS}.watchdog_control`, { action });
 }
 
-export function devboxCockpitOpen(): Promise<DevboxAccepted> {
-  return safeInvoke<DevboxAccepted>(`${NS}.cockpit_open`, {});
+export interface DevboxCockpitResult {
+  url?: string;
+}
+
+export function devboxCockpitOpen(): Promise<DevboxCockpitResult> {
+  return safeInvoke<DevboxCockpitResult>(`${NS}.cockpit_open`, {});
 }
 
 export interface DevboxAgentPromptReady {
@@ -408,6 +413,7 @@ export interface DevboxConnectionCheckResult {
   server?: string;
   latency_ms?: number;
   error?: string;
+  mode?: string;
 }
 
 export function devboxConnectionCheck(): Promise<DevboxConnectionCheckResult> {
@@ -424,6 +430,15 @@ export function devboxAgentPrompt(params: {
   if (params.task !== '') args.task = params.task;
   if (params.acceptance !== '') args.acceptance = params.acceptance;
   return safeInvoke<DevboxAgentPrompt>(`${NS}.agent_prompt`, args, NO_CACHE);
+}
+
+export interface DevboxHandoffBlock {
+  block: string;
+  masked: boolean;
+}
+
+export function devboxHandoffBlock(reveal = false): Promise<DevboxHandoffBlock> {
+  return safeInvoke<DevboxHandoffBlock>(`${NS}.handoff_block`, { reveal }, NO_CACHE);
 }
 
 export interface DevboxObserved<T> {

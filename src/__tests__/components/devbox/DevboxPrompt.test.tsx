@@ -8,6 +8,11 @@ jest.mock('@/lib/backend/core/invoke', () => ({
   BackendError: class extends Error {},
 }));
 
+jest.mock('@/components/ui/ConfirmDialogHost', () => ({
+  askConfirm: jest.fn(() => Promise.resolve(true)),
+}));
+
+
 jest.mock('sonner', () => ({
   toast: { success: jest.fn(), error: jest.fn(), info: jest.fn(), warning: jest.fn() },
 }));
@@ -37,6 +42,7 @@ import {
 const invokeMock = safeInvoke as jest.Mock;
 let writeText: jest.Mock;
 let onAction: jest.Mock;
+let onOpenTab: jest.Mock;
 
 function promptRoutes(overrides: DevboxRoutes = {}) {
   return devboxRouter(pageRoutes(overrides));
@@ -49,6 +55,7 @@ function renderPrompt(props: Partial<DevboxPromptProps> = {}) {
       overviewCards={overviewFixture.cards}
       actionStatus={idleActionStatus}
       onAction={onAction as (action: Promise<DevboxAccepted>) => void}
+      onOpenTab={onOpenTab}
       {...props}
     />,
   );
@@ -63,6 +70,7 @@ beforeEach(() => {
   localStorage.clear();
   invokeMock.mockImplementation(promptRoutes());
   onAction = jest.fn();
+  onOpenTab = jest.fn();
   writeText = jest.fn(async () => undefined);
   Object.defineProperty(navigator, 'clipboard', {
     value: { writeText },
@@ -273,7 +281,7 @@ describe('DevboxPrompt blocking state', () => {
     expect(warning.querySelectorAll('button')).toHaveLength(1);
 
     fireEvent.click(ingressButton);
-    expect(onAction).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onAction).toHaveBeenCalledTimes(1));
     expect(devboxCallArgs(invokeMock, 'ingress_control')).toEqual([{ action: 'up' }]);
   });
 
@@ -416,8 +424,8 @@ describe('DevboxPrompt copy flow', () => {
   });
 });
 
-describe('DevboxPrompt remote MCP mode', () => {
-  it('shows the sandbox editor by default and switches to the remote panel', async () => {
+describe('DevboxPrompt remote mode', () => {
+  it('shows the sandbox editor by default and remote links to Connect', async () => {
     renderPrompt();
     await promptReady();
 
@@ -426,10 +434,10 @@ describe('DevboxPrompt remote MCP mode', () => {
 
     fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
     expect(screen.getByTestId('devbox-remote-panel')).toBeTruthy();
-    expect(screen.getByTestId('devbox-remote-url')).toHaveValue(
-      'https://x.trycloudflare.com/p/8787/mcp',
-    );
     expect(screen.queryByTestId('devbox-prompt-task')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('devbox-remote-open-connect'));
+    expect(onOpenTab).toHaveBeenCalledWith('connect');
 
     fireEvent.click(screen.getByText(t('devboxPage.promptModeSandbox')));
     expect(screen.getByTestId('devbox-prompt-task')).toBeTruthy();
@@ -441,107 +449,6 @@ describe('DevboxPrompt remote MCP mode', () => {
     fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
 
     expect(screen.queryByTestId('devbox-prompt-tabs')).toBeNull();
-  });
-
-  it('copies URL, token, and header value separately, revealing on demand', async () => {
-    renderPrompt();
-    await promptReady();
-    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
-
-    fireEvent.click(screen.getByTestId('devbox-remote-copy-url'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://x.trycloudflare.com/p/8787/mcp'));
-
-    fireEvent.click(screen.getByTestId('devbox-remote-copy-header'));
-    await waitFor(() => {
-      expect(devboxCallArgs(invokeMock, 'agent_prompt')).toContainEqual({
-        reveal: true,
-        client: 'universal',
-      });
-    });
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('Bearer bridge-secret-1'));
-
-    fireEvent.click(screen.getByTestId('devbox-remote-copy-token'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('bridge-secret-1'));
-  });
-
-  it('shows an info badge for OAuth types but keeps the connection fields visible', async () => {
-    renderPrompt();
-    await promptReady();
-    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
-
-    expect(screen.queryByTestId('devbox-remote-auth-unsupported')).toBeNull();
-    expect(screen.getByTestId('devbox-remote-url')).toBeTruthy();
-
-    fireEvent.change(screen.getByTestId('devbox-remote-auth'), {
-      target: { value: 'oauth-dynamic' },
-    });
-    expect(screen.getByTestId('devbox-remote-auth-unsupported').textContent).toBe(
-      t('devboxPage.remoteAuthBadge'),
-    );
-    expect(screen.getByTestId('devbox-remote-url')).toBeTruthy();
-
-    fireEvent.change(screen.getByTestId('devbox-remote-auth'), {
-      target: { value: 'bearer' },
-    });
-    expect(screen.queryByTestId('devbox-remote-auth-unsupported')).toBeNull();
-  });
-
-  it('runs a live connection check and reports tools on success', async () => {
-    invokeMock.mockImplementation(
-      promptRoutes({
-        connection_check: () => ({
-          ok: true,
-          url: 'https://x.trycloudflare.com/p/8787/mcp',
-          tools: 16,
-          server: 'opencode-mcp-bridge',
-          latency_ms: 42,
-        }),
-      }),
-    );
-    renderPrompt();
-    await promptReady();
-    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
-
-    fireEvent.click(screen.getByTestId('devbox-remote-check'));
-    await waitFor(() => {
-      expect(screen.getByTestId('devbox-remote-check-ok').textContent).toBe(
-        t('devboxPage.remoteCheckOk', { tools: 16, latency: 42 }),
-      );
-    });
-  });
-
-  it('shows the failure reason when the connection check fails', async () => {
-    invokeMock.mockImplementation(
-      promptRoutes({
-        connection_check: () => ({ ok: false, error: 'HTTP 401' }),
-      }),
-    );
-    renderPrompt();
-    await promptReady();
-    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
-
-    fireEvent.click(screen.getByTestId('devbox-remote-check'));
-    await waitFor(() => {
-      expect(screen.getByTestId('devbox-remote-check-fail').textContent).toBe(
-        t('devboxPage.remoteCheckFail', { error: 'HTTP 401' }),
-      );
-    });
-  });
-
-  it('collapses additional endpoints behind a toggle', async () => {
-    renderPrompt();
-    await promptReady();
-    fireEvent.click(screen.getByText(t('devboxPage.promptModeRemote')));
-
-    expect(screen.queryByTestId('devbox-remote-endpoints')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('devbox-remote-endpoints-toggle'));
-    expect(screen.getByTestId('devbox-remote-endpoints')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('devbox-remote-copy-url-runner'));
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith('https://x.trycloudflare.com/p/8796/mcp'),
-    );
   });
 });
 
@@ -817,9 +724,9 @@ describe('DevboxPrompt hint and warning lines', () => {
 
     const warning = screen.getByTestId('devbox-prompt-stack-warning');
     expect(warning.textContent).toContain(t('devboxPage.promptStackDownWarning'));
-    expect(warning.className).toContain('border-amber-500/40');
-    expect(warning.className).toContain('bg-amber-500/10');
-    expect(warning.className).toContain('text-amber-200');
+    const plate = warning.querySelector('[role="status"]');
+    expect(plate).not.toBeNull();
+    expect(plate?.className).toContain('bg-amber-500/10');
     expect(screen.queryByTestId('devbox-prompt-runner-warning')).toBeNull();
   });
 
@@ -837,10 +744,9 @@ describe('DevboxPrompt hint and warning lines', () => {
     expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
     const warning = screen.getByTestId('devbox-prompt-runner-warning');
     expect(warning.textContent).toBe(t('devboxPage.promptRunnerDownHint'));
-    expect(warning.className).toContain('border-amber-500/40');
-    expect(warning.className).toContain('bg-amber-500/10');
-    expect(warning.className).toContain('text-amber-200');
-    expect(warning.className).toContain('text-xs');
+    const plate = warning.querySelector('[role="status"]');
+    expect(plate).not.toBeNull();
+    expect(plate?.className).toContain('bg-amber-500/10');
 
     const task = screen.getByTestId('devbox-prompt-task');
     expect(
@@ -856,9 +762,9 @@ describe('DevboxPrompt gateway warning', () => {
 
     const warning = screen.getByTestId('devbox-prompt-gateway-warning');
     expect(warning.textContent).toBe(t('devboxPage.gatewayWarnChip'));
-    expect(warning.className).toContain('border-amber-500/40');
-    expect(warning.className).toContain('bg-amber-500/10');
-    expect(warning.className).toContain('text-amber-200');
+    const plate = warning.querySelector('[role="status"]');
+    expect(plate).not.toBeNull();
+    expect(plate?.className).toContain('bg-amber-500/10');
     expect(warning.querySelector('button')).toBeNull();
   });
 

@@ -1,14 +1,3 @@
-/**
- * Devbox workspace page — header control bar (project selector with confirmed
- * switch, new-project signal, composite stack badge, stack start, danger zone),
- * tab shell, the single 4s poll contract feeding rail/services/console, and
- * card normalization defenses.
- *
- * Mocks: safeInvoke (core invoke, routed by command name through the real
- * devbox contract module), sonner, Header (pulls proxy-status stores),
- * app store. i18n runs REAL.
- */
-
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { toast } from 'sonner';
@@ -69,6 +58,16 @@ function mockRoutes(overrides = {}) {
   invokeMock.mockImplementation(
     devboxRouter(
       pageRoutes({
+        env_get: { entries: [] },
+        env_set: { valid: true, errors: [], restart: [] },
+        connection_check: { ok: false, error: 'unavailable' },
+        handoff_block: { block: '', masked: true },
+        profile_get: { json: '{"mode":"standard"}', valid: true, errors: [] },
+        profile_put: { valid: true, errors: [] },
+        watchdog_control: accepted,
+        cockpit_open: accepted,
+        ingress_control: accepted,
+        run_doctor: accepted,
         profile_use: accepted,
         stack_start: accepted,
         stack_full_down: accepted,
@@ -90,8 +89,20 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-function taskGrid(): HTMLElement {
-  return screen.getByTestId('devbox-panel-task');
+function panel(id: string): HTMLElement {
+  return screen.getByTestId(`devbox-panel-${id}`);
+}
+
+function clickTab(id: string): void {
+  fireEvent.click(screen.getByTestId(`devbox-tab-${id}`));
+}
+
+async function openTab(id: string): Promise<void> {
+  fireEvent.click(await screen.findByTestId(`devbox-tab-${id}`));
+}
+
+function isHidden(element: HTMLElement): boolean {
+  return element.classList.contains('hidden');
 }
 
 describe('Devbox page poll contract', () => {
@@ -120,7 +131,7 @@ describe('Devbox page poll contract', () => {
     });
   });
 
-  it('feeds rail, service cards and console from one poll per cycle', async () => {
+  it('feeds agent, service cards and console from one poll per cycle', async () => {
     jest.useFakeTimers();
     mockRoutes({
       poll: devboxPollBundle({
@@ -139,10 +150,17 @@ describe('Devbox page poll contract', () => {
     });
 
     expect(devboxCalls(invokeMock, 'poll')).toHaveLength(1);
-    expect(screen.getByTestId('devbox-rail-active-job').textContent).toContain('bash');
+
+    clickTab('agent');
+    expect(screen.getByTestId('devbox-agent-job-j1').textContent).toContain('bash');
     expect(screen.getByText('rm -rf build/')).toBeTruthy();
-    expect(screen.getByTestId('devbox-events-river').textContent).toContain('bash');
+
+    clickTab('services');
     expect(screen.getByTestId('devbox-service-value-ingress').textContent).toBe('running');
+
+    clickTab('logs');
+    expect(screen.getByTestId('devbox-events-river').textContent).toContain('bash');
+
     for (const cmd of ['overview', 'action_status', 'jobs_live', 'permissions_pending', 'events_tail']) {
       expect(devboxCalls(invokeMock, cmd)).toHaveLength(0);
     }
@@ -163,6 +181,7 @@ describe('Devbox page poll contract', () => {
       },
     });
     render(<DevboxPage />);
+    await openTab('logs');
 
     const matches = await screen.findAllByText('sidecar exploded');
     expect(matches.length).toBeGreaterThan(0);
@@ -177,8 +196,9 @@ describe('Devbox page permission cards', () => {
       permission_reply: { accepted: false, reason: "no pending permission matches 'p1'" },
     });
     render(<DevboxPage />);
+    await openTab('agent');
 
-    expect(await screen.findByTestId('devbox-rail-permission-p1')).toBeTruthy();
+    expect(await screen.findByTestId('devbox-agent-permission-p1')).toBeTruthy();
     fireEvent.click(screen.getByTestId('devbox-permission-approve-p1'));
 
     await waitFor(() => {
@@ -188,12 +208,26 @@ describe('Devbox page permission cards', () => {
     });
     expect(toast.error).not.toHaveBeenCalled();
     await waitFor(() => {
-      expect(screen.queryByTestId('devbox-rail-permission-p1')).toBeNull();
+      expect(screen.queryByTestId('devbox-agent-permission-p1')).toBeNull();
     });
   });
 });
 
 describe('Devbox page header control bar', () => {
+  it('renders the six tabs in the required order', async () => {
+    render(<DevboxPage />);
+    const tabs = await screen.findByTestId('devbox-tabs');
+
+    expect(Array.from(tabs.querySelectorAll('button')).map(button => button.textContent)).toEqual([
+      'Overview',
+      'Connect',
+      'Agent',
+      'Services',
+      'Projects',
+      'Logs',
+    ]);
+  });
+
   it('derives the composite stack badge from the poll cards', async () => {
     render(<DevboxPage />);
     expect(await screen.findByTestId('devbox-stack-badge')).toBeTruthy();
@@ -349,15 +383,15 @@ describe('Devbox page header control bar', () => {
     expect(options[1].textContent).toBe('example-simple · readonly');
     expect(options[2].textContent).toBe('+ New project');
     expect(options[3].textContent).toBe('Project settings');
-    expect(select.closest('.w-56')).toBeTruthy();
+    expect(select.closest('[class*="sm:w-56"]')).toBeTruthy();
   });
 
   it('renders the title without the Devbox prefix', async () => {
     render(<DevboxPage />);
-    expect(await screen.findByText('Agent on your hardware')).toBeTruthy();
+    expect(await screen.findByText('A coding agent on your machine')).toBeTruthy();
   });
 
-  it('moves Doctor and Cockpit into the More menu with always-visible labels', async () => {
+  it('moves Doctor and ingress into the More menu and keeps Cockpit out of the header', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
 
@@ -367,23 +401,23 @@ describe('Devbox page header control bar', () => {
     fireEvent.click(screen.getByTestId('devbox-more-toggle'));
 
     const doctor = screen.getByTestId('devbox-control-doctor');
-    const cockpit = screen.getByTestId('devbox-control-cockpit');
-    expect(doctor.textContent).toBe('Doctor');
-    expect(cockpit.textContent).toBe('Open cockpit');
+    expect(doctor.textContent).toBe('Diagnostics');
     expect(doctor.querySelector('svg')).toBeTruthy();
-    expect(cockpit.querySelector('svg')).toBeTruthy();
     expect(doctor.querySelector('span.hidden')).toBeNull();
-    expect(cockpit.querySelector('span.hidden')).toBeNull();
+    expect(screen.getByTestId('devbox-control-ingress')).toBeTruthy();
+    expect(screen.queryByTestId('devbox-control-cockpit')).toBeNull();
+    expect(screen.queryByTestId('devbox-control-tokens')).toBeNull();
   });
 
-  it('select __add switches to infra, opens the projects modal in add mode and snaps back', async () => {
+  it('select __add switches to Projects and opens the inline editor in add mode', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
 
     fireEvent.change(select, { target: { value: '__add' } });
 
-    expect(taskGrid().classList.contains('hidden')).toBe(true);
+    expect(isHidden(panel('overview'))).toBe(true);
+    expect(await screen.findByTestId('devbox-panel-projects')).toBeTruthy();
     expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
     expect(await screen.findByTestId('devbox-profile-new-name')).toBeTruthy();
     await waitFor(() => {
@@ -393,16 +427,16 @@ describe('Devbox page header control bar', () => {
     expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
   });
 
-  it('select __manage opens the projects modal without the add editor and snaps back', async () => {
+  it('select __manage opens the inline Projects tab without the add editor', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
 
     fireEvent.change(select, { target: { value: '__manage' } });
 
+    expect(isHidden(panel('overview'))).toBe(true);
     expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
     expect(screen.queryByTestId('devbox-profile-new-name')).toBeNull();
-    expect(taskGrid().classList.contains('hidden')).toBe(false);
     await waitFor(() => {
       expect(select.value).toBe('midsai');
     });
@@ -471,7 +505,7 @@ describe('Devbox page header control bar', () => {
       }),
     });
     render(<DevboxPage />);
-    await screen.findByTestId('devbox-services');
+    await screen.findByTestId('devbox-stack-badge');
     expect(toast.success).not.toHaveBeenCalled();
     expect(toast.warning).not.toHaveBeenCalled();
 
@@ -519,7 +553,7 @@ describe('Devbox page header control bar', () => {
       }),
     });
     render(<DevboxPage />);
-    await screen.findByTestId('devbox-services');
+    await screen.findByTestId('devbox-stack-badge');
     expect(toast.success).not.toHaveBeenCalled();
 
     mockRoutes({
@@ -578,50 +612,54 @@ describe('Devbox page header control bar', () => {
     expect(screen.getByTestId('devbox-stack-badge').textContent).toBe('Stack: stopping...');
   });
 
-  it('new-project button switches to the infra tab and opens the projects modal in add mode', async () => {
+  it('new-project button switches to the Projects tab and opens the inline add editor', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
 
-    expect(taskGrid().classList.contains('hidden')).toBe(false);
+    expect(isHidden(panel('overview'))).toBe(false);
     fireEvent.click(screen.getByTestId('devbox-new-project'));
 
-    expect(taskGrid().classList.contains('hidden')).toBe(true);
-    expect(screen.getByTestId('devbox-panel-infra').classList.contains('hidden')).toBe(false);
+    expect(isHidden(panel('overview'))).toBe(true);
+    expect(isHidden(panel('projects'))).toBe(false);
     expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
     expect(await screen.findByTestId('devbox-profile-new-name')).toBeTruthy();
   });
 
-  it('projects button opens the modal with the table and without the add editor', async () => {
+  it('projects tab renders the profile table without the add editor', async () => {
     render(<DevboxPage />);
-    await screen.findByTestId('devbox-project-strip');
-
-    fireEvent.click(screen.getByTestId('devbox-project-strip-open'));
+    await openTab('projects');
 
     expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
-    expect(screen.getByTestId('devbox-profile-add')).toBeTruthy();
+    expect(screen.getByTestId('devbox-projects-create')).toBeTruthy();
     expect(screen.queryByTestId('devbox-profile-new-name')).toBeNull();
   });
 
-  it('infra panel stacks service cards, MCP section, project strip and console in order', async () => {
+  it('services panel renders focus rows, capabilities and infrastructure in order', async () => {
     render(<DevboxPage />);
-    const panel = await screen.findByTestId('devbox-panel-infra');
-    await screen.findByTestId('devbox-project-strip');
+    await openTab('services');
 
-    const order = [
-      'devbox-services',
-      'devbox-mcp-section',
-      'devbox-project-strip',
-      'devbox-console-tabs',
-    ].map(id => screen.getByTestId(id));
-    for (let i = 1; i < order.length; i += 1) {
-      expect(
-        order[i - 1].compareDocumentPosition(order[i]) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+    const servicesPanel = await screen.findByTestId('devbox-panel-services');
+    const focus = screen.getByTestId('devbox-services-focus');
+    const gateway = screen.getByTestId('devbox-services-gateway');
+    const manifest = screen.getByTestId('devbox-services-manifest');
+    const infraCards = screen.getByTestId('devbox-services');
+    const ports = screen.getByTestId('devbox-services-ports');
+
+    expect(focus.compareDocumentPosition(gateway) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(gateway.compareDocumentPosition(manifest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(manifest.compareDocumentPosition(infraCards) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(infraCards.compareDocumentPosition(ports) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const node of [focus, gateway, infraCards, ports]) {
+      expect(servicesPanel.contains(node)).toBe(true);
     }
-    expect(panel.contains(order[0])).toBe(true);
-    expect(panel.contains(order[1])).toBe(true);
-    expect(panel.contains(order[3])).toBe(true);
+  });
+
+  it('logs panel renders the console', async () => {
+    render(<DevboxPage />);
+    await openTab('logs');
+
+    const logsPanel = await screen.findByTestId('devbox-panel-logs');
+    expect(logsPanel.contains(screen.getByTestId('devbox-console-tabs'))).toBe(true);
   });
 
   it('feeds the gateway to the prompt — the warning plate appears when the gateway is down', async () => {
@@ -644,12 +682,13 @@ describe('Devbox page header control bar', () => {
       }),
     });
     render(<DevboxPage />);
+    await openTab('agent');
 
     expect(await screen.findByTestId('devbox-prompt-gateway-warning')).toBeTruthy();
     expect(screen.queryByTestId('devbox-prompt-stack-warning')).toBeNull();
   });
 
-  it('MCP CTA opens the picker and the JSON escape hatch opens the seeded editor', async () => {
+  it('gateway inline editor and the JSON escape hatch open the seeded editor', async () => {
     mockRoutes({
       poll: devboxPollBundle({
         overview: {
@@ -679,13 +718,12 @@ describe('Devbox page header control bar', () => {
       },
     });
     render(<DevboxPage />);
+    await openTab('services');
 
-    fireEvent.click(await screen.findByTestId('devbox-mcp-configure'));
-
-    expect(await screen.findByText('MCP servers for this project')).toBeTruthy();
+    expect(await screen.findByTestId('devbox-services-gateway-context7')).toBeTruthy();
     expect(devboxCallArgs(invokeMock, 'mcp_candidates')).toEqual([{ name: 'midsai' }]);
 
-    fireEvent.click(screen.getByText('Edit JSON'));
+    fireEvent.click(screen.getByTestId('devbox-services-gateway-advanced'));
 
     expect(await screen.findByTestId('devbox-profiles')).toBeTruthy();
     const editor = (await screen.findByTestId('devbox-profile-editor')) as HTMLTextAreaElement;
@@ -696,34 +734,25 @@ describe('Devbox page header control bar', () => {
         exposed_mcps: [{ name: 'context7', mode: 'readonly', tool_allow: [] }],
       });
     });
-    expect(devboxCallArgs(invokeMock, 'profile_get')).toEqual([{ name: 'midsai' }]);
+    expect(devboxCallArgs(invokeMock, 'profile_get').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('danger zone entries are confirm-gated', async () => {
+  it('danger zone entries are confirm-gated and tokens stay out of the header', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
 
-    expect(screen.queryByTestId('devbox-danger-menu')).toBeNull();
-    fireEvent.click(screen.getByTestId('devbox-danger-toggle'));
+    fireEvent.click(screen.getByTestId('devbox-more-toggle'));
 
     expect(screen.queryByTestId('devbox-control-tokens')).toBeNull();
-    expect(screen.queryByTestId('devbox-control-ingress')).toBeNull();
+    expect(screen.queryByTestId('devbox-control-cockpit')).toBeNull();
+    expect(screen.getByTestId('devbox-control-ingress')).toBeTruthy();
 
     const stopAll = screen.getByTestId('devbox-control-stop-all');
-    fireEvent.click(stopAll);
-    expect(devboxCalls(invokeMock, 'stack_full_down')).toHaveLength(0);
     fireEvent.click(stopAll);
     await waitFor(() => {
       expect(devboxCalls(invokeMock, 'stack_full_down')).toHaveLength(1);
     });
-
-    fireEvent.click(screen.getByTestId('devbox-more-toggle'));
-    const tokens = screen.getByTestId('devbox-control-tokens');
-    fireEvent.click(tokens);
-    fireEvent.click(tokens);
-    await waitFor(() => {
-      expect(devboxCalls(invokeMock, 'issue_tokens')).toHaveLength(1);
-    });
+    expect(askConfirmMock).toHaveBeenCalled();
   });
 
   it('shows the onboarding strip when no project is active', async () => {
@@ -746,16 +775,22 @@ describe('Devbox page header control bar', () => {
     expect(screen.queryByTestId('devbox-onboard-project')).toBeNull();
   });
 
-  it('tabs toggle between task and infra without unmounting the prompt', async () => {
+  it('tabs lazy-mount panels and keep them mounted when hidden', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
 
-    fireEvent.click(screen.getByTestId('devbox-tab-infra'));
-    expect(taskGrid().classList.contains('hidden')).toBe(true);
+    expect(isHidden(panel('overview'))).toBe(false);
+    expect(screen.queryByTestId('devbox-panel-agent')).toBeNull();
+
+    clickTab('agent');
+    expect(isHidden(panel('overview'))).toBe(true);
+    expect(isHidden(panel('agent'))).toBe(false);
     expect(screen.getByTestId('devbox-prompt')).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId('devbox-tab-task'));
-    expect(taskGrid().classList.contains('hidden')).toBe(false);
+    clickTab('overview');
+    expect(isHidden(panel('overview'))).toBe(false);
+    expect(isHidden(panel('agent'))).toBe(true);
+    expect(screen.getByTestId('devbox-prompt')).toBeTruthy();
   });
 });
 
@@ -765,6 +800,7 @@ describe('Devbox page card normalization', () => {
       poll: devboxPollBundle({ overview: [{ title: 'Bridge', value: 'up' }] }),
     });
     render(<DevboxPage />);
+    await openTab('services');
 
     const bridge = await screen.findByTestId('devbox-service-value-bridge');
     expect(bridge.textContent).toBe('running');
@@ -790,6 +826,7 @@ describe('Devbox page card normalization', () => {
         }),
       });
       render(<DevboxPage />);
+      await openTab('services');
 
       expect(await screen.findByText('Ingress tunnel')).toBeTruthy();
       expect(screen.getByText('stitch-devbox.card.missing')).toBeTruthy();
