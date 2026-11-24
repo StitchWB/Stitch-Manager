@@ -18,6 +18,8 @@ export interface OverflowMenuItem {
   tone?: 'default' | 'danger';
   /** Disabled state. */
   disabled?: boolean;
+  /** Optional data-testid for the item button. */
+  testId?: string;
 }
 
 export interface OverflowMenuProps {
@@ -33,6 +35,8 @@ export interface OverflowMenuProps {
   /** Extra classes for the trigger IconButton (e.g. an accent color when
    *  the action is active — merged after the variant classes via cn). */
   triggerClassName?: string;
+  /** Optional data-testid for the trigger button. */
+  triggerTestId?: string;
   className?: string;
 }
 
@@ -48,6 +52,7 @@ export function OverflowMenu({
   size = 'md',
   triggerVariant = 'ghost',
   triggerClassName,
+  triggerTestId,
   className,
 }: OverflowMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -112,6 +117,7 @@ export function OverflowMenu({
           type="button"
           role="menuitem"
           disabled={item.disabled}
+          data-testid={item.testId}
           onClick={() => {
             if (item.disabled) return;
             setIsOpen(false);
@@ -143,6 +149,7 @@ export function OverflowMenu({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className={triggerClassName}
+        data-testid={triggerTestId}
       >
         {triggerIcon ?? <MoreHorizontal size={16} />}
       </IconButton>

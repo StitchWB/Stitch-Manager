@@ -173,3 +173,9 @@ export { AccountInspectorPanel } from './AccountInspectorPanel';
 
 export { ModelPicker } from './ModelPicker';
 export type { ModelOption } from './ModelPicker';
+
+export { CodeBlock } from './CodeBlock';
+export type { CodeBlockProps } from './CodeBlock';
+
+export { Alert } from './Alert';
+export type { AlertProps, AlertVariant } from './Alert';

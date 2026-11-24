@@ -36,7 +36,7 @@ export function DevboxSection({
           </h3>
           {caption && <p className="text-2xs text-slate-400 mt-0.5">{caption}</p>}
         </div>
-        {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+        {actions && <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{actions}</div>}
       </div>
       {error && (
         <div

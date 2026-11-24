@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import {
@@ -116,7 +117,17 @@ let valueText: string;
                 variant="secondary"
                 disabled={busy}
                 data-testid="devbox-service-ingress-enable"
-                onClick={() => onAction(devboxIngressControl('up'))}
+onClick={() =>
+                  void askConfirm({
+                    title: t('devboxPage.controlIngressOn'),
+                    message: t('devboxPage.tipIngress'),
+                    confirmText: t('common.confirm'),
+                    cancelText: t('common.cancel'),
+                    variant: 'warning',
+                  }).then(confirmed => {
+                    if (confirmed) onAction(devboxIngressControl('up'));
+                  })
+                }
               >
                 {t('devboxPage.serviceEnable')}
               </Button>

@@ -1,50 +1,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle,
+  ArrowRight,
   Check,
-  ChevronDown,
-  ChevronRight,
   Copy,
   Eye,
   EyeOff,
-  Info,
   Lock,
   Play,
   Plus,
   Power,
   RefreshCw,
   X,
-  Zap,
 } from 'lucide-react';
+import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
-import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { appToast } from '@/lib/observability/toast';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import {
   devboxActionSucceeded,
   devboxAgentPrompt,
-  devboxConnectionCheck,
   devboxIngressControl,
-  devboxNormalizeConnection,
   devboxStackStart,
   devboxVitalValue,
   type DevboxAccepted,
   type DevboxActionStatus,
   type DevboxAgentPrompt as DevboxAgentPromptPayload,
   type DevboxAgentPromptReady,
-  type DevboxConnectionEndpoint,
   type DevboxOverviewGateway,
   type DevboxProfileRow,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
 import { DevboxSection } from './DevboxSection';
+import type { DevboxTab } from './useDevboxConnect';
 
 const STALE_COMMAND_RE = /method not found|-32601/i;
 
@@ -79,12 +74,6 @@ const INGRESS_RETRY_MS = 3000;
 const INGRESS_RETRY_LIMIT = 10;
 
 type ConnectionMode = 'sandbox' | 'remote';
-
-type CheckState =
-  | { status: 'idle' }
-  | { status: 'running' }
-  | { status: 'ok'; tools: number; latency: number }
-  | { status: 'fail'; error: string };
 
 const AGENT_CLIENTS: ReadonlyArray<readonly [string, string]> = [
   ['claude-code', 'Claude Code'],
@@ -141,31 +130,11 @@ export interface DevboxPromptProps {
   gateway?: DevboxOverviewGateway | null;
   actionStatus: DevboxActionStatus | null;
   onAction: (action: Promise<DevboxAccepted>) => void;
+  onOpenTab: (tab: DevboxTab) => void;
   reloadTick?: number;
 }
 
 type PromptTab = 'editor' | 'prompt';
-
-const AUTH_TYPES: ReadonlyArray<readonly [string, string]> = [
-  ['bearer', 'API key / Bearer'],
-  ['oauth-dynamic', 'OAuth 2 Dynamic'],
-  ['oauth-pkce', 'OAuth 2 Code + PKCE'],
-];
-
-async function copyValue(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch {
-    const area = document.createElement('textarea');
-    area.value = value;
-    document.body.appendChild(area);
-    area.select();
-    const ok = document.execCommand('copy');
-    area.remove();
-    return ok;
-  }
-}
 
 export function DevboxPrompt({
   profiles,
@@ -173,6 +142,7 @@ export function DevboxPrompt({
   gateway = null,
   actionStatus,
   onAction,
+  onOpenTab,
   reloadTick = 0,
 }: DevboxPromptProps) {
   const draftProfileName = profiles?.find(row => row.active)?.name ?? '';
@@ -187,17 +157,14 @@ export function DevboxPrompt({
   const [task, setTask] = useState(() => readTaskDraft(taskDraftKey));
   const [acceptance, setAcceptance] = useState('');
   const [client, setClient] = useState('universal');
-  const [authType, setAuthType] = useState('bearer');
   const [copied, setCopied] = useState<{ at: number; fingerprint: string } | null>(null);
   const [copyFlash, setCopyFlash] = useState(false);
-  const [remoteCopied, setRemoteCopied] = useState<string | null>(null);
-  const [endpointsOpen, setEndpointsOpen] = useState(false);
-  const [check, setCheck] = useState<CheckState>({ status: 'idle' });
   const revealedRef = useRef(false);
   const taskRef = useRef(task);
   const acceptanceRef = useRef('');
   const clientRef = useRef('universal');
   const flashTimerRef = useRef<number | null>(null);
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
     const stored = readTaskDraft(taskDraftKey);
@@ -206,6 +173,7 @@ export function DevboxPrompt({
   }, [taskDraftKey]);
 
   const load = useCallback((reveal: boolean) => {
+    const seq = ++loadSeqRef.current;
     devboxAgentPrompt({
       task: taskRef.current,
       acceptance: acceptanceRef.current,
@@ -213,12 +181,14 @@ export function DevboxPrompt({
       client: clientRef.current,
     })
       .then(result => {
+        if (seq !== loadSeqRef.current) return;
         setData(result);
         setError(null);
         setRevealed(reveal);
         revealedRef.current = reveal;
       })
       .catch((err: unknown) => {
+        if (seq !== loadSeqRef.current) return;
         setError(err instanceof Error ? err.message : String(err));
       });
   }, []);
@@ -268,73 +238,6 @@ export function DevboxPrompt({
     const timer = window.setTimeout(() => load(revealedRef.current), INGRESS_RETRY_MS);
     return () => window.clearTimeout(timer);
   }, [ingressUrlPending, data, load]);
-
-  const connection = useMemo(
-    () => (data !== null ? devboxNormalizeConnection(data.connection) : null),
-    [data],
-  );
-
-  const remoteEndpoint = useMemo<DevboxConnectionEndpoint | null>(
-    () => connection?.endpoints[0] ?? null,
-    [connection],
-  );
-
-  const ensureRevealed = useCallback(async (): Promise<DevboxAgentPromptPayload | null> => {
-    if (revealed && data !== null) return data;
-    try {
-      const payload = await devboxAgentPrompt({
-        task: taskRef.current,
-        acceptance: acceptanceRef.current,
-        reveal: true,
-        client: clientRef.current,
-      });
-      setData(payload);
-      setRevealed(true);
-      revealedRef.current = true;
-      return payload;
-    } catch {
-      appToast.error(t('pluginUi.actionFailed'));
-      return null;
-    }
-  }, [revealed, data]);
-
-  const copyRemote = async (key: string, value: string) => {
-    const ok = await copyValue(value);
-    if (!ok) {
-      appToast.error(t('pluginUi.actionFailed'));
-      return;
-    }
-    setRemoteCopied(key);
-    window.setTimeout(
-      () => setRemoteCopied(current => (current === key ? null : current)),
-      COPY_FLASH_MS,
-    );
-  };
-
-  const revealedToken = useCallback(async (): Promise<string | null> => {
-    const payload = await ensureRevealed();
-    const token = payload?.connection?.endpoints[0]?.token;
-    return typeof token === 'string' && token !== '' ? token : null;
-  }, [ensureRevealed]);
-
-  const runCheck = async () => {
-    setCheck({ status: 'running' });
-    try {
-      const result = await devboxConnectionCheck();
-      if (result.ok) {
-        setCheck({ status: 'ok', tools: result.tools ?? 0, latency: result.latency_ms ?? 0 });
-      } else {
-        setCheck({ status: 'fail', error: result.error ?? t('pluginUi.actionFailed') });
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (STALE_COMMAND_RE.test(message)) {
-        setCheck({ status: 'fail', error: t('devboxPage.handoffErrorStale') });
-      } else {
-        setCheck({ status: 'fail', error: message });
-      }
-    }
-  };
 
   const activeProfileName = useMemo(
     () => (Array.isArray(profiles) ? profiles.find(row => row.active)?.name ?? '' : ''),
@@ -451,13 +354,9 @@ export function DevboxPrompt({
   );
 
   const alertPlate = (testId: string, text: string) => (
-    <span
-      className="flex shrink-0 items-center gap-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
-      data-testid={testId}
-    >
-      <AlertTriangle size={12} className="shrink-0" aria-hidden />
-      {text}
-    </span>
+    <div className="shrink-0 self-start" data-testid={testId}>
+      <Alert variant="warning" message={text} />
+    </div>
   );
 
   const blockingMessage = starting
@@ -469,38 +368,47 @@ export function DevboxPrompt({
         : t('devboxPage.promptIngressDownWarning');
 
   const blockingAlert = (
-    <div
-      className="flex shrink-0 flex-col gap-1 self-start rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
-      data-testid="devbox-prompt-stack-warning"
-    >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="flex items-center gap-1">
-          <AlertTriangle size={12} className="shrink-0" aria-hidden />
-          {blockingMessage}
-        </span>
-        {!ready.bridge && !starting && (
-          <Button
-            size="xs"
-            variant="outline"
-            leftIcon={<Power size={12} />}
-            data-testid="devbox-prompt-alert-stack-start"
-            onClick={() => onAction(devboxStackStart(activeProfileName, false))}
-          >
-            {t('devboxPage.promptChipStackStart')}
-          </Button>
-        )}
-        {ready.bridge && !ready.ingress && (
-          <Button
-            size="xs"
-            variant="outline"
-            leftIcon={<Play size={12} />}
-            data-testid="devbox-prompt-alert-ingress-up"
-            onClick={() => onAction(devboxIngressControl('up'))}
-          >
-            {t('devboxPage.promptChipIngressUp')}
-          </Button>
-        )}
-      </div>
+    <div className="flex shrink-0 flex-col gap-1 self-start" data-testid="devbox-prompt-stack-warning">
+      <Alert
+        variant="warning"
+        message={blockingMessage}
+        actions={
+          <>
+            {!ready.bridge && !starting && (
+              <Button
+                size="xs"
+                variant="outline"
+                leftIcon={<Power size={12} />}
+                data-testid="devbox-prompt-alert-stack-start"
+                onClick={() => onAction(devboxStackStart(activeProfileName, false))}
+              >
+                {t('devboxPage.promptChipStackStart')}
+              </Button>
+            )}
+              {ready.bridge && !ready.ingress && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  leftIcon={<Play size={12} />}
+                  data-testid="devbox-prompt-alert-ingress-up"
+onClick={() =>
+                  void askConfirm({
+                    title: t('devboxPage.controlIngressOn'),
+                    message: t('devboxPage.tipIngress'),
+                    confirmText: t('common.confirm'),
+                    cancelText: t('common.cancel'),
+                    variant: 'warning',
+                  }).then(confirmed => {
+                    if (confirmed) onAction(devboxIngressControl('up'));
+                  })
+                }
+                >
+                  {t('devboxPage.promptChipIngressUp')}
+                </Button>
+              )}
+          </>
+        }
+      />
       {(starting || startFailed) && (
         <div className="flex flex-col gap-1" data-testid="devbox-prompt-start-progress">
           <div className="flex flex-wrap items-center gap-2 text-2xs">
@@ -589,204 +497,21 @@ export function DevboxPrompt({
 
           {mode === 'remote' ? (
             <div className="flex flex-col gap-3" data-testid="devbox-remote-panel">
-              <Select
-                label={t('devboxPage.remoteAuthLabel')}
-                options={AUTH_TYPES.map(([value, label]) => ({
-                  value,
-                  label:
-                    value === 'bearer'
-                      ? label
-                      : `${label} ${t('devboxPage.remoteAuthSoon')}`,
-                }))}
-                value={authType}
-                containerClassName="shrink-0"
-                data-testid="devbox-remote-auth"
-                onValueChange={setAuthType}
+              <Alert
+                variant="info"
+                message={t('devboxPage.promptRemoteMoved')}
+                className="shrink-0"
               />
-              {authType !== 'bearer' && (
-                <span
-                  className="flex shrink-0 items-start gap-1.5 self-start rounded border border-sky-500/40 bg-sky-500/10 px-2 py-1 text-xs text-sky-200"
-                  data-testid="devbox-remote-auth-unsupported"
-                >
-                  <Info size={12} className="mt-0.5 shrink-0" aria-hidden />
-                  {t('devboxPage.remoteAuthBadge')}
-                </span>
-              )}
-
-              {remoteEndpoint !== null && (
-                <div
-                  className="flex shrink-0 flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3"
-                  data-testid="devbox-remote-box"
-                >
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-300" htmlFor="devbox-remote-url">
-                      {t('devboxPage.remoteUrlLabel')}
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={remoteEndpoint.url}
-                        readOnly
-                        containerClassName="min-w-0 flex-1"
-                        className="font-mono text-xs"
-                        data-testid="devbox-remote-url"
-                      />
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        leftIcon={remoteCopied === 'url' ? <Check size={14} /> : <Copy size={14} />}
-                        data-testid="devbox-remote-copy-url"
-                        onClick={() => void copyRemote('url', remoteEndpoint.url)}
-                      >
-                        {remoteCopied === 'url'
-                          ? t('devboxPage.remoteCopied')
-                          : t('devboxPage.remoteCopyUrl')}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-300" htmlFor="devbox-remote-token">
-                      {t('devboxPage.remoteTokenLabel')}
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={remoteEndpoint.token}
-                        readOnly
-                        type={revealed ? 'text' : 'password'}
-                        containerClassName="min-w-0 flex-1"
-                        className="font-mono text-xs"
-                        data-testid="devbox-remote-token"
-                      />
-                      <IconButton
-                        size="sm"
-                        variant="ghost"
-                        aria-label={t('devboxPage.promptTokens')}
-                        data-testid="devbox-remote-reveal"
-                        onClick={() => void ensureRevealed()}
-                      >
-                        {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </IconButton>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        leftIcon={remoteCopied === 'token' ? <Check size={14} /> : <Copy size={14} />}
-                        data-testid="devbox-remote-copy-token"
-                        onClick={() => void (async () => {
-                          const current = await revealedToken();
-                          if (current === null) return;
-                          await copyRemote('token', current);
-                        })()}
-                      >
-                        {remoteCopied === 'token'
-                          ? t('devboxPage.remoteCopied')
-                          : t('devboxPage.remoteCopyToken')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        leftIcon={remoteCopied === 'header' ? <Check size={14} /> : <Copy size={14} />}
-                        data-testid="devbox-remote-copy-header"
-                        onClick={() => void (async () => {
-                          const current = await revealedToken();
-                          if (current === null) return;
-                          await copyRemote('header', `Bearer ${current}`);
-                        })()}
-                      >
-                        {remoteCopied === 'header'
-                          ? t('devboxPage.remoteCopied')
-                          : t('devboxPage.remoteCopyHeader')}
-                      </Button>
-                    </div>
-                    <span className="text-2xs text-slate-500" data-testid="devbox-remote-hint">
-                      {t('devboxPage.remoteHint')}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      leftIcon={<Zap size={14} />}
-                      disabled={check.status === 'running'}
-                      data-testid="devbox-remote-check"
-                      onClick={() => void runCheck()}
-                    >
-                      {check.status === 'running'
-                        ? t('devboxPage.remoteChecking')
-                        : t('devboxPage.remoteCheck')}
-                    </Button>
-                    {check.status === 'ok' && (
-                      <span
-                        className="flex items-center gap-1.5 text-xs text-emerald-300"
-                        data-testid="devbox-remote-check-ok"
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden />
-                        {t('devboxPage.remoteCheckOk', {
-                          tools: check.tools,
-                          latency: check.latency,
-                        })}
-                      </span>
-                    )}
-                    {check.status === 'fail' && (
-                      <span
-                        className="flex min-w-0 items-center gap-1.5 text-xs text-red-300"
-                        data-testid="devbox-remote-check-fail"
-                      >
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" aria-hidden />
-                        <span className="truncate" title={check.error}>
-                          {t('devboxPage.remoteCheckFail', { error: check.error })}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {(connection?.endpoints.length ?? 0) > 1 && (
-                <div className="flex shrink-0 flex-col rounded-lg border border-white/[0.08] bg-white/[0.02]">
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 px-2.5 py-2 text-left text-2xs uppercase tracking-wider text-slate-400 hover:text-slate-300"
-                    data-testid="devbox-remote-endpoints-toggle"
-                    onClick={() => setEndpointsOpen(v => !v)}
-                  >
-                    {endpointsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    {t('devboxPage.remoteOtherEndpoints')}
-                  </button>
-                  {endpointsOpen && (
-                    <div
-                      className="flex flex-col gap-1.5 border-t border-white/[0.06] p-2.5"
-                      data-testid="devbox-remote-endpoints"
-                    >
-                      {connection?.endpoints.slice(1).map(endpoint => (
-                        <div key={endpoint.id} className="flex items-center gap-2">
-                          <span className="w-16 shrink-0 text-2xs text-slate-300">{endpoint.id}</span>
-                          <span
-                            className="min-w-0 flex-1 truncate font-mono text-2xs text-slate-400"
-                            title={endpoint.url}
-                          >
-                            {endpoint.url}
-                          </span>
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            leftIcon={
-                              remoteCopied === `url-${endpoint.id}` ? <Check size={12} /> : <Copy size={12} />
-                            }
-                            data-testid={`devbox-remote-copy-url-${endpoint.id}`}
-                            onClick={() => void copyRemote(`url-${endpoint.id}`, endpoint.url)}
-                          >
-                            {remoteCopied === `url-${endpoint.id}`
-                              ? t('devboxPage.remoteCopied')
-                              : t('devboxPage.remoteCopyUrl')}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon={<ArrowRight size={14} />}
+                className="self-start"
+                data-testid="devbox-remote-open-connect"
+                onClick={() => onOpenTab('connect')}
+              >
+                {t('devboxPage.servicesOpenConnect')}
+              </Button>
               {copyDisabled ? blockingAlert : null}
             </div>
           ) : (
@@ -932,7 +657,7 @@ export function DevboxPrompt({
           )}
 
           <div
-            className="flex shrink-0 items-start justify-between gap-3"
+            className="flex min-w-0 flex-wrap items-start justify-between gap-3"
             data-testid="devbox-prompt-footer"
           >
             {mode === 'sandbox' ? (
@@ -959,9 +684,9 @@ export function DevboxPrompt({
 {revealed ? t('devboxPage.promptHideTokens') : t('devboxPage.promptRevealTokens')}
                   </Button>
                 </div>
-                <div className="flex flex-col items-end gap-1">
+                <div className="flex min-w-0 flex-col items-end gap-1">
                   <span
-                    className="max-w-[320px] text-right text-xs text-slate-300"
+                    className="max-w-[min(320px,100%)] text-right text-xs text-slate-300"
                     data-testid="devbox-prompt-step2"
                   >
                     {t('devboxPage.promptStep2')}
@@ -978,21 +703,14 @@ export function DevboxPrompt({
                     copyButton
                   )}
                   <span
-                    className="max-w-[320px] text-right text-2xs text-slate-500"
+                    className="max-w-[min(320px,100%)] text-right text-2xs text-slate-500"
                     data-testid="devbox-prompt-hint"
                   >
                     {clientHint}
                   </span>
                 </div>
               </>
-            ) : (
-              <span
-                className="max-w-[480px] text-2xs text-slate-500"
-                data-testid="devbox-remote-footer-hint"
-              >
-                {t('devboxPage.remoteFooterHint')}
-              </span>
-            )}
+            ) : null}
           </div>
         </div>
       )}

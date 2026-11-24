@@ -16,6 +16,11 @@ jest.mock('@/lib/backend/core/invoke', () => ({
   BackendError: class extends Error {},
 }));
 
+jest.mock('@/components/ui/ConfirmDialogHost', () => ({
+  askConfirm: jest.fn(() => Promise.resolve(true)),
+}));
+
+
 jest.mock('sonner', () => ({
   toast: { success: jest.fn(), error: jest.fn(), info: jest.fn(), warning: jest.fn() },
 }));

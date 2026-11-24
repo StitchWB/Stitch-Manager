@@ -53,7 +53,7 @@ export function KeyValueList({
             (idx < rows.length - 1 || !hideLastDivider) && 'border-b border-white/[0.04]'
           )}
         >
-          <dt className="text-slate-500 truncate">{row.label}</dt>
+          <dt className="shrink-0 text-slate-500">{row.label}</dt>
           <dd
             className={cn(
               'tabular-nums text-right truncate min-w-0 font-medium',

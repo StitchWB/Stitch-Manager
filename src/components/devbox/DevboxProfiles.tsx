@@ -1,23 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Copy, FolderCog, FolderOpen, Info, Pencil, Plus, Trash2 } from 'lucide-react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/Table';
+import { ChevronDown, ChevronRight, FolderOpen, Info } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { ConfirmActionButton } from '@/components/ui/ConfirmActionButton';
-import { IconButton } from '@/components/ui/IconButton';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { RadioCard } from '@/components/ui/RadioCard';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Textarea } from '@/components/ui/Textarea';
 import { Input } from '@/components/ui/Input';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { appToast } from '@/lib/observability/toast';
 import { isDesktopApp } from '@/lib/backend/core/url';
@@ -25,20 +14,17 @@ import { pickFolderNative, nativePickerAvailable } from '@/lib/desktop/nativeDia
 import { t } from '@/lib/i18n';
 import {
   devboxProfileDefaults,
-  devboxProfileDelete,
   devboxProfileDetect,
   devboxProfileGet,
   devboxProfilePut,
-  devboxProfileUse,
   devboxStackStart,
   type DevboxAccepted,
   type DevboxProfileDetect,
   type DevboxProfileRow,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
-import { DevboxSection } from './DevboxSection';
 import { isFolderProfileError, profileErrorTitle } from './profileErrors';
-import { stackVitalState } from './state';
+import { serializeProfileWrite } from './profileWriteLock';
 
 interface EditorState {
   name: string;
@@ -91,13 +77,6 @@ function parseModel(json: string): ProfileModel | null {
 function basename(value: string): string {
   const parts = value.split(/[\\/]/).filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : '';
-}
-
-function modeTitle(mode: string): string {
-  if (mode === 'readonly') return t('devboxPage.modeReadonlyTitle');
-  if (mode === 'standard') return t('devboxPage.modeStandardTitle');
-  if (mode === 'full') return t('devboxPage.modeFullTitle');
-  return mode;
 }
 
 const RECENTS_KEY = 'devbox.recentProjectDirs';
@@ -179,11 +158,14 @@ export interface DevboxProfilesProps {
   onStarted?: () => void;
   addSignal?: number;
   seedSignal?: number;
+  editSignal?: number;
+  editName?: string;
+  duplicateSignal?: number;
+  duplicateName?: string;
 }
 
 export function DevboxProfiles({
   profiles,
-  overviewCards,
   error,
   busy,
   onAction,
@@ -192,12 +174,13 @@ export function DevboxProfiles({
   onStarted,
   addSignal = 0,
   seedSignal = 0,
+  editSignal = 0,
+  editName = '',
+  duplicateSignal = 0,
+  duplicateName = '',
 }: DevboxProfilesProps) {
   const rows = Array.isArray(profiles) ? profiles : [];
   const activeRow = rows.find(row => row.active) ?? null;
-  const activeModeTitle = activeRow ? modeTitle(activeRow.mode) : '';
-  const stackState = stackVitalState(overviewCards);
-  const stackRunning = stackState === 'healthy' || stackState === 'degraded';
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -227,8 +210,24 @@ export function DevboxProfiles({
   const updateModel = useCallback((patch: Record<string, unknown>) => {
     setEditor(prev => {
       if (!prev) return prev;
-      const current = parseModel(prev.json) ?? {};
-      return { ...prev, json: JSON.stringify({ ...current, ...patch }, null, 2) };
+      const current = parseModel(prev.json);
+      // битый JSON не перезаписываем — иначе один клик по структурному полю
+      // стирал бы всё содержимое редактора
+      if (current === null) return prev;
+      const next: ProfileModel = { ...current, ...patch };
+      // сиды MCP мерджим по имени, а не заменой — иначе seed затирал бы
+      // уже настроенные exposed_mcps
+      if (Array.isArray(patch.exposed_mcps) && Array.isArray(current.exposed_mcps)) {
+        const incoming = patch.exposed_mcps as Array<{ name?: string }>;
+        const incomingNames = new Set(incoming.map(row => row?.name));
+        next.exposed_mcps = [
+          ...(current.exposed_mcps as Array<{ name?: string }>).filter(
+            row => !incomingNames.has(row?.name),
+          ),
+          ...incoming,
+        ];
+      }
+      return { ...prev, json: JSON.stringify(next, null, 2) };
     });
   }, []);
 
@@ -240,7 +239,8 @@ export function DevboxProfiles({
     setGitIdentity(gitName && gitEmail ? `${gitName} <${gitEmail}>` : '');
     setEditor(prev => {
       if (!prev || !prev.create) return prev;
-      const current = parseModel(prev.json) ?? {};
+      const current = parseModel(prev.json);
+      if (current === null) return prev;
       const next: ProfileModel = { ...current };
       const auto = autoFilledRef.current;
       const assign = (key: string, value: unknown) => {
@@ -344,6 +344,12 @@ export function DevboxProfiles({
     return () => clearTimeout(timer);
   }, [addSignal, openCreate]);
 
+  useEffect(() => {
+    if (editSignal === 0 || editName === '') return;
+    const timer = setTimeout(() => openEditor(editName), 0);
+    return () => clearTimeout(timer);
+  }, [editSignal, editName, openEditor]);
+
   const seededRef = useRef(0);
   useEffect(() => {
     if (seedSignal === 0) {
@@ -396,18 +402,19 @@ export function DevboxProfiles({
     [loadCreateExtras],
   );
 
-  const deleteProfile = useCallback(
-    async (name: string) => {
-      try {
-        await devboxProfileDelete(name);
-        appToast.success(t('devboxPage.profileDeleted'));
-        onChanged();
-      } catch (err) {
-        appToast.error(err instanceof Error ? err.message : t('pluginUi.actionFailed'));
-      }
-    },
-    [onChanged],
-  );
+  const dupedRef = useRef(0);
+  useEffect(() => {
+    if (duplicateSignal === 0) {
+      dupedRef.current = 0;
+      return;
+    }
+    if (duplicateSignal === dupedRef.current || duplicateName === '') return;
+    const timer = setTimeout(() => {
+      dupedRef.current = duplicateSignal;
+      openCreateFrom(duplicateName);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [duplicateSignal, duplicateName, openCreateFrom]);
 
   const parseOk = useMemo(() => {
     if (!editor || editor.loading) return false;
@@ -499,7 +506,7 @@ export function DevboxProfiles({
     const { name, json, create } = editor;
     setEditor(prev => (prev ? { ...prev, saving: true } : prev));
     try {
-      const result = await devboxProfilePut(name, json);
+      const result = await serializeProfileWrite(() => devboxProfilePut(name, json));
       if (result.valid) {
         appToast.success(t('devboxPage.editorSaved'));
         if (create) writeRecents(folder);
@@ -528,157 +535,17 @@ export function DevboxProfiles({
     );
 
   return (
-    <DevboxSection
-      title={t('devboxPage.sectionProfiles')}
-      caption={t('devboxPage.profilesCaption')}
-      error={error}
-      onRetry={onRetry}
-      testId="devbox-profiles"
-      actions={
-        <Button
-          size="sm"
-          variant="secondary"
-          leftIcon={<Plus size={14} />}
-          disabled={busy}
-          data-testid="devbox-profile-add"
-          onClick={openCreate}
-        >
-          {t('devboxPage.addProfile')}
-        </Button>
-      }
-    >
-      {activeRow && (
+    <div className="flex flex-col gap-3" data-testid="devbox-profiles">
+      {error !== null && (
         <div
-          className="mb-3 flex flex-wrap items-center gap-x-2 text-2xs text-slate-400"
-          data-testid="devbox-profile-active-summary"
+          className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2"
+          data-testid="devbox-profiles-error"
         >
-          <span className="font-medium text-slate-200">{activeRow.name}</span>
-          {activeRow.git_placeholder && (
-            <Badge variant="danger" size="sm" data-testid="devbox-profile-git-placeholder">
-              {t('devboxPage.gitPlaceholderBadge')}
-            </Badge>
-          )}
-          <span aria-hidden>·</span>
-          <span className="font-mono">{activeRow.project_dir}</span>
-          <span aria-hidden>·</span>
-          <span>{activeModeTitle}</span>
-          <span aria-hidden>·</span>
-          <span>
-            {stackRunning
-              ? t('devboxPage.summaryStackUp')
-              : t('devboxPage.summaryStackDown')}
-          </span>
+          <p className="min-w-0 flex-1 truncate text-2xs text-red-300">{error}</p>
+          <Button size="xs" variant="ghost" onClick={onRetry}>
+            {t('common.retry')}
+          </Button>
         </div>
-      )}
-      {rows.length === 0 && !error ? (
-        <EmptyState
-          compact
-          icon={FolderCog}
-          title={t('devboxPage.profilesEmpty')}
-          description={t('devboxPage.profilesEmptyDesc')}
-        />
-      ) : (
-        <Table containerClassName="rounded-lg border border-white/5">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('devboxPage.colProfile')}</TableHead>
-              <TableHead>{t('devboxPage.colMode')}</TableHead>
-              <TableHead>{t('devboxPage.colProject')}</TableHead>
-              <TableHead>{t('devboxPage.colActive')}</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map(row => (
-              <TableRow key={row.name}>
-                <TableCell className="font-medium text-white">
-                  {row.name}
-                  {row.git_placeholder && (
-                    <Badge variant="danger" size="sm" className="ml-1.5">
-                      {t('devboxPage.gitPlaceholderBadge')}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>{modeTitle(row.mode)}</TableCell>
-                <TableCell className="font-mono text-2xs text-slate-400">{row.project_dir}</TableCell>
-                <TableCell>
-                  {row.active ? (
-                    <Badge variant="success" size="sm" withDot>
-                      {t('devboxPage.activeBadge')}
-                    </Badge>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                    <div className="flex items-center justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8"
-                      disabled={busy}
-                      data-testid={`devbox-profile-start-${row.name}`}
-                      title={
-                        row.active && stackRunning
-                          ? t('devboxPage.tipRestart')
-                          : t('devboxPage.tipStart')
-                      }
-                      onClick={() => onAction(devboxStackStart(row.name, false))}
-                    >
-                      {row.active && stackRunning
-                        ? t('devboxPage.restart')
-                        : t('devboxPage.controlStart')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8"
-                      disabled={busy || row.active}
-                      data-testid={`devbox-profile-use-${row.name}`}
-                      title={t('devboxPage.tipUse')}
-                      onClick={() => onAction(devboxProfileUse(row.name))}
-                    >
-                      {t('devboxPage.controlUse')}
-                    </Button>
-                    <IconButton
-                      size="sm"
-                      className="h-8 w-8"
-                      aria-label={t('devboxPage.duplicateProfile')}
-                      tooltip={t('devboxPage.duplicateProfile')}
-                      data-testid={`devbox-profile-duplicate-${row.name}`}
-                      onClick={() => openCreateFrom(row.name)}
-                    >
-                      <Copy size={14} />
-                    </IconButton>
-                    <IconButton
-                      size="sm"
-                      className="h-8 w-8"
-                      aria-label={t('common.edit')}
-                      tooltip={t('common.edit')}
-                      data-testid={`devbox-profile-edit-${row.name}`}
-                      onClick={() => openEditor(row.name)}
-                    >
-                      <Pencil size={14} />
-                    </IconButton>
-                    <ConfirmActionButton
-                      size="xs"
-                      variant="danger"
-                      disabled={busy}
-                      iconOnly
-                      className="h-8 w-8"
-                      aria-label={t('devboxPage.deleteProfile')}
-                      tooltip={t('devboxPage.tipDelete')}
-                      data-testid={`devbox-profile-delete-${row.name}`}
-                      onConfirm={() => void deleteProfile(row.name)}
-                    >
-                      <Trash2 size={14} />
-                    </ConfirmActionButton>
-                    </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
       )}
 
       {editor && (
@@ -704,7 +571,7 @@ export function DevboxProfiles({
                 >
                   {t('devboxPage.saveWithoutStart')}
                 </Button>
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Button size="sm" variant="secondary" onClick={() => setEditor(null)}>
                     {t('common.close')}
                   </Button>
@@ -1143,6 +1010,6 @@ export function DevboxProfiles({
           )}
         </Modal>
       )}
-    </DevboxSection>
+    </div>
   );
 }

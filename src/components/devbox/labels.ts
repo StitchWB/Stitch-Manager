@@ -14,3 +14,10 @@ export function devboxModeLabel(mode: string): string {
   if (mode === 'full') return t('devboxPage.modeFullTitle');
   return mode;
 }
+
+export function devboxIngressModeLabel(mode: string): string {
+  if (mode === 'cloudflare') return t('devboxPage.connectModeCloudflareTitle');
+  if (mode === 'relay') return t('devboxPage.connectModeRelayTitle');
+  if (mode === 'manual') return t('devboxPage.connectModeManualTitle');
+  return t('devboxPage.connectModeAutoTitle');
+}
