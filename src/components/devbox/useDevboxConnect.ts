@@ -102,7 +102,15 @@ const TOKEN_DEFS: ReadonlyArray<TokenDefinition> = [
   },
 ];
 
-const MUTATION_CMDS = new Set(['issue_tokens', 'ingress_control', 'stack_start', 'profile_use']);
+const MUTATION_CMDS = new Set([
+  'issue_tokens',
+  'ingress_control',
+  'stack_start',
+  'stack_down',
+  'stack_full_down',
+  'profile_use',
+  'allow_port',
+]);
 const BOOTSTRAP_HEADING = '## 1. Bootstrap — выполни до всего остального';
 const BOOTSTRAP_FENCE = '```bash';
 
@@ -273,11 +281,14 @@ export function useDevboxConnect({
   const savedSignatureRef = useRef(savedSignature);
   savedSignatureRef.current = savedSignature;
 
+  const envSeqRef = useRef(0);
   const loadEnv = useCallback(async () => {
+    const seq = ++envSeqRef.current;
     setEnvLoading(true);
     setEnvError(null);
     try {
       const result = await devboxEnvGet();
+      if (seq !== envSeqRef.current) return;
       const list = Array.isArray(result?.entries) ? result.entries : [];
       const initial: Record<string, string> = {};
       for (const entry of list) initial[entry.key] = entry.secret ? '' : entry.value;
@@ -299,11 +310,12 @@ export function useDevboxConnect({
       setSaved(false);
       setErrors([]);
     } catch (err) {
+      if (seq !== envSeqRef.current) return;
       setEnvError(err instanceof Error ? err.message : String(err));
       setEntries([]);
       setDraft({});
     } finally {
-      setEnvLoading(false);
+      if (seq === envSeqRef.current) setEnvLoading(false);
     }
   }, []);
 
@@ -458,11 +470,16 @@ export function useDevboxConnect({
     connectionRevealedRef.current = false;
     setHandoffRevealed(false);
     setRestartKinds([]);
-    setConnectionState(prev => (prev === null ? null : { ...prev, revealed: false }));
+    // токены уже отозваны бэкендом — стираем немедленно, не ждём masked-рефетч
+    setHandoff(null);
+    setConnectionState(null);
     setMutationEpoch(epoch => epoch + 1);
     void loadEnv();
     setProfileTick(tick => tick + 1);
-  }, [actionStatus, loadEnv]);
+    // cockpit/CLI-мутации не проходят onAction — без этого profiles/activeProfile
+    // остаются старыми и startStack переключает профиль обратно
+    onChanged();
+  }, [actionStatus, loadEnv, onChanged]);
 
   const patch = useMemo(() => {
     const diff: Record<string, string> = {};
