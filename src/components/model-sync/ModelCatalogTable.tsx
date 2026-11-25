@@ -76,10 +76,10 @@ export function ModelCatalogTable({
   };
 
   return (
-    <GlassCard className="p-4" data-testid="model-sync-catalog-card">
+    <GlassCard className="p-5" data-testid="model-sync-catalog-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">{t('modelSync.catalog.title')}</h2>
+          <h2 className="text-base font-semibold text-slate-100">{t('modelSync.catalog.title')}</h2>
           <p className="mt-1 text-xs text-slate-500">{t('modelSync.catalog.description')}</p>
         </div>
         <Badge variant="indigo" size="sm" data-testid="model-sync-selected-count">
@@ -90,33 +90,39 @@ export function ModelCatalogTable({
         </Badge>
       </div>
 
-      <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_170px_auto]">
-        <Input
-          value={search}
-          onChange={event => setSearch(event.target.value)}
-          placeholder={t('modelSync.catalog.searchPlaceholder')}
-          aria-label={t('modelSync.catalog.searchPlaceholder')}
-        />
-        <Select
-          value={modalityFilter}
-          onValueChange={setModalityFilter}
-          aria-label={t('modelSync.catalog.columns.modalities')}
-          options={[
-            { value: '', label: t('modelSync.catalog.allModalities') },
-            ...modalities.map(modality => ({ value: modality, label: modality })),
-          ]}
-        />
-        <Select
-          value={toolsFilter}
-          onValueChange={setToolsFilter}
-          aria-label={t('modelSync.catalog.columns.tools')}
-          options={[
-            { value: '', label: t('modelSync.catalog.allTools') },
-            { value: 'yes', label: t('modelSync.catalog.toolsOnly') },
-            { value: 'no', label: t('modelSync.catalog.noToolsOnly') },
-          ]}
-        />
-        <div className="flex flex-wrap gap-1.5">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="min-w-[220px] flex-1">
+          <Input
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder={t('modelSync.catalog.searchPlaceholder')}
+            aria-label={t('modelSync.catalog.searchPlaceholder')}
+          />
+        </div>
+        <div className="w-44">
+          <Select
+            value={modalityFilter}
+            onValueChange={setModalityFilter}
+            aria-label={t('modelSync.catalog.columns.modalities')}
+            options={[
+              { value: '', label: t('modelSync.catalog.allModalities') },
+              ...modalities.map(modality => ({ value: modality, label: modality })),
+            ]}
+          />
+        </div>
+        <div className="w-40">
+          <Select
+            value={toolsFilter}
+            onValueChange={setToolsFilter}
+            aria-label={t('modelSync.catalog.columns.tools')}
+            options={[
+              { value: '', label: t('modelSync.catalog.allTools') },
+              { value: 'yes', label: t('modelSync.catalog.toolsOnly') },
+              { value: 'no', label: t('modelSync.catalog.noToolsOnly') },
+            ]}
+          />
+        </div>
+        <div className="ml-auto flex flex-wrap gap-1.5">
           <Button
             type="button"
             variant="secondary"
@@ -153,16 +159,16 @@ export function ModelCatalogTable({
             title={t('modelSync.catalog.noMatches')}
           />
         ) : (
-          <Table containerClassName="max-h-[360px]" data-testid="model-sync-catalog-table">
+          <Table containerClassName="max-h-[420px]" data-testid="model-sync-catalog-table">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">{t('modelSync.catalog.columns.selected')}</TableHead>
-                <TableHead>{t('modelSync.catalog.columns.model')}</TableHead>
-                <TableHead>{t('modelSync.catalog.columns.id')}</TableHead>
-                <TableHead className="text-right">{t('modelSync.catalog.columns.context')}</TableHead>
-                <TableHead className="text-right">{t('modelSync.catalog.columns.output')}</TableHead>
-                <TableHead>{t('modelSync.catalog.columns.modalities')}</TableHead>
-                <TableHead>{t('modelSync.catalog.columns.tools')}</TableHead>
+                <TableHead className="sticky top-0 z-10 w-12 bg-vsc-panel-solid">{t('modelSync.catalog.columns.selected')}</TableHead>
+                <TableHead className="sticky top-0 z-10 bg-vsc-panel-solid">{t('modelSync.catalog.columns.model')}</TableHead>
+                <TableHead className="sticky top-0 z-10 bg-vsc-panel-solid">{t('modelSync.catalog.columns.id')}</TableHead>
+                <TableHead className="sticky top-0 z-10 bg-vsc-panel-solid text-right">{t('modelSync.catalog.columns.context')}</TableHead>
+                <TableHead className="sticky top-0 z-10 bg-vsc-panel-solid text-right">{t('modelSync.catalog.columns.output')}</TableHead>
+                <TableHead className="sticky top-0 z-10 bg-vsc-panel-solid">{t('modelSync.catalog.columns.modalities')}</TableHead>
+                <TableHead className="sticky top-0 z-10 bg-vsc-panel-solid">{t('modelSync.catalog.columns.tools')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -220,6 +226,25 @@ export function ModelCatalogTable({
           </Table>
         )}
       </div>
+
+      {models.length > 0 && filteredModels.length > 0 ? (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500"
+          data-testid="model-sync-catalog-summary"
+        >
+          <span>
+            {t('modelSync.catalog.selectedCount', {
+              selected: selectedIds.size,
+              total: models.length,
+            })}
+          </span>
+          {filteredModels.length !== models.length ? (
+            <span>
+              {filteredModels.length} / {models.length}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </GlassCard>
   );
 }

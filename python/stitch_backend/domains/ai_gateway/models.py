@@ -567,6 +567,69 @@ class UserProxyKey(Base):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# InstallProxyKey
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class InstallProxyKey(Base):
+    """A machine-scoped, loopback-only proxy key provisioned for external tools.
+
+    Unlike :class:`UserProxyKey` these keys are not tied to an auth user —
+    desktop guests have ``caller_user_id=None``.  Model Sync provisions them
+    for external tools (opencode, omp, ...) so each target gets an
+    independently revocable/rotatable/auditable credential.  The granted
+    scope is NOT narrower than the local chat token: resolution yields the
+    same ``PoolScope(None, (), True)`` — the value is revocation granularity
+    and per-target ``last_used_at`` audit, not privilege separation.
+
+    The raw key is shown ONCE at creation time; only its SHA256 hex digest
+    (``token_hash``) is stored.  ``last_used_at`` is updated in batches by a
+    background flush task (not per request) to avoid write amplification on
+    the single-writer SQLite connection.
+
+    No Alembic migration: ``create_all_tables()`` picks the table up from
+    ``Base.metadata`` (this module is in ``_import_all_models``).
+    """
+
+    __tablename__ = "ai_gateway_install_proxy_keys"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    purpose: Mapped[str] = mapped_column(
+        String, nullable=False, index=True,
+        comment='Provisioning purpose, e.g. "model-sync"',
+    )
+    target: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True,
+        comment='Provisioned tool, e.g. "opencode" / "omp"; NULL = untargeted',
+    )
+    label: Mapped[str | None] = mapped_column(
+        String, comment="User-facing label, e.g. \"opencode default\"",
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+        comment="sha256 hex of the raw install key (never stored raw)",
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="Set when the key is revoked (enabled flips to False)",
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="Batched: updated by a background flush task, not per request",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<InstallProxyKey id={self.id!r} purpose={self.purpose!r} "
+            f"target={self.target!r} enabled={self.enabled!r}>"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # CredentialGroupShare
 # ═══════════════════════════════════════════════════════════════════════════
 

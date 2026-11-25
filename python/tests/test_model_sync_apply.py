@@ -11,6 +11,7 @@ from stitch_backend.domains.ai_proxy.model_sync import service
 from stitch_backend.domains.ai_proxy.model_sync.catalog import catalog_entry_from_public_model
 
 TOKEN = "tok-secret-abcdef123456"
+INSTALL_KEYS = {"opencode": "install-opencode-secret", "omp": "install-omp-secret"}
 BASE = "http://127.0.0.1:8787/v1"
 
 
@@ -49,6 +50,42 @@ def _patch_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         "check_stitch_credential",
         lambda *a, **k: {"status": "no-database", "detail": "test fixture"},
     )
+
+    from stitch_backend.domains.ai_proxy.model_sync import key_material
+
+    async def fake_plan(target, extracted, *, legacy_local_token=None):
+        if extracted == INSTALL_KEYS[target]:
+            return key_material.KeyMaterial(
+                target=target,
+                action="reuse",
+                raw=extracted,
+                fingerprint=key_material.sha256_key(extracted),
+                key_id=f"key-{target}",
+            )
+        return key_material.KeyMaterial(target=target, action="create")
+
+    async def fake_provision(target, extracted, *, legacy_local_token=None):
+        raw = INSTALL_KEYS[target]
+        return key_material.KeyMaterial(
+            target=target,
+            action="reuse" if extracted == raw else "create",
+            raw=raw,
+            fingerprint=key_material.sha256_key(raw),
+            key_id=f"key-{target}",
+            created_key_id=None if extracted == raw else f"key-{target}",
+        )
+
+    async def fake_revoke(key_ids):
+        return []
+
+    monkeypatch.setattr(key_material, "plan_key_material", fake_plan)
+    monkeypatch.setattr(key_material, "provision_key_material", fake_provision)
+    monkeypatch.setattr(key_material, "revoke_install_keys", fake_revoke)
+    monkeypatch.setattr(
+        service.opencode_credentials,
+        "repair_stitch_credential",
+        lambda *a, **k: {"ok": False, "error": "test fixture cli missing", "code": "cli-missing"},
+    )
     # redirect omp root away from the real user profile
     monkeypatch.setenv("PI_CONFIG_DIR", str(tmp_path / "omp-root"))
     monkeypatch.delenv("PI_CODING_AGENT_DIR", raising=False)
@@ -75,7 +112,10 @@ async def test_preview_is_readonly_and_redacts_token(tmp_path: Path) -> None:
     assert result["expectedSha256"]
     blob = json.dumps(result)
     assert TOKEN not in blob  # token redacted everywhere in the preview
+    assert service.KEY_SENTINEL not in blob
     assert "********" in blob
+    assert result["keyPlan"]["opencode"]["action"] == "create"
+    assert result["keyPlan"]["omp"]["action"] == "create"
     # readonly: nothing written
     assert not (tmp_path / "opencode.json").exists()
     assert not (tmp_path / "omp-root" / "agent" / "models.yml").exists()
@@ -85,10 +125,95 @@ async def test_preview_is_readonly_and_redacts_token(tmp_path: Path) -> None:
         assert "diff" in entry
 
 
+def test_redact_covers_diff_prefixed_yaml_and_json() -> None:
+    text = (
+        "+  apiKey: yaml-secret\n"
+        "-  password: yaml-password\n"
+        '+    "token": "json-secret",\n'
+        "  secret: yaml-context\n"
+    )
+    redacted = service._redact(text, None)
+    assert "yaml-secret" not in redacted
+    assert "yaml-password" not in redacted
+    assert "json-secret" not in redacted
+    assert "yaml-context" not in redacted
+
+
 async def test_preview_model_diffs(tmp_path: Path) -> None:
     result = await service.preview(_params(tmp_path))
     assert set(result["modelDiffs"]["opencode"]["added"]) == {"vision-best", "text-fast"}
     assert set(result["modelDiffs"]["omp"]["added"]) == {"vision-best", "text-fast"}
+
+
+async def test_preview_never_provisions_install_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from stitch_backend.domains.ai_proxy.model_sync import key_material
+
+    async def forbidden_provision(*args, **kwargs):
+        raise AssertionError("preview must not write install-key rows")
+
+    monkeypatch.setattr(key_material, "provision_key_material", forbidden_provision)
+    result = await service.preview(_params(tmp_path))
+    assert result["ok"] is True
+    assert result["keyPlan"]["opencode"]["action"] == "create"
+    assert service.KEY_SENTINEL not in json.dumps(result)
+
+
+async def test_apply_credential_repair_precedes_file_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    params = _params(tmp_path, targets=["opencode"], schema="v2")
+    preview = await service.preview(params)
+    params["expectedSha256"] = preview["expectedSha256"]
+
+    events: list[str] = []
+    monkeypatch.setattr(
+        service,
+        "check_stitch_credential",
+        lambda *a, **k: {"status": "credential-mismatch", "detail": "stale"},
+    )
+
+    def fake_repair(raw_key, **kwargs):
+        events.append("repair")
+        assert raw_key == INSTALL_KEYS["opencode"]
+        return {"ok": True, "credentialId": "cred_new", "verified": True}
+
+    monkeypatch.setattr(service.opencode_credentials, "repair_stitch_credential", fake_repair)
+    real_write = service.write_text_atomic
+
+    def recording_write(path, text, *, expected_sha256, encoding="utf-8"):
+        events.append("write")
+        return real_write(path, text, expected_sha256=expected_sha256, encoding=encoding)
+
+    monkeypatch.setattr(service, "write_text_atomic", recording_write)
+    result = await service.apply(params)
+    assert result["ok"] is True, result
+    assert events[:2] == ["repair", "write"]
+    data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
+    assert data["providers"]["stitch"]["settings"]["apiKey"] == INSTALL_KEYS["opencode"]
+
+
+async def test_apply_mismatch_repair_failure_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    params = _params(tmp_path, targets=["opencode"], schema="v2")
+    preview = await service.preview(params)
+    params["expectedSha256"] = preview["expectedSha256"]
+    monkeypatch.setattr(
+        service,
+        "check_stitch_credential",
+        lambda *a, **k: {"status": "credential-mismatch", "detail": "stale"},
+    )
+    monkeypatch.setattr(
+        service.opencode_credentials,
+        "repair_stitch_credential",
+        lambda *a, **k: {"ok": False, "error": "cli missing", "code": "cli-missing"},
+    )
+    result = await service.apply(params)
+    assert result["ok"] is False
+    assert result["partialState"]["filesWritten"] is False
+    assert not (tmp_path / "opencode.json").exists()
 
 
 async def test_apply_then_files_written(tmp_path: Path) -> None:
@@ -99,10 +224,13 @@ async def test_apply_then_files_written(tmp_path: Path) -> None:
     assert result["ok"] is True, result
     oc_data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
     assert "stitch" in oc_data["provider"]
-    assert oc_data["provider"]["stitch"]["options"]["apiKey"] == TOKEN  # real write unmasked
+    assert oc_data["provider"]["stitch"]["options"]["apiKey"] == INSTALL_KEYS["opencode"]
+    assert TOKEN not in json.dumps(oc_data)  # legacy local token is never provisioned
     omp_models = tmp_path / "omp-root" / "agent" / "models.yml"
     assert omp_models.exists()
-    assert TOKEN in omp_models.read_text(encoding="utf-8")
+    omp_text = omp_models.read_text(encoding="utf-8")
+    assert INSTALL_KEYS["omp"] in omp_text
+    assert TOKEN not in omp_text
     assert all(f.get("written") or f.get("unchanged") for f in result["files"])
 
 
@@ -134,6 +262,32 @@ async def test_apply_requires_expected_sha(tmp_path: Path) -> None:
     assert "expectedSha256" in result["error"]
 
 
+async def test_exactly_one_backup_for_written_file_zero_for_unchanged(tmp_path: Path) -> None:
+    params = _params(tmp_path)
+    first_preview = await service.preview(params)
+    params["expectedSha256"] = first_preview["expectedSha256"]
+    first = await service.apply(params)
+    assert first["ok"] is True
+
+    # Second apply changes only opencode (smallModel); omp remains byte-identical.
+    params2 = _params(tmp_path, smallModel="stitch/text-fast")
+    second_preview = await service.preview(params2)
+    params2["expectedSha256"] = second_preview["expectedSha256"]
+    second = await service.apply(params2)
+    assert second["ok"] is True, second
+
+    oc_backups = list(tmp_path.glob("opencode.json.bak-*"))
+    omp_backups = list((tmp_path / "omp-root" / "agent").glob("models.yml.bak-*"))
+    assert len(oc_backups) == 1
+    assert omp_backups == []
+    oc_entry = next(f for f in second["files"] if f["kind"] == "opencode-primary")
+    omp_entry = next(f for f in second["files"] if f["kind"] == "omp-models")
+    assert oc_entry["written"] is True
+    assert oc_entry["backupPath"] == str(oc_backups[0])
+    assert omp_entry.get("unchanged") is True
+    assert omp_entry["backupPath"] is None
+
+
 async def test_apply_missing_file_in_sha_map_blocks(tmp_path: Path) -> None:
     params = _params(tmp_path)
     preview = await service.preview(params)
@@ -150,6 +304,15 @@ async def test_apply_partial_failure_rolls_back(tmp_path: Path, monkeypatch) -> 
     preview = await service.preview(params)
     params["expectedSha256"] = preview["expectedSha256"]
 
+    from stitch_backend.domains.ai_proxy.model_sync import key_material
+
+    revoked: list[list[str]] = []
+
+    async def recording_revoke(key_ids):
+        revoked.append(list(key_ids))
+        return []
+
+    monkeypatch.setattr(key_material, "revoke_install_keys", recording_revoke)
     real_write = service.write_text_atomic
     calls = {"n": 0}
 
@@ -167,6 +330,9 @@ async def test_apply_partial_failure_rolls_back(tmp_path: Path, monkeypatch) -> 
     assert rolled, "first file must have been rolled back"
     # rollback means the first file no longer exists (it was newly created)
     assert not (tmp_path / "omp-root" / "agent" / "models.yml").exists()
+    # both newly-created keys were never activated after the successful rollback
+    assert revoked == [["key-opencode", "key-omp"]]
+    assert result["partialState"]["filesLeftBehind"] is False
 
 
 async def test_restore_roundtrip(tmp_path: Path) -> None:
@@ -325,6 +491,9 @@ async def test_status_surfaces_small_model_and_omp_binary(
     )
     result = await service.status({"opencodeConfigPath": str(oc_path)})
     assert result["ok"] is True
+    assert "security" in result
+    assert result["security"]["keys"]["opencode"]["configuredSecretState"] == "missing"
+    assert INSTALL_KEYS["opencode"] not in json.dumps(result)
     assert result["opencode"]["smallModel"] == "stitch/text-fast"
     assert result["opencode"]["defaultModel"] == "stitch/vision-best"
     assert result["omp"]["binaryPath"] == "C:/omp/omp.exe"

@@ -376,3 +376,19 @@ def existing_stitch_model_ids_omp(data: Any) -> set[str]:
     if not isinstance(models, list):
         return set()
     return {m["id"] for m in models if isinstance(m, dict) and m.get("id")}
+
+
+def extract_stitch_api_key_omp(data: Any) -> str | None:
+    """Return the currently configured stitch ``apiKey`` from models.yml.
+
+    This is internal key material: callers may hash/compare it and use it for
+    a rewrite, but must never include it in responses, logs or diffs.
+    """
+    providers = data.get("providers") if isinstance(data, dict) else None
+    if not isinstance(providers, dict):
+        return None
+    stitch = providers.get(STITCH_PROVIDER_ID)
+    if not isinstance(stitch, dict):
+        return None
+    value = stitch.get("apiKey")
+    return value if isinstance(value, str) and value else None

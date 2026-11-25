@@ -50,6 +50,35 @@ export interface ModelSyncTranslations {
         tools: string;
       };
     };
+    sections: {
+      targets: string;
+      targetsDescription: string;
+      catalog: string;
+      catalogDescription: string;
+      sync: string;
+      syncDescription: string;
+    };
+    security: {
+      title: string;
+      description: string;
+      fingerprint: string;
+      keyId: string;
+      createdAt: string;
+      lastUsed: string;
+      neverUsed: string;
+      enabledLabel: string;
+      disabledLabel: string;
+      legacyTokenWarning: string;
+      noData: string;
+      targetOpencode: string;
+      targetOmp: string;
+      states: {
+        active: string;
+        disabled: string;
+        missing: string;
+        unknown: string;
+      };
+    };
     targets: {
       title: string;
       include: string;
@@ -102,6 +131,11 @@ export interface ModelSyncTranslations {
       ensureEnabledHint: string;
       opencodeNotInstalledHint: string;
       ompNotInstalledHint: string;
+      detectionFacts: string;
+      binaries: {
+        v1: string;
+        v2: string;
+      };
       roles: {
         default: string;
         smol: string;
@@ -155,6 +189,11 @@ export interface ModelSyncTranslations {
       noModelsSelected: string;
       targetOpencode: string;
       targetOmp: string;
+      keyPlanTitle: string;
+      keyReuse: string;
+      keyCreate: string;
+      keyMissing: string;
+      keyLegacyWarning: string;
     };
     result: {
       title: string;

@@ -40,6 +40,7 @@ from stitch_backend.domains.ai_proxy.commands.ide_config import (
 from stitch_backend.domains.ai_proxy.commands.model_sync import (
     cmd_model_sync_apply,
     cmd_model_sync_catalog,
+    cmd_model_sync_opencode_credential_repair,
     cmd_model_sync_preview,
     cmd_model_sync_restore,
     cmd_model_sync_status,
@@ -93,6 +94,7 @@ __all__ = [
     "cmd_import_ai_proxy_accounts_payload",
     "cmd_model_sync_apply",
     "cmd_model_sync_catalog",
+    "cmd_model_sync_opencode_credential_repair",
     "cmd_model_sync_preview",
     "cmd_model_sync_restore",
     "cmd_model_sync_status",

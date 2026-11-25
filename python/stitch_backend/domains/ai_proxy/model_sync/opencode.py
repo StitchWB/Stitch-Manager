@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, cast
 
 STITCH_PROVIDER_ID = "stitch"
 STITCH_PROVIDER_NAME = "Stitch Gateway"
@@ -167,3 +167,25 @@ def existing_stitch_model_ids(data: dict[str, Any]) -> set[str]:
             if isinstance(stitch, dict) and isinstance(stitch.get("models"), dict):
                 ids.update(stitch["models"].keys())
     return ids
+
+
+def extract_stitch_api_key(data: dict[str, Any]) -> str | None:
+    """Return the currently configured stitch apiKey (v1 or v2 dialect).
+
+    This is internal key material: callers may hash/compare it and use it for
+    a rewrite, but must never include it in responses, logs or diffs.
+    """
+    for container_key in ("providers", "provider"):
+        providers = data.get(container_key)
+        if not isinstance(providers, dict):
+            continue
+        stitch = providers.get(STITCH_PROVIDER_ID)
+        if not isinstance(stitch, dict):
+            continue
+        for settings_key in ("settings", "options"):
+            settings = stitch.get(settings_key)
+            if isinstance(settings, dict) and isinstance(settings.get("apiKey"), str):
+                value = settings["apiKey"]
+                if value:
+                    return cast("str", value)
+    return None

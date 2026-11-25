@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import logging
 import time
 from datetime import UTC, datetime
@@ -371,8 +372,9 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         """Resolve the caller's PoolScope per request.
 
         Order: (a) Authorization Bearer matching a user proxy key →
-        PoolScope(uid, group_ids); (b) web session cookie →
-        PoolScope(user.id, group_ids); (c) local install token / auth
+        PoolScope(uid, group_ids), or matching an install-scoped proxy key
+        (loopback-only) → PoolScope(None, (), True); (b) web session cookie
+        → PoolScope(user.id, group_ids); (c) local install token / auth
         disabled → PoolScope(None, (), True).  Raises 401 when no auth
         path matches.
 
@@ -380,7 +382,9 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         proxy key or the local install token, we raise 401 immediately
         — we do NOT fall through to the web-session cookie path.  This
         prevents an invalid bearer from silently authenticating as the
-        cookie's user.
+        cookie's user.  Likewise, a valid install key presented from a
+        non-loopback peer is rejected with 401 — it never falls through
+        to the local-token check.
 
         P1.6: the proxy-key resolve and the web-session groups read are in
         separate branches (only one executes per request).  The original
@@ -388,12 +392,15 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
         web-session path — P0.3 closed it by raising 401 on invalid
         bearer.  The two ``get_db()`` calls cannot share a single session
         because ``_current_user_optional`` opens its own write session
-        (pool_size=1 → would deadlock if nested).
+        (pool_size=1 → would deadlock if nested).  Install-key resolution
+        reuses the SAME already-open session as the user proxy-key resolve
+        — never a nested one.
         """
+        from stitch_backend.domains.ai_gateway.install_key_service import InstallKeyService
         from stitch_backend.domains.ai_gateway.service import UserProxyKeyService
         from stitch_backend.domains.groups.service import group_ids_for_user
 
-        # (a) Authorization Bearer matching a user proxy key
+        # (a) Authorization Bearer matching a user proxy key or an install key
         raw_bearer = _extract_bearer(authorization)
         if raw_bearer:
             # Single session for proxy-key resolve + groups read.
@@ -403,6 +410,22 @@ def create_litellm_gateway_router(settings: GatewaySettings) -> APIRouter | None
                 if uid is not None:
                     group_ids = await group_ids_for_user(session, uid)
                     return PoolScope(uid, tuple(group_ids))
+                # Install-scoped keys (model-sync targets like opencode/omp):
+                # machine-scoped, loopback-only, instance-shared pool — the
+                # same effective scope as the local install token.  Resolved
+                # inside the request's already-open session (nested sessions
+                # deadlock the pool_size=1 write pool).
+                install_svc = InstallKeyService(session)
+                install_key = await install_svc.resolve_install_key(raw_bearer)
+                if install_key is not None:
+                    if not _is_loopback_client(request):
+                        # Valid key, invalid peer: reject outright — do NOT
+                        # fall through to the local-token or cookie paths.
+                        raise HTTPException(
+                            status_code=401,
+                            detail={"error": {"message": "Install keys are loopback-only"}},
+                        )
+                    return PoolScope(None, (), True)
             # (c) Local install token
             expected_token = get_cached_local_chat_token()
             if expected_token and hmac.compare_digest(
@@ -450,6 +473,31 @@ def _require_auth(
         if hmac.compare_digest(authorization or "", expected):
             return
     raise HTTPException(status_code=401, detail={"error": {"message": "Unauthorized"}})
+
+
+def _is_loopback_client(request: Request) -> bool:
+    """True only when the direct TCP peer is a loopback address.
+
+    Uses ``request.client.host`` — the actual peer of this connection — and
+    NEVER trusts ``X-Forwarded-For`` (client-controlled, trivially spoofed).
+    Accepts the full 127.0.0.0/8 range, ``::1``, and IPv4-mapped
+    ``::ffff:127.x`` peers (dual-stack sockets commonly surface IPv4
+    loopback in IPv6-mapped form).  Comparison goes through
+    :mod:`ipaddress` — never string equality — so non-canonical spellings
+    cannot slip past or be wrongly rejected.
+    """
+    client = request.client
+    if client is None or not client.host:
+        return False
+    try:
+        ip = ipaddress.ip_address(client.host)
+    except ValueError:
+        return False
+    # ipv4_mapped exists only on IPv6Address; unwrap ::ffff:a.b.c.d first.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
+    return ip.is_loopback
 
 
 def _extract_bearer(authorization: str | None) -> str | None:

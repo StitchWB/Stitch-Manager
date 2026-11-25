@@ -9,16 +9,21 @@ interface GatewayStatusCardProps {
   modelCount: number;
 }
 
+/**
+ * Slim status strip at the top of the page: the gateway state, base URL and
+ * catalog size are the key facts and are rendered at a readable size rather
+ * than as caption-gray microtext.
+ */
 export function GatewayStatusCard({ status, modelCount }: GatewayStatusCardProps) {
   const running = Boolean(status?.gatewayRunning);
   const tokenAvailable = Boolean(status?.gatewayRunning);
 
   return (
-    <GlassCard className="p-4" data-testid="model-sync-gateway-card">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <GlassCard className="px-5 py-4" data-testid="model-sync-gateway-card">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-300">
-            <Server size={17} />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300">
+            <Server size={18} />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-slate-100">{t('modelSync.gateway.title')}</h2>
@@ -35,21 +40,28 @@ export function GatewayStatusCard({ status, modelCount }: GatewayStatusCardProps
             </div>
           </div>
         </div>
-        <div className="grid gap-1 text-right text-xs text-slate-400">
+
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
           <div>
-            <span className="text-slate-500">{t('modelSync.gateway.baseUrl')}: </span>
-            <span className="font-mono text-slate-200">{status?.baseUrl || '—'}</span>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {t('modelSync.gateway.baseUrl')}
+            </div>
+            <div className="mt-0.5 font-mono text-sm text-slate-100">
+              {status?.baseUrl || '—'}
+            </div>
           </div>
           <div>
-            <span className="text-slate-500">{t('modelSync.gateway.models')}: </span>
-            <span className="font-semibold text-slate-200">{modelCount}</span>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {t('modelSync.gateway.models')}
+            </div>
+            <div className="mt-0.5 text-sm font-semibold text-slate-100">{modelCount}</div>
           </div>
+          <p className="flex items-center gap-2 text-xs text-slate-500">
+            <ShieldCheck size={14} className="shrink-0 text-emerald-400" />
+            {t('modelSync.gateway.tokenNotice')}
+          </p>
         </div>
       </div>
-      <p className="mt-3 flex items-center gap-2 text-[11px] text-slate-500">
-        <ShieldCheck size={13} className="text-emerald-400" />
-        {t('modelSync.gateway.tokenNotice')}
-      </p>
     </GlassCard>
   );
 }

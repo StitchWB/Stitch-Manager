@@ -14,11 +14,15 @@ async def proxy_key_flush_loop() -> None:
         await asyncio.sleep(10)
         try:
             from stitch_backend.database import get_session_factory
+            from stitch_backend.domains.ai_gateway.install_key_service import (
+                flush_install_key_last_used_at,
+            )
             from stitch_backend.domains.ai_gateway.service import flush_last_used_at
 
             factory = get_session_factory()
             async with factory() as _db:
                 await flush_last_used_at(_db)
+                await flush_install_key_last_used_at(_db)
                 await _db.commit()
         except asyncio.CancelledError:
             raise

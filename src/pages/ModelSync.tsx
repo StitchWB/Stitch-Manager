@@ -7,6 +7,7 @@ import { GatewayStatusCard } from '@/components/model-sync/GatewayStatusCard';
 import { ModelCatalogTable } from '@/components/model-sync/ModelCatalogTable';
 import { OpenCodeTargetCard } from '@/components/model-sync/OpenCodeTargetCard';
 import { OmpTargetCard, type OmpRoleSelection } from '@/components/model-sync/OmpTargetCard';
+import { SecurityKeysSection } from '@/components/model-sync/SecurityKeysSection';
 import { SyncPreviewPanel } from '@/components/model-sync/SyncPreviewPanel';
 import { SyncResultPanel } from '@/components/model-sync/SyncResultPanel';
 import { Button, LoadingSpinner, PageHeader } from '@/components/ui';
@@ -36,6 +37,15 @@ function emptyRoleSelections(): Record<string, OmpRoleSelection> {
 
 function sortedIds(ids: Set<string>): string[] {
   return [...ids].sort();
+}
+
+function SectionHeader({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="pt-2">
+      <h2 className="text-lg font-semibold tracking-tight text-slate-100">{title}</h2>
+      {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+    </div>
+  );
 }
 
 function collectSyncedIds(status: ModelSyncStatusResponse | null): Set<string> {
@@ -326,16 +336,16 @@ export default function ModelSync() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         {loading && !status && !catalog.length ? (
           <div className="flex h-48 items-center justify-center gap-3 text-sm text-slate-400">
             <LoadingSpinner size="sm" />
             {t('modelSync.loading')}
           </div>
         ) : (
-          <div className="mx-auto max-w-7xl space-y-4">
+          <div className="mx-auto max-w-7xl space-y-6">
             {loadError ? (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-200">
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-200">
                 <span className="font-semibold">{t('modelSync.loadError')}: </span>
                 {loadError}
               </div>
@@ -343,81 +353,101 @@ export default function ModelSync() {
 
             <GatewayStatusCard status={status} modelCount={catalog.length} />
 
-            <ModelCatalogTable
-              models={catalog}
-              selectedIds={selectedIds}
-              syncedIds={syncedIds}
-              onSelectionChange={ids => {
-                setSelectedIds(ids);
-                clearPreviewForEdit();
-              }}
-            />
-
-            <section aria-label={t('modelSync.targets.title')} className="grid gap-4 xl:grid-cols-2">
-              <OpenCodeTargetCard
-                status={status?.opencode}
-                enabled={opencodeEnabled}
-                onEnabledChange={value => {
-                  setOpencodeEnabled(value);
-                  clearPreviewForEdit();
-                }}
-                schemaOverride={schemaOverride}
-                onSchemaOverrideChange={setSchemaOverride}
-                defaultModel={defaultModel}
-                onDefaultModelChange={setDefaultModel}
-                smallModel={smallModel}
-                onSmallModelChange={setSmallModel}
-                pruneUnselected={pruneUnselected}
-                onPruneUnselectedChange={setPruneUnselected}
-                selectedModels={selectedModels}
-                conflictPaths={conflictPaths}
+            <section aria-label={t('modelSync.sections.targets')} className="space-y-4">
+              <SectionHeader
+                title={t('modelSync.sections.targets')}
+                description={t('modelSync.sections.targetsDescription')}
               />
-              <OmpTargetCard
-                profiles={status?.omp?.profiles || []}
-                profileHint={status?.omp?.profileHint || null}
-                binaryPath={status?.omp?.binaryPath || null}
-                binaryVersion={status?.omp?.version || null}
-                enabled={ompEnabled}
-                onEnabledChange={value => {
-                  setOmpEnabled(value);
+              <div className="grid gap-5 xl:grid-cols-2">
+                <OpenCodeTargetCard
+                  status={status?.opencode}
+                  enabled={opencodeEnabled}
+                  onEnabledChange={value => {
+                    setOpencodeEnabled(value);
+                    clearPreviewForEdit();
+                  }}
+                  schemaOverride={schemaOverride}
+                  onSchemaOverrideChange={setSchemaOverride}
+                  defaultModel={defaultModel}
+                  onDefaultModelChange={setDefaultModel}
+                  smallModel={smallModel}
+                  onSmallModelChange={setSmallModel}
+                  pruneUnselected={pruneUnselected}
+                  onPruneUnselectedChange={setPruneUnselected}
+                  selectedModels={selectedModels}
+                  conflictPaths={conflictPaths}
+                />
+                <OmpTargetCard
+                  profiles={status?.omp?.profiles || []}
+                  profileHint={status?.omp?.profileHint || null}
+                  binaryPath={status?.omp?.binaryPath || null}
+                  binaryVersion={status?.omp?.version || null}
+                  enabled={ompEnabled}
+                  onEnabledChange={value => {
+                    setOmpEnabled(value);
+                    clearPreviewForEdit();
+                  }}
+                  selectedProfile={ompProfile}
+                  onSelectedProfileChange={setOmpProfile}
+                  roleSelections={roleSelections}
+                  onRoleSelectionsChange={setRoleSelections}
+                  pruneUnselected={pruneUnselected}
+                  onPruneUnselectedChange={setPruneUnselected}
+                  ensureEnabled={ensureEnabled}
+                  onEnsureEnabledChange={setEnsureEnabled}
+                  selectedModels={selectedModels}
+                />
+              </div>
+            </section>
+
+            <SecurityKeysSection status={status} />
+
+            <section aria-label={t('modelSync.sections.catalog')} className="space-y-4">
+              <SectionHeader
+                title={t('modelSync.sections.catalog')}
+                description={t('modelSync.sections.catalogDescription')}
+              />
+              <ModelCatalogTable
+                models={catalog}
+                selectedIds={selectedIds}
+                syncedIds={syncedIds}
+                onSelectionChange={ids => {
+                  setSelectedIds(ids);
                   clearPreviewForEdit();
                 }}
-                selectedProfile={ompProfile}
-                onSelectedProfileChange={setOmpProfile}
-                roleSelections={roleSelections}
-                onRoleSelectionsChange={setRoleSelections}
-                pruneUnselected={pruneUnselected}
-                onPruneUnselectedChange={setPruneUnselected}
-                ensureEnabled={ensureEnabled}
-                onEnsureEnabledChange={setEnsureEnabled}
-                selectedModels={selectedModels}
               />
             </section>
 
             {clientError ? (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-200">
                 {clientError}
               </div>
             ) : null}
 
-            <SyncPreviewPanel
-              preview={preview}
-              isFresh={previewIsFresh}
-              previewing={previewing}
-              applying={applying}
-              canApply={canApply}
-              conflictMismatches={conflictMismatches}
-              onPreview={() => void handlePreview()}
-              onApply={() => void handleApply()}
-            />
+            <section aria-label={t('modelSync.sections.sync')} className="space-y-4">
+              <SectionHeader
+                title={t('modelSync.sections.sync')}
+                description={t('modelSync.sections.syncDescription')}
+              />
+              <SyncPreviewPanel
+                preview={preview}
+                isFresh={previewIsFresh}
+                previewing={previewing}
+                applying={applying}
+                canApply={canApply}
+                conflictMismatches={conflictMismatches}
+                onPreview={() => void handlePreview()}
+                onApply={() => void handleApply()}
+              />
 
-            <SyncResultPanel
-              result={applyResult}
-              restoringPath={restoringPath}
-              restoreMessage={restoreMessage}
-              restoreError={restoreError}
-              onRestore={file => void handleRestore(file)}
-            />
+              <SyncResultPanel
+                result={applyResult}
+                restoringPath={restoringPath}
+                restoreMessage={restoreMessage}
+                restoreError={restoreError}
+                onRestore={file => void handleRestore(file)}
+              />
+            </section>
           </div>
         )}
       </div>
