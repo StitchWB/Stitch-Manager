@@ -112,16 +112,29 @@ _CODE_TABLE: dict[str, Verdict] = {
     "model_access_denied": Verdict("model_access_denied", "key", is_model_specific=True),
     "model_not_found": Verdict("model_not_found", "key", is_model_specific=True),
     "model_unavailable": Verdict("model_not_found", "key", is_model_specific=True),
+    # New API / ReformBoss: the token's group has no channel serving this model —
+    # the key itself is healthy, so this is strictly model-scoped.
+    "token_model_not_allowed": Verdict("model_access_denied", "key", is_model_specific=True),
+    "no_channel": Verdict("model_not_found", "key", is_model_specific=True),
+    "no_channel_for_model": Verdict("model_not_found", "key", is_model_specific=True),
     "insufficient_quota": Verdict("quota_exhausted", "account"),
     "quota_precharge_insufficient": Verdict("quota_exhausted", "account"),
     "api_key_empty": Verdict("quota_exhausted", "account"),
     "daily_budget_exhausted": Verdict("quota_exhausted", "account", until_local_reset=True),
     "rate_limit_exceeded": Verdict("rate_limited", "key"),
+    # New API: per-token concurrency cap — transient, a short retry usually passes.
+    "token_concurrency_limit": Verdict("rate_limited", "key", retry_hint_seconds=5),
     "upstream_busy": Verdict("rate_limited", "global", retry_hint_seconds=10),
     "upstream_rate_limited": Verdict("rate_limited", "global", retry_hint_seconds=10),
     "upstream_rate_limit_exceeded": Verdict("rate_limited", "global", retry_hint_seconds=10),
     "gateway_restarting": Verdict("server_error", "global", retry_hint_seconds=2),
     "upstream_timeout": Verdict("server_error", "endpoint", retry_hint_seconds=2),
+    # New API: free-tier accounting not yet initialized — transient gateway state,
+    # endpoint-scoped (the key and the model are both blameless).
+    "free_tokens_accounting_pending": Verdict("server_error", "endpoint", retry_hint_seconds=10),
+    # New API probe suppression: the gateway recognized a catalog/health probe and
+    # refused it.  Says nothing about the model — endpoint-level transient.
+    "catalog_probe_detected": Verdict("server_error", "endpoint", retry_hint_seconds=30),
     "content_policy_violation": Verdict("client_error", "key"),
     "context_overflow": Verdict("client_error", "key"),
     "request_too_large": Verdict("client_error", "key"),

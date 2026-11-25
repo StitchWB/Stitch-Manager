@@ -202,6 +202,7 @@ def _invalidate_resolve_caches() -> None:
 
 @event_bus.on("credential.state_changed")
 @event_bus.on("endpoint.models_changed")
+@event_bus.on("credential.model_access_changed")
 async def _on_routing_state_changed(_event: Event) -> None:
     _invalidate_resolve_caches()
 
@@ -753,17 +754,32 @@ class RoutingEngine:
                     CredentialModelAccess.upstream_model_id == upstream_model_id,
                 ))).scalar_one_or_none()
                 if row is not None:
+                    # Invalidate the resolve cache only on a real transition —
+                    # rewriting the same mark must not churn routing.
+                    transitioned = row.status != "temporarily_unavailable"
                     row.status = "temporarily_unavailable"
                     row.last_error = error.category
                     row.last_verified_at = _utcnow()
                     await session.flush()
+                    if transitioned:
+                        _invalidate_resolve_caches()
             return
         await credential_state.transition_credential(
             session, credential_id, error, http_status,
         )
-        await circuit_breaker.record_endpoint_result(
-            session, endpoint_id, success=(error is None),
+        # Scope attribution: only endpoint-attributed outcomes reach the circuit
+        # breaker.  A key-scoped failure (auth/quota/rate-limit of one key) says
+        # nothing about the endpoint — counting it would open the circuit on a
+        # healthy endpoint because of one dead key.  Model-specific errors
+        # already returned above.  Successes always reach the breaker so a
+        # half-open probe can close the circuit.
+        endpoint_attributed = error is None or error.is_endpoint_wide or error.scope in (
+            "endpoint", "global",
         )
+        if endpoint_attributed:
+            await circuit_breaker.record_endpoint_result(
+                session, endpoint_id, success=(error is None),
+            )
 
     async def get_available_public_models(
         self,

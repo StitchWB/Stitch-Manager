@@ -52,8 +52,28 @@ FAILURE_WINDOW_SECONDS = 60
 COOLDOWN_SECONDS = 30
 """How long the circuit stays open before a half-open probe is allowed."""
 
+HALF_OPEN_PROBE_GRACE_SECONDS = 5.0
+"""Admission window of one half-open probe.
+
+The probe request itself checks availability several times in quick
+succession (once per route target in ``RoutingEngine.route`` and once more in
+the executor right before invoking); checks within this window of the probe
+start are the same logical probe.  Once the grace elapses, further requests
+are rejected until the probe resolves — concurrent traffic can no longer
+stampede the sick endpoint through the half-open state.
+"""
+
+HALF_OPEN_PROBE_TIMEOUT_SECONDS = 120.0
+"""How long a probe may be in flight before its slot is considered lost
+(e.g. the outcome was never recorded because the DB write failed) and a new
+probe may be admitted."""
+
 # In-process fast path; ProviderEndpoint.circuit_failures is authoritative across restart.
 _recent_failures: dict[str, list[datetime]] = defaultdict(list)
+
+# In-process half-open probe slots: endpoint_id → probe start time.
+# In-memory only by design — after a restart no probe can be in flight.
+_half_open_probes: dict[str, datetime] = {}
 
 
 def _seed_window(endpoint: ProviderEndpoint) -> list[datetime]:
@@ -87,6 +107,7 @@ def _store(endpoint: ProviderEndpoint, window: list[datetime]) -> None:
 def _reset_failure_tracker() -> None:
     """Clear all in-process failure tracking. Intended for tests."""
     _recent_failures.clear()
+    _half_open_probes.clear()
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -127,6 +148,7 @@ async def record_endpoint_result(
             endpoint.circuit_opened_at = None
             endpoint.circuit_retry_at = None
             endpoint.updated_at = now
+            _half_open_probes.pop(endpoint_id, None)
             _store(endpoint, [])
             await session.flush()
         elif state == "closed" and window:
@@ -142,6 +164,7 @@ async def record_endpoint_result(
         endpoint.circuit_opened_at = now
         endpoint.circuit_retry_at = now + timedelta(seconds=COOLDOWN_SECONDS)
         endpoint.updated_at = now
+        _half_open_probes.pop(endpoint_id, None)
         _store(endpoint, [])
         await session.flush()
         return
@@ -209,10 +232,30 @@ async def is_endpoint_available(
                 .values(circuit_state="half_open", updated_at=now)
             )
             await session.flush()
-            return int(cast("Any", result).rowcount or 0) > 0
+            if int(cast("Any", result).rowcount or 0) > 0:
+                _half_open_probes[endpoint_id] = now
+                return True
+            return False
         return False
 
     if state == "half_open":
-        return True
+        # Single-probe semantics: only ONE probe request may test the endpoint.
+        # The probe itself checks availability several times in quick succession
+        # (route resolution + executor re-check), so checks within the admission
+        # grace of the probe start are the same logical probe and pass.  After
+        # the grace, further requests are rejected until the probe resolves or
+        # its slot times out — before this, every concurrent request slipped
+        # through the half-open state and stampeded the sick endpoint.
+        probe_started = _half_open_probes.get(endpoint_id)
+        if probe_started is None:
+            # Restarted while half-open (in-memory slot lost) — admit one probe.
+            _half_open_probes[endpoint_id] = now
+            return True
+        elapsed = (now - _as_utc(probe_started)).total_seconds()
+        if elapsed >= HALF_OPEN_PROBE_TIMEOUT_SECONDS:
+            # Probe outcome never recorded — free the slot for a new probe.
+            _half_open_probes[endpoint_id] = now
+            return True
+        return elapsed <= HALF_OPEN_PROBE_GRACE_SECONDS
 
     return False

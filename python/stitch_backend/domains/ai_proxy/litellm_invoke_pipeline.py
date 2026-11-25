@@ -48,18 +48,81 @@ def _adapter_options(payload: GatewayRequest) -> dict[str, Any]:
     })
 
 
+class EmptyCompletionError(RuntimeError):
+    """Upstream answered HTTP 200 but the completion carries no usable content.
+
+    Distinct type so the failure pipeline can classify it as a model-level
+    retryable failure instead of letting the adapter guess from the message
+    text (which lands on ``unknown`` and miscounts toward the endpoint
+    breaker).
+    """
+
+
+def _choice_is_empty(choice: Any) -> bool:
+    """True when a chat-completion choice carries no content at all.
+
+    Empty means: no content, no tool_calls, no reasoning content.  A
+    tool-call-only reply is a legitimate answer and is NOT empty.
+    """
+    if not isinstance(choice, dict):
+        return False
+    message = choice.get("message")
+    if not isinstance(message, dict):
+        # Non-message shapes (text completions, deltas already materialized)
+        # fall back to the choice-level text field.
+        text = choice.get("text")
+        return isinstance(text, str) and not text
+    content = message.get("content")
+    if isinstance(content, str) and content:
+        return False
+    if isinstance(content, list) and content:
+        return False
+    if message.get("tool_calls"):
+        return False
+    if message.get("reasoning_content"):
+        return False
+    if message.get("reasoning"):
+        return False
+    return True
+
+
 def _reject_empty_completion(result: Any) -> None:
     if not isinstance(result, dict):
         return
     choices = result.get("choices")
-    if isinstance(choices, list) and not choices:
-        raise RuntimeError("upstream returned an empty completion")
+    if isinstance(choices, list):
+        if not choices:
+            raise EmptyCompletionError("upstream returned an empty completion")
+        # deepseek-v4-pro shape: choices exist but every message is empty.
+        if all(_choice_is_empty(choice) for choice in choices):
+            raise EmptyCompletionError("upstream returned an empty completion")
     output = result.get("output")
     if isinstance(output, list) and not output and "object" in result:
-        raise RuntimeError("upstream returned an empty completion")
+        raise EmptyCompletionError("upstream returned an empty completion")
     content = result.get("content")
     if isinstance(content, list) and not content and "stop_reason" in result:
-        raise RuntimeError("upstream returned an empty completion")
+        raise EmptyCompletionError("upstream returned an empty completion")
+
+
+def _classify_invoke_failure(adapter: Any, exc: BaseException) -> Any:
+    """Classify an invoke failure, honouring pipeline-raised error types.
+
+    ``EmptyCompletionError`` is a model-level retryable failure: the endpoint
+    answered 200 (so the endpoint and the key are both healthy) but this one
+    model produced nothing usable.  ``is_model_specific`` routes it to
+    ``CredentialModelAccess`` in ``record_result`` and keeps it out of both
+    the credential state machine and the endpoint circuit breaker.
+    """
+    from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
+
+    if isinstance(exc, EmptyCompletionError):
+        return ClassifiedError(
+            category="server_error",
+            is_endpoint_wide=False,
+            is_model_specific=True,
+            scope="key",
+        )
+    return adapter.classify_error(exc)
 
 
 def _response_usage(response: Any) -> tuple[int, int]:
@@ -318,7 +381,7 @@ async def invoke_via_gateway(
         )
         # Record failure to routing engine (non-fatal if DB is unavailable)
         exc = e  # capture for closure — PEP 3110 deletes `e` after except block
-        classified = routing_result.adapter.classify_error(exc)
+        classified = _classify_invoke_failure(routing_result.adapter, exc)
         outcome.routing_result = routing_result
         outcome.ok = False
         outcome.error_class = _failure_metadata(classified, exc)
@@ -484,7 +547,7 @@ async def invoke_via_gateway_messages(
         )
         # Record failure to routing engine (non-fatal if DB is unavailable)
         exc = e  # capture for closure — PEP 3110 deletes `e` after except block
-        classified = routing_result.adapter.classify_error(exc)
+        classified = _classify_invoke_failure(routing_result.adapter, exc)
         outcome.routing_result = routing_result
         outcome.ok = False
         outcome.error_class = _failure_metadata(classified, exc)
@@ -656,7 +719,7 @@ async def invoke_via_gateway_responses(
         )
         # Record failure to routing engine (non-fatal if DB is unavailable)
         exc = e  # capture for closure — PEP 3110 deletes `e` after except block
-        classified = routing_result.adapter.classify_error(exc)
+        classified = _classify_invoke_failure(routing_result.adapter, exc)
         outcome.routing_result = routing_result
         outcome.ok = False
         outcome.error_class = _failure_metadata(classified, exc)
