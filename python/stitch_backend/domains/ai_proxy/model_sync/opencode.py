@@ -99,15 +99,18 @@ def merge_stitch_block(
     schema: str,
     *,
     default_model: str | None = None,
+    small_model: str | None = None,
 ) -> dict[str, Any]:
     """Return a copy of *data* with the stitch provider merged per *schema*.
 
-    v1: singular ``provider.stitch`` + top-level ``model``/``small_model``
-    (only when absent or explicitly requested).  Any legacy v2-style
-    ``providers.stitch`` entry is removed — never the other entries.
+    v1: singular ``provider.stitch`` + top-level ``model``/``small_model``.
+    Both follow the same no-clobber rule: an explicit request value always
+    wins, otherwise the key is written ONLY when absent — a user-set value
+    is never overwritten implicitly.  Any legacy v2-style ``providers.stitch``
+    entry is removed — never the other entries.
 
     v2: plural ``providers.stitch``; legacy singular ``provider.stitch``
-    removed; no ``small_model`` is written.
+    removed; no ``small_model`` is written (v2 ignores the key entirely).
     """
     out = copy.deepcopy(data)
     if schema == "v2":
@@ -131,8 +134,9 @@ def merge_stitch_block(
         if chosen:
             if default_model or not out.get("model"):
                 out["model"] = default_model or chosen
-            if not out.get("small_model"):
-                out["small_model"] = chosen
+            small_chosen = small_model or chosen
+            if small_model or not out.get("small_model"):
+                out["small_model"] = small_chosen
     return out
 
 

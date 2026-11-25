@@ -34,6 +34,7 @@ from stitch_backend.domains.ai_proxy.model_sync.catalog import load_catalog, sel
 from stitch_backend.domains.ai_proxy.model_sync.detection import (
     check_stitch_credential,
     detect_opencode_version,
+    probe_omp_binary,
     resolve_opencode_layout,
     resolve_schema,
 )
@@ -121,6 +122,7 @@ def _opencode_file_plans(
     config_path: str | None,
     config_dir: str | None,
     default_model: str | None,
+    small_model: str | None,
 ) -> tuple[list[FilePlan], list[str], dict[str, Any]]:
     warnings: list[str] = []
     layout = resolve_opencode_layout(config_path=config_path, config_dir=config_dir)
@@ -136,7 +138,13 @@ def _opencode_file_plans(
 
     primary = read_snapshot(layout.write_target)
     merged = oc_layer.merge_stitch_block(
-        primary.data, entries, base_url, token, schema, default_model=default_model
+        primary.data,
+        entries,
+        base_url,
+        token,
+        schema,
+        default_model=default_model,
+        small_model=small_model,
     )
     new_text = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
     old_text = primary.path.read_text(encoding="utf-8-sig") if primary.exists else ""
@@ -298,6 +306,7 @@ def build_plan(params: dict[str, Any], catalog: list[dict[str, Any]]) -> SyncPla
             config_path=params.get("opencodeConfigPath"),
             config_dir=params.get("opencodeConfigDir"),
             default_model=params.get("defaultModel"),
+            small_model=params.get("smallModel"),
         )
         files.extend(oc_plans)
         warnings.extend(oc_warnings)
@@ -342,7 +351,10 @@ async def status(params: dict[str, Any]) -> dict[str, Any]:
     import asyncio
 
     token = gateway_token()
-    detected = await asyncio.to_thread(detect_opencode_version)
+    detected, omp_binary = await asyncio.gather(
+        asyncio.to_thread(detect_opencode_version),
+        asyncio.to_thread(probe_omp_binary),
+    )
     layout = resolve_opencode_layout(
         config_path=params.get("opencodeConfigPath"),
         config_dir=params.get("opencodeConfigDir"),
@@ -364,6 +376,11 @@ async def status(params: dict[str, Any]) -> dict[str, Any]:
                 oc_layer.existing_stitch_model_ids(snapshot.data)
             )
             opencode_info["sha256"] = snapshot.sha256
+            # current top-level selectors — the pickers initialize from these
+            for key, out_key in (("model", "defaultModel"), ("small_model", "smallModel")):
+                value = snapshot.data.get(key)
+                if isinstance(value, str) and value:
+                    opencode_info[out_key] = value
         except Exception as exc:
             opencode_info["warnings"].append(f"cannot parse config: {exc!r}"[:200])
 
@@ -399,6 +416,8 @@ async def status(params: dict[str, Any]) -> dict[str, Any]:
         "omp": {
             "profiles": profiles,
             "profileHint": omp_layer.profile_hint(),
+            "binaryPath": omp_binary["binaryPath"],
+            "version": omp_binary["version"],
         },
     }
 

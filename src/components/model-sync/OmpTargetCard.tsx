@@ -18,6 +18,8 @@ export interface OmpRoleSelection {
 interface OmpTargetCardProps {
   profiles: ModelSyncOmpProfile[];
   profileHint: string | null;
+  binaryPath: string | null;
+  binaryVersion: string | null;
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
   selectedProfile: string;
@@ -34,6 +36,8 @@ interface OmpTargetCardProps {
 export function OmpTargetCard({
   profiles,
   profileHint,
+  binaryPath,
+  binaryVersion,
   enabled,
   onEnabledChange,
   selectedProfile,
@@ -116,14 +120,14 @@ export function OmpTargetCard({
         <div className="space-y-2 text-xs">
           <div>
             <div className="text-slate-500">{t('modelSync.targets.binary')}</div>
-            <div className="mt-0.5 font-mono text-slate-200">
-              {t('modelSync.targets.notReported')}
+            <div className="mt-0.5 break-all font-mono text-slate-200" data-testid="omp-binary-path">
+              {binaryPath || t('modelSync.targets.notReported')}
             </div>
           </div>
           <div>
             <div className="text-slate-500">{t('modelSync.targets.version')}</div>
-            <div className="mt-0.5 font-mono text-slate-200">
-              {t('modelSync.targets.notReported')}
+            <div className="mt-0.5 font-mono text-slate-200" data-testid="omp-binary-version">
+              {binaryVersion || t('modelSync.targets.notReported')}
             </div>
           </div>
           <div>

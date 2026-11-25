@@ -191,6 +191,45 @@ describe('ModelSync page', () => {
     expect(smallModel.disabled).toBe(true);
   });
 
+  it('enables the small model picker for v1 and includes it in the payload', async () => {
+    await renderLoaded('v1');
+
+    const smallModel = screen.getByTestId('opencode-small-model-select') as HTMLSelectElement;
+    expect(smallModel.disabled).toBe(false);
+    fireEvent.change(smallModel, { target: { value: 'stitch/beta' } });
+    await clickPreview();
+
+    const params = backend.modelSyncPreview.mock.calls.at(-1)?.[0] as any;
+    expect(params.smallModel).toBe('stitch/beta');
+  });
+
+  it('initializes the small model picker from the status response', async () => {
+    const status = statusResponse('v1') as any;
+    status.opencode.smallModel = 'stitch/alpha';
+    backend.modelSyncStatus.mockResolvedValue(status);
+    renderPage();
+    await screen.findByTestId('model-sync-model-row-alpha');
+
+    const smallModel = screen.getByTestId('opencode-small-model-select') as HTMLSelectElement;
+    expect(smallModel.value).toBe('stitch/alpha');
+    await clickPreview();
+
+    const params = backend.modelSyncPreview.mock.calls.at(-1)?.[0] as any;
+    expect(params.smallModel).toBe('stitch/alpha');
+  });
+
+  it('displays the omp binary path and version when reported', async () => {
+    const status = statusResponse('v1') as any;
+    status.omp.binaryPath = '/usr/local/bin/omp';
+    status.omp.version = '0.14.2';
+    backend.modelSyncStatus.mockResolvedValue(status);
+    renderPage();
+    await screen.findByTestId('model-sync-model-row-alpha');
+
+    expect(screen.getByTestId('omp-binary-path').textContent).toBe('/usr/local/bin/omp');
+    expect(screen.getByTestId('omp-binary-version').textContent).toBe('0.14.2');
+  });
+
   it('keeps apply disabled before a fresh preview', async () => {
     await renderLoaded();
 

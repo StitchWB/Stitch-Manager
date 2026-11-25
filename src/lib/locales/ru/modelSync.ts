@@ -79,8 +79,8 @@ export const modelSync: ModelSyncTranslations = {
       automatic: 'Автоматически',
       smallModel: 'Small model',
       smallModelV2Disabled: 'OpenCode v2 не использует small_model.',
-      smallModelBackendHint:
-        'Backend синхронизации сейчас заполняет small_model из default model только если значение отсутствует; для независимого значения используйте продвинутый редактор.',
+      smallModelHint:
+        'Только v1: записывается как верхнеуровневый small_model. Существующее пользовательское значение сохраняется, пока вы не выберете своё здесь.',
       pruneUnselected: 'Удалять невыбранные модели Stitch',
       pruneUnselectedHint:
         'Общая опция backend. omp использует её напрямую; OpenCode декларативно переписывает весь блок провайдера Stitch.',

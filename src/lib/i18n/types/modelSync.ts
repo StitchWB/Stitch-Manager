@@ -76,7 +76,7 @@ export interface ModelSyncTranslations {
       automatic: string;
       smallModel: string;
       smallModelV2Disabled: string;
-      smallModelBackendHint: string;
+      smallModelHint: string;
       pruneUnselected: string;
       pruneUnselectedHint: string;
       credential: string;

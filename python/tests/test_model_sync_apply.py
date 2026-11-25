@@ -23,7 +23,9 @@ class _FakeModel:
 
 def _catalog():
     return [
-        catalog_entry_from_public_model(_FakeModel("vision-best", {"inputModalities": ["text", "image"]})),
+        catalog_entry_from_public_model(
+            _FakeModel("vision-best", {"inputModalities": ["text", "image"]})
+        ),
         catalog_entry_from_public_model(_FakeModel("text-fast", None)),
     ]
 
@@ -182,10 +184,12 @@ async def test_restore_roundtrip(tmp_path: Path) -> None:
     oc_path.write_text('{"tampered": true}', encoding="utf-8")
     written = [f for f in applied["files"] if f["path"] == str(oc_path)]
     assert written and written[0].get("backupPath")
-    restored = await service.restore({
-        "path": str(oc_path),
-        "backupPath": written[0]["backupPath"],
-    })
+    restored = await service.restore(
+        {
+            "path": str(oc_path),
+            "backupPath": written[0]["backupPath"],
+        }
+    )
     assert restored["ok"] is True
     backup_bytes = Path(written[0]["backupPath"]).read_bytes()
     assert oc_path.read_bytes() == backup_bytes
@@ -196,11 +200,13 @@ async def test_restore_conflict(tmp_path: Path) -> None:
     backup = tmp_path / "x.yml.bak"
     target.write_text("current", encoding="utf-8")
     backup.write_text("old", encoding="utf-8")
-    result = await service.restore({
-        "path": str(target),
-        "backupPath": str(backup),
-        "expectedSha256": "0" * 64,
-    })
+    result = await service.restore(
+        {
+            "path": str(target),
+            "backupPath": str(backup),
+            "expectedSha256": "0" * 64,
+        }
+    )
     assert result["ok"] is False
     assert result["files"][0]["error"] == "conflict"
     assert target.read_text(encoding="utf-8") == "current"
@@ -211,18 +217,21 @@ async def test_both_json_jsonc_split_write(tmp_path: Path) -> None:
     oc_dir = tmp_path / "ocdir"
     oc_dir.mkdir()
     (oc_dir / "opencode.json").write_text(
-        json.dumps({
-            "provider": {"stitch": {"name": "old"}, "other": {"name": "keep"}},
-            "model": "stitch/old",
-        }),
+        json.dumps(
+            {
+                "provider": {"stitch": {"name": "old"}, "other": {"name": "keep"}},
+                "model": "stitch/old",
+            }
+        ),
         encoding="utf-8",
     )
     (oc_dir / "opencode.jsonc").write_text(
         '// comment\n{"provider": {"other2": {"name": "keep2"}}}\n',
         encoding="utf-8",
     )
-    params = _params(tmp_path, targets=["opencode"], opencodeConfigPath=None,
-                     opencodeConfigDir=str(oc_dir))
+    params = _params(
+        tmp_path, targets=["opencode"], opencodeConfigPath=None, opencodeConfigDir=str(oc_dir)
+    )
     params.pop("opencodeConfigPath")
     preview = await service.preview(params)
     assert preview["ok"] is True
@@ -255,3 +264,83 @@ async def test_v2_schema_write(tmp_path: Path) -> None:
     stitch = data["providers"]["stitch"]
     assert stitch["package"] == "@opencode/ai/providers/openai-compatible"
     assert "small_model" not in data
+
+
+async def test_apply_writes_requested_small_model(tmp_path: Path) -> None:
+    params = _params(tmp_path, targets=["opencode"], smallModel="stitch/text-fast")
+    preview = await service.preview(params)
+    params["expectedSha256"] = preview["expectedSha256"]
+    applied = await service.apply(params)
+    assert applied["ok"] is True, applied
+    data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
+    assert data["small_model"] == "stitch/text-fast"
+    # the preview diff already contains the selector — no separate UI channel
+    assert any("stitch/text-fast" in f["diff"] for f in preview["files"])
+
+
+async def test_apply_small_model_no_clobber_existing(tmp_path: Path) -> None:
+    oc_path = tmp_path / "opencode.json"
+    oc_path.write_text(json.dumps({"small_model": "other/user-choice"}), encoding="utf-8")
+    params = _params(tmp_path, targets=["opencode"])
+    preview = await service.preview(params)
+    params["expectedSha256"] = preview["expectedSha256"]
+    applied = await service.apply(params)
+    assert applied["ok"] is True, applied
+    data = json.loads(oc_path.read_text(encoding="utf-8"))
+    assert data["small_model"] == "other/user-choice"  # user value never overwritten
+
+
+async def test_apply_small_model_written_when_absent(tmp_path: Path) -> None:
+    params = _params(tmp_path, targets=["opencode"])
+    preview = await service.preview(params)
+    params["expectedSha256"] = preview["expectedSha256"]
+    applied = await service.apply(params)
+    assert applied["ok"] is True, applied
+    data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
+    assert data["small_model"].startswith("stitch/")
+
+
+async def test_apply_v2_never_writes_small_model(tmp_path: Path) -> None:
+    params = _params(tmp_path, targets=["opencode"], schema="v2", smallModel="stitch/text-fast")
+    preview = await service.preview(params)
+    params["expectedSha256"] = preview["expectedSha256"]
+    applied = await service.apply(params)
+    assert applied["ok"] is True, applied
+    data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
+    assert "small_model" not in data
+
+
+async def test_status_surfaces_small_model_and_omp_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    oc_path = tmp_path / "opencode.json"
+    oc_path.write_text(
+        json.dumps({"small_model": "stitch/text-fast", "model": "stitch/vision-best"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        service,
+        "probe_omp_binary",
+        lambda: {"binaryPath": "C:/omp/omp.exe", "version": "0.14.2", "raw": "omp 0.14.2"},
+    )
+    result = await service.status({"opencodeConfigPath": str(oc_path)})
+    assert result["ok"] is True
+    assert result["opencode"]["smallModel"] == "stitch/text-fast"
+    assert result["opencode"]["defaultModel"] == "stitch/vision-best"
+    assert result["omp"]["binaryPath"] == "C:/omp/omp.exe"
+    assert result["omp"]["version"] == "0.14.2"
+
+
+async def test_status_omp_binary_unknown_when_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        service,
+        "probe_omp_binary",
+        lambda: {"binaryPath": None, "version": None, "raw": None},
+    )
+    result = await service.status({"opencodeConfigPath": str(tmp_path / "opencode.json")})
+    assert result["ok"] is True
+    assert result["omp"]["binaryPath"] is None
+    assert result["omp"]["version"] is None
+    assert "smallModel" not in result["opencode"]  # absent config key → absent in status

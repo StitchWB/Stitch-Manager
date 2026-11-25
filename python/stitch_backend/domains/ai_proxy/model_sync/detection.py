@@ -19,6 +19,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -86,6 +87,81 @@ def probe_opencode_binary(timeout: float = 4.0) -> tuple[str | None, str | None]
         except (OSError, subprocess.SubprocessError):
             continue
     return None, None
+
+
+def _omp_binary_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    which = shutil.which("omp")
+    if which:
+        candidates.append(Path(which))
+    localappdata = os.environ.get("LOCALAPPDATA")
+    if localappdata:
+        candidates.append(Path(localappdata) / "omp" / "omp.exe")
+    seen: set[str] = set()
+    out: list[Path] = []
+    for cand in candidates:
+        key = str(cand).lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(cand)
+    return out
+
+
+def _parse_omp_version(text: str) -> str | None:
+    match = re.search(r"(\d+)\.(\d+)(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?", text)
+    if match:
+        return match.group(0)
+    return None
+
+
+def _run_version_probe(binary: Path, timeout: float) -> str | None:
+    """Run ``<binary> --version`` in a daemon thread, tolerating every failure.
+
+    The thread indirection mirrors how hung CLI probes are absorbed: a stuck
+    binary can never block the caller beyond ``timeout``.
+    """
+    result: dict[str, str | None] = {"output": None}
+
+    def _worker() -> None:
+        try:
+            proc = subprocess.run(  # noqa: S603 — fixed binary, no shell
+                [str(binary), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+            result["output"] = (proc.stdout or "") + (proc.stderr or "")
+        except (OSError, subprocess.SubprocessError):
+            result["output"] = None
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    thread.join(timeout + 1.0)
+    return result["output"]
+
+
+def probe_omp_binary(timeout: float = 4.0) -> dict[str, Any]:
+    """Detect the oh-my-pi binary and its version.
+
+    Returns ``{"binaryPath": str|None, "version": str|None, "raw": str|None}``
+    — ``None`` fields mean *unknown*, never a failure.
+    """
+    for candidate in _omp_binary_candidates():
+        try:
+            if not candidate.exists() and shutil.which("omp") is None:
+                continue
+        except OSError:
+            continue
+        output = _run_version_probe(candidate, timeout)
+        if output is None:
+            continue
+        return {
+            "binaryPath": str(candidate),
+            "version": _parse_omp_version(output),  # None means version unknown
+            "raw": output.strip()[:200],
+        }
+    return {"binaryPath": None, "version": None, "raw": None}
 
 
 def detect_opencode_version(

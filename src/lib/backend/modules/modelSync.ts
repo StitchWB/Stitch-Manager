@@ -84,6 +84,10 @@ export interface ModelSyncOpenCodeStatus {
   stitchModels: string[];
   sha256?: string;
   credential: OpenCodeCredentialState;
+  /** Current top-level "model" selector, when the config has one. */
+  defaultModel?: string;
+  /** Current top-level "small_model" selector, when the config has one. */
+  smallModel?: string;
 }
 
 export interface ModelSyncOmpProfile {
@@ -105,6 +109,10 @@ export interface ModelSyncStatusResponse {
   omp?: {
     profiles: ModelSyncOmpProfile[];
     profileHint: string | null;
+    /** Detected omp binary path — null when no binary was found. */
+    binaryPath?: string | null;
+    /** Detected omp version — null when unknown (probe failure tolerated). */
+    version?: string | null;
   };
   error?: string;
 }
@@ -135,6 +143,8 @@ export interface ModelSyncPlanParams {
   opencodeConfigPath?: string;
   opencodeConfigDir?: string;
   defaultModel?: string;
+  /** v1-only top-level small_model selector ("stitch/<id>"). Ignored for v2. */
+  smallModel?: string;
   ompProfile?: string;
   pruneUnselected?: boolean;
   roles?: ModelSyncRoleUpdate[];

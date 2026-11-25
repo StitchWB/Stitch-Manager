@@ -61,9 +61,7 @@ export default function ModelSync() {
   const [ompEnabled, setOmpEnabled] = useState(true);
   const [schemaOverride, setSchemaOverride] = useState<ModelSyncSchemaOverride>('auto');
   const [defaultModel, setDefaultModel] = useState('');
-  // The backend currently has no independent smallModel request field. The
-  // v1 picker is intentionally local-only and the card explains the backend
-  // limitation instead of inventing a wire field.
+  // v1-only: written as the top-level small_model selector; ignored for v2.
   const [smallModel, setSmallModel] = useState('');
   const [pruneUnselected, setPruneUnselected] = useState(true);
   const [ensureEnabled, setEnsureEnabled] = useState(true);
@@ -100,9 +98,18 @@ export default function ModelSync() {
 
       if (initializeSelection && !initializedSelection.current) {
         initializedSelection.current = true;
-        setSelectedIds(
-          validSynced.size ? new Set(validSynced) : new Set(models.map(model => model.id)),
-        );
+        const initialSelection = validSynced.size
+          ? new Set(validSynced)
+          : new Set(models.map(model => model.id));
+        setSelectedIds(initialSelection);
+        // initialize the small-model picker from the live config, but only
+        // when it points at a stitch model that is part of the selection —
+        // otherwise the picker has no matching option to display
+        const currentSmall = statusResponse.opencode?.smallModel;
+        if (currentSmall?.startsWith('stitch/')) {
+          const smallId = currentSmall.slice('stitch/'.length).split(':', 1)[0];
+          if (initialSelection.has(smallId)) setSmallModel(currentSmall);
+        }
         const profiles = statusResponse.omp?.profiles || [];
         const hinted = profiles.find(profile => profile.name === statusResponse.omp?.profileHint);
         const defaultProfile = profiles.find(profile => profile.isDefault) || profiles[0];
@@ -148,6 +155,7 @@ export default function ModelSync() {
       ensureEnabled,
     };
     if (defaultModel) params.defaultModel = defaultModel;
+    if (smallModel) params.smallModel = smallModel;
     if (ompEnabled) params.ompProfile = ompProfile;
     if (roles.length) params.roles = roles;
     return params;
@@ -159,6 +167,7 @@ export default function ModelSync() {
     pruneUnselected,
     ensureEnabled,
     defaultModel,
+    smallModel,
     ompProfile,
     roleSelections,
   ]);
@@ -366,6 +375,8 @@ export default function ModelSync() {
               <OmpTargetCard
                 profiles={status?.omp?.profiles || []}
                 profileHint={status?.omp?.profileHint || null}
+                binaryPath={status?.omp?.binaryPath || null}
+                binaryVersion={status?.omp?.version || null}
                 enabled={ompEnabled}
                 onEnabledChange={value => {
                   setOmpEnabled(value);
