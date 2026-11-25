@@ -329,11 +329,12 @@ class ProbeWorker:
             # Models became routable again — drop stale route resolutions.
             # Only when rows actually transitioned: a no-op sweep must not
             # churn the cache.
-            if getattr(result, "rowcount", 0):
+            transitioned = int(getattr(result, "rowcount", 0) or 0)
+            if transitioned:
                 from stitch_backend.core.event_bus import event_bus
                 await event_bus.emit(
                     "credential.model_access_changed",
-                    {"transitions": int(result.rowcount)},
+                    {"transitions": transitioned},
                 )
 
         try:
