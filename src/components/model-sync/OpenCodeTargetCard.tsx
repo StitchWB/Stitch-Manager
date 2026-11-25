@@ -77,7 +77,7 @@ export function OpenCodeTargetCard({
 }: OpenCodeTargetCardProps) {
   const detected = status?.detectedVersion;
   const effectiveSchema = resolvedOpenCodeSchema(detected, schemaOverride);
-  const binaries = status?.binaries;
+  const binaries = detected?.binaries ?? status?.binaries;
   const installed = detected?.source === 'binary' || Boolean(binaries?.opencode || binaries?.opencode2);
   const selectedIds = selectedModels.map(model => model.id);
   const writePaths = [status?.writeTarget, status?.secondaryPath].filter(
