@@ -69,6 +69,7 @@ const Logs = lazy(() => import('./pages/Logs'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AiIntegrations = lazy(() => import('./pages/AiIntegrations'));
 const OpenCodeConfig = lazy(() => import('./pages/OpenCodeConfig'));
+const ModelSync = lazy(() => import('./pages/ModelSync'));
 const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Tools = lazy(() => import('./pages/Tools'));
 const Automation = lazy(() => import('./pages/Automation'));
@@ -196,6 +197,7 @@ function RouteTracker() {
         'routing',
         'monitor',
         'integrations',
+        'model-sync',
         'opencode-config',
         'chat',
         'notebooklm',
@@ -610,6 +612,7 @@ function App() {
               <Route path="/ai/integrations" element={<AiIntegrations />} />
               <Route path="/ai/antigravity" element={<Antigravity />} />
               <Route path="/ai/devbox" element={<Devbox />} />
+              <Route path="/ai/model-sync" element={<ModelSync />} />
               <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
               <Route path="/ai/chat" element={<Chat />} />
               <Route path="/ai/plugin/stitch-velly" element={<Navigate to="/ai/velly" replace />} />

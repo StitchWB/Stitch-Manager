@@ -5,21 +5,25 @@ import {
   BookOpen,
   Cable,
   CreditCard,
+  Globe,
   LayoutDashboard,
   Mail,
   MessageSquare,
   Network,
   Orbit,
+  Plug,
   Puzzle,
   Radar,
   Route,
   Server,
   Settings,
   Shield,
+  Sparkles,
   Terminal,
   Users,
   Waypoints,
   Wrench,
+  Zap,
 } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
@@ -40,7 +44,7 @@ type AiTabId =
   | 'providers'
   | 'routing'
   | 'connections'
-  | 'opencode'
+  | 'modelSync'
   | 'monitor'
   | 'chat'
   | 'antigravity'
@@ -85,7 +89,7 @@ const AI_TAB_GROUPS: AiTabGroup[] = [
     tabs: [
       { id: 'routing', label: 'aiHub.tabs.routing', to: '/ai/routing', icon: Route },
       { id: 'connections', label: 'aiHub.tabs.connections', to: '/ai/integrations', icon: Cable },
-      { id: 'opencode', label: 'aiHub.tabs.opencode', to: '/ai/opencode-config', icon: Settings },
+      { id: 'modelSync', label: 'modelSync.navTitle', to: '/ai/model-sync', icon: Waypoints },
       { id: 'monitor', label: 'aiHub.tabs.monitor', to: '/ai/monitor', icon: Activity },
     ],
   },
@@ -105,7 +109,8 @@ function activeTab(pathname: string): AiTabId {
   if (pathname.startsWith('/ai/integrations')) {
     return 'connections';
   }
-  if (pathname.startsWith('/ai/opencode-config')) return 'opencode';
+  if (pathname.startsWith('/ai/model-sync')) return 'modelSync';
+  if (pathname.startsWith('/ai/opencode-config')) return 'modelSync';
   if (pathname.startsWith('/ai/monitor') || pathname.startsWith('/ai/analytics')) return 'monitor';
   if (pathname.startsWith('/ai/chat')) return 'chat';
   // Redirect old api-keys route to providers
@@ -140,21 +145,25 @@ const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   BookOpen,
   Cable,
   CreditCard,
+  Globe,
   LayoutDashboard,
   Mail,
   MessageSquare,
   Network,
   Orbit,
+  Plug,
   Puzzle,
   Radar,
   Route,
   Server,
   Settings,
   Shield,
+  Sparkles,
   Terminal,
   Users,
   Waypoints,
   Wrench,
+  Zap,
 };
 
 function getPluginIcon(name?: string): LucideIcon {

@@ -59,7 +59,9 @@ jest.mock('@/components/ui', () => ({
     </button>
   ),
   LoadingSpinner: () => <div data-testid="loading-spinner" />,
-  PageHeader: () => <div data-testid="page-header" />,
+  PageHeader: ({ actions }: { actions?: ReactNode }) => (
+    <div data-testid="page-header">{actions}</div>
+  ),
   StatusBadge: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
   TabButton: ({
     onClick,
@@ -91,11 +93,13 @@ jest.mock('sonner', () => ({
 }));
 
 let navigatedSearch = '';
+let navigatedPath = '';
 
 function LocationSpy() {
   const loc = useLocation();
   useEffect(() => {
   navigatedSearch = loc.search;
+  navigatedPath = loc.pathname;
   }, [loc.pathname, loc.search]);
   return null;
 }
@@ -106,6 +110,7 @@ function renderAt(path: string) {
       <LocationSpy />
       <Routes>
         <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
+        <Route path="/ai/model-sync" element={<div data-testid="model-sync-page-stub" />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -116,6 +121,7 @@ describe('OpenCodeConfig URL tab state', () => {
     jest.clearAllMocks();
     window.localStorage.clear();
   navigatedSearch = '';
+  navigatedPath = '';
   });
 
   it('(a) renders the agents section from ?tab=agents and preserves the search', async () => {
@@ -174,5 +180,18 @@ describe('OpenCodeConfig URL tab state', () => {
 
     expect(await screen.findByTestId('opencode-providers-section')).toBeTruthy();
     expect(screen.queryByText('IDE & CLI')).toBeNull();
+  });
+
+  it('navigates Connect to Stitch to the guided Model Sync flow', async () => {
+    renderAt('/ai/opencode-config');
+
+    expect(await screen.findByTestId('opencode-providers-section')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Connect to Stitch' }));
+    });
+
+    await waitFor(() => {
+      expect(navigatedPath).toBe('/ai/model-sync');
+    });
   });
 });

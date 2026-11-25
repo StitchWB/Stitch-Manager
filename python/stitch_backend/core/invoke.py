@@ -86,6 +86,10 @@ WRITE_COMMANDS: set[str] = {
     "opencode_models_reconcile",
     "opencode_config_restore",
     "refresh_endpoint_models",
+    "configure_ai_proxy_ide",
+    "restore_ai_proxy_ide_config",
+    "model_sync_apply",
+    "model_sync_restore",
 }
 
 

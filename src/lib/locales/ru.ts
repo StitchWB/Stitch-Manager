@@ -60,6 +60,7 @@ import { catalog } from './ru/catalog';
 import { footer } from './ru/footer';
 import { users } from './ru/users';
 import { ai } from './ru/ai';
+import { modelSync } from './ru/modelSync';
 import { admin } from './ru/admin';
 
 export const ru: Translations = {
@@ -124,5 +125,6 @@ export const ru: Translations = {
   ...footer,
   ...users,
   ...ai,
+  ...modelSync,
   ...admin,
 };

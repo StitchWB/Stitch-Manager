@@ -41,6 +41,8 @@ dependencies = [
     # ── Utilities ──────────────────────────────────────────────────────────
     "aiofiles>=24.0.0",
     "python-dotenv>=1.0.0",
+    # ruamel round-trip YAML for omp models.yml/config.yml (comments preserved)
+    "ruamel.yaml>=0.18.0",
     "psutil>=5.9.0",
     "keyring>=25.0.0",
     # ed25519 plugin signing (autoreg.plugin.crypto) + artifact encryption

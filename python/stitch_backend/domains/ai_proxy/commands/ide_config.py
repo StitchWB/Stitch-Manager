@@ -9,12 +9,16 @@ from typing import Any
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import StitchError
+from stitch_backend.domains.ai_proxy.model_sync.opencode import (
+    STITCH_PROVIDER_ID,
+    merge_stitch_block,
+)
+from stitch_backend.domains.opencode_config.service import (
+    read_snapshot,
+    write_config,
+)
 
 _BACKUP_SUFFIX = ".stitch-backup"
-_STITCH_PROVIDER_ID = "stitch"
-_STITCH_PROVIDER_NPM = "@ai-sdk/openai-compatible"
-_DEFAULT_CONTEXT_TOKENS = 128000
-_DEFAULT_OUTPUT_TOKENS = 8192
 
 
 def _gateway_base_url() -> str:
@@ -46,54 +50,17 @@ def _backup_path(path: Path) -> Path:
     return path.with_name(path.name + _BACKUP_SUFFIX)
 
 
-def _read_config(path: Path) -> dict[str, Any]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}
-    except (json.JSONDecodeError, OSError) as exc:
-        raise StitchError(f"Cannot read {path}: {exc}") from exc
-    if not isinstance(data, dict):
-        raise StitchError(f"{path} is not a JSON object")
-    return data
+async def _catalog_entries() -> list[dict[str, Any]]:
+    from stitch_backend.domains.ai_proxy.model_sync.catalog import load_catalog
 
-
-def _write_config(path: Path, config: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-async def _available_models() -> dict[str, Any]:
-    from stitch_backend.database import run_in_read_session
-    from stitch_backend.domains.ai_gateway.routing_engine import PoolScope, RoutingEngine
-
-    async def _load(session):
-        return await RoutingEngine().get_available_public_models(session, pool=PoolScope(None))
-
-    models = await run_in_read_session(_load)
-    catalog: dict[str, Any] = {}
-    for model in models:
-        contract = model.contract or {}
-        context = contract.get("minContextTokens")
-        if not isinstance(context, int) or context <= 0:
-            context = _DEFAULT_CONTEXT_TOKENS
-        catalog[model.id] = {
-            "name": model.display_name or model.id,
-            "limit": {"context": context, "output": _DEFAULT_OUTPUT_TOKENS},
-        }
-    return catalog
+    return await load_catalog()
 
 
 async def _stitch_provider_block(api_key: str) -> dict[str, Any]:
-    block: dict[str, Any] = {
-        "npm": _STITCH_PROVIDER_NPM,
-        "name": "Stitch Gateway",
-        "options": {"baseURL": _gateway_base_url(), "apiKey": api_key},
-    }
-    models = await _available_models()
-    if models:
-        block["models"] = models
-    return block
+    from stitch_backend.domains.ai_proxy.model_sync.opencode import build_v1_provider_block
+
+    entries = await _catalog_entries()
+    return build_v1_provider_block(entries, _gateway_base_url(), api_key)
 
 
 def _require_opencode(ide_name: str) -> None:
@@ -124,27 +91,40 @@ async def cmd_detect_ai_proxy_ides(params: dict) -> list:
 
 @register_command("configure_ai_proxy_ide")
 async def cmd_configure_ai_proxy_ide(params: dict) -> dict:
-    """Point an IDE at the local gateway (currently OpenCode only)."""
+    """Point an IDE at the local gateway (currently OpenCode only).
+
+    Internals use the shared model-sync opencode writer (atomic, sha256
+    conflict-aware, schema auto → v1 for unknown runtimes).  The response
+    shape is exactly the legacy one: success/ide/configPath/baseUrl/models.
+    """
     ide_name = params.get("ideName", params.get("ide", ""))
     _require_opencode(ide_name)
 
     path = _resolve_opencode_path(params)
-    config = _read_config(path)
+    try:
+        snapshot = read_snapshot(path)
+    except (json.JSONDecodeError, ValueError, OSError) as exc:
+        raise StitchError(f"Cannot read {path}: {exc}") from exc
+
+    # legacy one-shot backup kept for restore_ai_proxy_ide_config compatibility
     backup = _backup_path(path)
     if path.exists() and not backup.exists():
         shutil.copy2(path, backup)
 
-    config.setdefault("provider", {})
-    block = await _stitch_provider_block(_gateway_key())
-    config["provider"][_STITCH_PROVIDER_ID] = block
-    _write_config(path, config)
+    entries = await _catalog_entries()
+    token = _gateway_key()
+    # schema auto: unknown runtimes get v1-compatible output (v2 normalizes it)
+    merged = merge_stitch_block(snapshot.data, entries, _gateway_base_url(), token, "v1")
+    result = write_config(path, merged, expected_sha256=snapshot.sha256)
+    if not result.get("ok"):
+        raise StitchError(f"Cannot write {path}: {result.get('error', 'conflict')}")
 
     return {
         "success": True,
         "ide": ide_name,
         "configPath": str(path),
         "baseUrl": _gateway_base_url(),
-        "models": sorted(block.get("models", {})),
+        "models": sorted(e["id"] for e in entries),
     }
 
 
@@ -154,7 +134,7 @@ async def cmd_get_ai_proxy_ide_config_preview(params: dict) -> str:
     ide_name = params.get("ideName", params.get("ide", ""))
     _require_opencode(ide_name)
 
-    preview = {"provider": {_STITCH_PROVIDER_ID: await _stitch_provider_block(_gateway_key())}}
+    preview = {"provider": {STITCH_PROVIDER_ID: await _stitch_provider_block(_gateway_key())}}
     return json.dumps(preview, indent=2)
 
 
