@@ -10,6 +10,8 @@ import hashlib
 import json
 import os
 import tempfile
+import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -154,16 +156,60 @@ def read_snapshot(path: str | Path) -> Snapshot:
 
 
 def _backup_path(path: Path) -> Path:
+    # Unique suffix: 1s-resolution timestamps collide when several files are
+    # backed up inside the same second (multi-file apply), so add a uuid tail.
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    return path.with_name(f"{path.name}.bak-{stamp}")
+    return path.with_name(f"{path.name}.bak-{stamp}-{uuid.uuid4().hex[:8]}")
 
 
-def write_config(
-    path: str | Path, data: dict[str, Any], *, expected_sha256: str | None
+def sha256_file(path: str | Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _replace_with_retry(tmp_name: str, target: Path, attempts: int = 3) -> None:
+    """os.replace with a small backoff for transient Windows file locks."""
+    delay = 0.05
+    last_exc: OSError | None = None
+    for attempt in range(attempts):
+        try:
+            os.replace(tmp_name, target)
+            return
+        except OSError as exc:  # PermissionError on Windows when a reader holds a lock
+            last_exc = exc
+            if attempt < attempts - 1:
+                time.sleep(delay)
+                delay *= 2
+    assert last_exc is not None
+    raise last_exc
+
+
+def write_text_atomic(
+    path: str | Path,
+    text: str,
+    *,
+    expected_sha256: str | None,
+    encoding: str = "utf-8",
 ) -> dict[str, Any]:
+    """Write *text* to *path* atomically with sha256 conflict protection.
+
+    Protocol: when the file exists, ``expected_sha256`` must match the current
+    on-disk hash (``None`` is never accepted for an existing file — callers
+    must snapshot first); when the file does not exist, ``expected_sha256``
+    must be ``None``.  A mismatch returns ``{"ok": False, "error": "conflict"}``
+    and nothing is written.
+
+    The previous content is copied to a uniquely-named sibling backup before
+    replacement.  NOTE: backups may contain secrets (API tokens) — never log
+    their contents.
+
+    The write itself is flush+fsync into a temp file in the same directory
+    followed by ``os.replace`` (with a short retry loop for transient Windows
+    locks).  This is atomic for a single file only — multi-file applies are
+    best-effort, never fully atomic.
+    """
     resolved = Path(path)
     if resolved.exists():
-        current = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        current = sha256_file(resolved)
         if expected_sha256 is None or current != expected_sha256:
             return {"ok": False, "error": "conflict", "path": str(resolved)}
         backup = _backup_path(resolved)
@@ -175,14 +221,17 @@ def write_config(
         backup_path = None
 
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     fd, tmp_name = tempfile.mkstemp(
         dir=str(resolved.parent), prefix=f"{resolved.name}.", suffix=".tmp"
     )
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        # newline="" disables text-mode translation: bytes on disk match the
+        # exact text we were given on every platform (sha256-stable).
+        with os.fdopen(fd, "w", encoding=encoding, newline="") as handle:
             handle.write(text)
-        os.replace(tmp_name, resolved)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _replace_with_retry(tmp_name, resolved)
     except BaseException:
         try:
             os.unlink(tmp_name)
@@ -195,6 +244,13 @@ def write_config(
         "backupPath": backup_path,
         "commentsMayBeDropped": resolved.suffix.lower() == ".jsonc",
     }
+
+
+def write_config(
+    path: str | Path, data: dict[str, Any], *, expected_sha256: str | None
+) -> dict[str, Any]:
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    return write_text_atomic(path, text, expected_sha256=expected_sha256)
 
 
 def normalize_opencode(snapshot: Snapshot) -> dict[str, Any]:
@@ -322,7 +378,9 @@ def restore_from_backup(
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(raw)
-        os.replace(tmp_name, resolved)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _replace_with_retry(tmp_name, resolved)
     except BaseException:
         try:
             os.unlink(tmp_name)

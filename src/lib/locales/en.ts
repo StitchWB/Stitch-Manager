@@ -60,6 +60,7 @@ import { catalog } from './en/catalog';
 import { footer } from './en/footer';
 import { users } from './en/users';
 import { ai } from './en/ai';
+import { modelSync } from './en/modelSync';
 import { admin } from './en/admin';
 
 export const en: Translations = {
@@ -124,5 +125,6 @@ export const en: Translations = {
   ...footer,
   ...users,
   ...ai,
+  ...modelSync,
   ...admin,
 };

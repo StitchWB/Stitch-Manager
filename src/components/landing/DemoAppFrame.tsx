@@ -24,6 +24,7 @@ const AiMonitorPage = lazy(() => import('../../pages/AiMonitorPage'));
 const Chat = lazy(() => import('../../pages/Chat'));
 const AiIntegrations = lazy(() => import('../../pages/AiIntegrations'));
 const OpenCodeConfig = lazy(() => import('../../pages/OpenCodeConfig'));
+const ModelSync = lazy(() => import('../../pages/ModelSync'));
 const NotebookLM = lazy(() => import('../../pages/NotebookLM'));
 const Antigravity = lazy(() => import('../../pages/Antigravity'));
 const Devbox = lazy(() => import('../../pages/Devbox'));
@@ -93,6 +94,7 @@ function DemoRoutes() {
       <Route path="/ai/monitor" element={<AiMonitorPage />} />
       <Route path="/ai/chat" element={<Chat />} />
       <Route path="/ai/integrations" element={<AiIntegrations />} />
+      <Route path="/ai/model-sync" element={<ModelSync />} />
       <Route path="/ai/opencode-config" element={<OpenCodeConfig />} />
       <Route path="/ai/notebooklm" element={<NotebookLM />} />
       <Route path="/ai/antigravity" element={<Antigravity />} />

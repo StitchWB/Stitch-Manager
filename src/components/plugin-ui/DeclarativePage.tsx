@@ -386,24 +386,70 @@ function useRefreshInterval(refreshMs: number | undefined, bump: () => void) {
   }, [refreshMs, bump]);
 }
 
-/** Readonly toggle bound to a fetched source value (`field.source` + `valueKey`, default "value"). */
+/**
+ * First boolean value found in a mutation response payload, looking up
+ * the toggle's `valueKey` first, then the conventional `enabled`/`value`
+ * keys. Returns undefined when the payload carries none of them (the
+ * caller then falls back to refetching the source).
+ */
+function mutationStateFromPayload(
+  payload: unknown,
+  valueKey: string | undefined,
+): boolean | undefined {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return undefined;
+  }
+  const record = payload as Record<string, unknown>;
+  const candidates: string[] = [];
+  for (const key of [valueKey, 'enabled', 'value']) {
+    if (typeof key === 'string' && key !== '' && !candidates.includes(key)) {
+      candidates.push(key);
+    }
+  }
+  for (const key of candidates) {
+    if (typeof record[key] === 'boolean') return record[key] as boolean;
+  }
+  return undefined;
+}
+
+/**
+ * Toggle bound to a fetched source value (`field.source` + `valueKey`,
+ * default "value"). A source toggle WITHOUT `action` is a readonly status
+ * switch; WITH `action` it is interactive — flipping invokes the action
+ * command with the next boolean under `valueParam` (default "enabled").
+ *
+ * Race safety: the safeInvoke layer caches/dedups in-flight requests, so a
+ * status fetch started BEFORE the mutation can resolve with PRE-mutation
+ * data. The mutation response is therefore authoritative; fetches record
+ * the mutation generation at request time and a response whose generation
+ * went stale (a mutation began after the request started) never overwrites
+ * the post-mutation state.
+ */
 function SourceToggle({
   pluginId,
   node,
+  refreshSignal = 0,
+  onRefresh,
 }: {
   pluginId: string;
   node: Extract<UiNode, { kind: 'field' }>;
+  refreshSignal?: number;
+  onRefresh?: (nodeIds: string[]) => void;
 }) {
   const [checked, setChecked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchKey, setFetchKey] = useState(0);
+  const [busy, setBusy] = useState(false);
   const bump = useCallback(() => setFetchKey(k => k + 1), []);
+  // Monotonic generation bumped every time a mutation begins.
+  const mutationGen = useRef(0);
   const source = node.source;
   const command = source?.command;
 
   useEffect(() => {
     if (!source) return;
     let cancelled = false;
+    const genAtStart = mutationGen.current;
     const commandMissing = typeof command !== 'string' || command === '';
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync error state before the async fetch
     setError(commandMissing ? 'Toggle source is missing a command' : null);
@@ -411,6 +457,9 @@ function SourceToggle({
     invokeAction<unknown>(pluginId, command, source.params)
       .then(resp => {
         if (cancelled) return;
+        // Stale response: a mutation began after this request started —
+        // the mutation outcome owns the state now.
+        if (mutationGen.current !== genAtStart) return;
         const valueKey = node.valueKey ?? 'value';
         if (resp != null && typeof resp === 'object') {
           setChecked((resp as Record<string, unknown>)[valueKey] === true);
@@ -418,22 +467,67 @@ function SourceToggle({
       })
       .catch(err => {
         if (cancelled) return;
+        if (mutationGen.current !== genAtStart) return;
         setError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;
     };
-  }, [pluginId, source, command, node.valueKey, fetchKey]);
+  }, [pluginId, source, command, node.valueKey, fetchKey, refreshSignal]);
 
   useRefreshInterval(source?.refreshMs, bump);
+
+  const action = node.action;
+  const interactive = Boolean(action) && !node.readonly;
+
+  const handleChange = async (next: boolean) => {
+    if (!action || busy || node.readonly) return;
+    if (action.confirm && !window.confirm(resolveLabel(pluginId, action.confirm))) {
+      return;
+    }
+    mutationGen.current += 1;
+    const previous = checked;
+    // Optimistic flip — rolled back on business error or exception.
+    setChecked(next);
+    setBusy(true);
+    try {
+      const params: Record<string, unknown> = { ...(action.params ?? {}) };
+      params[action.valueParam ?? 'enabled'] = next;
+      const payload = await invokeAction<unknown>(pluginId, action.command, params);
+      const errorText = businessErrorText(payload);
+      if (errorText !== null) {
+        setChecked(previous);
+        appToast.error(errorText);
+        return;
+      }
+      // The mutation response is authoritative: adopt the returned state
+      // when the payload carries it; otherwise refetch the source.
+      const reported = mutationStateFromPayload(payload, node.valueKey);
+      if (reported !== undefined) {
+        setChecked(reported);
+      } else {
+        bump();
+      }
+      if (action.refreshOnSuccess && action.refreshOnSuccess.length > 0) {
+        onRefresh?.(action.refreshOnSuccess);
+      }
+    } catch {
+      setChecked(previous);
+      appToast.error(t('pluginUi.toggleActionFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-2">
       <Toggle
         label={resolveLabel(pluginId, node.label)}
         checked={checked}
-        disabled
-        onChange={() => undefined}
+        disabled={!interactive || busy}
+        onChange={v => {
+          void handleChange(v);
+        }}
       />
       {error && <NodeError message={error} />}
     </div>
@@ -524,7 +618,15 @@ function renderNode(
       }
       // toggle
       if (node.source) {
-        return <SourceToggle key={index} pluginId={pluginId} node={node} />;
+        return (
+          <SourceToggle
+            key={index}
+            pluginId={pluginId}
+            node={node}
+            refreshSignal={nodeRefreshSignal(refresh, node.id)}
+            onRefresh={refresh.request}
+          />
+        );
       }
       return (
         <Toggle

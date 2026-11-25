@@ -85,6 +85,7 @@ function renderAt(path: string) {
           <Route path="/ai/routing" element={<div data-testid="page-content" />} />
           <Route path="/ai/antigravity" element={<div data-testid="page-content" />} />
           <Route path="/ai/devbox" element={<div data-testid="page-content" />} />
+          <Route path="/ai/model-sync" element={<div data-testid="page-content" />} />
           <Route path="/ai/opencode-config" element={<div data-testid="page-content" />} />
           <Route path="/ai/plugin/:id" element={<div data-testid="page-content" />} />
         </Route>
@@ -522,9 +523,9 @@ describe('AiHubLayout breadcrumb bar (P2.9)', () => {
   });
 });
 
-// ── W4/P3.4: opencode gets its own rail item ─────────────────────────────────
+// ── W4/P3.4: model sync gets its own rail item ───────────────────────────────
 
-describe('AiHubLayout opencode rail item (P3)', () => {
+describe('AiHubLayout model sync rail item (P3)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     _resetForTests();
@@ -533,25 +534,33 @@ describe('AiHubLayout opencode rail item (P3)', () => {
     (useMediaQuery as jest.Mock).mockReturnValue(false);
   });
 
-  it('renders the opencode rail item and navigates to /ai/opencode-config', async () => {
+  it('renders the model sync rail item and navigates to /ai/model-sync', async () => {
     renderAt('/ai');
 
-    const item = screen.getByTestId('ai-hub-rail-item-opencode');
+    const item = screen.getByTestId('ai-hub-rail-item-modelSync');
     await act(async () => {
       fireEvent.click(item);
     });
     await waitFor(() => {
-      expect(navigatedPath).toBe('/ai/opencode-config');
+      expect(navigatedPath).toBe('/ai/model-sync');
     });
   });
 
-  it('marks the opencode item active at /ai/opencode-config, not connections', () => {
-    renderAt('/ai/opencode-config');
+  it('marks the model sync item active at /ai/model-sync, not connections', () => {
+    renderAt('/ai/model-sync');
 
-    expect(screen.getByTestId('ai-hub-rail-item-opencode').getAttribute('aria-current')).toBe(
+    expect(screen.getByTestId('ai-hub-rail-item-modelSync').getAttribute('aria-current')).toBe(
       'page',
     );
     expect(screen.getByTestId('ai-hub-rail-item-connections').getAttribute('aria-current')).toBeNull();
+  });
+
+  it('keeps the model sync item active for the advanced OpenCode editor', () => {
+    renderAt('/ai/opencode-config');
+
+    expect(screen.getByTestId('ai-hub-rail-item-modelSync').getAttribute('aria-current')).toBe(
+      'page',
+    );
   });
 });
 

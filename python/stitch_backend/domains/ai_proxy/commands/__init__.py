@@ -37,6 +37,13 @@ from stitch_backend.domains.ai_proxy.commands.ide_config import (
     cmd_get_ai_proxy_ide_config_preview,
     cmd_restore_ai_proxy_ide_config,
 )
+from stitch_backend.domains.ai_proxy.commands.model_sync import (
+    cmd_model_sync_apply,
+    cmd_model_sync_catalog,
+    cmd_model_sync_preview,
+    cmd_model_sync_restore,
+    cmd_model_sync_status,
+)
 from stitch_backend.domains.ai_proxy.commands.models import (
     _models_cache,
     cmd_get_available_models,
@@ -84,6 +91,11 @@ __all__ = [
     "cmd_get_provider_model_mappings",
     "cmd_get_weekly_stats",
     "cmd_import_ai_proxy_accounts_payload",
+    "cmd_model_sync_apply",
+    "cmd_model_sync_catalog",
+    "cmd_model_sync_preview",
+    "cmd_model_sync_restore",
+    "cmd_model_sync_status",
     "cmd_open_url_in_browser",
     "cmd_provider_auth_flow_cancel",
     "cmd_provider_auth_flow_start",

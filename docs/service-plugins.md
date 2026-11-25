@@ -466,6 +466,48 @@ input (v2.1): `source: {command, params?, refreshMs?}` plus `valueKey?`
 (default `"value"`) renders a disabled switch reflecting the boolean
 under `valueKey` in the `source.command` response.
 
+### Interactive toggle actions (v2.2)
+
+A source toggle MAY declare an `action` to become interactive — the
+service-plugin bridge on/off switch:
+
+```json
+{
+  "kind": "field", "field": "toggle", "id": "bridge", "label": "myplugin.bridge",
+  "source": {"command": "bridge_status"},
+  "valueKey": "enabled",
+  "action": {
+    "command": "set_bridge",
+    "valueParam": "enabled",
+    "confirm": "myplugin.confirm.bridge",
+    "refreshOnSuccess": ["services"]
+  }
+}
+```
+
+Flipping the switch invokes `plugin.{id}.{action.command}` with
+`{...action.params, [valueParam ?? "enabled"]: nextBool}`. Semantics:
+
+- the flip is **optimistic** — the switch moves immediately and rolls
+  back with an error toast on a business error (`{success: false}` /
+  `{accepted: false}`) or an exception;
+- the **mutation response is authoritative**: when the payload carries
+  the new state as a boolean under `valueKey` (falling back to the
+  conventional `enabled`/`value` keys) the renderer adopts it directly;
+  only when no such key is present does it refetch the source. Source
+  responses whose request started before the mutation began never
+  overwrite the post-mutation state (the invoke layer caches/dedups
+  in-flight requests, so a pre-mutation status fetch can otherwise win
+  the race);
+- `readonly: true` disables interaction even when `action` is present,
+  and a source toggle WITHOUT `action` stays a readonly status switch;
+- `confirm` (i18n key or literal, resolved like `label`) prompts before
+  invoking; `refreshOnSuccess` lists node ids whose sources refetch
+  after a successful flip.
+
+The linter requires `action` only on toggle fields WITH a `source`
+binding and `action.command` to be declared in `contributions.commands`.
+
 ### Source polling and empty states (v2.1)
 
 `table`, `card_grid` and `markdown` sources accept `refreshMs`: the
@@ -648,7 +690,10 @@ at **dev-install**, at **publish**, and in CI
 - a node kind outside the frozen vocabulary, or a `field` type outside
   `text`/`select`/`toggle`;
 - a command reference (button, `source.command`, `rowActions`,
-  `card.action`) that is not declared in `contributions.commands`;
+  `card.action`, toggle `action.command`, job start/status/cancel) that is
+  not declared in `contributions.commands`;
+- a toggle field `action` on a non-toggle field or without a `source`
+  binding, or an empty/non-string `action.valueParam`;
 - a referenced label/`empty`/`hint`/`confirm` i18n key that does not
   resolve in BOTH the `ru` and `en` bundles (including column labels, tab
   labels and the page title);
@@ -659,7 +704,9 @@ at **dev-install**, at **publish**, and in CI
 
 `paramsFromRow` targets that are not a declared table column are a
 **warning**, never a block: rows may carry extra keys (e.g. totp rows
-expose `id` without a visible column).
+expose `id` without a visible column). `refreshOnSuccess` node ids (button
+or toggle action) that are not declared on the page are likewise a
+warning — the renderer ignores unknown ids.
 
 **Honest scope.** The gate is structural and static. It does NOT catch
 semantic param inversion (a button wired to the wrong field with the right

@@ -374,6 +374,46 @@ export {
 } from './modules/aiProxy';
 
 // ============================================
+// Model Sync
+// ============================================
+
+export {
+  modelSyncCatalog,
+  modelSyncStatus,
+  modelSyncPreview,
+  modelSyncApply,
+  modelSyncRestore,
+  OMP_ROLES,
+  OMP_EFFORTS,
+  type ModelSyncTarget,
+  type ModelSyncSchemaOverride,
+  type OpenCodeSchemaVersion,
+  type ModelSyncCatalogModel,
+  type ModelSyncCatalogResponse,
+  type OpenCodeDetectedVersion,
+  type OpenCodeCredentialStatus,
+  type OpenCodeCredentialState,
+  type ModelSyncOpenCodeStatus,
+  type ModelSyncOmpProfile,
+  type ModelSyncStatusResponse,
+  type ModelSyncOmpEffort,
+  type ModelSyncOmpRole,
+  type ModelSyncRoleUpdate,
+  type ModelSyncPlanParams,
+  type ModelDiffSummary,
+  type ModelSyncPreviewFile,
+  type ModelSyncPreviewResponse,
+  type ModelSyncApplyParams,
+  type ModelSyncApplyFileResult,
+  type ModelSyncShaMismatch,
+  type ModelSyncApplyResponse,
+  type ModelSyncRestoreEntry,
+  type ModelSyncRestoreParams,
+  type ModelSyncRestoreFileResult,
+  type ModelSyncRestoreResponse,
+} from './modules/modelSync';
+
+// ============================================
 // Scheduler
 // ============================================
 
@@ -479,6 +519,7 @@ export * as logs from './modules/logs';
 export * as observability from './modules/observability';
 export * as kiroPatch from './modules/kiro-patch';
 export * as aiProxy from './modules/aiProxy';
+export * as modelSync from './modules/modelSync';
 export * as scheduler from './modules/scheduler';
 export * as backgroundManager from './modules/backgroundManager';
 export * as apiKeys from './modules/apiKeys';

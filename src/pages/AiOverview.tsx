@@ -10,13 +10,14 @@ import {
   Orbit,
   Route,
   Server,
-  Settings2,
+  Waypoints,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import Header from '@/components/layout/Header';
 import { Button, GlassCard, PageHeader } from '@/components/ui';
 import { useAppStore } from '@/stores/app';
+import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface HubAction {
@@ -25,6 +26,8 @@ interface HubAction {
   to: string;
   icon: LucideIcon;
   tone: string;
+  secondaryTo?: string;
+  secondaryLabel?: string;
 }
 
 interface HubGroup {
@@ -111,11 +114,13 @@ export default function AiOverview() {
           tone: 'text-indigo-300 bg-indigo-500/10',
         },
         {
-          title: 'OpenCode',
-          description: isRu ? 'Провайдеры, агенты и модели' : 'Providers, agents and models',
-          to: '/ai/opencode-config',
-          icon: Settings2,
+          title: t('modelSync.overviewCardTitle'),
+          description: t('modelSync.overviewCardDescription'),
+          to: '/ai/model-sync',
+          icon: Waypoints,
           tone: 'text-fuchsia-300 bg-fuchsia-500/10',
+          secondaryTo: '/ai/opencode-config',
+          secondaryLabel: t('modelSync.overviewAdvancedLink'),
         },
         {
           title: 'NotebookLM',
@@ -168,6 +173,15 @@ export default function AiOverview() {
                         <div className="min-w-0 flex-1">
                           <h3 className="text-sm font-medium text-slate-100">{action.title}</h3>
                           <p className="mt-1 text-xs leading-5 text-slate-500">{action.description}</p>
+                          {action.secondaryTo && action.secondaryLabel ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(action.secondaryTo as string)}
+                              className="mt-2 text-[11px] text-indigo-300 transition-colors hover:text-indigo-200"
+                            >
+                              {action.secondaryLabel}
+                            </button>
+                          ) : null}
                         </div>
                         <Button
                           variant="ghost"

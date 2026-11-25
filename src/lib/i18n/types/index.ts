@@ -60,6 +60,7 @@ import type { UiTextsTranslations } from './uiTexts';
 import type { FooterTranslations } from './footer';
 import type { UsersTranslations } from './users';
 import type { AiTranslations } from './ai';
+import type { ModelSyncTranslations } from './modelSync';
 
 export interface Translations
   extends AccountsTranslations,
@@ -123,4 +124,5 @@ export interface Translations
     FooterTranslations,
     UsersTranslations,
     AiTranslations,
+    ModelSyncTranslations,
     DevboxPageTranslations {}

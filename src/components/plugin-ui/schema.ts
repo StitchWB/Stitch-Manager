@@ -152,6 +152,37 @@ export interface CardTemplate {
   action?: CardAction;
 }
 
+/**
+ * Interactive action of a toggle field with a `source` binding (additive
+ * v2.2 revision). A source toggle WITHOUT `action` stays a readonly
+ * status switch; a source toggle WITH `action` becomes interactive:
+ * flipping it invokes `plugin.{pluginId}.{action.command}` with
+ * `{...action.params, [valueParam ?? 'enabled']: nextBool}`.
+ *
+ * COMMAND CONTRACT: the command returns the new state — the renderer
+ * reads `valueKey` (default of the toggle's own valueKey, i.e. the same
+ * key the source uses) from the response payload when present and treats
+ * it as authoritative; only when the key is absent does it fall back to
+ * refetching the source. This guards against the invoke-layer response
+ * cache / in-flight dedup satisfying a post-mutation refetch with
+ * pre-mutation data.
+ *
+ * `action` is only valid on a toggle field that declares `source`;
+ * `readonly: true` disables interaction even when `action` is present.
+ */
+export interface ToggleAction {
+  /** Plugin command invoked as `plugin.{pluginId}.{command}`; must be declared in contributions.commands. */
+  command: string;
+  /** Static extra params merged into every invocation. */
+  params?: Record<string, unknown>;
+  /** Name of the boolean param carrying the next state; default `"enabled"`. */
+  valueParam?: string;
+  /** Optional confirmation prompt (i18n key or literal) shown before invoking. */
+  confirm?: string;
+  /** Ids of nodes whose sources are refetched after a successful invocation. Unknown ids are ignored. */
+  refreshOnSuccess?: string[];
+}
+
 /** Start invocation of a job node; the command must return `{jobId: string}`. */
 export interface JobStart {
   command: string;
@@ -194,6 +225,12 @@ export type UiNode =
        * carries the toggle state (additive v2.1 revision).
        */
       valueKey?: string;
+      /**
+       * Interactive mutation binding of a source toggle (additive v2.2
+       * revision). Present only together with `source` — see
+       * `ToggleAction` for the invocation and response contract.
+       */
+      action?: ToggleAction;
     }
   | {
       kind: 'table';

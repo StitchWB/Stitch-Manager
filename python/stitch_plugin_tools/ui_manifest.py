@@ -7,10 +7,11 @@ rendering a broken page.
 Errors (block dev-install / publish / CI):
 
   1. A declarative page node uses a kind outside the frozen v2 vocabulary
-     (heading, section, field, table, button, card_grid, markdown) or a
+     (heading, section, field, table, button, card_grid, markdown, job) or a
      ``field`` type outside (text, select, toggle).
   2. A referenced command (button.command, source.command,
-     rowActions[].command, card.action.command, toggle field source.command)
+     rowActions[].command, card.action.command, toggle field source.command,
+     toggle field action.command, job start/status/cancel commands)
      is not declared in ``contributions.commands``.
   3. A referenced i18n key (text/title/label/placeholder/empty/hint/confirm
      and table column labels, tab labels, page title) does not resolve in
@@ -44,7 +45,7 @@ from pathlib import Path
 from typing import Any
 
 NODE_KINDS = frozenset(
-    {"heading", "section", "field", "table", "button", "card_grid", "markdown"}
+    {"heading", "section", "field", "table", "button", "card_grid", "markdown", "job"}
 )
 FIELD_KINDS = frozenset({"text", "select", "toggle"})
 UI_KINDS = frozenset({"declarative", "core_page"})
@@ -215,6 +216,38 @@ class _PageLinter:
             source = node.get("source")
             if isinstance(source, dict):
                 self.command(f"{loc}.source.command", source.get("command"))
+            action = node.get("action")
+            if action is not None:
+                if field_type != "toggle":
+                    self.errors.append(
+                        f"{loc}.action: action is only valid on toggle fields"
+                    )
+                elif not isinstance(source, dict):
+                    self.errors.append(
+                        f"{loc}.action: action requires a source binding "
+                        f"(a source-less toggle holds user input)"
+                    )
+                if not isinstance(action, dict):
+                    self.errors.append(f"{loc}.action: must be an object")
+                else:
+                    self.command(f"{loc}.action.command", action.get("command"))
+                    self.key(f"{loc}.action.confirm", action.get("confirm"))
+                    value_param = action.get("valueParam")
+                    if value_param is not None and (
+                        not isinstance(value_param, str) or value_param == ""
+                    ):
+                        self.errors.append(
+                            f"{loc}.action.valueParam: must be a non-empty string"
+                        )
+                    refresh = action.get("refreshOnSuccess")
+                    if isinstance(refresh, list):
+                        for target in refresh:
+                            if isinstance(target, str) and target not in self.node_ids:
+                                self.warnings.append(
+                                    f"{loc}.action.refreshOnSuccess: node id "
+                                    f"{target!r} is not declared on the page "
+                                    f"(ignored at render)"
+                                )
             for i, option in enumerate(node.get("options") or []):
                 if isinstance(option, dict):
                     self.key(f"{loc}.options[{i}].label", option.get("label"))
@@ -269,6 +302,19 @@ class _PageLinter:
             )
             self.key(f"{loc}.empty", node.get("empty"))
             return
+        if kind == "job":
+            self.key(f"{loc}.label", node.get("label"))
+            start = node.get("start")
+            self.command(
+                f"{loc}.start.command",
+                start.get("command") if isinstance(start, dict) else None,
+            )
+            if isinstance(start, dict):
+                self.params_from(start, f"{loc}.start")
+            for opt_key in ("statusCommand", "cancelCommand"):
+                value = node.get(opt_key)
+                if value is not None:
+                    self.command(f"{loc}.{opt_key}", value)
 
 
 def lint_contributions(
