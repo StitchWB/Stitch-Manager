@@ -176,6 +176,23 @@ describe('DevboxConnect ingress configuration', () => {
     expect(await screen.findByText('Tunnel not configured — fill in the domain and token.')).toBeTruthy();
   });
 
+  it('warns when the manifest route is down behind a healthy bridge', async () => {
+    mockRoutes({
+      connection_check: {
+        ...connectionOkFixture,
+        manifest_status: 404,
+        public_url: 'https://devbox.example.test',
+        public_status: 530,
+      },
+    });
+    await renderConnect();
+
+    const status = screen.getByTestId('devbox-connect-status');
+    expect(status.textContent).toContain('16 tools active');
+    expect(status.textContent).toContain('Endpoint registry unreachable: HTTP 404');
+    expect(status.textContent).toContain('PUBLIC_URL dead: HTTP 530');
+  });
+
   it('recommends Manual when probe fails and PUBLIC_URL exists', async () => {
     mockRoutes({ connection_check: connectionFailFixture });
     await renderConnect();
