@@ -300,14 +300,25 @@ async function runPluginCommand(
       appToast.error(errorText);
       return { ok: false };
     }
-    appToast.success(t('pluginUi.actionSucceeded'));
-    return {
-      ok: true,
-      payload:
-        payload != null && typeof payload === 'object' && !Array.isArray(payload)
-          ? (payload as Record<string, unknown>)
-          : undefined,
-    };
+    const isRecord = payload != null && typeof payload === 'object' && !Array.isArray(payload);
+    const record = isRecord ? (payload as Record<string, unknown>) : undefined;
+    // A `warning` string is status surfacing (e.g. bridge refused to start), not
+    // copyable output: toast it instead of the success toast and keep it out of
+    // the result dialog.
+    const warningText =
+      record && typeof record.warning === 'string' && record.warning !== ''
+        ? record.warning
+        : null;
+    if (warningText !== null) {
+      appToast.warning(warningText);
+    } else {
+      appToast.success(t('pluginUi.actionSucceeded'));
+    }
+    if (record && warningText !== null) {
+      const { warning: _warning, ...rest } = record;
+      return { ok: true, payload: rest };
+    }
+    return { ok: true, payload: record };
   } catch {
     appToast.error(t('pluginUi.actionFailed'));
     return { ok: false };
@@ -333,25 +344,29 @@ function CommandResultDialog({
 
   return (
     <Modal isOpen onClose={onClose} title={t('pluginUi.actionSucceeded')} size="sm">
-      <div className="space-y-4">
+      <div className="space-y-5">
         {entries.map(entry => (
-          <div key={entry.key} className="space-y-1.5">
-            <div className="text-xs font-medium text-slate-400">{entry.key}</div>
+          <div key={entry.key} className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                {entry.key}
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                data-testid={`copy-${entry.key}`}
+                onClick={() => void handleCopy(entry.value)}
+              >
+                {t('common.copy')}
+              </Button>
+            </div>
             <Textarea
               readOnly
               rows={Math.min(8, entry.value.split('\n').length + 1)}
               value={entry.value}
               data-testid={`command-result-${entry.key}`}
-              className="font-mono text-xs"
+              className="font-mono text-[13px] leading-relaxed bg-black/30 border-white/[0.08] rounded-lg"
             />
-            <Button
-              size="sm"
-              variant="secondary"
-              data-testid={`copy-${entry.key}`}
-              onClick={() => void handleCopy(entry.value)}
-            >
-              {t('common.copy')}
-            </Button>
           </div>
         ))}
       </div>

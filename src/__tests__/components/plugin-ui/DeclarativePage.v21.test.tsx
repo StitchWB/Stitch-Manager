@@ -187,6 +187,56 @@ describe('DeclarativePage v2.1 renderer feedback', () => {
     expect(appToast.error).not.toHaveBeenCalled();
   });
 
+  it('(a2) a warning payload toasts the warning and never opens the result dialog', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue({
+      running: false,
+      endpoint: '',
+      warning: 'no QuickWork accounts — add one first',
+    });
+    render(
+      <DeclarativePage
+        pluginId="test"
+        schema={buttonSchema({ id: 'go', label: 'Go', command: 'bridge_start' })}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Go'));
+    });
+
+    await waitFor(() => {
+      expect(appToast.warning).toHaveBeenCalledWith('no QuickWork accounts — add one first');
+    });
+    expect(appToast.success).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('ui-modal')).toBeNull();
+    expect(screen.queryAllByTestId(/^command-result-/)).toHaveLength(0);
+  });
+
+  it('(a3) warning is stripped but remaining copyable entries still render', async () => {
+    (safeInvoke as jest.Mock).mockResolvedValue({
+      accepted: true,
+      actionId: 'a1',
+      warning: 'partial',
+      chatBlock: 'tok_abc123',
+    });
+    render(
+      <DeclarativePage
+        pluginId="test"
+        schema={buttonSchema({ id: 'go', label: 'Go', command: 'go' })}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Go'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('command-result-chatBlock')).toBeTruthy();
+    });
+    expect(appToast.warning).toHaveBeenCalledWith('partial');
+    expect(screen.queryByTestId('command-result-warning')).toBeNull();
+  });
+
   it('(b) business error {success:false,error} surfaces the error text', async () => {
     (safeInvoke as jest.Mock).mockResolvedValue({ success: false, error: 'boom' });
     render(
