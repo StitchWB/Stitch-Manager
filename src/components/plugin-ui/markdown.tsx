@@ -52,7 +52,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       out.push(
         <code
           key={k}
-          className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-xs text-indigo-300"
+          className="rounded-md border border-white/[0.08] bg-white/[0.06] px-1.5 py-0.5 font-mono text-xs text-indigo-300"
         >
           {match[2]}
         </code>,
@@ -143,7 +143,7 @@ export function renderMarkdown(text: string): ReactNode {
       blocks.push(
         <pre
           key={key++}
-          className="overflow-x-auto rounded-lg border border-white/[0.06] bg-black/40 p-3 font-mono text-xs text-slate-300"
+          className="overflow-x-auto rounded-lg border border-white/[0.08] bg-black/50 p-3.5 font-mono text-xs leading-relaxed text-slate-300"
         >
           <code>{buf.join('\n')}</code>
         </pre>,
@@ -173,16 +173,25 @@ export function renderMarkdown(text: string): ReactNode {
         i++;
       }
       blocks.push(
-        <ul key={key++} className="list-disc space-y-1 pl-5 text-sm text-slate-300">
+        <ul key={key++} className="space-y-2 text-sm text-slate-300">
           {items.map((item, idx) => (
-            <li key={idx}>{renderInline(item, `ul${key}-${idx}`)}</li>
+            <li key={idx} className="flex items-start gap-2.5">
+              <span
+                aria-hidden="true"
+                className="mt-[0.55rem] h-1 w-1 shrink-0 rounded-full bg-slate-500"
+              />
+              <span className="min-w-0 flex-1 leading-relaxed">
+                {renderInline(item, `ul${key}-${idx}`)}
+              </span>
+            </li>
           ))}
         </ul>,
       );
       continue;
     }
 
-    // Ordered list — consecutive `1. item` / `1) item` lines.
+    // Ordered list — consecutive `1. item` / `1) item` lines. Rendered as
+    // numbered steps with accent chips instead of browser-default numerals.
     if (/^\s*\d+[.)]\s+/.test(line)) {
       const items: string[] = [];
       while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
@@ -190,9 +199,19 @@ export function renderMarkdown(text: string): ReactNode {
         i++;
       }
       blocks.push(
-        <ol key={key++} className="list-decimal space-y-1 pl-5 text-sm text-slate-300">
+        <ol key={key++} className="space-y-2.5 text-sm text-slate-300">
           {items.map((item, idx) => (
-            <li key={idx}>{renderInline(item, `ol${key}-${idx}`)}</li>
+            <li key={idx} className="flex items-start gap-3">
+              <span
+                aria-hidden="true"
+                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-indigo-400/30 bg-indigo-500/15 font-mono text-[11px] font-semibold text-indigo-300"
+              >
+                {idx + 1}
+              </span>
+              <span className="min-w-0 flex-1 leading-relaxed">
+                {renderInline(item, `ol${key}-${idx}`)}
+              </span>
+            </li>
           ))}
         </ol>,
       );
@@ -212,5 +231,5 @@ export function renderMarkdown(text: string): ReactNode {
     );
   }
 
-  return <div className="space-y-3">{blocks}</div>;
+  return <div className="space-y-4">{blocks}</div>;
 }

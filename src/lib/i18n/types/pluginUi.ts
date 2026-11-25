@@ -9,6 +9,7 @@ export interface PluginUiTranslations {
     pluginNotInstalled: string;
     pluginNotInstalledDescription: string;
     noData: string;
+    emptyHint: string;
     runtime: {
       enabled: string;
       enable: string;
