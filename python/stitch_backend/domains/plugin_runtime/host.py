@@ -6,7 +6,7 @@ child as a ``subprocess.Popen`` with stdin/stdout/stderr PIPE handles
 and process-group isolation.  The host then attaches an
 :class:`RpcPluginClient` to the supervisor-spawned process (reader
 thread + ``plugin.init`` handshake), monitors for crashes, and
-restarts once.  Kill always goes through the supervisor's
+restarts within a sliding window.  Kill always goes through the supervisor's
 ``_terminate_tree`` (kill-tree), never through the RPC client.
 
 Zone-2: depends on ``stitch_backend`` (supervisor) and
@@ -84,7 +84,7 @@ class ServicePluginHost:
 
     The supervisor owns the process (spawn + kill-tree).  The host owns
     the RPC protocol (handshake, calls, ping) and the crash-restart
-    policy (restart-once).
+    policy (sliding crash window).
     """
 
     def __init__(
@@ -130,6 +130,7 @@ class ServicePluginHost:
         self.supervisor = get_supervisor()
         self.rpc = RpcPluginClient(default_timeout=default_timeout)
         self._restart_count = 0
+        self._death_times: list[float] = []
         self._stopping = False
 
         self._crash_loop = False
@@ -191,6 +192,7 @@ class ServicePluginHost:
                 return {"status": "error", "error": str(exc),
                         "port": None, "pid": None, "uptimeSeconds": None}
             self._restart_count = 0
+            self._death_times.clear()
             self._crash_loop = False
             self._crash_loop_event.clear()
             self._stopping = False
