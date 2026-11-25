@@ -189,7 +189,7 @@ export function OpenCodeTargetCard({
             hint={
               effectiveSchema === 'v2'
                 ? t('modelSync.targets.smallModelV2Disabled')
-                : t('modelSync.targets.smallModelBackendHint')
+                : t('modelSync.targets.smallModelHint')
             }
             options={modelOptions}
             data-testid="opencode-small-model-select"

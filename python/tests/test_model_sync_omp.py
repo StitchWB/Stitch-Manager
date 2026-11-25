@@ -82,9 +82,7 @@ def test_models_yaml_preserves_comments_and_unknown_keys(tmp_path: Path) -> None
         encoding="utf-8",
     )
     data = omp.load_yaml_rt(path)
-    updated, diff = omp.update_models_yaml(
-        data, [ENTRY], BASE, KEY, prune_unselected=True
-    )
+    updated, diff = omp.update_models_yaml(data, [ENTRY], BASE, KEY, prune_unselected=True)
     text = omp.dump_yaml_rt(updated)
     assert "top comment — must survive" in text
     stitch = updated["providers"]["stitch"]
@@ -215,11 +213,13 @@ def test_config_enabled_models_add_only_when_exists() -> None:
 def test_config_fallback_chain_pruning_and_self_reference() -> None:
     data = omp.CommentedMap()
     data["retry"] = omp.CommentedMap()
-    data["retry"]["fallbackChains"] = omp.CommentedMap({
-        "default": ["stitch/old", "other/x", "stitch/vision-best"],
-        "stitch/old": ["other/y"],
-        "stitch/vision-best": ["stitch/vision-best", "other/z"],
-    })
+    data["retry"]["fallbackChains"] = omp.CommentedMap(
+        {
+            "default": ["stitch/old", "other/x", "stitch/vision-best"],
+            "stitch/old": ["other/y"],
+            "stitch/vision-best": ["stitch/vision-best", "other/z"],
+        }
+    )
     updated, warnings, _ = omp.update_config_yaml(
         data, roles=[], selected_ids=["vision-best"], pruned_ids=["old"], ensure_enabled=False
     )
@@ -282,3 +282,81 @@ def test_resolve_unknown_named_profile(tmp_path: Path, monkeypatch: pytest.Monke
     profile = omp.resolve_profile("newprof")
     assert profile.name == "newprof"
     assert profile.agent_dir == tmp_path / "profiles" / "newprof" / "agent"
+
+
+# ── omp binary detection ────────────────────────────────────────────────────
+
+import subprocess  # noqa: E402
+
+from stitch_backend.domains.ai_proxy.model_sync import detection  # noqa: E402
+
+
+def _fake_which(path: str | None):
+    return lambda name: path if name == "omp" else None
+
+
+def test_probe_omp_binary_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = tmp_path / "omp.exe"
+    fake.write_text("binary", encoding="utf-8")
+    monkeypatch.setattr(detection.shutil, "which", _fake_which(str(fake)))
+
+    def fake_run(*args, **kwargs):  # noqa: ANN202, ANN002, ANN003
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout="omp 0.14.2\n", stderr=""
+        )
+
+    monkeypatch.setattr(detection.subprocess, "run", fake_run)
+    result = detection.probe_omp_binary()
+    assert result["binaryPath"] == str(fake)
+    assert result["version"] == "0.14.2"
+    assert "0.14.2" in result["raw"]
+
+
+def test_probe_omp_binary_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(detection.shutil, "which", _fake_which(None))
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    result = detection.probe_omp_binary()
+    assert result["binaryPath"] is None
+    assert result["version"] is None
+    assert result["raw"] is None
+
+
+def test_probe_omp_binary_failure_tolerated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = tmp_path / "omp.exe"
+    fake.write_text("binary", encoding="utf-8")
+    monkeypatch.setattr(detection.shutil, "which", _fake_which(str(fake)))
+
+    def raising_run(*args, **kwargs):  # noqa: ANN202, ANN002, ANN003
+        raise OSError("simulated launch failure")
+
+    monkeypatch.setattr(detection.subprocess, "run", raising_run)
+    result = detection.probe_omp_binary(timeout=0.2)
+    assert result["binaryPath"] is None
+    assert result["version"] is None
+
+
+def test_probe_omp_binary_localappdata_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = tmp_path / "omp" / "omp.exe"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("binary", encoding="utf-8")
+    monkeypatch.setattr(detection.shutil, "which", _fake_which(None))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    def fake_run(*args, **kwargs):  # noqa: ANN202, ANN002, ANN003
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="0.9.1", stderr="")
+
+    monkeypatch.setattr(detection.subprocess, "run", fake_run)
+    result = detection.probe_omp_binary()
+    assert result["binaryPath"] == str(fake)
+    assert result["version"] == "0.9.1"
+
+
+def test_parse_omp_version() -> None:
+    assert detection._parse_omp_version("omp 0.14.2") == "0.14.2"
+    assert detection._parse_omp_version("1.2.3-beta.1") == "1.2.3-beta.1"
+    assert detection._parse_omp_version("") is None
+    assert detection._parse_omp_version("no digits") is None

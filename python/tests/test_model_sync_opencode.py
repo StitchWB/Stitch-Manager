@@ -119,6 +119,36 @@ def test_v2_write_shape_and_legacy_removal() -> None:
     assert merged.get("model") is None
 
 
+def test_v1_explicit_small_model_written() -> None:
+    merged = oc.merge_stitch_block({}, ENTRIES, BASE, KEY, "v1", small_model="stitch/text-fast")
+    assert merged["small_model"] == "stitch/text-fast"
+
+
+def test_v1_explicit_small_model_overrides_existing() -> None:
+    existing = {"small_model": "stitch/old-small"}
+    merged = oc.merge_stitch_block(
+        existing, ENTRIES, BASE, KEY, "v1", small_model="stitch/text-fast"
+    )
+    assert merged["small_model"] == "stitch/text-fast"
+
+
+def test_v1_existing_small_model_never_clobbered_implicitly() -> None:
+    existing = {"small_model": "other/user-choice"}
+    merged = oc.merge_stitch_block(existing, ENTRIES, BASE, KEY, "v1")
+    assert merged["small_model"] == "other/user-choice"
+
+
+def test_v1_small_model_falls_back_to_first_when_absent() -> None:
+    merged = oc.merge_stitch_block({}, ENTRIES, BASE, KEY, "v1")
+    assert merged["small_model"] == "stitch/vision-best"
+
+
+def test_v2_never_writes_small_model_even_when_requested() -> None:
+    merged = oc.merge_stitch_block({}, ENTRIES, BASE, KEY, "v2", small_model="stitch/text-fast")
+    assert "small_model" not in merged
+    assert "model" not in merged
+
+
 def test_v2_does_not_write_small_model() -> None:
     merged = oc.merge_stitch_block({}, ENTRIES, BASE, KEY, "v2")
     assert "small_model" not in merged
