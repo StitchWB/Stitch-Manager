@@ -60,9 +60,12 @@ function NodeLoading() {
 /** Dashed-border centered empty block shared by table/card_grid/markdown nodes. */
 function NodeEmpty({ message }: { message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-8 text-center">
-      <Inbox className="h-5 w-5 text-slate-600" aria-hidden="true" />
-      <p className="text-xs text-slate-500">{message}</p>
+    <div className="flex flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-10 text-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.04]">
+        <Inbox className="h-5 w-5 text-slate-500" aria-hidden="true" />
+      </div>
+      <p className="text-sm font-medium text-slate-400">{message}</p>
+      <p className="text-xs text-slate-600">{t('pluginUi.emptyHint')}</p>
     </div>
   );
 }
@@ -517,6 +520,7 @@ function SourceToggle({
         label={resolveLabel(pluginId, node.label)}
         checked={checked}
         disabled={!interactive || busy}
+        className="w-full justify-between"
         onChange={v => {
           void handleChange(v);
         }}
@@ -548,11 +552,18 @@ function renderNode(
     case 'section':
       if (node.collapsible) {
         return (
-          <details key={index} open={node.defaultOpen} className="rounded-lg border border-white/[0.06] bg-white/[0.02]">
-            <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-slate-300 hover:text-white">
+          <details
+            key={index}
+            open={node.defaultOpen}
+            className="rounded-xl border border-white/[0.07] bg-vsc-panel-solid/50"
+          >
+            <summary className="flex cursor-pointer items-center gap-2.5 px-5 py-3.5 text-sm font-medium text-slate-300 transition-colors hover:text-white">
+              {node.title && (
+                <span aria-hidden="true" className="h-3.5 w-1 shrink-0 rounded-full bg-indigo-500/70" />
+              )}
               {node.title && resolveLabel(pluginId, node.title)}
             </summary>
-            <div className="space-y-3 border-t border-white/[0.06] p-4">
+            <div className="space-y-4 border-t border-white/[0.06] px-5 py-4">
               {renderNodeList(pluginId, node.nodes ?? [], fields, refresh)}
             </div>
           </details>
@@ -561,14 +572,19 @@ function renderNode(
       return (
         <div
           key={index}
-          className="space-y-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+          className="rounded-xl border border-white/[0.07] bg-vsc-panel-solid/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
         >
           {node.title && (
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              {resolveLabel(pluginId, node.title)}
+            <div className="flex items-center gap-2.5 px-5 pt-4">
+              <span aria-hidden="true" className="h-3.5 w-1 shrink-0 rounded-full bg-indigo-500/70" />
+              <div className="text-sm font-semibold tracking-wide text-slate-100">
+                {resolveLabel(pluginId, node.title)}
+              </div>
             </div>
           )}
-          {renderNodeList(pluginId, node.nodes ?? [], fields, refresh)}
+          <div className={node.title ? 'space-y-4 px-5 pb-5 pt-4' : 'space-y-4 p-5'}>
+            {renderNodeList(pluginId, node.nodes ?? [], fields, refresh)}
+          </div>
         </div>
       );
     case 'field': {
@@ -627,6 +643,7 @@ function renderNode(
           checked={Boolean(value)}
           onChange={v => fields.onChange(node.id, v)}
           disabled={node.readonly}
+          className="w-full justify-between"
         />
       );
     }
@@ -686,7 +703,17 @@ function renderNode(
   }
 }
 
-/** Render a node list, grouping consecutive button nodes into one wrapping row. */
+/** A toggle field node — consecutive ones are grouped into a control list. */
+function isToggleNode(node: UiNode): boolean {
+  return node.kind === 'field' && node.field === 'toggle';
+}
+
+/**
+ * Render a node list, grouping consecutive button nodes into one wrapping
+ * row and consecutive toggle fields into a shared control list (divided
+ * rows with the switch right-aligned) so settings read as one control
+ * surface instead of scattered switches.
+ */
 function renderNodeList(
   pluginId: string,
   nodes: UiNode[],
@@ -695,24 +722,49 @@ function renderNodeList(
 ): ReactNode[] {
   const out: ReactNode[] = [];
   let run: number[] = [];
+  let toggleRun: number[] = [];
   const flushRun = (): void => {
     if (run.length === 0) return;
     out.push(
-      <div key={`buttons-${run[0]}`} className="flex flex-wrap items-center gap-2">
+      <div key={`buttons-${run[0]}`} className="flex flex-wrap items-center gap-3">
         {run.map(i => renderNode(pluginId, nodes[i], i, fields, refresh))}
       </div>,
     );
     run = [];
   };
+  const flushToggleRun = (): void => {
+    if (toggleRun.length === 0) return;
+    out.push(
+      <div
+        key={`toggles-${toggleRun[0]}`}
+        className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.02]"
+      >
+        {toggleRun.map(i => (
+          <div key={i} className="px-4 py-3">
+            {renderNode(pluginId, nodes[i], i, fields, refresh)}
+          </div>
+        ))}
+      </div>,
+    );
+    toggleRun = [];
+  };
   nodes.forEach((node, i) => {
     if (node.kind === 'button') {
+      flushToggleRun();
       run.push(i);
       return;
     }
+    if (isToggleNode(node)) {
+      flushRun();
+      toggleRun.push(i);
+      return;
+    }
     flushRun();
+    flushToggleRun();
     out.push(renderNode(pluginId, node, i, fields, refresh));
   });
   flushRun();
+  flushToggleRun();
   return out;
 }
 
@@ -863,33 +915,36 @@ function TableNode({
   return (
     <div className="space-y-2">
       {refreshing && <NodeRefreshing />}
-      <div className="overflow-hidden rounded-xl border border-white/[0.06]">
+      <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.01]">
         <Table className="w-full" containerClassName="overflow-x-auto">
-          <TableHeader className="bg-white/[0.03]">
-            <TableRow className="border-b border-white/[0.06] hover:bg-transparent">
+          <TableHeader className="bg-white/[0.04]">
+            <TableRow className="border-b border-white/[0.07] hover:bg-transparent">
               {node.columns.map(col => (
                 <TableHead
                   key={col.key}
-                  className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+                  className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500"
                 >
                   {resolveLabel(pluginId, col.label)}
                 </TableHead>
               ))}
-              {rowActions.length > 0 && <TableHead className="px-4 py-2.5" />}
+              {rowActions.length > 0 && <TableHead className="px-4 py-3" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row, i) => {
               const key = stableRowKey(row, i);
               return (
-                <TableRow key={key} className="border-b border-white/[0.04] last:border-b-0">
+                <TableRow
+                  key={key}
+                  className="border-b border-white/[0.04] transition-colors last:border-b-0 hover:bg-white/[0.02]"
+                >
                   {node.columns.map(col => (
-                    <TableCell key={col.key} className="px-4 py-2 text-xs text-slate-300">
+                    <TableCell key={col.key} className="px-4 py-3 text-[13px] text-slate-300">
                       {String(row[col.key] ?? '')}
                     </TableCell>
                   ))}
                   {rowActions.length > 0 && (
-                    <TableCell key="__row_actions" className="px-4 py-2">
+                    <TableCell key="__row_actions" className="px-4 py-3">
                       <div className="flex justify-end gap-2">
                         {rowActions.map(action => (
                           <Button
@@ -990,11 +1045,11 @@ function resolveCardField(
   return template;
 }
 
-/** Card status tone → dot color + border color; unknown tones render neutral. */
-const TONE_STYLES: Record<string, { dot: string; border: string }> = {
-  ok: { dot: 'bg-emerald-400', border: 'border-emerald-500/40' },
-  warn: { dot: 'bg-amber-400', border: 'border-amber-500/40' },
-  down: { dot: 'bg-red-400', border: 'border-red-500/40' },
+/** Card status tone → dot color + border color + value accent; unknown tones render neutral. */
+const TONE_STYLES: Record<string, { dot: string; border: string; value: string }> = {
+  ok: { dot: 'bg-emerald-400', border: 'border-emerald-500/40', value: 'text-emerald-300' },
+  warn: { dot: 'bg-amber-400', border: 'border-amber-500/40', value: 'text-amber-300' },
+  down: { dot: 'bg-red-400', border: 'border-red-500/40', value: 'text-red-300' },
 };
 
 function CardGridNode({
@@ -1142,7 +1197,7 @@ function CardGridNode({
   return (
     <div className="space-y-2">
       {refreshing && <NodeRefreshing />}
-      <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] items-stretch gap-4">
         {rows.map((row, i) => {
           const key = stableRowKey(row, i);
           const title = resolveCardField(row, card.title);
@@ -1165,7 +1220,7 @@ function CardGridNode({
                   className="h-32 w-full shrink-0 object-cover"
                 />
               )}
-              <div className="flex flex-col gap-1 p-4">
+              <div className="flex flex-1 flex-col gap-1.5 p-5">
                 <div className="flex items-center gap-2">
                   {toneStyle && (
                     <span
@@ -1174,20 +1229,23 @@ function CardGridNode({
                       className={cn('h-2 w-2 shrink-0 rounded-full', toneStyle.dot)}
                     />
                   )}
-                  <span className="truncate text-xs font-medium uppercase tracking-wide text-slate-400">
+                  <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     {title}
                   </span>
                 </div>
                 {subtitle && (
                   <div
                     title={subtitle}
-                    className="truncate text-lg font-semibold tabular-nums text-white"
+                    className={cn(
+                      'truncate text-2xl font-semibold tabular-nums tracking-tight',
+                      toneStyle?.value ?? 'text-white',
+                    )}
                   >
                     {subtitle}
                   </div>
                 )}
                 {body && (
-                  <div className="text-xs leading-relaxed text-slate-300">
+                  <div className="text-[13px] leading-relaxed text-slate-400">
                     {body}
                   </div>
                 )}
@@ -1195,7 +1253,7 @@ function CardGridNode({
                   <div className="text-[11px] text-slate-500">{hint}</div>
                 )}
                 {action && (
-                  <div className="mt-2">
+                  <div className="mt-auto pt-3">
                     <Button
                       size="xs"
                       variant={action.variant ?? 'secondary'}
@@ -1307,7 +1365,7 @@ function MarkdownNode({
   return (
     <div className="space-y-2">
       {refreshing && <NodeRefreshing />}
-      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-5">
         {renderMarkdown(text)}
       </div>
     </div>
@@ -1445,9 +1503,9 @@ function JobNode({
   }
   if (phase === 'running') {
     return (
-      <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+      <div className="space-y-3 rounded-xl border border-indigo-500/25 bg-indigo-500/[0.04] p-5">
         {label && (
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <div className="text-xs font-semibold uppercase tracking-wider text-indigo-300">
             {label}
           </div>
         )}
@@ -1455,25 +1513,27 @@ function JobNode({
         {statusMessage && (
           <div className="text-xs text-slate-400">{statusMessage}</div>
         )}
-        <Button
-          size="sm"
-          variant="secondary"
-          isLoading={cancelling}
-          onClick={handleCancel}
-        >
-          {t('common.cancel')}
-        </Button>
+        <div className="pt-1">
+          <Button
+            size="sm"
+            variant="secondary"
+            isLoading={cancelling}
+            onClick={handleCancel}
+          >
+            {t('common.cancel')}
+          </Button>
+        </div>
       </div>
     );
   }
   if (phase === 'done') {
     return (
-      <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+      <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
         <div className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
           {label === '' ? t('common.success') : label}
         </div>
         {resultText !== '' && (
-          <div className="whitespace-pre-wrap break-all font-mono text-xs text-slate-300">
+          <div className="whitespace-pre-wrap break-all rounded-lg border border-white/[0.06] bg-black/30 p-3 font-mono text-xs text-slate-300">
             {resultText}
           </div>
         )}
@@ -1482,21 +1542,23 @@ function JobNode({
   }
   if (phase === 'cancelled') {
     return (
-      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs text-slate-500">
+      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-5 text-xs text-slate-500">
         {JOB_CANCELLED_NOTE}
       </div>
     );
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {label && (
         <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
           {label}
         </div>
       )}
-      <Button variant="primary" isLoading={phase === 'starting'} onClick={handleStart}>
-        {t('common.start')}
-      </Button>
+      <div>
+        <Button variant="primary" isLoading={phase === 'starting'} onClick={handleStart}>
+          {t('common.start')}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1575,9 +1637,9 @@ function DeclarativePageContent({ pluginId, schema }: DeclarativePageProps) {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       {schema?.title && (
-        <h1 className="text-2xl font-bold tracking-tight text-white">
+        <h1 className="border-b border-white/[0.06] pb-4 text-2xl font-bold tracking-tight text-white">
           {resolveLabel(pluginId, schema.title)}
         </h1>
       )}

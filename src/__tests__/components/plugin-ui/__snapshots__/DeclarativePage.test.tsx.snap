@@ -3,10 +3,10 @@
 exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
 <div>
   <div
-    class="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8"
+    class="mx-auto w-full max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8"
   >
     <h1
-      class="text-2xl font-bold tracking-tight text-white"
+      class="border-b border-white/[0.06] pb-4 text-2xl font-bold tracking-tight text-white"
     >
       Title
     </h1>
@@ -16,65 +16,85 @@ exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
       Overview
     </div>
     <div
-      class="space-y-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+      class="rounded-xl border border-white/[0.07] bg-vsc-panel-solid/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
     >
       <div
-        class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+        class="flex items-center gap-2.5 px-5 pt-4"
       >
-        Settings
-      </div>
-      <div
-        class="max-w-md"
-      >
-        <div
-          data-testid="ui-input"
-        >
-          <label>
-            Name
-          </label>
-          <input
-            value="Alice"
-          />
-        </div>
-      </div>
-      <div
-        class="max-w-md"
-      >
-        <div
-          data-testid="ui-select"
-        >
-          <label>
-            Role
-          </label>
-          <select>
-            <option
-              value="admin"
-            >
-              Admin
-            </option>
-            <option
-              value="user"
-            >
-              User
-            </option>
-          </select>
-        </div>
-      </div>
-      <label
-        data-testid="ui-toggle"
-      >
-        <input
-          checked=""
-          type="checkbox"
+        <span
+          aria-hidden="true"
+          class="h-3.5 w-1 shrink-0 rounded-full bg-indigo-500/70"
         />
-        Active
-      </label>
+        <div
+          class="text-sm font-semibold tracking-wide text-slate-100"
+        >
+          Settings
+        </div>
+      </div>
+      <div
+        class="space-y-4 px-5 pb-5 pt-4"
+      >
+        <div
+          class="max-w-md"
+        >
+          <div
+            data-testid="ui-input"
+          >
+            <label>
+              Name
+            </label>
+            <input
+              value="Alice"
+            />
+          </div>
+        </div>
+        <div
+          class="max-w-md"
+        >
+          <div
+            data-testid="ui-select"
+          >
+            <label>
+              Role
+            </label>
+            <select>
+              <option
+                value="admin"
+              >
+                Admin
+              </option>
+              <option
+                value="user"
+              >
+                User
+              </option>
+            </select>
+          </div>
+        </div>
+        <div
+          class="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.02]"
+        >
+          <div
+            class="px-4 py-3"
+          >
+            <label
+              data-testid="ui-toggle"
+            >
+              <input
+                checked=""
+                type="checkbox"
+              />
+              Active
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
     <div
       class="space-y-2"
     >
       <div
-        class="overflow-hidden rounded-xl border border-white/[0.06]"
+        class="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.01]"
       >
         <table
           data-testid="ui-table"
@@ -116,7 +136,7 @@ exports[`DeclarativePage (a) renders a fixture schema snapshot 1`] = `
       </div>
     </div>
     <div
-      class="flex flex-wrap items-center gap-2"
+      class="flex flex-wrap items-center gap-3"
     >
       <button
         data-loading="false"
