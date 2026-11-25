@@ -29,12 +29,38 @@ def _gateway_base_url() -> str:
 
 
 def _gateway_key() -> str:
+    """Legacy gateway-running check; the returned token must not be written."""
     from stitch_backend.domains.ai_proxy.local_auth import get_cached_local_chat_token
 
     token = get_cached_local_chat_token()
     if not token:
         raise StitchError("Gateway is not running — start the AI proxy first")
     return token
+
+
+async def _provision_opencode_install_key(path: Path):
+    """Provision/reuse the opencode model-sync install key for this config."""
+    from stitch_backend.domains.ai_proxy.model_sync import service as model_sync_service
+
+    params = {"opencodeConfigPath": str(path)}
+    materials, _ = await model_sync_service.resolve_key_materials(
+        ["opencode"], params, provision=True
+    )
+    material = materials["opencode"]
+    if not material.raw:
+        raise StitchError("Could not provision the opencode install key")
+    return material
+
+
+async def _planned_opencode_install_key(path: Path):
+    """Read-only opencode key plan for previews (never creates DB rows)."""
+    from stitch_backend.domains.ai_proxy.model_sync import service as model_sync_service
+
+    params = {"opencodeConfigPath": str(path)}
+    materials, _ = await model_sync_service.resolve_key_materials(
+        ["opencode"], params, provision=False
+    )
+    return materials["opencode"]
 
 
 def _resolve_opencode_path(params: dict) -> Path:
@@ -112,12 +138,30 @@ async def cmd_configure_ai_proxy_ide(params: dict) -> dict:
         shutil.copy2(path, backup)
 
     entries = await _catalog_entries()
-    token = _gateway_key()
+    _gateway_key()  # gateway-running check only — the legacy local token is never written
+    material = await _provision_opencode_install_key(path)
+    assert material.raw is not None  # guaranteed by _provision_opencode_install_key
     # schema auto: unknown runtimes get v1-compatible output (v2 normalizes it)
-    merged = merge_stitch_block(snapshot.data, entries, _gateway_base_url(), token, "v1")
-    result = write_config(path, merged, expected_sha256=snapshot.sha256)
+    try:
+        merged = merge_stitch_block(snapshot.data, entries, _gateway_base_url(), material.raw, "v1")
+        result = write_config(path, merged, expected_sha256=snapshot.sha256)
+    except Exception:
+        if material.created_key_id:
+            from stitch_backend.domains.ai_proxy.model_sync import key_material
+
+            await key_material.revoke_install_keys([material.created_key_id])
+        raise
     if not result.get("ok"):
+        if material.created_key_id:
+            from stitch_backend.domains.ai_proxy.model_sync import key_material
+
+            await key_material.revoke_install_keys([material.created_key_id])
         raise StitchError(f"Cannot write {path}: {result.get('error', 'conflict')}")
+
+    if material.superseded_key_ids:
+        from stitch_backend.domains.ai_proxy.model_sync import key_material
+
+        await key_material.revoke_install_keys(material.superseded_key_ids)
 
     return {
         "success": True,
@@ -134,8 +178,22 @@ async def cmd_get_ai_proxy_ide_config_preview(params: dict) -> str:
     ide_name = params.get("ideName", params.get("ide", ""))
     _require_opencode(ide_name)
 
-    preview = {"provider": {STITCH_PROVIDER_ID: await _stitch_provider_block(_gateway_key())}}
-    return json.dumps(preview, indent=2)
+    path = _resolve_opencode_path(params)
+    material = await _planned_opencode_install_key(path)
+    from stitch_backend.domains.ai_proxy.model_sync import service as model_sync_service
+
+    key_for_shape = material.raw or model_sync_service.KEY_SENTINEL
+    preview = {"provider": {STITCH_PROVIDER_ID: await _stitch_provider_block(key_for_shape)}}
+    # This legacy endpoint returns a full JSON document, so redact both exact
+    # key material and generic apiKey assignments before returning it.
+    legacy_token = None
+    try:
+        legacy_token = _gateway_key()
+    except StitchError:
+        pass
+    return model_sync_service._redact(  # noqa: SLF001 — shared backend redactor
+        json.dumps(preview, indent=2), legacy_token, [key_for_shape]
+    )
 
 
 @register_command("restore_ai_proxy_ide_config")

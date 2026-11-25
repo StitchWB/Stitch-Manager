@@ -193,7 +193,7 @@ async def _get_provider_models(params: dict) -> list:
     return result
 
 
-@register_command("get_local_chat_token", readonly=True)
+@register_command("get_local_chat_token", readonly=True, admin_only=True)
 async def cmd_get_local_chat_token(params: dict) -> dict:
     """Return the per-install local chat token for the /v1/chat/completions
     endpoint. The frontend uses this as the request bearer."""

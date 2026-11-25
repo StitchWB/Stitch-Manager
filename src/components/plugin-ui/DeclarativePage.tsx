@@ -8,10 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 import { useParams } from 'react-router-dom';
-import { Inbox, Puzzle } from 'lucide-react';
+import { Inbox, Power, Puzzle } from 'lucide-react';
 import { t } from '@/lib/i18n';
-import { safeInvoke } from '@/lib/backend/core/invoke';
 import { appToast } from '@/lib/observability/toast';
+import { hasFetched, setServicePluginEnabled } from '@/lib/backend/modules/servicePlugins';
+import { useServicePlugins } from '@/hooks/useServicePlugins';
+import { useEffectiveAdmin } from '@/hooks/useEffectiveAdmin';
+import { PluginRuntimeStrip } from '@/components/plugins/ServicePluginRuntimeControls';
 import {
   Button,
   Input,
@@ -34,17 +37,6 @@ import { cn } from '@/lib/utils';
 import type { CardTemplate, PluginPageSchema, RowAction, UiNode } from './schema';
 import { invokeAction } from './bindings';
 import { renderMarkdown } from './markdown';
-
-/** Minimal shape of a service-plugin entry returned by list_service_plugins. */
-interface ServicePluginInfo {
-  id: string;
-  version: string;
-  status: string;
-  ui?: {
-    kind: 'declarative' | 'core_page';
-    page?: PluginPageSchema;
-  };
-}
 
 // Invariant: heading-node scale stays one step below the page title (text-2xl).
 const headingSizes = [
@@ -1604,33 +1596,35 @@ function DeclarativePage(props: DeclarativePageProps) {
 
 export function PluginPageHost() {
   const { id } = useParams<{ id: string }>();
-  const [plugin, setPlugin] = useState<ServicePluginInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notInstalled, setNotInstalled] = useState(false);
+  // Subscribed cache snapshot — restart/enable mutations refetch the cache
+  // before resolving, so this view converges without its own fetch effect.
+  const plugins = useServicePlugins();
+  const plugin = plugins.find(p => p.id === id) ?? null;
+  // Remount generation: the strip fires onChanged only when enable/restart
+  // resolved with status 'running' (backend resolves after the full RPC
+  // attach handshake), so a key bump safely remounts the declarative tree
+  // — no polling, no commands against a dead host.
+  const [generation, setGeneration] = useState(0);
+  const isAdmin = useEffectiveAdmin();
+  const [enabling, setEnabling] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync loading flag before async fetch ensures spinner shows during refetch
-    setLoading(true);
-    setNotInstalled(false);
-    safeInvoke<ServicePluginInfo[]>('list_service_plugins')
-      .then(plugins => {
-        if (cancelled) return;
-        const found = plugins?.find(p => p.id === id) ?? null;
-        setPlugin(found);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setNotInstalled(true);
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  const handleEnable = useCallback(async (pluginId: string) => {
+    setEnabling(true);
+    try {
+      const result = await setServicePluginEnabled(pluginId, true);
+      if (result.status.status === 'running') {
+        setGeneration(g => g + 1);
+      }
+    } catch {
+      appToast.error(t('pluginUi.runtime.actionFailedToast'), 'plugins');
+    } finally {
+      setEnabling(false);
+    }
+  }, []);
 
-  if (loading) {
+  // The module cache is [] both before the first fetch and when the plugin
+  // list is genuinely empty — hasFetched separates the two.
+  if (!hasFetched) {
     return (
       <div className="flex items-center justify-center py-12">
         <LoadingSpinner />
@@ -1638,7 +1632,7 @@ export function PluginPageHost() {
     );
   }
 
-  if (notInstalled || !plugin) {
+  if (!plugin) {
     return (
       <EmptyState
         icon={Puzzle}
@@ -1650,11 +1644,45 @@ export function PluginPageHost() {
 
   const ui = plugin.ui;
   if (ui?.kind === 'declarative' && ui.page) {
+    const disabled = plugin.enabled === false;
     // Key by plugin id so navigating between two plugin pages remounts and
-    // the field state map is re-collected from the new schema.
+    // the field state map is re-collected from the new schema; generation
+    // remounts the tree after enable/restart.
     return (
       <div className="h-full overflow-y-auto">
-        <DeclarativePage key={plugin.id} pluginId={plugin.id} schema={ui.page} />
+        <div className="sticky top-0 z-10">
+          <PluginRuntimeStrip
+            plugin={plugin}
+            onChanged={() => setGeneration(g => g + 1)}
+          />
+        </div>
+        {disabled ? (
+          <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+            <EmptyState
+              icon={Power}
+              title={t('pluginUi.runtime.disabledBannerTitle')}
+              description={t('pluginUi.runtime.disabledBannerDescription')}
+            />
+            {isAdmin && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  isLoading={enabling}
+                  onClick={() => void handleEnable(plugin.id)}
+                >
+                  {t('pluginUi.runtime.enable')}
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <DeclarativePage
+            key={`${plugin.id}:${generation}`}
+            pluginId={plugin.id}
+            schema={ui.page as PluginPageSchema}
+          />
+        )}
       </div>
     );
   }

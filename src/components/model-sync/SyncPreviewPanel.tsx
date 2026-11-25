@@ -83,11 +83,16 @@ export function SyncPreviewPanel({
   const errors = preview?.errors || [];
   const unknownModelIds = preview?.unknownModelIds || [];
 
+  const keyPlan = preview?.keyPlan;
+  const keyPlanTargets = keyPlan
+    ? (['opencode', 'omp'] as const).filter(target => keyPlan[target])
+    : [];
+
   return (
-    <GlassCard className="p-4" data-testid="model-sync-preview-panel">
+    <GlassCard className="p-5" data-testid="model-sync-preview-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">{t('modelSync.preview.title')}</h2>
+          <h2 className="text-base font-semibold text-slate-100">{t('modelSync.preview.title')}</h2>
           <p className="mt-1 text-xs text-slate-500">{t('modelSync.preview.description')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -198,6 +203,50 @@ export function SyncPreviewPanel({
           {unknownModelIds.length ? (
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
               {t('modelSync.preview.unknownModels')}: {unknownModelIds.join(', ')}
+            </div>
+          ) : null}
+
+          {keyPlanTargets.length ? (
+            <div data-testid="model-sync-key-plan">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {t('modelSync.preview.keyPlanTitle')}
+              </h3>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                {keyPlanTargets.map(target => {
+                  const plan = keyPlan![target]!;
+                  const actionLabel =
+                    plan.action === 'reuse'
+                      ? t('modelSync.preview.keyReuse')
+                      : plan.action === 'create'
+                        ? t('modelSync.preview.keyCreate')
+                        : t('modelSync.preview.keyMissing');
+                  return (
+                    <div
+                      key={target}
+                      className="flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5"
+                      data-testid={`key-plan-${target}`}
+                    >
+                      <span className="text-xs font-semibold text-slate-200">{targetLabel(target)}</span>
+                      <Badge
+                        variant={plan.action === 'reuse' ? 'success' : plan.action === 'create' ? 'indigo' : 'warning'}
+                        size="sm"
+                      >
+                        {actionLabel}
+                      </Badge>
+                      {plan.fingerprint ? (
+                        <span className="rounded-md border border-white/[0.08] bg-black/30 px-2 py-0.5 font-mono text-[11px] text-slate-300">
+                          {plan.fingerprint}
+                        </span>
+                      ) : null}
+                      {plan.legacyLocalTokenDetected ? (
+                        <Badge variant="warning" size="sm">
+                          {t('modelSync.preview.keyLegacyWarning')}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
 

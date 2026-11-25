@@ -74,6 +74,16 @@ export interface OpenCodeCredentialState {
   detail: string;
 }
 
+/**
+ * Per-binary opencode detection entry. `opencode` is the v1 binary,
+ * `opencode2` the v2 binary; either may be absent when not installed.
+ * Additive backend field — absent on older backends.
+ */
+export interface OpenCodeBinaryInfo {
+  version: string | null;
+  path: string | null;
+}
+
 export interface ModelSyncOpenCodeStatus {
   detectedVersion: OpenCodeDetectedVersion;
   writeTarget: string;
@@ -88,6 +98,37 @@ export interface ModelSyncOpenCodeStatus {
   defaultModel?: string;
   /** Current top-level "small_model" selector, when the config has one. */
   smallModel?: string;
+  /** Per-binary detection results (additive; absent on older backends). */
+  binaries?: {
+    opencode?: OpenCodeBinaryInfo;
+    opencode2?: OpenCodeBinaryInfo;
+  };
+}
+
+/**
+ * Key state for one sync target, reported under status.security.keys.
+ * Additive backend field — every property may be absent.
+ */
+export interface ModelSyncSecurityKeyInfo {
+  state?: 'active' | 'disabled' | 'missing' | 'unknown' | string;
+  keyId?: string | null;
+  fingerprint?: string | null;
+  enabled?: boolean;
+  createdAt?: string | null;
+  lastUsedAt?: string | null;
+  configuredSecretState?: string | null;
+  legacyLocalTokenDetected?: boolean;
+}
+
+export interface ModelSyncSecurityStatus {
+  keys?: Partial<Record<ModelSyncTarget, ModelSyncSecurityKeyInfo>>;
+}
+
+/** Optional per-target key plan reported by preview (additive). */
+export interface ModelSyncKeyPlan {
+  action: 'reuse' | 'create' | 'missing';
+  fingerprint?: string | null;
+  legacyLocalTokenDetected?: boolean;
 }
 
 export interface ModelSyncOmpProfile {
@@ -114,6 +155,8 @@ export interface ModelSyncStatusResponse {
     /** Detected omp version — null when unknown (probe failure tolerated). */
     version?: string | null;
   };
+  /** Per-target key security state (additive; absent on older backends). */
+  security?: ModelSyncSecurityStatus;
   error?: string;
 }
 
@@ -181,6 +224,8 @@ export interface ModelSyncPreviewResponse {
   unknownModelIds?: string[];
   files?: ModelSyncPreviewFile[];
   expectedSha256?: Record<string, string | null>;
+  /** Per-target key plan (additive; absent on older backends). */
+  keyPlan?: Partial<Record<ModelSyncTarget, ModelSyncKeyPlan>>;
   error?: string;
 }
 

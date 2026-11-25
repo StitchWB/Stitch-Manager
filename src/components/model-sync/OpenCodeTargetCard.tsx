@@ -38,6 +38,28 @@ export function resolvedOpenCodeSchema(
   return detected?.version === 'v2' ? 'v2' : 'v1';
 }
 
+/** Compact labeled chip for detection facts — replaces the old cramped micro-rows. */
+function FactChip({ label, value, mono = true, testId }: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  testId?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-baseline gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+      <span
+        className={`min-w-0 break-all text-xs text-slate-200 ${mono ? 'font-mono' : ''}`}
+        data-testid={testId}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export function OpenCodeTargetCard({
   status,
   enabled,
@@ -55,7 +77,8 @@ export function OpenCodeTargetCard({
 }: OpenCodeTargetCardProps) {
   const detected = status?.detectedVersion;
   const effectiveSchema = resolvedOpenCodeSchema(detected, schemaOverride);
-  const installed = detected?.source === 'binary';
+  const binaries = status?.binaries;
+  const installed = detected?.source === 'binary' || Boolean(binaries?.opencode || binaries?.opencode2);
   const selectedIds = selectedModels.map(model => model.id);
   const writePaths = [status?.writeTarget, status?.secondaryPath].filter(
     (value): value is string => Boolean(value),
@@ -98,23 +121,65 @@ export function OpenCodeTargetCard({
     })),
   ];
 
+  // Version badges: when the backend reports per-binary detection, show BOTH
+  // binaries (v1 + v2) — this is what makes an installed opencode2 visible.
+  // Fall back to the single detected version on older backends.
+  const versionBadges: Array<{ key: string; label: string; version: string | null; testId: string }> = [];
+  if (binaries && (binaries.opencode || binaries.opencode2)) {
+    if (binaries.opencode) {
+      versionBadges.push({
+        key: 'v1',
+        label: t('modelSync.targets.binaries.v1'),
+        version: binaries.opencode.version,
+        testId: 'opencode-binary-v1-badge',
+      });
+    }
+    if (binaries.opencode2) {
+      versionBadges.push({
+        key: 'v2',
+        label: t('modelSync.targets.binaries.v2'),
+        version: binaries.opencode2.version,
+        testId: 'opencode-binary-v2-badge',
+      });
+    }
+  } else if (detected?.raw || detected?.version) {
+    versionBadges.push({
+      key: 'detected',
+      label: detected?.version === 'v2' ? t('modelSync.targets.binaries.v2') : t('modelSync.targets.binaries.v1'),
+      version: detected.raw || null,
+      testId: 'opencode-binary-detected-badge',
+    });
+  }
+
   return (
-    <GlassCard className="p-4" data-testid="model-sync-opencode-card">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-fuchsia-500/10 text-fuchsia-300">
-            <TerminalSquare size={17} />
+    <GlassCard className="p-5 md:p-6" data-testid="model-sync-opencode-card">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-fuchsia-500/10 text-fuchsia-300">
+            <TerminalSquare size={20} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">
+            <h3 className="text-base font-semibold text-slate-100">
               {t('modelSync.targets.opencodeTitle')}
             </h3>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              <Badge variant={installed ? 'success' : 'warning'} size="sm">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <Badge variant={installed ? 'success' : 'warning'} size="sm" withDot>
                 {installed ? t('modelSync.targets.installed') : t('modelSync.targets.notInstalled')}
               </Badge>
+              {versionBadges.map(badge => (
+                <Badge key={badge.key} variant="indigo" size="sm" data-testid={badge.testId}>
+                  {badge.label}{badge.version ? ` ${badge.version}` : ''}
+                </Badge>
+              ))}
               <Badge variant="slate" size="sm">
                 {t('modelSync.targets.schema')}: {detected?.version ?? t('modelSync.targets.schemaUnknown')}
+              </Badge>
+              <Badge
+                variant={state === 'in-sync' ? 'success' : state === 'conflict' ? 'danger' : 'warning'}
+                size="sm"
+                data-testid="opencode-sync-state"
+              >
+                {stateLabel}
               </Badge>
             </div>
           </div>
@@ -128,43 +193,69 @@ export function OpenCodeTargetCard({
       </div>
 
       {!installed ? (
-        <p className="mt-3 text-[11px] text-amber-300/90">
+        <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/90">
           {t('modelSync.targets.opencodeNotInstalledHint')}
         </p>
       ) : null}
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="space-y-2 text-xs">
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.binary')}</div>
-            <div className="mt-0.5 font-mono text-slate-200">
-              {installed ? 'opencode' : t('modelSync.targets.notReported')}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+        <div>
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {t('modelSync.targets.detectionFacts')}
+          </h4>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <FactChip
+              label={t('modelSync.targets.state')}
+              value={stateLabel}
+              mono={false}
+            />
+            <FactChip
+              label={t('modelSync.targets.credential')}
+              value={credentialLabel}
+              mono={false}
+            />
+            {binaries?.opencode?.path ? (
+              <FactChip
+                label={t('modelSync.targets.binaries.v1')}
+                value={binaries.opencode.path}
+              />
+            ) : null}
+            {binaries?.opencode2?.path ? (
+              <FactChip
+                label={t('modelSync.targets.binaries.v2')}
+                value={binaries.opencode2.path}
+              />
+            ) : null}
+          </div>
+          <div className="mt-3 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5 text-xs">
+            <div className="flex items-start gap-2">
+              <FileJson size={14} className="mt-0.5 shrink-0 text-slate-500" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div>
+                  <span className="text-slate-500">{t('modelSync.targets.configPath')}: </span>
+                  <span className="break-all font-mono text-slate-200">{status?.writeTarget || '—'}</span>
+                </div>
+                {status?.secondaryPath ? (
+                  <div>
+                    <span className="text-slate-500">{t('modelSync.targets.secondaryPath')}: </span>
+                    <span className="break-all font-mono text-slate-200">{status.secondaryPath}</span>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.version')}</div>
-            <div className="mt-0.5 font-mono text-slate-200">
-              {detected?.raw || detected?.version || t('modelSync.targets.notReported')}
-            </div>
-          </div>
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.state')}</div>
-            <Badge
-              variant={state === 'in-sync' ? 'success' : state === 'conflict' ? 'danger' : 'warning'}
-              size="sm"
-              className="mt-1"
-              data-testid="opencode-sync-state"
-            >
-              {stateLabel}
-            </Badge>
-          </div>
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.credential')}</div>
-            <div className="mt-0.5 text-slate-200">{credentialLabel}</div>
+          <div className="mt-3">
+            <Checkbox
+              checked={pruneUnselected}
+              onChange={event => onPruneUnselectedChange(event.target.checked)}
+              label={t('modelSync.targets.pruneUnselected')}
+              description={t('modelSync.targets.pruneUnselectedHint')}
+              data-testid="opencode-prune-unselected"
+            />
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           <Select
             label={t('modelSync.targets.schema')}
             value={schemaOverride}
@@ -197,44 +288,16 @@ export function OpenCodeTargetCard({
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs">
-        <div className="flex items-start gap-2">
-          <FileJson size={14} className="mt-0.5 shrink-0 text-slate-500" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div>
-              <span className="text-slate-500">{t('modelSync.targets.configPath')}: </span>
-              <span className="break-all font-mono text-slate-200">{status?.writeTarget || '—'}</span>
-            </div>
-            {status?.secondaryPath ? (
-              <div>
-                <span className="text-slate-500">{t('modelSync.targets.secondaryPath')}: </span>
-                <span className="break-all font-mono text-slate-200">{status.secondaryPath}</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <Checkbox
-          checked={pruneUnselected}
-          onChange={event => onPruneUnselectedChange(event.target.checked)}
-          label={t('modelSync.targets.pruneUnselected')}
-          description={t('modelSync.targets.pruneUnselectedHint')}
-          data-testid="opencode-prune-unselected"
-        />
-      </div>
-
       {(status?.warnings?.length || credentialStatus === 'credential-mismatch') ? (
-        <div className="mt-3 space-y-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+        <div className="mt-4 space-y-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
           {(status?.warnings || []).map(warning => (
-            <div key={warning} className="flex items-start gap-2 text-[11px] text-amber-200">
+            <div key={warning} className="flex items-start gap-2 text-xs text-amber-200">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" />
               <span>{warning}</span>
             </div>
           ))}
           {credentialStatus === 'credential-mismatch' ? (
-            <div className="flex items-start gap-2 text-[11px] text-amber-200">
+            <div className="flex items-start gap-2 text-xs text-amber-200">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" />
               <span>{t('modelSync.targets.credentialHint')}</span>
             </div>

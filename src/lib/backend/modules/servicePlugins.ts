@@ -71,9 +71,25 @@ export interface ServicePluginInfo {
 // Cache + subscriber store
 // ============================================
 
+/**
+ * Result shape of `set_service_plugin_enabled` and `restart_service_plugin`
+ * (backend converged both to `{id, enabled, status}`).
+ */
+export interface ServicePluginEnabledResult {
+  id: string;
+  enabled: boolean;
+  status: ServicePluginStatus;
+}
+
 const subscribers = new Set<() => void>();
 let cache: ServicePluginInfo[] = [];
 let fetchInFlight: Promise<void> | null = null;
+/**
+ * True once the first fetchServicePlugins() has settled (success OR error).
+ * Lets consumers distinguish "never loaded" from "loaded, empty" — the
+ * cache is [] in both cases otherwise.
+ */
+export let hasFetched = false;
 
 /**
  * Snapshot for useSyncExternalStore. Returns a stable reference between
@@ -135,6 +151,7 @@ export async function fetchServicePlugins(): Promise<void> {
     } catch {
       cache = [];
     } finally {
+      hasFetched = true;
       fetchInFlight = null;
       notify();
     }
@@ -152,25 +169,44 @@ export function invalidate(): void {
   void fetchServicePlugins();
 }
 
-export async function restartServicePlugin(pluginId: string): Promise<void> {
-  await safeInvoke('restart_service_plugin', { plugin_id: pluginId });
-  invalidate();
+/**
+ * Restart a plugin runtime (admin-only backend command). Returns the
+ * converged `{id, enabled, status}` result. Awaits a cache refetch BEFORE
+ * resolving so subscribers never render a stale pre-mutation snapshot —
+ * fire-and-forget invalidate() raced the caller's own state updates.
+ */
+export async function restartServicePlugin(
+  pluginId: string,
+): Promise<ServicePluginEnabledResult> {
+  const result = await safeInvoke<ServicePluginEnabledResult>(
+    'restart_service_plugin',
+    { plugin_id: pluginId },
+  );
+  fetchInFlight = null;
+  await fetchServicePlugins();
+  return result;
 }
 
 /**
  * Enable/disable a plugin runtime without uninstalling it (admin-only
  * backend command). Disable stops the host and persists the flag so the
  * plugin stays off across server restarts; enable starts it again.
+ * Awaits the cache refetch before resolving (same race fix as restart).
  */
 export async function setServicePluginEnabled(
   pluginId: string,
   enabled: boolean,
-): Promise<void> {
-  await safeInvoke('set_service_plugin_enabled', {
-    plugin_id: pluginId,
-    enabled,
-  });
-  invalidate();
+): Promise<ServicePluginEnabledResult> {
+  const result = await safeInvoke<ServicePluginEnabledResult>(
+    'set_service_plugin_enabled',
+    {
+      plugin_id: pluginId,
+      enabled,
+    },
+  );
+  fetchInFlight = null;
+  await fetchServicePlugins();
+  return result;
 }
 
 /**
@@ -178,6 +214,7 @@ export async function setServicePluginEnabled(
  */
 export function _resetForTests(): void {
   cache = [];
+  hasFetched = false;
   fetchInFlight = null;
   subscribers.clear();
 }

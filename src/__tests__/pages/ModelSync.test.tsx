@@ -286,4 +286,103 @@ describe('ModelSync page', () => {
     const params = backend.modelSyncPreview.mock.calls.at(-1)?.[0] as any;
     expect(params.ompProfile).toBe('work');
   });
+
+  it('renders both opencode binaries when v1 and v2 are detected', async () => {
+    const status = statusResponse('v1') as any;
+    status.opencode.binaries = {
+      opencode: { version: '1.4.0', path: '/usr/local/bin/opencode' },
+      opencode2: { version: '2.1.0', path: '/usr/local/bin/opencode2' },
+    };
+    backend.modelSyncStatus.mockResolvedValue(status);
+    renderPage();
+    await screen.findByTestId('model-sync-model-row-alpha');
+
+    const v1Badge = screen.getByTestId('opencode-binary-v1-badge');
+    const v2Badge = screen.getByTestId('opencode-binary-v2-badge');
+    expect(v1Badge.textContent).toContain('1.4.0');
+    expect(v2Badge.textContent).toContain('2.1.0');
+  });
+
+  it('renders only the v2 binary badge when only opencode2 is installed', async () => {
+    const status = statusResponse('v2') as any;
+    status.opencode.binaries = {
+      opencode2: { version: '2.1.0', path: '/usr/local/bin/opencode2' },
+    };
+    backend.modelSyncStatus.mockResolvedValue(status);
+    renderPage();
+    await screen.findByTestId('model-sync-model-row-alpha');
+
+    expect(screen.queryByTestId('opencode-binary-v1-badge')).toBeNull();
+    expect(screen.getByTestId('opencode-binary-v2-badge').textContent).toContain('2.1.0');
+  });
+
+  it('degrades gracefully when binaries are absent — no binary badges', async () => {
+    await renderLoaded();
+
+    expect(screen.queryByTestId('opencode-binary-v1-badge')).toBeNull();
+    expect(screen.queryByTestId('opencode-binary-v2-badge')).toBeNull();
+    // legacy fallback badge still renders the detected version
+    expect(screen.getByTestId('opencode-binary-detected-badge')).toBeTruthy();
+  });
+
+  it('renders the security section with key state, fingerprint and legacy warning', async () => {
+    const status = statusResponse('v1') as any;
+    status.security = {
+      keys: {
+        opencode: {
+          state: 'active',
+          keyId: 'key-1',
+          fingerprint: 'fp:aa:bb',
+          enabled: true,
+          createdAt: new Date(Date.now() - 86400000).toISOString(),
+          lastUsedAt: new Date(Date.now() - 3600000).toISOString(),
+          configuredSecretState: 'configured',
+          legacyLocalTokenDetected: true,
+        },
+        omp: {
+          state: 'missing',
+          legacyLocalTokenDetected: false,
+        },
+      },
+    };
+    backend.modelSyncStatus.mockResolvedValue(status);
+    renderPage();
+    await screen.findByTestId('model-sync-model-row-alpha');
+
+    expect(screen.getByTestId('model-sync-security-section')).toBeTruthy();
+    expect(screen.getByTestId('model-sync-security-key-opencode')).toBeTruthy();
+    expect(screen.getByTestId('model-sync-security-key-omp')).toBeTruthy();
+    expect(screen.getByTestId('security-fingerprint-opencode').textContent).toBe('fp:aa:bb');
+    expect(screen.getByTestId('security-legacy-warning-opencode')).toBeTruthy();
+    expect(screen.queryByTestId('security-legacy-warning-omp')).toBeNull();
+  });
+
+  it('hides the security section entirely when the backend reports no security info', async () => {
+    await renderLoaded();
+
+    expect(screen.queryByTestId('model-sync-security-section')).toBeNull();
+  });
+
+  it('renders the key plan inside the preview when reported', async () => {
+    const preview = previewResponse() as any;
+    preview.keyPlan = {
+      opencode: { action: 'create', fingerprint: 'fp:cc:dd', legacyLocalTokenDetected: true },
+      omp: { action: 'reuse', fingerprint: 'fp:ee:ff' },
+    };
+    backend.modelSyncPreview.mockResolvedValue(preview);
+    await renderLoaded();
+    await clickPreview();
+
+    expect(await screen.findByTestId('model-sync-key-plan')).toBeTruthy();
+    expect(screen.getByTestId('key-plan-opencode').textContent).toContain('fp:cc:dd');
+    expect(screen.getByTestId('key-plan-omp')).toBeTruthy();
+  });
+
+  it('renders no key plan block when the preview omits it', async () => {
+    await renderLoaded();
+    await clickPreview();
+
+    await screen.findByTestId('model-sync-preview-panel');
+    expect(screen.queryByTestId('model-sync-key-plan')).toBeNull();
+  });
 });

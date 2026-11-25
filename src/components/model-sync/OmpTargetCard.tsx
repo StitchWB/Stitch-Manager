@@ -80,20 +80,25 @@ export function OmpTargetCard({
   ];
 
   return (
-    <GlassCard className="p-4" data-testid="model-sync-omp-card">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/10 text-teal-300">
-            <FolderGit2 size={17} />
+    <GlassCard className="p-5 md:p-6" data-testid="model-sync-omp-card">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-500/10 text-teal-300">
+            <FolderGit2 size={20} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-100">
+            <h3 className="text-base font-semibold text-slate-100">
               {t('modelSync.targets.ompTitle')}
             </h3>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              <Badge variant={installed ? 'success' : 'warning'} size="sm">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <Badge variant={installed ? 'success' : 'warning'} size="sm" withDot>
                 {installed ? t('modelSync.targets.installed') : t('modelSync.targets.notInstalled')}
               </Badge>
+              {binaryVersion ? (
+                <Badge variant="indigo" size="sm">
+                  {binaryVersion}
+                </Badge>
+              ) : null}
               {activeProfile ? (
                 <Badge variant="slate" size="sm">
                   {activeProfile.name}
@@ -111,40 +116,53 @@ export function OmpTargetCard({
       </div>
 
       {!installed ? (
-        <p className="mt-3 text-[11px] text-amber-300/90">
+        <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/90">
           {t('modelSync.targets.ompNotInstalledHint')}
         </p>
       ) : null}
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="space-y-2 text-xs">
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.binary')}</div>
-            <div className="mt-0.5 break-all font-mono text-slate-200" data-testid="omp-binary-path">
-              {binaryPath || t('modelSync.targets.notReported')}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+        <div>
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {t('modelSync.targets.detectionFacts')}
+          </h4>
+          <dl className="mt-2 space-y-2 text-xs">
+            <div className="flex flex-wrap items-baseline gap-x-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+              <dt className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {t('modelSync.targets.binary')}
+              </dt>
+              <dd className="min-w-0 break-all font-mono text-slate-200" data-testid="omp-binary-path">
+                {binaryPath || t('modelSync.targets.notReported')}
+              </dd>
             </div>
-          </div>
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.version')}</div>
-            <div className="mt-0.5 font-mono text-slate-200" data-testid="omp-binary-version">
-              {binaryVersion || t('modelSync.targets.notReported')}
+            <div className="flex flex-wrap items-baseline gap-x-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+              <dt className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {t('modelSync.targets.version')}
+              </dt>
+              <dd className="font-mono text-slate-200" data-testid="omp-binary-version">
+                {binaryVersion || t('modelSync.targets.notReported')}
+              </dd>
             </div>
-          </div>
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.modelsPath')}</div>
-            <div className="mt-0.5 break-all font-mono text-slate-200">
-              {activeProfile?.modelsPath || '—'}
+            <div className="flex flex-wrap items-baseline gap-x-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+              <dt className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {t('modelSync.targets.modelsPath')}
+              </dt>
+              <dd className="min-w-0 break-all font-mono text-slate-200">
+                {activeProfile?.modelsPath || '—'}
+              </dd>
             </div>
-          </div>
-          <div>
-            <div className="text-slate-500">{t('modelSync.targets.configYmlPath')}</div>
-            <div className="mt-0.5 break-all font-mono text-slate-200">
-              {activeProfile?.configPath || '—'}
+            <div className="flex flex-wrap items-baseline gap-x-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+              <dt className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                {t('modelSync.targets.configYmlPath')}
+              </dt>
+              <dd className="min-w-0 break-all font-mono text-slate-200">
+                {activeProfile?.configPath || '—'}
+              </dd>
             </div>
-          </div>
+          </dl>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           <Select
             label={t('modelSync.targets.profile')}
             value={activeProfile?.name || selectedProfile || 'default'}
@@ -185,8 +203,8 @@ export function OmpTargetCard({
         </p>
       ) : null}
 
-      <div className="mt-4 border-t border-white/[0.06] pt-4">
-        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <div className="mt-5 border-t border-white/[0.06] pt-5">
+        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
           <FileSliders size={13} />
           {t('modelSync.targets.rolesTitle')}
         </h4>
@@ -194,7 +212,7 @@ export function OmpTargetCard({
           {OMP_ROLES.map(role => {
             const selection = roleSelections[role] || { model: '', effort: '' };
             return (
-              <div key={role} className="rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+              <div key={role} className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
                 <div className="grid grid-cols-[1fr_112px] gap-2">
                   <Select
                     label={t(`modelSync.targets.roles.${role}`)}

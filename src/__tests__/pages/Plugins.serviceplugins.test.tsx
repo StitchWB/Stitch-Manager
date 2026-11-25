@@ -185,7 +185,9 @@ describe('PluginAccessPanel — service plugins section', () => {
         callCount++;
         return Promise.resolve([runningPlugin]);
       }
-      if (cmd === 'restart_service_plugin') return Promise.resolve({ status: 'running' });
+      if (cmd === 'restart_service_plugin') {
+        return Promise.resolve({ id: 'echo', enabled: true, status: { ...runningPlugin.status, status: 'running' } });
+      }
       return Promise.resolve([]);
     });
 

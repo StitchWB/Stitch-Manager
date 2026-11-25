@@ -11,5 +11,21 @@ export const pluginUi: PluginUiTranslations = {
     pluginNotInstalled: "Plugin not installed",
     pluginNotInstalledDescription: "The plugin is not installed or is unavailable.",
     noData: "No data",
+    runtime: {
+      enabled: "Enabled",
+      enable: "Enable",
+      disable: "Disable",
+      restart: "Restart",
+      disabled: "Disabled",
+      enabledToast: "Plugin enabled",
+      disabledToast: "Plugin disabled",
+      restartedToast: "Plugin restarted",
+      actionFailedToast: "Plugin action failed",
+      disabledBannerTitle: "Plugin is disabled",
+      disabledBannerDescription: "This plugin was disabled by an administrator. Its package and data are kept, but the runtime is stopped.",
+      pid: "PID",
+      uptime: "Uptime",
+      restarts: "Restarts",
+    },
   }
 };
