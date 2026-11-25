@@ -216,7 +216,13 @@ async def _restart_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
     """Restart a service-plugin host (admin-only).
 
     Stops the host (graceful RPC shutdown + kill-tree) then starts it
-    again.  Returns the new status dict from ``host.start()``.
+    again.  Returns ``{id, enabled, status}`` — the same shape as
+    ``set_service_plugin_enabled``.
+
+    A DISABLED plugin is never resurrected: the persisted disabled flag
+    wins over the restart request.  Defensively stops the host when it is
+    somehow alive (restart-of-disabled used to actually start the host
+    while the flag stayed set — state corruption).
     """
     plugin_id = params.get("plugin_id")
     if not isinstance(plugin_id, str) or not _PLUGIN_ID_RE.match(plugin_id):
@@ -228,7 +234,12 @@ async def _restart_service_plugin(params: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(
             status_code=404, detail=f"Unknown plugin: {plugin_id}"
         )
-    return await host.restart()
+    if is_plugin_disabled(plugin_id):
+        if host.rpc.is_alive:
+            await host.stop()
+        return {"id": plugin_id, "enabled": False, "status": host.status()}
+    result = await host.restart()
+    return {"id": plugin_id, "enabled": True, "status": result}
 
 
 @register_command("reload_service_plugin", admin_only=True)
