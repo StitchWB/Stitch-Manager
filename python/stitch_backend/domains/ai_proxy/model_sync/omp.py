@@ -180,7 +180,7 @@ def update_models_yaml(
     """
     selected_ids = [e["id"] for e in entries]
     selected_set = set(selected_ids)
-    diff = {"added": [], "removed": [], "updated": [], "unchanged": []}
+    diff: dict[str, list[str]] = {"added": [], "removed": [], "updated": [], "unchanged": []}
 
     providers = data.get("providers")
     if not isinstance(providers, dict):
@@ -212,20 +212,21 @@ def update_models_yaml(
         ),
     )
     for entry in ordered_entries:
+        model_id = str(entry["id"])
         generated = build_omp_model_entry(entry)
-        old = by_id.get(entry["id"])
+        old = by_id.get(model_id)
         if isinstance(old, dict):
             merged = copy.deepcopy(old)
             if generated != {k: merged.get(k) for k in generated}:
-                diff["updated"].append(entry["id"])
+                diff["updated"].append(model_id)
             else:
-                diff["unchanged"].append(entry["id"])
+                diff["unchanged"].append(model_id)
             merged.update(generated)
             new_list.append(merged)
         else:
-            diff["added"].append(entry["id"])
+            diff["added"].append(model_id)
             new_list.append(generated)
-        seen.add(entry["id"])
+        seen.add(model_id)
 
     if not prune_unselected:
         for model in existing_models:
@@ -235,7 +236,7 @@ def update_models_yaml(
     else:
         for old_id in by_id:
             if old_id not in selected_set:
-                diff["removed"].append(old_id)
+                diff["removed"].append(str(old_id))
 
     provider["models"] = new_list
     providers[STITCH_PROVIDER_ID] = provider
