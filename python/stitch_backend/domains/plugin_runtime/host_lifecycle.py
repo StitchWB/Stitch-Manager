@@ -1,10 +1,11 @@
-"""Crash-monitor + restart-once lifecycle loop for a plugin host."""
+"""Crash-monitor + sliding-window restart lifecycle loop for a plugin host."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import subprocess
+import time
 from typing import TYPE_CHECKING
 
 from autoreg.plugin.rpc import RpcProtocolError, RpcTimeoutError
@@ -14,13 +15,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Sliding crash-window policy: a host is restarted after a crash as long as
+# deaths stay rare; more than CRASH_WINDOW_MAX_RESTARTS deaths inside
+# CRASH_WINDOW_S seconds is a crash loop and the host is marked dead.
+CRASH_WINDOW_S = 600.0
+CRASH_WINDOW_MAX_RESTARTS = 2
+
 
 async def monitor(host: ServicePluginHost) -> None:
-    """Background task: detect crashes, restart once, then mark dead.
+    """Background task: detect crashes and restart within a sliding window.
 
-    Loops so the RESTARTED child is monitored too: the first crash
-    triggers the restart-once, the second consecutive crash marks the
-    host dead and fires the crash hook (telemetry + LKG rollback).
+    A death is restarted while fewer than ``CRASH_WINDOW_MAX_DEATHS`` deaths
+    happened inside the last ``CRASH_WINDOW_S`` seconds; exceeding the window
+    marks the host dead (crash loop) and fires the crash hook (telemetry +
+    LKG rollback).  A single occasional crash therefore always recovers,
+    while a tight crash loop is still stopped.
     """
     # Track consecutive crashes per plugin id (todo 23 LKG bookkeeping).
     from stitch_backend.domains.plugin_runtime.lkg import record_crash
@@ -59,10 +68,17 @@ async def monitor(host: ServicePluginHost) -> None:
         async with host._lock:
             if host._stopping:
                 return
-            if host._restart_count >= 1:
+            now = time.monotonic()
+            host._death_times = [
+                t for t in host._death_times if now - t < CRASH_WINDOW_S
+            ]
+            host._death_times.append(now)
+            if len(host._death_times) > CRASH_WINDOW_MAX_RESTARTS:
                 logger.warning(
-                    "[Plugin:%s] crashed again after restart — marking dead",
+                    "[Plugin:%s] crash loop: %d deaths within %ds — marking dead",
                     host.plugin_id,
+                    len(host._death_times),
+                    int(CRASH_WINDOW_S),
                 )
                 host._crash_loop = True
                 host._crash_loop_event.set()
@@ -81,12 +97,12 @@ async def monitor(host: ServicePluginHost) -> None:
 
 
 async def restart_once(host: ServicePluginHost) -> None:
-    """Restart the child via the supervisor after a crash (restart-once).
+    """Restart the child via the supervisor after a crash (windowed).
 
     Called with ``host._lock`` held.
     """
     host._restart_count += 1
-    logger.info("[Plugin:%s] crashed — restarting once", host.plugin_id)
+    logger.info("[Plugin:%s] crashed — restarting", host.plugin_id)
     # Clean up old RPC client pipes.
     try:
         host.rpc._finalize()
