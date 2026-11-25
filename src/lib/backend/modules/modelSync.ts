@@ -60,6 +60,13 @@ export interface OpenCodeDetectedVersion {
   version: OpenCodeSchemaVersion;
   source: string;
   raw: string | null;
+  /** Which binary produced the detection, when source is binary. */
+  binary?: string;
+  /** Per-binary detection results (additive; absent on older backends). */
+  binaries?: {
+    opencode?: OpenCodeBinaryInfo;
+    opencode2?: OpenCodeBinaryInfo;
+  };
 }
 
 export type OpenCodeCredentialStatus =
@@ -82,6 +89,8 @@ export interface OpenCodeCredentialState {
 export interface OpenCodeBinaryInfo {
   version: string | null;
   path: string | null;
+  schema?: string | null;
+  raw?: string | null;
 }
 
 export interface ModelSyncOpenCodeStatus {
