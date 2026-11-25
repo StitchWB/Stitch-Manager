@@ -317,7 +317,7 @@ class ProbeWorker:
 
         async def _op(session: AsyncSession) -> None:
             cutoff = _utcnow() - timedelta(seconds=_MODEL_MARK_TTL_SECONDS)
-            await session.execute(
+            result = await session.execute(
                 update(CredentialModelAccess)
                 .where(
                     CredentialModelAccess.status == "temporarily_unavailable",
@@ -326,6 +326,15 @@ class ProbeWorker:
                 .values(status="available")
             )
             await session.flush()
+            # Models became routable again — drop stale route resolutions.
+            # Only when rows actually transitioned: a no-op sweep must not
+            # churn the cache.
+            if getattr(result, "rowcount", 0):
+                from stitch_backend.core.event_bus import event_bus
+                await event_bus.emit(
+                    "credential.model_access_changed",
+                    {"transitions": int(result.rowcount)},
+                )
 
         try:
             await run_in_session(_op)

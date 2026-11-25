@@ -142,7 +142,13 @@ def _classify_status(status: int, lowered_body: str) -> tuple[str, bool]:
     if _contains(lowered_body, _AUTH_SIGNALS):
         return "auth_failed", False
     if 500 <= status < 600:
-        return "server_error", True
+        # A generic 5xx is the ENDPOINT failing, not the model: classifying it
+        # model-specific kept it out of the circuit breaker, so a dying
+        # endpoint never opened its circuit.  Only an explicit model signal in
+        # the body makes a 5xx model-scoped.
+        if _contains(lowered_body, _MODEL_SIGNALS):
+            return "model_not_found", True
+        return "server_error", False
     if status == 402 or _contains(lowered_body, _QUOTA_SIGNALS):
         return "quota_exhausted", False
     if status == 429:
@@ -178,6 +184,7 @@ class ConfigurableAdapter:
         auth_query_param: str | None = None,
         models_path: str = "/v1/models",
         invoke_path: str = "/v1/chat/completions",
+        responses_path: str = "/v1/responses",
         extra_headers: dict[str, str] | None = None,
         supports_chat: bool = True,
     ) -> None:
@@ -186,6 +193,7 @@ class ConfigurableAdapter:
         self._auth_query_param = auth_query_param
         self._models_path = models_path
         self._invoke_path = invoke_path
+        self._responses_path = responses_path
         self._extra_headers = extra_headers or {}
         self._supports_chat = supports_chat
 
@@ -434,9 +442,12 @@ class ConfigurableAdapter:
         as the primary content field.  The payload is
         ``{"model": ..., "input": ..., "stream": ..., **kwargs}`` — no
         ``messages`` key is included.
+
+        Posts to the Responses endpoint (``/v1/responses``), not the
+        chat-completions URL — ``_invoke_url`` is the chat path.
         """
         self._ensure_chat_supported()
-        url = self._invoke_url(base_url, secret)
+        url = self._build_url(base_url, secret, self._responses_path)
         headers = self._build_headers(secret, default_headers)
         payload: dict[str, Any] = {"model": model, "input": input, "stream": stream, **kwargs}
 
