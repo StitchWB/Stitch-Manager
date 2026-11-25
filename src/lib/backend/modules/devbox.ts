@@ -414,6 +414,10 @@ export interface DevboxConnectionCheckResult {
   latency_ms?: number;
   error?: string;
   mode?: string;
+  manifest_url?: string;
+  manifest_status?: number;
+  public_url?: string;
+  public_status?: number;
 }
 
 export function devboxConnectionCheck(): Promise<DevboxConnectionCheckResult> {

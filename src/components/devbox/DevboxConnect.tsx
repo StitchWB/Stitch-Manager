@@ -253,11 +253,31 @@ export function DevboxConnect({ connect, busy }: DevboxConnectProps) {
     if (connect.probeStale) return <Alert variant="warning" message={t('devboxPage.overviewProbeStale')} />;
     if (connect.probeResult === null) return <Alert variant="info" message={t('devboxPage.overviewProbeNone')} />;
     if (connect.probeResult.ok) {
+      const statusText = (code: number | undefined) =>
+        code === undefined || code === 0 ? 'timeout/unreachable' : `HTTP ${code}`;
+      const manifestBad =
+        connect.probeResult.manifest_status !== undefined && connect.probeResult.manifest_status !== 200;
+      const publicBad =
+        connect.probeResult.public_status !== undefined && connect.probeResult.public_status !== 200;
       return (
-        <Alert
-          variant="success"
-          message={t('devboxPage.connectToolsOk', { tools: connect.tools, latency: connect.latency ?? 0 })}
-        />
+        <div className="flex flex-col gap-2">
+          <Alert
+            variant="success"
+            message={t('devboxPage.connectToolsOk', { tools: connect.tools, latency: connect.latency ?? 0 })}
+          />
+          {manifestBad && (
+            <Alert
+              variant="warning"
+              message={t('devboxPage.connectManifestDown', { status: statusText(connect.probeResult.manifest_status) })}
+            />
+          )}
+          {publicBad && (
+            <Alert
+              variant="warning"
+              message={t('devboxPage.connectPublicUrlDown', { status: statusText(connect.probeResult.public_status) })}
+            />
+          )}
+        </div>
       );
     }
     return (

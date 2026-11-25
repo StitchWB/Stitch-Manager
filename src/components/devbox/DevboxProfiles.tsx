@@ -8,6 +8,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { Textarea } from '@/components/ui/Textarea';
 import { Input } from '@/components/ui/Input';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { appToast } from '@/lib/observability/toast';
 import { isDesktopApp } from '@/lib/backend/core/url';
 import { pickFolderNative, nativePickerAvailable } from '@/lib/desktop/nativeDialogs';
@@ -29,6 +30,9 @@ import { serializeProfileWrite } from './profileWriteLock';
 interface EditorState {
   name: string;
   json: string;
+  // слепок при открытии редактора — перед PUT сверяем с диском,
+  // чтобы не затереть правки, сделанные watchdog'ом/CLI/другой вкладкой
+  baseJson: string;
   loading: boolean;
   saving: boolean;
   create: boolean;
@@ -296,7 +300,7 @@ export function DevboxProfiles({
       nameTouchedRef.current = true;
       detectSeqRef.current += 1;
       setDetect(null);
-      setEditor({ name, json: '', loading: true, saving: false, create: false, lastInvalid: null });
+      setEditor({ name, json: '', baseJson: '', loading: true, saving: false, create: false, lastInvalid: null });
       devboxProfileGet(name)
         .then(result => {
           setEditor(prev =>
@@ -304,6 +308,7 @@ export function DevboxProfiles({
               ? {
                   ...prev,
                   json: result.json,
+                  baseJson: result.json,
                   loading: false,
                   lastInvalid: result.valid ? null : { json: result.json, errors: result.errors },
                 }
@@ -331,6 +336,7 @@ export function DevboxProfiles({
     setEditor({
       name: '',
       json: CREATE_TEMPLATE,
+      baseJson: CREATE_TEMPLATE,
       loading: false,
       saving: false,
       create: true,
@@ -383,6 +389,7 @@ export function DevboxProfiles({
       setEditor({
         name: '',
         json: CREATE_TEMPLATE,
+        baseJson: CREATE_TEMPLATE,
         loading: true,
         saving: false,
         create: true,
@@ -391,7 +398,7 @@ export function DevboxProfiles({
       devboxProfileGet(name)
         .then(result =>
           setEditor(prev =>
-            prev && prev.create ? { ...prev, json: result.json, loading: false } : prev,
+            prev && prev.create ? { ...prev, json: result.json, baseJson: result.json, loading: false } : prev,
           ),
         )
         .catch((err: unknown) => {
@@ -504,6 +511,31 @@ export function DevboxProfiles({
   const save = async (startAfter: boolean) => {
     if (!editor || saveDisabled) return;
     const { name, json, create } = editor;
+    // файл могли переписать снаружи (watchdog, devbox.py use, другая вкладка)
+    // пока редактор был открыт — слепое перезаписывание теряет чужие правки
+    if (!create) {
+      try {
+        const fresh = await devboxProfileGet(name);
+        const freshModel = parseModel(fresh.json);
+        const baseModel = parseModel(editor.baseJson);
+        const drifted =
+          freshModel !== null && baseModel !== null
+            ? JSON.stringify(freshModel) !== JSON.stringify(baseModel)
+            : fresh.json !== editor.baseJson;
+        if (drifted) {
+          const overwrite = await askConfirm({
+            title: t('devboxPage.profilesDriftTitle'),
+            message: t('devboxPage.profilesDriftWarn'),
+            confirmText: t('devboxPage.profilesDriftOverwrite'),
+            cancelText: t('common.cancel'),
+            variant: 'warning',
+          });
+          if (!overwrite) return;
+        }
+      } catch {
+        // re-GET не удался — продолжаем как раньше, PUT сам покажет ошибку
+      }
+    }
     setEditor(prev => (prev ? { ...prev, saving: true } : prev));
     try {
       const result = await serializeProfileWrite(() => devboxProfilePut(name, json));

@@ -14,7 +14,12 @@ jest.mock('sonner', () => ({
   toast: { success: jest.fn(), error: jest.fn(), info: jest.fn(), warning: jest.fn() },
 }));
 
+jest.mock('@/components/ui/ConfirmDialogHost', () => ({
+  askConfirm: jest.fn(() => Promise.resolve(true)),
+}));
+
 import { safeInvoke } from '@/lib/backend/core/invoke';
+import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { DevboxProfiles, type DevboxProfilesProps } from '@/components/devbox/DevboxProfiles';
 import type { DevboxProfileRow, DevboxVitalCard } from '@/lib/backend/modules/devbox';
 import {
@@ -27,6 +32,7 @@ import {
 } from './devboxTestKit';
 
 const invokeMock = safeInvoke as jest.Mock;
+const askConfirmMock = askConfirm as jest.Mock;
 
 function renderProfiles(
   onChanged = jest.fn(() => undefined),
@@ -232,6 +238,75 @@ describe('Devbox profile editor', () => {
       expect(screen.queryByTestId('devbox-profile-editor')).toBeNull();
     });
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('warns on disk drift before profile_put and overwrites on confirm', async () => {
+    let gets = 0;
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_get: () => {
+            gets += 1;
+            const json = gets === 1 ? '{"mode": "standard"}' : '{"mode": "full", "deny_mounts": ["x"]}';
+            return { json, valid: true, errors: [] };
+          },
+          profile_put: { valid: true, errors: [] },
+        }),
+      ),
+    );
+    render(
+      <DevboxProfiles
+        profiles={profilesFixture}
+        overviewCards={overviewFixture.cards}
+        error={null}
+        busy={false}
+        onAction={jest.fn()}
+        onRetry={jest.fn(() => undefined)}
+        onChanged={jest.fn()}
+        editSignal={1}
+        editName="midsai"
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('devbox-profile-save'));
+
+    await waitFor(() => expect(askConfirmMock).toHaveBeenCalled());
+    await waitFor(() => expect(devboxCalls(invokeMock, 'profile_put')).toHaveLength(1));
+  });
+
+  it('aborts profile_put when drift overwrite is declined', async () => {
+    askConfirmMock.mockResolvedValueOnce(false);
+    let gets = 0;
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_get: () => {
+            gets += 1;
+            const json = gets === 1 ? '{"mode": "standard"}' : '{"mode": "full"}';
+            return { json, valid: true, errors: [] };
+          },
+          profile_put: { valid: true, errors: [] },
+        }),
+      ),
+    );
+    render(
+      <DevboxProfiles
+        profiles={profilesFixture}
+        overviewCards={overviewFixture.cards}
+        error={null}
+        busy={false}
+        onAction={jest.fn()}
+        onRetry={jest.fn(() => undefined)}
+        onChanged={jest.fn()}
+        editSignal={1}
+        editName="midsai"
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('devbox-profile-save'));
+
+    await waitFor(() => expect(askConfirmMock).toHaveBeenCalled());
+    expect(devboxCalls(invokeMock, 'profile_put')).toHaveLength(0);
   });
 
   it('renders put validation errors under the editor and keeps it open', async () => {

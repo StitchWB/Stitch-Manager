@@ -176,6 +176,9 @@ export interface DevboxPageTranslations {
     errR41: string;
     errR42: string;
     editorSaved: string;
+    profilesDriftTitle: string;
+    profilesDriftWarn: string;
+    profilesDriftOverwrite: string;
     editorJsonToggle: string;
     editorJsonHide: string;
     editorJsonCaption: string;
@@ -604,6 +607,8 @@ export interface DevboxPageTranslations {
     connectCheckTools: string;
     connectToolsOk: string;
     connectToolsFail: string;
+    connectManifestDown: string;
+    connectPublicUrlDown: string;
     connectChatConfigCopied: string;
     connectTokensTitle: string;
     connectRotateAll: string;
