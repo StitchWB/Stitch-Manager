@@ -6,6 +6,8 @@ export const pluginUi: PluginUiTranslations = {
     actionSucceeded: "Action succeeded",
     copied: "Copied",
     confirmRowAction: "Execute this action?",
+    toggleActionFailed: "Failed to switch",
+    confirmToggle: "Switch this setting?",
     pluginNotInstalled: "Plugin not installed",
     pluginNotInstalledDescription: "The plugin is not installed or is unavailable.",
     noData: "No data",

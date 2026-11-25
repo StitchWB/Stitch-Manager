@@ -6,6 +6,8 @@ export const pluginUi: PluginUiTranslations = {
     actionSucceeded: "Действие выполнено",
     copied: "Скопировано",
     confirmRowAction: "Выполнить это действие?",
+    toggleActionFailed: "Не удалось переключить",
+    confirmToggle: "Переключить этот параметр?",
     pluginNotInstalled: "Плагин не установлен",
     pluginNotInstalledDescription: "Плагин не установлен или недоступен.",
     noData: "Нет данных",

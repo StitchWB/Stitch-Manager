@@ -4,6 +4,8 @@ export interface PluginUiTranslations {
     actionSucceeded: string;
     copied: string;
     confirmRowAction: string;
+    toggleActionFailed: string;
+    confirmToggle: string;
     pluginNotInstalled: string;
     pluginNotInstalledDescription: string;
     noData: string;
