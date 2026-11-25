@@ -425,7 +425,10 @@ async def start_gateway_workers() -> None:
         from stitch_backend.domains.ai_gateway.velly_bridge import VellyBridgeWorker
 
         await VellyBridgeWorker.start()
-        logger.info("AI Gateway workers started (discovery=3600s, probe=300s, velly=10s)")
+        from stitch_backend.domains.ai_gateway.plugin_bridge import PluginBridgeWorker
+
+        await PluginBridgeWorker.start()
+        logger.info("AI Gateway workers started (discovery=3600s, probe=300s, velly=10s, plugin-bridge=10s)")
     except Exception as _exc:
         logger.warning("AI Gateway workers init skipped: %s", _exc)
 
@@ -484,6 +487,9 @@ async def stop_gateway_workers() -> None:
         from stitch_backend.domains.ai_gateway.velly_bridge import VellyBridgeWorker
 
         await VellyBridgeWorker.stop()
+        from stitch_backend.domains.ai_gateway.plugin_bridge import PluginBridgeWorker
+
+        await PluginBridgeWorker.stop()
     except Exception:
         pass
     try:
