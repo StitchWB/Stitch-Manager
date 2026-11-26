@@ -909,6 +909,16 @@ holone: {
         disabled: "выключен",
         missing: "не найден",
         manual: "вручную"
+      },
+      trust: {
+        verifiedCoherent: "подтверждена когерентность",
+        untested: "не проверена",
+        degraded: "деградирована",
+        usageFabricationSuspect: "подозрение на фейковый usage",
+        tierLine: "tier {tier} · {latency} мс",
+        probedAt: "проверена {when}",
+        suspicionCount: "зафиксировано фабрикованных usage-ответов: {count}",
+        supplierIntegrity: "целостность поставщика: {suspect}/{probed} проверенных моделей фабрикуют usage"
       }
     },
     throughput: {

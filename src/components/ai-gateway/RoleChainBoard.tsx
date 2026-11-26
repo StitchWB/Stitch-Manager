@@ -6,6 +6,7 @@ import type { BadgeProps } from '@/components/ui';
 import type {
   RoleChainStepState,
   RoleChainStepStatus,
+  RoleChainTrustState,
   RoleRoutingState,
 } from '@/lib/backend/modules/aiGateway';
 import { t } from '@/lib/i18n';
@@ -31,6 +32,26 @@ const STEP_VARIANTS: Record<RoleChainStepState, BadgeProps['variant']> = {
   manual: 'indigo',
 };
 
+const TRUST_VARIANTS: Record<RoleChainTrustState, BadgeProps['variant']> = {
+  verified_coherent: 'success',
+  untested: 'slate',
+  degraded: 'danger',
+  usage_fabrication_suspect: 'warning',
+};
+
+const TRUST_LABEL_KEYS: Record<RoleChainTrustState, string> = {
+  verified_coherent: 'aiHub.roleChains.trust.verifiedCoherent',
+  untested: 'aiHub.roleChains.trust.untested',
+  degraded: 'aiHub.roleChains.trust.degraded',
+  usage_fabrication_suspect: 'aiHub.roleChains.trust.usageFabricationSuspect',
+};
+
+// Endpoint-level fabrication is worth a compact warning only when the share
+// is large and the sample is not a single model — below that the per-step
+// "usage suspect" badge already carries the signal.
+const SUPPLIER_INTEGRITY_MIN_PROBED = 2;
+const SUPPLIER_INTEGRITY_MIN_SHARE = 0.5;
+
 function formatDateTime(value: string | null | undefined, locale: string): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -53,6 +74,8 @@ function StepCard({ step, locale }: { step: RoleChainStepStatus; locale: string 
         : null;
   const lastVerified = formatDateTime(step.access.lastVerifiedAt, locale);
   const nextProbe = formatDateTime(step.access.nextProbeAt, locale);
+  const trustState: RoleChainTrustState = step.trustState ?? 'untested';
+  const probedAt = formatDateTime(step.probedAt, locale);
 
   return (
     <div
@@ -131,6 +154,32 @@ function StepCard({ step, locale }: { step: RoleChainStepStatus; locale: string 
           {t('aiHub.roleChains.lastVerified')}: {lastVerified ?? t('aiHub.roleChains.never')}
         </span>
         {nextProbe ? <span>{t('aiHub.roleChains.nextProbe')}: {nextProbe}</span> : null}
+      </div>
+
+      <div className="mt-2 border-t border-white/[0.06] pt-2" data-testid={`role-chain-trust-${step.ordinal}`}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant={TRUST_VARIANTS[trustState]}
+            size="sm"
+            withDot
+          >
+            {t(TRUST_LABEL_KEYS[trustState])}
+          </Badge>
+          {step.evidenceTier && step.probeLatencyMs != null ? (
+            <span className="text-[10px] text-slate-500">
+              {t('aiHub.roleChains.trust.tierLine', { tier: step.evidenceTier, latency: step.probeLatencyMs })}
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-1 space-y-0.5 text-[10px] text-slate-500">
+          {probedAt ? <div>{t('aiHub.roleChains.trust.probedAt', { when: probedAt })}</div> : null}
+          {step.usageReason ? <div className="text-amber-300/90">{step.usageReason}</div> : null}
+          {(step.usageSuspicionCount ?? 0) > 0 ? (
+            <div className="text-amber-300/90">
+              {t('aiHub.roleChains.trust.suspicionCount', { count: step.usageSuspicionCount ?? 0 })}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -215,7 +264,24 @@ export function RoleChainBoard() {
         />
       ) : (
         <div className="divide-y divide-white/[0.05]">
-          {roles.map(role => (
+          {roles.map(role => {
+            const supplierWarnings = new Map<string, { probed: number; suspect: number }>();
+            for (const step of role.steps) {
+              const integrity = step.supplierIntegrity;
+              if (
+                step.endpointId
+                && integrity
+                && integrity.probedModels >= SUPPLIER_INTEGRITY_MIN_PROBED
+                && integrity.fabricationShare >= SUPPLIER_INTEGRITY_MIN_SHARE
+                && integrity.fabricationSuspectModels > 0
+              ) {
+                supplierWarnings.set(step.endpointId, {
+                  probed: integrity.probedModels,
+                  suspect: integrity.fabricationSuspectModels,
+                });
+              }
+            }
+            return (
             <section key={role.id} className="p-4" data-testid={`role-chain-role-${role.id}`}>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
@@ -223,6 +289,18 @@ export function RoleChainBoard() {
                   {role.displayName && role.displayName !== role.id ? (
                     <span className="truncate text-xs text-slate-500">{role.displayName}</span>
                   ) : null}
+                  {[...supplierWarnings.values()].map(warning => (
+                    <span
+                      key={`${warning.probed}-${warning.suspect}`}
+                      data-testid={`supplier-integrity-warning-${role.id}`}
+                      className="rounded-md border border-amber-400/25 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300"
+                    >
+                      {t('aiHub.roleChains.trust.supplierIntegrity', {
+                        suspect: warning.suspect,
+                        probed: warning.probed,
+                      })}
+                    </span>
+                  ))}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400">
@@ -247,7 +325,8 @@ export function RoleChainBoard() {
                 ))}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
     </GlassCard>

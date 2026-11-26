@@ -150,6 +150,20 @@ export type RoleRoutingState =
   | 'disabled'
   | 'missing';
 
+// Trust display states derived backend-side from exact-probe capability
+// evidence.  Observability-only: never a routing input.
+export type RoleChainTrustState =
+  | 'verified_coherent'
+  | 'untested'
+  | 'degraded'
+  | 'usage_fabrication_suspect';
+
+export interface SupplierIntegrity {
+  probedModels: number;
+  fabricationSuspectModels: number;
+  fabricationShare: number;
+}
+
 export interface GatewayRuntimeStatus {
   running: boolean;
   baseUrl: string;
@@ -190,6 +204,18 @@ export interface RoleChainStepStatus {
   state: RoleChainStepState;
   isCurrent: boolean;
   access: RoleChainAccessSummary;
+  // ── Trust evidence (observability-only) ────────────────────────────────
+  trustState?: RoleChainTrustState;
+  coherencePassed?: boolean | null;
+  level2Passed?: boolean | null;
+  usageSane?: boolean | null;
+  usageReason?: string | null;
+  evidenceTier?: string | null;
+  probeLatencyMs?: number | null;
+  probedAt?: string | null;
+  usageSuspicionCount?: number;
+  usageSuspicionReasons?: string[];
+  supplierIntegrity?: SupplierIntegrity | null;
 }
 
 export interface RoleRoutingStatus {

@@ -31,6 +31,21 @@ class RoleChainAccessSummaryResponse(BaseModel):
     last_verified_at: datetime | None = Field(None, alias="lastVerifiedAt")
 
 
+class SupplierIntegrityResponse(BaseModel):
+    """Endpoint-level fabrication share across all probed upstream models.
+
+    Purely observational: a high share means the supplier's usage accounting
+    is fabricated at scale, which is a trust signal for the operator — never
+    a routing input.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    probed_models: int = Field(0, alias="probedModels")
+    fabrication_suspect_models: int = Field(0, alias="fabricationSuspectModels")
+    fabrication_share: float = Field(0.0, alias="fabricationShare")
+
+
 class RoleChainStepStatusResponse(BaseModel):
     """Desired chain step joined with its materialized runtime target."""
 
@@ -64,6 +79,19 @@ class RoleChainStepStatusResponse(BaseModel):
     state: str
     is_current: bool = Field(False, alias="isCurrent")
     access: RoleChainAccessSummaryResponse
+
+    # ── Trust evidence (observability-only; never a routing input) ─────────
+    trust_state: str = Field("untested", alias="trustState")
+    coherence_passed: bool | None = Field(None, alias="coherencePassed")
+    level2_passed: bool | None = Field(None, alias="level2Passed")
+    usage_sane: bool | None = Field(None, alias="usageSane")
+    usage_reason: str | None = Field(None, alias="usageReason")
+    evidence_tier: str | None = Field(None, alias="evidenceTier")
+    probe_latency_ms: int | None = Field(None, alias="probeLatencyMs")
+    probed_at: str | None = Field(None, alias="probedAt")
+    usage_suspicion_count: int = Field(0, alias="usageSuspicionCount")
+    usage_suspicion_reasons: list[str] = Field(default_factory=list, alias="usageSuspicionReasons")
+    supplier_integrity: SupplierIntegrityResponse | None = Field(None, alias="supplierIntegrity")
 
 
 class RoleRoutingStatusResponse(BaseModel):

@@ -909,6 +909,16 @@ export const aiHub: AiHubTranslations = {
         disabled: "disabled",
         missing: "missing",
         manual: "manual"
+      },
+      trust: {
+        verifiedCoherent: "verified coherent",
+        untested: "untested",
+        degraded: "degraded",
+        usageFabricationSuspect: "usage suspect",
+        tierLine: "tier {tier} · {latency} ms",
+        probedAt: "probed {when}",
+        suspicionCount: "{count} fabricated-usage responses observed",
+        supplierIntegrity: "supplier integrity: {suspect}/{probed} probed models fabricate usage"
       }
     },
     throughput: {

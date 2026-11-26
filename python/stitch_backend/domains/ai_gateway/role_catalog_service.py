@@ -24,7 +24,10 @@ from stitch_backend.domains.ai_gateway.chain_refill_policy import (
     rotation_state,
     rotation_state_active,
 )
-from stitch_backend.domains.ai_gateway.model_evidence import derive_evidence_tier
+from stitch_backend.domains.ai_gateway.model_evidence import (
+    derive_evidence_tier,
+    derive_trust_state,
+)
 from stitch_backend.domains.ai_gateway.model_identity import (
     canonical_model_key,
     humanize_model_id,
@@ -39,6 +42,7 @@ from stitch_backend.domains.ai_gateway.models import (
     UpstreamModel,
     _utcnow,
 )
+from stitch_backend.domains.ai_gateway.usage_integrity import usage_integrity_tracker
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -548,6 +552,57 @@ class RoleCatalogService:
         }
         upstream_row_ids = [row.id for row in upstream_rows]
 
+        # Supplier-integrity summary per endpoint: across ALL of the endpoint's
+        # upstream rows with probe evidence, what fraction exhibits fabricated
+        # usage accounting.  Chain-referenced rows alone would be a biased
+        # sample, so this intentionally queries the wider endpoint inventory —
+        # still a single indexed read on an operator-facing poll path.
+        supplier_integrity_by_endpoint: dict[str, dict[str, Any]] = {}
+        if endpoint_ids:
+            endpoint_upstream_rows = list(
+                (
+                    await self._db.execute(
+                        select(UpstreamModel).where(
+                            UpstreamModel.provider_endpoint_id.in_(endpoint_ids),
+                        ),
+                    )
+                ).scalars().all()
+            )
+            probed_by_endpoint: dict[str, list[UpstreamModel]] = {}
+            for row in endpoint_upstream_rows:
+                row_caps = row.capabilities if isinstance(row.capabilities, dict) else {}
+                if row_caps.get("probed_at"):
+                    probed_by_endpoint.setdefault(row.provider_endpoint_id, []).append(row)
+            for ep_id, rows in probed_by_endpoint.items():
+                fabrication = sum(
+                    1
+                    for row in rows
+                    if isinstance(row.capabilities, dict)
+                    and row.capabilities.get("usage_sane") is False
+                )
+                supplier_integrity_by_endpoint[ep_id] = {
+                    "probed_models": len(rows),
+                    "fabrication_suspect_models": fabrication,
+                    "fabrication_share": fabrication / len(rows) if rows else 0.0,
+                }
+
+        # Live-traffic fabrication suspicion, keyed exactly like the tracker:
+        # (endpoint row id, upstream row id).  In-memory and best-effort — a
+        # restart simply zeroes these counters, which is an accepted trade-off
+        # for the telemetry signal.
+        suspicion_index: dict[tuple[str, str], dict[str, Any]] = {}
+        for record in usage_integrity_tracker.snapshot():
+            ep = str(record.get("endpoint_id") or "")
+            um = str(record.get("upstream_model_id") or "")
+            if not ep or not um:
+                continue
+            bucket = suspicion_index.setdefault((ep, um), {"count": 0, "reasons": set()})
+            count_value = record.get("count")
+            bucket["count"] += int(count_value) if isinstance(count_value, int) else 0
+            reason = record.get("reason")
+            if isinstance(reason, str) and reason:
+                bucket["reasons"].add(reason)
+
         target_rows: list[RouteTarget] = []
         if upstream_row_ids:
             target_rows = list(
@@ -672,6 +727,17 @@ class RoleCatalogService:
                     # probe path has not produced positive evidence yet.
                     state = "probing"
 
+                caps: dict[str, Any] = (
+                    dict(upstream.capabilities)
+                    if upstream is not None and isinstance(upstream.capabilities, dict)
+                    else {}
+                )
+                suspicion = (
+                    suspicion_index.get((endpoint.id, upstream.id))
+                    if endpoint is not None and upstream is not None
+                    else None
+                )
+                probe_latency = caps.get("probe_latency_ms")
                 steps.append(
                     {
                         "entry_id": entry.id,
@@ -688,6 +754,51 @@ class RoleCatalogService:
                         "endpoint_circuit_state": endpoint.circuit_state if endpoint else None,
                         "upstream_row_id": upstream.id if upstream else None,
                         "upstream_enabled": upstream.enabled if upstream else None,
+                        # ── Trust evidence (observability only) ─────────────
+                        "trust_state": derive_trust_state(caps),
+                        "coherence_passed": (
+                            caps.get("coherence_passed")
+                            if isinstance(caps.get("coherence_passed"), bool)
+                            else None
+                        ),
+                        "level2_passed": (
+                            caps.get("level2_passed")
+                            if isinstance(caps.get("level2_passed"), bool)
+                            else None
+                        ),
+                        "usage_sane": (
+                            caps.get("usage_sane")
+                            if isinstance(caps.get("usage_sane"), bool)
+                            else None
+                        ),
+                        "usage_reason": (
+                            caps.get("usage_reason")
+                            if isinstance(caps.get("usage_reason"), str)
+                            else None
+                        ),
+                        "evidence_tier": (
+                            caps.get("evidence_tier")
+                            if isinstance(caps.get("evidence_tier"), str)
+                            else None
+                        ),
+                        "probe_latency_ms": (
+                            probe_latency
+                            if isinstance(probe_latency, int)
+                            and not isinstance(probe_latency, bool)
+                            else None
+                        ),
+                        "probed_at": (
+                            caps.get("probed_at")
+                            if isinstance(caps.get("probed_at"), str)
+                            else None
+                        ),
+                        "usage_suspicion_count": int(suspicion["count"]) if suspicion else 0,
+                        "usage_suspicion_reasons": sorted(suspicion["reasons"]) if suspicion else [],
+                        "supplier_integrity": (
+                            supplier_integrity_by_endpoint.get(endpoint.id)
+                            if endpoint is not None
+                            else None
+                        ),
                         "route_target_id": target.id if target else None,
                         "route_enabled": target.enabled if target else None,
                         "priority": target.priority if target else None,
