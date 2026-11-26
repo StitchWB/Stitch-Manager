@@ -58,7 +58,14 @@ import uvicorn  # noqa: E402
 API_PORT = int(os.environ.get("STITCH_API_PORT", "25584"))
 VITE_DEV_PORT = int(os.environ.get("STITCH_WEB_PORT", "5174"))
 HEALTH_URL = f"http://127.0.0.1:{API_PORT}/health"
-HEALTH_TIMEOUT = 20  # seconds
+# The clock starts when this Python process reaches _wait_for_server, so it
+# covers uvicorn startup + DB init + provider discovery. Measured at ~4-5s on
+# a warm developer machine against a large production stitch.db — but sqlite
+# lock contention with a second live instance, first-run DB creation, or AV
+# scanning of the fresh onefile extraction can multiply that. 20s was too
+# tight; a startup timeout kills the app silently (window never opens).
+# 60s default, overridable.
+HEALTH_TIMEOUT = float(os.environ.get("STITCH_HEALTH_TIMEOUT", "60"))
 WATCHDOG_INTERVAL = 5  # seconds between health checks
 
 
@@ -99,6 +106,53 @@ def _port_in_use(port: int) -> bool:
     """Check if a TCP port is already bound."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _probe_port_owner() -> str:
+    """Classify whatever occupies API_PORT by probing it over HTTP.
+
+    Returns one of:
+      - ``"stitch"``       — a healthy Stitch backend answers /health
+      - ``"foreign"``      — something answers HTTP but is not Stitch-shaped
+      - ``"unresponsive"`` — port is bound but no valid HTTP reply comes back
+        (the classic zombie instance: process alive, event loop wedged)
+    """
+    try:
+        resp = requests.get(HEALTH_URL, timeout=3)
+    except requests.RequestException:
+        return "unresponsive"
+    if resp.status_code != 200:
+        return "foreign"
+    try:
+        payload = resp.json()
+    except ValueError:
+        return "foreign"
+    if isinstance(payload, dict) and payload.get("status") == "ok":
+        return "stitch"
+    return "foreign"
+
+
+def _resolve_port_conflict(port: int, probe=_probe_port_owner) -> str:
+    """Decide how to handle an occupied API port.
+
+    Returns ``"attach"`` (reuse the healthy instance), ``"kill"`` (zombie —
+    safe to terminate) or ``"abort"`` (foreign service — never kill other
+    people's processes).
+
+    Rationale: the previous design killed whatever held the port
+    unconditionally.  On machines where a dev backend and the release app
+    coexist, each side murdered the other in a loop (the dev workspace
+    launcher force-frees the port too).  Additionally, a healthy Stitch
+    backend on the port almost always means the app is already running —
+    attaching is the correct single-instance behaviour and is non-destructive
+    even when the classification is wrong.
+    """
+    owner = probe()
+    if owner == "stitch":
+        return "attach"
+    if owner == "foreign":
+        return "abort"
+    return "kill"
 
 
 def _icon_path() -> str | None:
@@ -259,16 +313,43 @@ def main() -> None:
     if args.external_backend:
         print(f"[run_gui] Using external backend at {HEALTH_URL}", flush=True)
     else:
-        # Single-instance desktop app: a busy port means a zombie instance.
-        # Starting "anyway" only produces a dead backend + a window attached
-        # to the old process, so free the port unconditionally.
+        # Single-instance desktop app.  A busy port can mean three very
+        # different things — a live Stitch instance (attach to it), a zombie
+        # Stitch instance (kill it), or somebody else's service (leave it
+        # alone).  Blindly killing the owner made coexisting dev/release
+        # instances murder each other in a loop.
+        attach_existing = False
         if _port_in_use(API_PORT):
-            print(f"[run_gui] Port {API_PORT} is occupied — killing old instance", flush=True)
-            _kill_port_hog(API_PORT)
-            time.sleep(1)
+            decision = _resolve_port_conflict(API_PORT)
+            if decision == "attach":
+                print(
+                    f"[run_gui] Port {API_PORT} already serves a healthy Stitch "
+                    "backend — attaching to it instead of starting a second instance",
+                    flush=True,
+                )
+                attach_existing = True
+            elif decision == "abort":
+                print(
+                    f"ERROR: Port {API_PORT} is held by a service that is not a "
+                    "Stitch backend. Refusing to kill a foreign process.\n"
+                    "       Free the port yourself or point Stitch elsewhere:  "
+                    "set STITCH_API_PORT=<port>",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                sys.exit(2)
+            else:
+                print(
+                    f"[run_gui] Port {API_PORT} is occupied by an unresponsive "
+                    "(zombie) instance — killing it",
+                    flush=True,
+                )
+                _kill_port_hog(API_PORT)
+                time.sleep(1)
 
-        server_thread = threading.Thread(target=_start_uvicorn, daemon=True)
-        server_thread.start()
+        if not attach_existing:
+            server_thread = threading.Thread(target=_start_uvicorn, daemon=True)
+            server_thread.start()
 
     # 2. Decide what URL the webview will load
     if args.dev:
