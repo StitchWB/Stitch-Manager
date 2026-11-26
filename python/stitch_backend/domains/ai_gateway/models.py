@@ -402,6 +402,14 @@ class CredentialModelAccess(Base):
     )
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
+    probe_failures: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default=text("0"),
+        comment="Consecutive exact-model probe failures used for probe backoff",
+    )
+    next_probe_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        comment="Earliest time an exact-model probe may retest this credential/model pair",
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow,
@@ -500,6 +508,21 @@ class RouteTarget(Base):
     cost_modifier: Mapped[float] = mapped_column(
         Float, default=1.0, comment="Multiplier applied to cost-aware routing decisions",
     )
+    managed_by: Mapped[str | None] = mapped_column(
+        String, index=True,
+        comment="Automation owner: role_catalog | manual; NULL = legacy/manual pre-lifecycle row",
+    )
+    lifecycle_status: Mapped[str | None] = mapped_column(
+        String, index=True,
+        comment="discovered | quarantined | verified | active | demoted; NULL = legacy row",
+    )
+    lifecycle_reason: Mapped[str | None] = mapped_column(
+        Text, comment="Machine-oriented reason for the current lifecycle state",
+    )
+    lifecycle_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        comment="When lifecycle_status/reason last changed",
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=_utcnow,
@@ -509,6 +532,68 @@ class RouteTarget(Base):
         return (
             f"<RouteTarget public={self.public_model_id!r} "
             f"upstream={self.upstream_model_id!r} priority={self.priority!r}>"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RoleChainEntry
+# ═══════════════════════════════════════════════════════════════════════════
+
+class RoleChainEntry(Base):
+    """Operator-visible desired chain entry for a virtual role model.
+
+    This table is desired state only.  ``RoleCatalogService`` materializes
+    enabled entries into ``RouteTarget`` rows, while manual tombstones
+    (``enabled=False, source='manual'``) prevent automation from resurrecting
+    an entry the operator deliberately removed.
+    """
+
+    __tablename__ = "ai_gateway_role_chain_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "public_model_id", "endpoint_selector", "upstream_model_key",
+            name="uq_role_chain_entry",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    public_model_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("ai_gateway_public_models.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    endpoint_selector: Mapped[str] = mapped_column(
+        String, nullable=False, default="reformboss", server_default=text("'reformboss'"),
+        comment="Logical endpoint selector, not an endpoint FK (endpoint may be absent/recreated)",
+    )
+    upstream_model_key: Mapped[str] = mapped_column(
+        String, nullable=False,
+        comment="Exact upstream model id desired on the selected endpoint",
+    )
+    family: Mapped[str | None] = mapped_column(
+        String,
+        comment="Model family metadata used for cross-family chain design",
+    )
+    ordinal: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0"),
+        comment="Zero-based desired order; materialized priority is 10 * (ordinal + 1)",
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1"),
+    )
+    source: Mapped[str] = mapped_column(
+        String, nullable=False, default="default", server_default=text("'default'"),
+        comment="default | auto | manual; manual rows are never overwritten by automation",
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=_utcnow,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<RoleChainEntry public={self.public_model_id!r} "
+            f"upstream={self.upstream_model_key!r} ordinal={self.ordinal!r}>"
         )
 
 

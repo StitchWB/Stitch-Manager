@@ -22,7 +22,7 @@ _VARIANT_SUFFIXES = frozenset({"turbo", "preview", "latest", "instruct", "chat",
 
 _SEPARATORS = re.compile(r"[-_]+")
 
-_SLUG_RE = re.compile(r"[A-Za-z0-9._-]+")
+_SLUG_RE = re.compile(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*")
 
 _HUMAN_TOKEN_SPLIT = re.compile(r"[-_.:\s]+")
 

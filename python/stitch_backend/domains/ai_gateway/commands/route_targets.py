@@ -19,6 +19,10 @@ from stitch_backend.domains.ai_gateway.models import (
     PublicModel,
     UpstreamModel,
 )
+from stitch_backend.domains.ai_gateway.role_catalog_service import (
+    ROLE_MANAGED_BY,
+    RoleCatalogService,
+)
 from stitch_backend.domains.ai_gateway.schemas import (
     ListRouteTargetsForPublicModelRequest,
     RouteTargetCreateRequest,
@@ -121,6 +125,11 @@ async def cmd_update_route_target(db: AsyncSession, params: dict) -> Any:
     )
     if pm_result.scalar_one_or_none() is None:
         return None
+    if target.managed_by == ROLE_MANAGED_BY:
+        # A generic operator edit is an explicit manual override.  Record it
+        # in desired state and detach the materialized row from automation;
+        # otherwise the next role reconcile would silently revert the edit.
+        await RoleCatalogService(db).mark_target_manual_override(target, updates)
     svc = RouteTargetService(db)
     updated = await svc.update_by_pk(req.id, **updates)
     return RouteTargetResponse.from_orm_model(updated) if updated else None
@@ -146,6 +155,13 @@ async def cmd_delete_route_target(params: dict) -> dict:
         )
         if pm_result.scalar_one_or_none() is None:
             return False
+        if target.managed_by == ROLE_MANAGED_BY:
+            # Role-managed targets are materialized history, not independent
+            # rows.  Deleting one means "remove this desired chain entry":
+            # tombstone the entry so reconciliation cannot resurrect it, and
+            # disable the runtime target without erasing its history.
+            await RoleCatalogService(session).disable_entry_for_target(target)
+            return True
         svc = RouteTargetService(session)
         return await svc.delete_by_pk(req.id)
 

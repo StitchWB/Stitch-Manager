@@ -61,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await startup.migrate_legacy_group_usage()
     await startup.convert_legacy_labels()
     await startup.auto_create_public_models()
+    await startup.reconcile_role_catalog()
     await startup.run_plugin_distribution_startup()
     await startup.seed_partner_channels()
     await startup.ensure_scheduler_tables()

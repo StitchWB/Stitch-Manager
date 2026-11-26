@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime  # noqa: TC003 — pydantic resolves annotations at runtime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from stitch_backend.domains.ai_gateway.model_identity import is_valid_public_slug
 from stitch_backend.domains.ai_gateway.schemas._common import _validate_dict_size
 
 if TYPE_CHECKING:
@@ -32,10 +32,10 @@ class PublicModelCreateRequest(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("id must not be empty")
-        if not re.fullmatch(r"[A-Za-z0-9._-]+", v):
+        if not is_valid_public_slug(v):
             raise ValueError(
                 "id may only contain alphanumeric characters, hyphens, "
-                "underscores, and dots"
+                "underscores, dots, and non-empty slash-separated segments"
             )
         return v
 

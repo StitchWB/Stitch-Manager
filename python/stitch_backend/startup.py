@@ -171,6 +171,24 @@ async def auto_create_public_models() -> None:
         logger.warning("PublicModel auto-create skipped: %s", _exc)
 
 
+async def reconcile_role_catalog() -> None:
+    # Seed and materialize rb/* virtual role models, best-effort.
+    # The ReformBoss endpoint is optional (especially in dev/test installs), so
+    # reconciliation is idempotent and absent-tolerant; failure must never
+    # prevent application startup.
+    try:
+        from stitch_backend.database import run_in_session
+        from stitch_backend.domains.ai_gateway.role_catalog_service import RoleCatalogService
+
+        async def _reconcile(session):
+            return await RoleCatalogService(session).reconcile_all()
+
+        stats = await run_in_session(_reconcile)
+        logger.info("Role catalog reconciliation: %s", stats)
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("Role catalog reconciliation skipped: %s", _exc)
+
+
 async def run_plugin_distribution_startup() -> None:
     # Activate → heartbeat → sync; never blocks startup.
     try:

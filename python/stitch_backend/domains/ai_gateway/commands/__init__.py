@@ -78,6 +78,12 @@ from stitch_backend.domains.ai_gateway.commands.public_models import (
 from stitch_backend.domains.ai_gateway.commands.quota import (
     cmd_refresh_endpoint_quota,
 )
+from stitch_backend.domains.ai_gateway.commands.role_chain import (
+    cmd_disable_role_chain_entry,
+    cmd_list_role_chain_entries,
+    cmd_reset_role_chain_entry_to_default,
+    cmd_upsert_role_chain_entry,
+)
 from stitch_backend.domains.ai_gateway.commands.route_targets import (
     cmd_create_route_target,
     cmd_delete_route_target,
@@ -109,6 +115,7 @@ __all__ = [
     "cmd_delete_public_model",
     "cmd_delete_route_target",
     "cmd_delete_upstream_model",
+    "cmd_disable_role_chain_entry",
     "cmd_discover_models_for_endpoint",
     "cmd_gateway_claim_legacy",
     "cmd_gateway_set_instance_shared",
@@ -125,6 +132,7 @@ __all__ = [
     "cmd_list_model_throughput",
     "cmd_list_provider_endpoints",
     "cmd_list_public_models",
+    "cmd_list_role_chain_entries",
     "cmd_list_route_targets_for_public_model",
     "cmd_list_upstream_models",
     "cmd_merge_public_models",
@@ -135,6 +143,7 @@ __all__ = [
     "cmd_proxy_keys_revoke",
     "cmd_refresh_endpoint_models",
     "cmd_refresh_endpoint_quota",
+    "cmd_reset_role_chain_entry_to_default",
     "cmd_rotate_credential_secret",
     "cmd_save_connection",
     "cmd_test_credential_connection",
@@ -145,4 +154,5 @@ __all__ = [
     "cmd_update_route_target",
     "cmd_update_upstream_model",
     "cmd_upsert_credential_model_access",
+    "cmd_upsert_role_chain_entry",
 ]
