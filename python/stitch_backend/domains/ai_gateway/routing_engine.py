@@ -375,8 +375,8 @@ def _reorder_cached(
 
     affinity_upstream = affinity[2] if affinity is not None else None
     if affinity_upstream in buckets and order[0] != affinity_upstream:
-        order.remove(affinity_upstream)  # type: ignore[arg-type]
-        order.insert(0, affinity_upstream)  # type: ignore[arg-type]
+        order.remove(affinity_upstream)
+        order.insert(0, affinity_upstream)
 
     ordered: list[RoutingResult] = []
     for key in order:
