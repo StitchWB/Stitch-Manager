@@ -246,7 +246,9 @@ export function DevboxServices({
 
   const { copy, copied } = useCopyToClipboard();
 
-  const manifestBase = ingressBase(connect.resolvedUrl);
+  // manifest — ссылка для человека: браузерный PUBLIC_URL без lt-заглушки, иначе ingress
+  const publicBase = (connect.savedPublicUrl ?? '').replace(/\/+$/, '');
+  const manifestBase = publicBase !== '' ? publicBase : ingressBase(connect.resolvedUrl);
   const manifestUrl = manifestBase === '' ? '' : `${manifestBase}/p/9000/manifest.json`;
   const sessionStale = connect.connectionStale || connect.handoffStale;
 

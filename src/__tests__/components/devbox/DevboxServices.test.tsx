@@ -213,6 +213,16 @@ describe('DevboxServices capabilities', () => {
     expect(screen.getByTestId('devbox-services-manifest-copy')).toBeTruthy();
   });
 
+  it('prefers PUBLIC_URL for the human-facing manifest link', () => {
+    renderServices({
+      connect: connectFixture({ savedPublicUrl: 'https://devbox.whitebite.ru' }),
+    });
+
+    expect(screen.getByTestId('devbox-services-manifest').textContent).toContain(
+      'https://devbox.whitebite.ru/p/9000/manifest.json',
+    );
+  });
+
   it('links token management to Connect and never edits tokens here', () => {
     const { onOpenTab } = renderServices();
 
