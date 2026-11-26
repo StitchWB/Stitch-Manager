@@ -390,6 +390,15 @@ _PUBLISH_ALL_PROVIDERS = (
     "wispbyte", "gname_eucc",
 )
 
+# Official publish set only: plugins-src dirs may hold WIP service plugins
+# (stitch-quickwork, stitch-ramp) that are not released through publish-all yet.
+_PUBLISH_ALL_SERVICES = (
+    "stitch-antigravity", "stitch-bridges", "stitch-cards", "stitch-devbox",
+    "stitch-domains", "stitch-freemodel", "stitch-leonardo", "stitch-mail",
+    "stitch-notebooklm", "stitch-opencode", "stitch-radar",
+    "stitch-relaycheck", "stitch-sheets", "stitch-totp", "stitch-velly",
+)
+
 
 async def publish_all(
     *,
@@ -402,8 +411,8 @@ async def publish_all(
     """Publish every official package in one run (46 packages).
 
     Registry:
-      1. every ``plugins-src/<id>/`` whose manifest has ``kind == "service"``
-         (packed fresh into a temp dir),
+      1. ``plugins-src/<id>/`` entries in ``_PUBLISH_ALL_SERVICES`` whose
+         manifest has ``kind == "service"`` (packed fresh into a temp dir),
       2. the engine-pack (packed fresh into a temp dir),
       3. the autoreg providers (packed fresh into temp dirs).
 
@@ -431,7 +440,7 @@ async def publish_all(
                 if not child.is_dir() or not manifest_path.is_file():
                     continue
                 raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-                if raw.get("kind") == "service":
+                if raw.get("kind") == "service" and raw.get("id") in _PUBLISH_ALL_SERVICES:
                     pack_dir = Path(tempfile.mkdtemp(prefix=f"stitch-{raw['id']}-"))
                     temp_dirs.append(pack_dir)
                     pack_service(child, pack_dir)
