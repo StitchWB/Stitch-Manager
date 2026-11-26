@@ -1,0 +1,84 @@
+id: no-bare-python-subprocess
+language: Python
+severity: error
+message: Do not spawn PATH-resolved python/python3; use sys.executable so the child uses the backend interpreter environment.
+rule:
+  any:
+    - pattern: subprocess.$FUNC([$CMD])
+    - pattern: subprocess.$FUNC([$CMD], $$$KW)
+    - pattern: subprocess.$FUNC([$CMD, $$$ARGS])
+    - pattern: subprocess.$FUNC([$CMD, $$$ARGS], $$$KW)
+    - pattern: subprocess.$FUNC($CMD)
+    - pattern: subprocess.$FUNC($CMD, $$$KW)
+constraints:
+  FUNC:
+    regex: "^(run|Popen|call|check_call|check_output)$"
+  CMD:
+    regex: "^['\"]python3?([.]exe)?(['\"]|[[:space:]])"
+---
+id: no-bare-python-os-spawn
+language: Python
+severity: error
+message: Do not os.spawn PATH-resolved python/python3; use sys.executable.
+rule:
+  any:
+    - pattern: os.$FUNC($MODE, $CMD)
+    - pattern: os.$FUNC($MODE, $CMD, $$$ARGS)
+constraints:
+  FUNC:
+    regex: "^spawn[lv]p?e?$"
+  CMD:
+    regex: "^['\"]python3?([.]exe)?(['\"]|[[:space:]])"
+---
+id: no-bare-python-asyncio-spawn
+language: Python
+severity: error
+message: Do not asyncio-spawn PATH-resolved python/python3; use sys.executable.
+rule:
+  any:
+    - pattern: asyncio.create_subprocess_exec($CMD)
+    - pattern: asyncio.create_subprocess_exec($CMD, $$$ARGS)
+    - pattern: asyncio.create_subprocess_shell($CMD)
+    - pattern: asyncio.create_subprocess_shell($CMD, $$$KW)
+constraints:
+  CMD:
+    regex: "^['\"]python3?([.]exe)?(['\"]|[[:space:]])"
+---
+id: no-bare-python-interpreter-default
+language: Python
+severity: error
+message: Do not default a Python interpreter parameter to PATH-resolved python/python3; default to sys.executable.
+rule:
+  any:
+    - pattern:
+        context: |
+          def f(python_binary: str = $CMD):
+              pass
+        selector: typed_default_parameter
+    - pattern:
+        context: |
+          def f(python_binary = $CMD):
+              pass
+        selector: default_parameter
+    - pattern: python_binary = $CMD
+    - pattern:
+        context: f(python_binary=$CMD)
+        selector: keyword_argument
+    - pattern: $OBJ.get($KEY, $CMD)
+constraints:
+  CMD:
+    regex: "^['\"]python3?([.]exe)?['\"]$"
+  KEY:
+    regex: "^['\"](pythonBinary|python_binary)['\"]$"
+---
+id: no-bare-python-pexpect-spawn
+language: Python
+severity: error
+message: Do not pexpect-spawn PATH-resolved python/python3; use sys.executable.
+rule:
+  any:
+    - pattern: pexpect.spawn($CMD)
+    - pattern: pexpect.spawn($CMD, $$$ARGS)
+constraints:
+  CMD:
+    regex: "^['\"]python3?([.]exe)?(['\"]|[[:space:]])"
