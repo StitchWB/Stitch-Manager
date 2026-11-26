@@ -33,6 +33,12 @@ from stitch_backend.domains.ai_gateway.adapters.base import (
     ClassifiedError,
     get_adapter,
 )
+from stitch_backend.domains.ai_gateway.chain_refill_policy import (
+    CHAIN_PROBE_BURST_MAX_PER_ENDPOINT_PER_PASS,
+    CHAIN_PROBE_BURST_WINDOW_SECONDS,
+    CHAIN_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS,
+    rotation_state_active,
+)
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialModelAccess,
@@ -97,20 +103,26 @@ _QUOTA_ADAPTER_TYPE = "openai_compatible"
 # startup still gets the same cold-start treatment without extending the
 # burst for long-lived endpoints.
 ROLE_PROBE_MAX_PER_ENDPOINT_PER_PASS = 1
-ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS = 5
-ROLE_PROBE_COLD_START_WINDOW_SECONDS = 900
+# Cold starts and detected rotations share the centralized bounded burst
+# policy.  Keep the historical probe-worker names as compatibility aliases;
+# chain_refill_policy.py is the source of truth for budget values.
+ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS = CHAIN_PROBE_BURST_MAX_PER_ENDPOINT_PER_PASS
+ROLE_PROBE_COLD_START_WINDOW_SECONDS = CHAIN_PROBE_BURST_WINDOW_SECONDS
 # Sibling coverage is lower priority than recovery but gets one additional
 # exact pair per endpoint/pass.  This bounds the steady-state probe cost to at
 # most two exact probes/endpoint/pass while making multi-key failover real.
 ROLE_PROBE_SIBLING_MAX_PER_ENDPOINT_PER_PASS = 1
 # Unknown-tier catalog models are information-gathering work, strictly lower
-# priority than recovery and sibling coverage.  The trickle is deliberately
-# one model per endpoint per pass; aggressive rotation rediscovery is a later
-# design phase and must not be implicit here.
-ROLE_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS = 1
+# priority than recovery and sibling coverage.  Steady state is a trickle;
+# only a persisted, timestamped rotation event re-arms the bounded burst.
+ROLE_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS = CHAIN_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS
+ROLE_PROBE_ROTATION_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS = (
+    CHAIN_PROBE_BURST_MAX_PER_ENDPOINT_PER_PASS
+)
 # Candidate evidence probes are allowed to observe slow-but-coherent emergency
-# tails.  Ordinary activation probes keep the tighter budget above; only the
-# single lowest-priority candidate probe may wait this long.
+# tails.  Ordinary activation probes keep the tighter budget above.  In steady
+# state only one lowest-priority candidate probe may wait this long; detected
+# rotation may briefly re-arm the same bounded candidate burst policy.
 ROLE_CANDIDATE_PROBE_BUDGET_SECONDS = 90.0
 # Refreshed in ``start()`` so the cold-start window is process/worker-local
 # (as required for restarts); endpoint addition is detected separately from
@@ -462,13 +474,15 @@ class ProbeWorker:
 
     @classmethod
     async def _run_chain_refill(cls) -> None:
-        """Run rescue-only chain refill in one short write session."""
+        """Detect upstream rotation, then run deficit chain refill in one write session."""
         from stitch_backend.domains.ai_gateway.chain_refill_service import (
             ChainRefillService,
         )
 
         async def _op(session: AsyncSession) -> None:
-            await ChainRefillService(session).apply_rescue_refill()
+            await ChainRefillService(session).detect_and_apply_refill(
+                probe_pass_seconds=cls._interval_seconds,
+            )
 
         await run_in_session(_op)
 
@@ -776,8 +790,16 @@ class ProbeWorker:
             )
             candidate_counts: dict[str, int] = {}
             for upstream, endpoint in candidate_rows:
-                if candidate_counts.get(endpoint.id, 0) >= ROLE_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS:
+                candidate_budget = ROLE_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS
+                if rotation_state_active(endpoint.health_policy, now):
+                    candidate_budget = max(
+                        candidate_budget,
+                        ROLE_PROBE_ROTATION_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS,
+                    )
+                if candidate_counts.get(endpoint.id, 0) >= candidate_budget:
                     continue
+                # Endpoint pushback/backoff is a hard cap even in rotation
+                # aggressive mode: re-armed burst size never overrides it.
                 if _endpoint_blocked(endpoint):
                     continue
                 # Catalog presence may already have marked the pair available;

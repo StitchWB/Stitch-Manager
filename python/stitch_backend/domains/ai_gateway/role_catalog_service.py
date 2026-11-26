@@ -20,6 +20,10 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
+from stitch_backend.domains.ai_gateway.chain_refill_policy import (
+    rotation_state,
+    rotation_state_active,
+)
 from stitch_backend.domains.ai_gateway.model_evidence import derive_evidence_tier
 from stitch_backend.domains.ai_gateway.model_identity import (
     canonical_model_key,
@@ -497,6 +501,18 @@ class RoleCatalogService:
                 )
             endpoints_by_selector[selector] = endpoint
 
+        now = _utcnow()
+        rotation_by_selector: dict[str, dict[str, Any]] = {}
+        for selector, endpoint in endpoints_by_selector.items():
+            if endpoint is None:
+                continue
+            rotation_raw = rotation_state(endpoint.health_policy)
+            if rotation_raw is None:
+                continue
+            enriched = dict(rotation_raw)
+            enriched["active"] = rotation_state_active(endpoint.health_policy, now)
+            rotation_by_selector[selector] = enriched
+
         endpoint_ids = {
             endpoint.id for endpoint in endpoints_by_selector.values() if endpoint is not None
         }
@@ -709,6 +725,18 @@ class RoleCatalogService:
             else:
                 role_state = "disabled"
 
+            role_rotation_states = [
+                rotation_by_selector[selector]
+                for selector in sorted(
+                    {entry.endpoint_selector for entry in entries_by_role.get(role_id, [])}
+                )
+                if selector in rotation_by_selector
+            ]
+            rotation = next(
+                (state for state in role_rotation_states if state.get("active") is True),
+                role_rotation_states[0] if role_rotation_states else None,
+            )
+
             roles.append(
                 {
                     "id": role_id,
@@ -716,6 +744,8 @@ class RoleCatalogService:
                     "enabled": role_enabled,
                     "contract": public.contract if public else None,
                     "state": role_state,
+                    "rotation_detected": bool(rotation and rotation.get("active") is True),
+                    "rotation": rotation,
                     "total_steps": len(steps),
                     "active_steps": active_steps,
                     "probing_steps": probing_steps,
