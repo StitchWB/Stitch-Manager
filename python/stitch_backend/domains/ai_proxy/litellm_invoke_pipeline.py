@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import HTTPException
 
+from stitch_backend.core.event_bus import event_bus
 from stitch_backend.domains.ai_gateway import account_ledger
 from stitch_backend.domains.ai_gateway.adapters.error_vocab import parse_envelope
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
@@ -14,6 +16,10 @@ from stitch_backend.domains.ai_proxy.holone_inspector import (
     default_engine as _holone_default_engine,
 )
 from stitch_backend.domains.ai_proxy.litellm_response_parsing import _json_object, _usage_split
+from stitch_backend.domains.ai_proxy.litellm_streaming import (
+    StreamStallError,
+    TtftWatchdogError,
+)
 from stitch_backend.domains.ai_proxy.request_logs import RequestLogFailureMetadata
 
 if TYPE_CHECKING:
@@ -56,6 +62,145 @@ class EmptyCompletionError(RuntimeError):
     text (which lands on ``unknown`` and miscounts toward the endpoint
     breaker).
     """
+
+
+class LatencyPolicy:
+    """Parsed ``contract.latency`` of a public model.
+
+    Contract keys (all optional; absent or wrong-typed values disable the
+    corresponding guard)::
+
+        contract: {
+          "latency": {
+            "maxTtftMs": 20000,      # budget from upstream request start to
+                                     # the first *meaningful* frame (stream) or
+                                     # the completed response (non-stream)
+            "stallTimeoutMs": 30000  # max silence between stream frames;
+                                     # also bounds a totally silent stream
+          }
+        }
+    """
+
+    def __init__(self, max_ttft_ms: float | None, stall_timeout_ms: float | None) -> None:
+        self.max_ttft_ms = max_ttft_ms
+        self.stall_timeout_ms = stall_timeout_ms
+
+    def ttft_seconds(self) -> float | None:
+        return self.max_ttft_ms / 1000.0 if self.max_ttft_ms is not None else None
+
+    def stall_seconds(self) -> float | None:
+        return self.stall_timeout_ms / 1000.0 if self.stall_timeout_ms is not None else None
+
+
+def _positive_ms(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value <= 0:
+        return None
+    return float(value)
+
+
+def parse_latency_policy(contract: Any) -> LatencyPolicy | None:
+    """Defensively parse the ``latency`` object of a public-model contract.
+
+    Anything absent or wrong-typed yields ``None`` — no watchdog.  The
+    feature is strictly opt-in per public model.
+    """
+    if not isinstance(contract, dict):
+        return None
+    latency = contract.get("latency")
+    if not isinstance(latency, dict):
+        return None
+    ttft = _positive_ms(latency.get("maxTtftMs"))
+    stall = _positive_ms(latency.get("stallTimeoutMs"))
+    if ttft is None and stall is None:
+        return None
+    return LatencyPolicy(ttft, stall)
+
+
+_LATENCY_CACHE_TTL_S = 30.0
+_latency_cache: dict[str, tuple[float, LatencyPolicy | None]] = {}
+
+
+async def load_latency_policy(
+    model: str | None,
+    run_in_session: Callable[..., Awaitable[Any]],
+) -> LatencyPolicy | None:
+    """Load the latency policy for a public model, cached for 30s.
+
+    The routing engine already reads the contract but does not expose it on
+    ``RoutingResult``; rather than widening that contract we re-read the row
+    here through a small TTL cache.  Any failure (DB down, row missing,
+    malformed contract) disables the watchdog — never the request.
+    """
+    if not model:
+        return None
+    now = time.monotonic()
+    cached = _latency_cache.get(model)
+    if cached is not None and now - cached[0] < _LATENCY_CACHE_TTL_S:
+        return cached[1]
+    policy: LatencyPolicy | None = None
+    try:
+        from stitch_backend.domains.ai_gateway.model_catalog_service import (
+            PublicModelService,
+        )
+
+        async def _query(session):
+            public_model = await PublicModelService(session).get_by_pk(model)
+            return getattr(public_model, "contract", None) if public_model is not None else None
+
+        policy = parse_latency_policy(await run_in_session(_query))
+    except Exception:
+        logger.debug("Latency policy load failed for %s", model, exc_info=True)
+        policy = None
+    _latency_cache[model] = (now, policy)
+    return policy
+
+
+def _reset_latency_cache() -> None:
+    """Test hook: drop cached latency policies."""
+    _latency_cache.clear()
+
+
+async def _await_with_ttft_watchdog(coro: Any, timeout_s: float) -> Any:
+    """Await a non-stream upstream invoke under the TTFT budget.
+
+    Non-streaming adapters buffer the whole body, so the watchdog fires on
+    total elapsed time — an accepted approximation (a non-stream response is
+    silent until generation completes anyway, and aborting is always safe for
+    the client because no byte was ever sent).  Operators should size
+    ``maxTtftMs`` for non-stream roles with generation time in mind.
+    """
+    try:
+        return await asyncio.wait_for(coro, timeout_s)
+    except TimeoutError as exc:
+        raise TtftWatchdogError(
+            f"upstream response did not complete within {timeout_s:.2f}s"
+        ) from exc
+
+
+def _is_passive_slowness(exc: BaseException) -> bool:
+    """True for watchdog/stall aborts: slow ≠ dead, never a health failure."""
+    return isinstance(exc, (TtftWatchdogError, StreamStallError))
+
+
+async def _emit_slowness_event(kind: str, routing_result: Any, payload_model: str | None) -> None:
+    try:
+        await event_bus.emit(
+            f"gateway.request.{kind}",
+            {
+                "model": payload_model or "",
+                "upstream_model": getattr(
+                    getattr(routing_result, "upstream_model", None), "upstream_model_id", "",
+                ),
+                "endpoint_id": getattr(getattr(routing_result, "endpoint", None), "id", ""),
+                "credential_id": getattr(
+                    getattr(routing_result, "credential", None), "id", "",
+                )[:8],
+            },
+        )
+    except Exception:
+        logger.debug("Failed to emit %s event", kind, exc_info=True)
 
 
 class UpstreamErrorEnvelopeError(RuntimeError):
@@ -142,6 +287,25 @@ def _classify_invoke_failure(
     """
     from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
 
+    if isinstance(exc, TtftWatchdogError):
+        # Slowness, not death: model-level retryable, key-scoped so the
+        # failover walk simply advances to the next candidate.  Nothing is
+        # written to health state for this class of failure.
+        return ClassifiedError(
+            category="server_error",
+            is_endpoint_wide=False,
+            is_model_specific=True,
+            scope="key",
+            error_code="ttft_watchdog",
+        )
+    if isinstance(exc, StreamStallError):
+        return ClassifiedError(
+            category="server_error",
+            is_endpoint_wide=False,
+            is_model_specific=True,
+            scope="key",
+            error_code="stream_stall",
+        )
     if isinstance(exc, EmptyCompletionError):
         return ClassifiedError(
             category="server_error",
@@ -354,9 +518,12 @@ async def invoke_via_gateway(
 
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
+    latency_policy = await load_latency_policy(payload.model, run_in_session)
+    ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
+    stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
     try:
-        response = await routing_result.adapter.invoke(
+        invoke_coro = routing_result.adapter.invoke(
             base_url=routing_result.endpoint.base_url,
             secret=routing_result.secret,
             model=routing_result.upstream_model.upstream_model_id,
@@ -365,6 +532,10 @@ async def invoke_via_gateway(
             default_headers=routing_result.default_headers,
             **_adapter_options(payload),
         )
+        if ttft_budget is not None and not payload.stream:
+            response = await _await_with_ttft_watchdog(invoke_coro, ttft_budget)
+        else:
+            response = await invoke_coro
 
         latency = time.time() - start_time
 
@@ -375,8 +546,13 @@ async def invoke_via_gateway(
             input_tokens, output_tokens = _response_usage(response)
 
         if payload.stream:
+            ttft_remaining = (
+                max(ttft_budget - (time.time() - start_time), 0.001)
+                if ttft_budget is not None
+                else None
+            )
             result = await executor._stream_response(
-                executor._guard_stream(response, routing_result),
+                executor._guard_stream(response, routing_result, stall_timeout=stall_budget),
                 client_has_tools=client_has_tools,
                 on_complete=_stream_usage_callback(
                     executor,
@@ -389,6 +565,7 @@ async def invoke_via_gateway(
                 model=payload.model,
                 routing_result=routing_result,
                 request_started_at=start_time,
+                ttft_timeout=ttft_remaining,
             )
         else:
             result = cast("Any", _json_object(response))
@@ -475,6 +652,25 @@ async def invoke_via_gateway(
         outcome.routing_result = routing_result
         outcome.ok = False
         outcome.error_class = _failure_metadata(classified, exc)
+        if _is_passive_slowness(exc):
+            # Slowness is not death: a watchdog/stall abort must not mark
+            # CredentialModelAccess temporarily_unavailable, must not count
+            # toward credential consecutive_failures and must not feed the
+            # endpoint circuit breaker.  Failover + trace event only; the
+            # rolling-metrics latency observability is a later-phase
+            # integration point (latency-aware ordering / lifecycle demotion).
+            logger.warning(
+                "Gateway %s abort for %s (credential=%s) — slow upstream, failing over",
+                type(exc).__name__,
+                routing_result.upstream_model.upstream_model_id,
+                routing_result.credential.id[:8],
+            )
+            await _emit_slowness_event(
+                "ttft_watchdog" if isinstance(exc, TtftWatchdogError) else "stream_stall",
+                routing_result,
+                payload.model,
+            )
+            raise
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(
@@ -523,10 +719,13 @@ async def invoke_via_gateway_messages(
 
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
+    latency_policy = await load_latency_policy(payload.model, run_in_session)
+    ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
+    stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
     try:
         invoke = getattr(routing_result.adapter, "invoke_messages", routing_result.adapter.invoke)
-        response = await invoke(
+        invoke_coro = invoke(
             base_url=routing_result.endpoint.base_url,
             secret=routing_result.secret,
             model=routing_result.upstream_model.upstream_model_id,
@@ -535,6 +734,10 @@ async def invoke_via_gateway_messages(
             default_headers=routing_result.default_headers,
             **_adapter_options(payload),
         )
+        if ttft_budget is not None and not payload.stream:
+            response = await _await_with_ttft_watchdog(invoke_coro, ttft_budget)
+        else:
+            response = await invoke_coro
 
         latency = time.time() - start_time
 
@@ -545,8 +748,13 @@ async def invoke_via_gateway_messages(
             input_tokens, output_tokens = _response_usage(response)
 
         if payload.stream:
+            ttft_remaining = (
+                max(ttft_budget - (time.time() - start_time), 0.001)
+                if ttft_budget is not None
+                else None
+            )
             result = await executor._stream_anthropic_response(
-                executor._guard_stream(response, routing_result),
+                executor._guard_stream(response, routing_result, stall_timeout=stall_budget),
                 client_has_tools=client_has_tools,
                 on_complete=_stream_usage_callback(
                     executor,
@@ -559,6 +767,7 @@ async def invoke_via_gateway_messages(
                 model=payload.model,
                 routing_result=routing_result,
                 request_started_at=start_time,
+                ttft_timeout=ttft_remaining,
             )
         else:
             result = cast("Any", _json_object(response))
@@ -647,6 +856,25 @@ async def invoke_via_gateway_messages(
         outcome.routing_result = routing_result
         outcome.ok = False
         outcome.error_class = _failure_metadata(classified, exc)
+        if _is_passive_slowness(exc):
+            # Slowness is not death: a watchdog/stall abort must not mark
+            # CredentialModelAccess temporarily_unavailable, must not count
+            # toward credential consecutive_failures and must not feed the
+            # endpoint circuit breaker.  Failover + trace event only; the
+            # rolling-metrics latency observability is a later-phase
+            # integration point (latency-aware ordering / lifecycle demotion).
+            logger.warning(
+                "Gateway %s abort for %s (credential=%s) — slow upstream, failing over",
+                type(exc).__name__,
+                routing_result.upstream_model.upstream_model_id,
+                routing_result.credential.id[:8],
+            )
+            await _emit_slowness_event(
+                "ttft_watchdog" if isinstance(exc, TtftWatchdogError) else "stream_stall",
+                routing_result,
+                payload.model,
+            )
+            raise
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(
@@ -702,9 +930,12 @@ async def invoke_via_gateway_responses(
 
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
+    latency_policy = await load_latency_policy(payload.model, run_in_session)
+    ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
+    stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
     try:
-        response = await routing_result.adapter.invoke_responses(
+        invoke_coro = routing_result.adapter.invoke_responses(
             base_url=routing_result.endpoint.base_url,
             secret=routing_result.secret,
             model=routing_result.upstream_model.upstream_model_id,
@@ -713,6 +944,10 @@ async def invoke_via_gateway_responses(
             default_headers=routing_result.default_headers,
             **_adapter_options(payload),
         )
+        if ttft_budget is not None and not payload.stream:
+            response = await _await_with_ttft_watchdog(invoke_coro, ttft_budget)
+        else:
+            response = await invoke_coro
 
         latency = time.time() - start_time
 
@@ -723,8 +958,13 @@ async def invoke_via_gateway_responses(
             input_tokens, output_tokens = _response_usage(response)
 
         if payload.stream:
+            ttft_remaining = (
+                max(ttft_budget - (time.time() - start_time), 0.001)
+                if ttft_budget is not None
+                else None
+            )
             result = await executor._stream_response(
-                executor._guard_stream(response, routing_result),
+                executor._guard_stream(response, routing_result, stall_timeout=stall_budget),
                 client_has_tools=client_has_tools,
                 on_complete=_stream_usage_callback(
                     executor,
@@ -737,6 +977,7 @@ async def invoke_via_gateway_responses(
                 model=payload.model,
                 routing_result=routing_result,
                 request_started_at=start_time,
+                ttft_timeout=ttft_remaining,
             )
         else:
             result = cast("Any", _json_object(response))
@@ -825,6 +1066,25 @@ async def invoke_via_gateway_responses(
         outcome.routing_result = routing_result
         outcome.ok = False
         outcome.error_class = _failure_metadata(classified, exc)
+        if _is_passive_slowness(exc):
+            # Slowness is not death: a watchdog/stall abort must not mark
+            # CredentialModelAccess temporarily_unavailable, must not count
+            # toward credential consecutive_failures and must not feed the
+            # endpoint circuit breaker.  Failover + trace event only; the
+            # rolling-metrics latency observability is a later-phase
+            # integration point (latency-aware ordering / lifecycle demotion).
+            logger.warning(
+                "Gateway %s abort for %s (credential=%s) — slow upstream, failing over",
+                type(exc).__name__,
+                routing_result.upstream_model.upstream_model_id,
+                routing_result.credential.id[:8],
+            )
+            await _emit_slowness_event(
+                "ttft_watchdog" if isinstance(exc, TtftWatchdogError) else "stream_stall",
+                routing_result,
+                payload.model,
+            )
+            raise
         try:
             async def _record_failure(session):
                 await executor._routing_engine.record_result(
