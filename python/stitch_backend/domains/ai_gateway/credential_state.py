@@ -205,14 +205,18 @@ def record_outcome(
     latency_ms: float | None,
     error_kind: str | None = None,
     include_endpoint: bool = True,
+    include_credential: bool = True,
 ) -> None:
-    """Record one outcome against the credential and, when endpoint-attributed, its endpoint.
+    """Record one outcome into scoped rolling metrics.
 
-    Key- and model-scoped failures are useful evidence against that key/model
-    but must not skew endpoint health ordering, so callers that have already
-    classified scope pass ``include_endpoint=False`` for them.
+    Scope-first attribution is explicit at the call site: endpoint-scoped
+    evidence may feed endpoint metrics, key/account-scoped evidence may feed
+    credential metrics, and model-scoped evidence feeds neither aggregate —
+    it belongs only to ``CredentialModelAccess``.  Defaults preserve the
+    legacy behavior for callers that have not classified scope yet.
     """
-    metrics_store.record(credential_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
+    if include_credential:
+        metrics_store.record(credential_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
     if include_endpoint:
         metrics_store.record(endpoint_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
 

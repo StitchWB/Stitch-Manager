@@ -35,6 +35,11 @@ class AiProxyRequestLog(Base):
     upstream_model: Mapped[str] = mapped_column(
         String, nullable=False, default="", comment="Upstream model id used for pricing",
     )
+    served_public_model: Mapped[str | None] = mapped_column(
+        String,
+        index=True,
+        comment="Public model slug that actually served after fallback; NULL for total failure",
+    )
     credential_id: Mapped[str] = mapped_column(
         String, nullable=False, default="", comment="Gateway credential id",
     )

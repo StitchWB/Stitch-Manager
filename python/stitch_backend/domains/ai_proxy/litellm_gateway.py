@@ -43,7 +43,15 @@ class GatewayRequest(BaseModel):
     max_wait_seconds: int | None = None
 
     def sdk_payload(self) -> JsonObject:
-        return self.model_dump(mode="json", exclude_none=True, exclude={"max_wait_seconds"})
+        # ``session_hint`` is private in-process routing state.  It is carried
+        # on the payload object for the router only and must never become part
+        # of an upstream request body, including when the caller supplied a
+        # colliding extra field.
+        return self.model_dump(
+            mode="json",
+            exclude_none=True,
+            exclude={"max_wait_seconds", "session_hint"},
+        )
 
 
 def _max_wait_override(request: Request) -> dict[str, int]:
@@ -55,6 +63,14 @@ def _max_wait_override(request: Request) -> dict[str, int]:
     except ValueError:
         return {}
     return {"max_wait_seconds": max(0, value)}
+
+
+def _session_hint_update(payload: GatewayRequest, request: Request) -> dict[str, str]:
+    """Extract private session affinity state without mutating the client body."""
+    from stitch_backend.domains.ai_gateway.session_affinity import extract_session_hint
+
+    hint = extract_session_hint(request.headers, payload.sdk_payload())
+    return {"session_hint": hint} if hint else {}
 
 
 class NativeGatewayExecutor(Protocol):
@@ -187,7 +203,10 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        payload = payload.model_copy(update=_max_wait_override(request))
+        payload = payload.model_copy(update={
+            **_max_wait_override(request),
+            **_session_hint_update(payload, request),
+        })
         try:
             return await executor_factory().chat(payload, pool=pool)
         except RoutingError as exc:
@@ -203,7 +222,10 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        payload = payload.model_copy(update=_max_wait_override(request))
+        payload = payload.model_copy(update={
+            **_max_wait_override(request),
+            **_session_hint_update(payload, request),
+        })
         try:
             return await executor_factory().messages(payload, pool=pool)
         except RoutingError as exc:
@@ -219,7 +241,10 @@ def create_native_gateway_router(
         unsupported = _unsupported_adapter_response(payload)
         if unsupported is not None:
             return unsupported
-        payload = payload.model_copy(update=_max_wait_override(request))
+        payload = payload.model_copy(update={
+            **_max_wait_override(request),
+            **_session_hint_update(payload, request),
+        })
         try:
             return await executor_factory().responses(payload, pool=pool)
         except RoutingError as exc:

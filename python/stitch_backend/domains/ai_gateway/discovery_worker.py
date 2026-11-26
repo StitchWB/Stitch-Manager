@@ -30,6 +30,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_read_session, run_in_session
@@ -40,6 +41,7 @@ from stitch_backend.domains.ai_gateway.model_catalog_service import (
 )
 from stitch_backend.domains.ai_gateway.models import (
     CredentialModelAccess,
+    RoleChainEntry,
     RouteTarget,
     UpstreamModel,
     _utcnow,
@@ -625,6 +627,33 @@ class DiscoveryWorker:
         changed_endpoints: list[str] = []
         access_status_changed = False
 
+        # Desired rb/* chain entries pin their exact upstream rows against
+        # catalog-rotation retirement.  ReformBoss models routinely disappear
+        # from ``/v1/models`` for longer than the discovery retirement TTL;
+        # retiring them anyway creates a dead end because exact probes are the
+        # only recovery path.  Once an entry leaves every enabled desired
+        # chain, the normal retirement rules apply again.
+        from stitch_backend.domains.ai_gateway.role_catalog_service import (
+            REFORMBOSS_ENDPOINT_SELECTOR,
+        )
+
+        try:
+            desired_role_upstream_keys = set(
+                (
+                    await session.execute(
+                        select(RoleChainEntry.upstream_model_key).where(
+                            RoleChainEntry.endpoint_selector == REFORMBOSS_ENDPOINT_SELECTOR,
+                            RoleChainEntry.enabled.is_(True),
+                        ),
+                    )
+                ).scalars().all(),
+            )
+        except SQLAlchemyError:
+            # Some narrow unit-test schemas create only the pre-lifecycle gateway
+            # tables.  Absence of the additive desired-state table must not break
+            # ordinary discovery; it simply means no retirement exemptions.
+            desired_role_upstream_keys = set()
+
         for item in results:
             probe = item["probe"]
             endpoint_id = probe["endpoint_id"]
@@ -680,10 +709,23 @@ class DiscoveryWorker:
                                 or access_status_changed
                             )
 
+                    policy = probe.get("health_policy")
+                    role_catalog_endpoint = (
+                        _normalize_base_url(probe.get("base_url")) == REFORMBOSS_BASE_URL
+                        or (
+                            isinstance(policy, dict)
+                            and policy.get("roleCatalog") == REFORMBOSS_ENDPOINT_SELECTOR
+                        )
+                    )
                     for mid, upstream in upstream_rows.items():
                         if mid in {m.id for _c, models in item["credentials"] for m in models}:
                             continue
                         if upstream.selection_source != "auto":
+                            continue
+                        if (
+                            role_catalog_endpoint
+                            and mid in desired_role_upstream_keys
+                        ):
                             continue
                         if upstream.last_seen_at is None:
                             continue

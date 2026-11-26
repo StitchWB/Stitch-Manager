@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, select
@@ -26,6 +27,35 @@ from stitch_backend.domains.ai_gateway.service import ProviderEndpointService
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
+
+async def _reconcile_role_catalog_best_effort(
+    db: AsyncSession,
+    endpoint: ProviderEndpoint,
+) -> None:
+    """Materialize rb/* roles immediately after endpoint create/update.
+
+    Reconciliation is local desired-state work (no network), so running it in
+    the command's already-open transaction avoids both the discovery-interval
+    delay and the fire-and-forget race where a background task reads before
+    this command commits.  It is still strictly best-effort: endpoint CRUD must
+    never fail because role automation did.
+    """
+    try:
+        from stitch_backend.domains.ai_gateway.role_catalog_service import (
+            RoleCatalogService,
+        )
+
+        async with db.begin_nested():
+            await RoleCatalogService(db).reconcile_endpoint(endpoint)
+    except Exception:
+        logger.warning(
+            "Role catalog reconcile failed for endpoint %s",
+            getattr(endpoint, "id", "<new>"),
+            exc_info=True,
+        )
+
 
 @command("create_provider_endpoint")
 async def cmd_create_provider_endpoint(db: AsyncSession, params: dict) -> Any:
@@ -44,6 +74,7 @@ async def cmd_create_provider_endpoint(db: AsyncSession, params: dict) -> Any:
         health_policy=req.health_policy,
         owner_id=owner_id,
     )
+    await _reconcile_role_catalog_best_effort(db, endpoint)
     return ProviderEndpointResponse.from_orm_model(endpoint)
 
 
@@ -98,6 +129,7 @@ async def cmd_update_provider_endpoint(db: AsyncSession, params: dict) -> Any:
         endpoint.updated_at = _utcnow()
     await db.flush()
     await db.refresh(endpoint)
+    await _reconcile_role_catalog_best_effort(db, endpoint)
     if "enabled" in updates:
         await event_bus.emit("endpoint.models_changed", {"endpoint_ids": [endpoint.id]})
     return ProviderEndpointResponse.from_orm_model(endpoint)

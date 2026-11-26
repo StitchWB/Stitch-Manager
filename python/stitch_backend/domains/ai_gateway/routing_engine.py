@@ -35,7 +35,12 @@ from sqlalchemy import and_, false, or_, select
 from sqlalchemy.orm import aliased
 
 from stitch_backend.core.event_bus import Event, event_bus
-from stitch_backend.domains.ai_gateway import account_ledger, circuit_breaker, credential_state
+from stitch_backend.domains.ai_gateway import (
+    account_ledger,
+    circuit_breaker,
+    credential_state,
+    model_latency,
+)
 from stitch_backend.domains.ai_gateway.adapters.base import (
     ClassifiedError,
     ProviderAdapter,
@@ -108,6 +113,7 @@ class GatewayRequest:
     tools: list[dict[str, Any]] | None = None
     response_format: dict[str, Any] | None = None
     user: str | None = None
+    session_hint: str | None = None
 
     def __post_init__(self) -> None:
         if not self.model or not isinstance(self.model, str):
@@ -141,6 +147,12 @@ class RoutingResult:
     redundant database re-read; the pipeline keeps its TTL-cache fallback for
     candidates built outside routing.
     """
+    route_target_priority: int = 0
+    """Materialized target priority; chain priority is a hard ordering boundary."""
+    lifecycle_status: str | None = None
+    """Control-plane lifecycle of the materialized route target, for observability."""
+    sticky_hit: bool = False
+    """Whether this candidate belongs to the upstream bucket hit by session affinity."""
 
 
 class RoutingError(Exception):
@@ -292,14 +304,26 @@ _EPOCH = datetime.min.replace(tzinfo=UTC)
 def _balance_key(
     credential: Credential,
     endpoint_id: str,
-    affinity: tuple[str, str | None] | None,
+    affinity: tuple[str, str | None, str | None] | None,
     headroom: dict[str, float],
+    upstream_model_id: str | None = None,
 ) -> tuple[Any, ...]:
     group = credential.account_group
-    affinity_match = 1 if affinity is not None and affinity == (endpoint_id, group) else 0
+    affinity_match = 1 if (
+        affinity is not None
+        and affinity[0] == endpoint_id
+        and affinity[1] == group
+        and (affinity[2] is None or upstream_model_id is None or affinity[2] == upstream_model_id)
+    ) else 0
+    latency_band = (
+        model_latency.model_latency_tracker.ordering_band(credential.id, upstream_model_id)
+        if upstream_model_id is not None
+        else 0
+    )
     return (
         -affinity_match,
         -headroom.get(credential.id, 1.0),
+        latency_band,
         credential.last_success_at or _EPOCH,
         -_score(1.0, 1.0, credential_state.metrics_store.snapshot(credential.id)),
         random.random(),
@@ -308,9 +332,17 @@ def _balance_key(
 
 def _reorder_cached(
     results: list[RoutingResult],
-    affinity: tuple[str, str | None] | None,
+    affinity: tuple[str, str | None, str | None] | None,
     headroom: dict[str, float],
 ) -> list[RoutingResult]:
+    """Group candidates by upstream bucket and apply sticky ordering.
+
+    Every object in *results* has already passed enabled/health/access gates,
+    so a dead affinity target is simply absent and the walk falls through to
+    the normal priority order.  When the remembered upstream bucket IS present
+    it moves to the front — explicit stickiness is allowed to cross target
+    priority; ordinary latency/health ordering is not.
+    """
     buckets: dict[str, list[RoutingResult]] = {}
     order: list[str] = []
     for result in results:
@@ -319,17 +351,51 @@ def _reorder_cached(
             buckets[key] = []
             order.append(key)
         buckets[key].append(result)
+
+    # Passive latency ordering may refine buckets of the SAME chain priority
+    # only.  ``sorted`` is stable, so equal-priority/equal-band buckets retain
+    # the existing priority+score order and different priorities can never
+    # cross even when a lower-priority upstream is faster.
+    def _bucket_order_key(upstream_id: str) -> tuple[int, int]:
+        bucket = buckets[upstream_id]
+        priority = min(result.route_target_priority for result in bucket)
+        bands = [
+            model_latency.model_latency_tracker.ordering_band(
+                result.credential.id,
+                upstream_id,
+            )
+            for result in bucket
+        ]
+        # A bucket is as fast as its best usable credential.  Unknown pairs
+        # are band zero (neutral), so an unknown credential beside a slow one
+        # keeps the bucket neutral instead of inheriting a penalty.
+        return priority, min(bands, default=0)
+
+    order = sorted(order, key=_bucket_order_key)
+
+    affinity_upstream = affinity[2] if affinity is not None else None
+    if affinity_upstream in buckets and order[0] != affinity_upstream:
+        order.remove(affinity_upstream)
+        order.insert(0, affinity_upstream)
+
     ordered: list[RoutingResult] = []
     for key in order:
         bucket = buckets[key]
         endpoint_id = bucket[0].endpoint.id
-        ordered.extend(
-            sorted(
-                bucket,
-                key=lambda result: _balance_key(
-                    result.credential, endpoint_id, affinity, headroom,
-                ),
+        balanced = sorted(
+            bucket,
+            key=lambda result: _balance_key(
+                result.credential,
+                endpoint_id,
+                affinity,
+                headroom,
+                key,
             ),
+        )
+        sticky_hit = affinity_upstream == key
+        ordered.extend(
+            replace(result, sticky_hit=sticky_hit) if result.sticky_hit != sticky_hit else result
+            for result in balanced
         )
     return ordered
 
@@ -517,7 +583,10 @@ class RoutingEngine:
                 if not results:
                     return None
         affinity = account_ledger.get_affinity(
-            request.model, request.messages, getattr(request, "user", None),
+            request.model,
+            request.messages,
+            getattr(request, "user", None),
+            session_hint=request.session_hint,
         )
         return _reorder_cached(results, affinity, cached.headroom)
 
@@ -665,7 +734,10 @@ class RoutingEngine:
         cred_svc = CredentialService(session)
         results: list[RoutingResult] = []
         affinity = account_ledger.get_affinity(
-            request.model, request.messages, getattr(request, "user", None),
+            request.model,
+            request.messages,
+            getattr(request, "user", None),
+            session_hint=request.session_hint,
         )
         headroom_cache: dict[str, float] = {}
         probe_leases: dict[str, circuit_breaker.ProbeLease] = {}
@@ -724,7 +796,11 @@ class RoutingEngine:
                 )
             eligible.sort(
                 key=lambda pair: _balance_key(
-                    pair[0], upstream.provider_endpoint_id, affinity, headroom_cache,
+                    pair[0],
+                    upstream.provider_endpoint_id,
+                    affinity,
+                    headroom_cache,
+                    upstream.id,
                 ),
             )
             # квота дня сидит на аккаунте: ключи одной группы — одна квота, разводим группы
@@ -766,6 +842,8 @@ class RoutingEngine:
                     access_status=access_status,
                     access_row=access_row,
                     public_model_contract=public_model.contract or None,
+                    route_target_priority=_target.priority,
+                    lifecycle_status=_target.lifecycle_status,
                 ))
 
         if not results:
@@ -789,7 +867,7 @@ class RoutingEngine:
                     headroom=dict(headroom_cache),
                 ),
             )
-        return results
+        return _reorder_cached(results, affinity, headroom_cache)
 
     async def record_result(
         self,
@@ -820,6 +898,7 @@ class RoutingEngine:
         endpoint_attributed = error is None or error.is_endpoint_wide or error.scope in (
             "endpoint", "global",
         )
+        model_specific = error is not None and error.is_model_specific
         credential_state.record_outcome(
             credential_id=credential_id,
             endpoint_id=endpoint_id,
@@ -827,8 +906,8 @@ class RoutingEngine:
             latency_ms=latency_ms,
             error_kind=credential_state.classify_error_kind(error, http_status),
             include_endpoint=endpoint_attributed,
+            include_credential=not model_specific and (error is None or not endpoint_attributed),
         )
-        model_specific = error is not None and error.is_model_specific
         if error is not None and model_specific:
             if upstream_model_id is not None:
                 row = (await session.execute(select(CredentialModelAccess).where(
@@ -836,11 +915,21 @@ class RoutingEngine:
                     CredentialModelAccess.upstream_model_id == upstream_model_id,
                 ))).scalar_one_or_none()
                 if row is not None:
+                    # Entitlement failures are terminal for this exact
+                    # (credential, model) pair until positive probe evidence
+                    # says otherwise; inventory/transient model failures remain
+                    # temporary.  ``token_model_not_allowed`` can arrive either
+                    # as the normalized category or as the vendor error code.
+                    denied = (
+                        error.category == "model_access_denied"
+                        or error.error_code in {"token_model_not_allowed", "provider_forbidden"}
+                    )
+                    next_status = "denied" if denied else "temporarily_unavailable"
                     # Invalidate the resolve cache only on a real transition —
                     # rewriting the same mark must not churn routing.
-                    transitioned = row.status != "temporarily_unavailable"
-                    row.status = "temporarily_unavailable"
-                    row.last_error = error.category
+                    transitioned = row.status != next_status
+                    row.status = next_status
+                    row.last_error = error.error_code or error.category
                     row.last_verified_at = _utcnow()
                     await session.flush()
                     if transitioned:
