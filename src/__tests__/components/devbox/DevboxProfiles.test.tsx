@@ -692,3 +692,122 @@ function renderProfilesOnPut(putResult: { valid: boolean; errors: string[] }) {
   );
   return onChanged;
 }
+
+describe('Devbox profile advanced fields', () => {
+  it('commits port_ranges text as parsed ranges on blur', async () => {
+    renderProfilesOnPut({ valid: true, errors: [] });
+    fireEvent.click(await screen.findByTestId('devbox-profile-advanced-toggle'));
+    const field = (await screen.findByTestId(
+      'devbox-profile-field-port_ranges',
+    )) as HTMLInputElement;
+
+    fireEvent.change(field, { target: { value: '3000-3999, 8000-8699' } });
+    fireEvent.blur(field);
+    fireEvent.click(screen.getByTestId('devbox-profile-save'));
+
+    await waitFor(() => {
+      const put = devboxCallArgs(invokeMock, 'profile_put')[0];
+      expect(JSON.parse(put.json).port_ranges).toEqual([
+        [3000, 3999],
+        [8000, 8699],
+      ]);
+    });
+  });
+
+  it('renders existing port_ranges back as range text', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_get: {
+            json: '{"mode": "standard", "port_ranges": [[3000, 3999]]}',
+            valid: true,
+            errors: [],
+          },
+          profile_put: { valid: true, errors: [] },
+        }),
+      ),
+    );
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'example-simple' });
+    fireEvent.click(await screen.findByTestId('devbox-profile-advanced-toggle'));
+    const field = (await screen.findByTestId(
+      'devbox-profile-field-port_ranges',
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe('3000-3999'));
+  });
+
+  it('adds a runner command and seeds runner_port', async () => {
+    renderProfilesOnPut({ valid: true, errors: [] });
+    fireEvent.click(await screen.findByTestId('devbox-profile-advanced-toggle'));
+    fireEvent.click(await screen.findByTestId('devbox-profile-runner-add'));
+
+    fireEvent.change(screen.getByTestId('devbox-profile-runner-0-name'), {
+      target: { value: 'test' },
+    });
+    fireEvent.change(screen.getByTestId('devbox-profile-runner-0-cmd'), {
+      target: { value: 'npm test' },
+    });
+    fireEvent.change(screen.getByTestId('devbox-profile-runner-0-timeout'), {
+      target: { value: '300' },
+    });
+    fireEvent.click(screen.getByTestId('devbox-profile-save'));
+
+    await waitFor(() => {
+      const put = devboxCallArgs(invokeMock, 'profile_put')[0];
+      const model = JSON.parse(put.json);
+      expect(model.runner_commands).toEqual([
+        { name: 'test', cmd: ['npm', 'test'], timeout: 300 },
+      ]);
+      expect(model.runner_port).toBe(8796);
+    });
+  });
+
+  it('removes a runner command row', async () => {
+    invokeMock.mockImplementation(
+      devboxRouter(
+        pageRoutes({
+          profile_get: {
+            json: JSON.stringify({
+              mode: 'standard',
+              runner_port: 8796,
+              runner_commands: [{ name: 'lint', cmd: ['npm', 'run', 'lint'] }],
+            }),
+            valid: true,
+            errors: [],
+          },
+          profile_put: { valid: true, errors: [] },
+        }),
+      ),
+    );
+    renderProfiles(undefined, undefined, { editSignal: 1, editName: 'example-simple' });
+    fireEvent.click(await screen.findByTestId('devbox-profile-advanced-toggle'));
+    fireEvent.click(await screen.findByTestId('devbox-profile-runner-0-remove'));
+    fireEvent.click(screen.getByTestId('devbox-profile-save'));
+
+    await waitFor(() => {
+      const put = devboxCallArgs(invokeMock, 'profile_put')[0];
+      expect(JSON.parse(put.json).runner_commands).toEqual([]);
+    });
+  });
+
+  it('adds a host service row with auth and cmd', async () => {
+    renderProfilesOnPut({ valid: true, errors: [] });
+    fireEvent.click(await screen.findByTestId('devbox-profile-advanced-toggle'));
+    fireEvent.click(await screen.findByTestId('devbox-profile-service-add'));
+
+    fireEvent.change(screen.getByTestId('devbox-profile-service-0-port'), {
+      target: { value: '8790' },
+    });
+    fireEvent.change(screen.getByTestId('devbox-profile-service-0-cmd'), {
+      target: { value: 'python -m http.server 8790' },
+    });
+    fireEvent.click(screen.getByTestId('devbox-profile-save'));
+
+    await waitFor(() => {
+      const put = devboxCallArgs(invokeMock, 'profile_put')[0];
+      const model = JSON.parse(put.json);
+      expect(model.host_services).toEqual([
+        { port: 8790, auth: 'open', cmd: 'python -m http.server 8790' },
+      ]);
+    });
+  });
+});

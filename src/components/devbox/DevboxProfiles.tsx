@@ -7,6 +7,8 @@ import { RadioCard } from '@/components/ui/RadioCard';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Textarea } from '@/components/ui/Textarea';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Toggle } from '@/components/ui/Toggle';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { appToast } from '@/lib/observability/toast';
@@ -115,20 +117,47 @@ function textToPorts(text: string): number[] {
     .filter(port => Number.isFinite(port) && port !== 0);
 }
 
+function rangesToText(value: unknown): string {
+  if (!Array.isArray(value)) return '';
+  return value
+    .map(range =>
+      Array.isArray(range) && range.length === 2 && range.every(n => Number.isFinite(n))
+        ? `${range[0]}-${range[1]}`
+        : '',
+    )
+    .filter(Boolean)
+    .join(', ');
+}
+
+function textToRanges(text: string): [number, number][] {
+  const ranges: [number, number][] = [];
+  for (const part of text.split(',')) {
+    const bounds = part.trim().split('-').map(Number);
+    if (bounds.length === 2 && bounds.every(n => Number.isFinite(n))) {
+      ranges.push([bounds[0], bounds[1]]);
+    }
+  }
+  return ranges;
+}
+
 function PortsField({
   label,
   testId,
   value,
   tip,
+  toText = portsToText,
+  fromText = textToPorts,
   onCommit,
 }: {
   label: string;
   testId: string;
   value: unknown;
   tip?: string;
-  onCommit: (ports: number[]) => void;
+  toText?: (value: unknown) => string;
+  fromText?: (text: string) => unknown;
+  onCommit: (parsed: unknown) => void;
 }) {
-  const [text, setText] = useState(portsToText(value));
+  const [text, setText] = useState(toText(value));
   const labelEl = (
     <label className="flex flex-col gap-1 text-2xs uppercase tracking-wider text-slate-400">
       {label}
@@ -138,7 +167,7 @@ function PortsField({
         className="font-mono text-xs normal-case tracking-normal"
         data-testid={testId}
         onChange={e => setText(e.target.value)}
-        onBlur={() => onCommit(textToPorts(text))}
+        onBlur={() => onCommit(fromText(text))}
       />
     </label>
   );
@@ -148,6 +177,201 @@ function PortsField({
     </Tooltip>
   ) : (
     labelEl
+  );
+}
+
+type RowObject = Record<string, unknown>;
+
+function rowObjects(value: unknown): RowObject[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((row): row is RowObject => row !== null && typeof row === 'object');
+}
+
+function argvText(row: RowObject): string {
+  return Array.isArray(row.cmd) ? row.cmd.filter((p): p is string => typeof p === 'string').join(' ') : '';
+}
+
+function RunnerCommandsField({
+  value,
+  tip,
+  onChange,
+}: {
+  value: unknown;
+  tip: string;
+  onChange: (rows: RowObject[]) => void;
+}) {
+  const rows = rowObjects(value);
+  const set = (index: number, patch: RowObject) =>
+    onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  return (
+    <div className="col-span-2 flex flex-col gap-1.5" data-testid="devbox-profile-runner-commands">
+      <span className="flex items-center gap-1 text-2xs uppercase tracking-wider text-slate-400">
+        {t('devboxPage.formRunnerCommands')}
+        <Tooltip content={tip}>
+          <Info size={11} className="text-slate-500" aria-hidden />
+        </Tooltip>
+      </span>
+      {rows.map((row, i) => (
+        <div
+          key={i}
+          className="flex flex-wrap items-center gap-1.5 rounded-lg border border-white/[0.06] px-2 py-1.5"
+          data-testid={`devbox-profile-runner-${i}`}
+        >
+          <Input
+            value={typeof row.name === 'string' ? row.name : ''}
+            placeholder={t('devboxPage.runnerCmdName')}
+            spellCheck={false}
+            className="w-24 font-mono text-xs"
+            data-testid={`devbox-profile-runner-${i}-name`}
+            onChange={e => set(i, { name: e.target.value })}
+          />
+          <Input
+            value={argvText(row)}
+            placeholder={t('devboxPage.runnerCmdArgv')}
+            spellCheck={false}
+            className="min-w-32 flex-1 font-mono text-xs"
+            data-testid={`devbox-profile-runner-${i}-cmd`}
+            onChange={e => set(i, { cmd: e.target.value.split(/\s+/).filter(Boolean) })}
+          />
+          <Input
+            value={typeof row.description === 'string' ? row.description : ''}
+            placeholder={t('devboxPage.runnerCmdDesc')}
+            className="min-w-24 flex-1 text-xs"
+            data-testid={`devbox-profile-runner-${i}-desc`}
+            onChange={e => set(i, { description: e.target.value })}
+          />
+          <Input
+            value={typeof row.port === 'number' ? String(row.port) : ''}
+            placeholder={t('devboxPage.runnerCmdPort')}
+            inputMode="numeric"
+            className="w-16 font-mono text-xs"
+            data-testid={`devbox-profile-runner-${i}-port`}
+            onChange={e =>
+              set(i, { port: e.target.value === '' ? undefined : Number(e.target.value) })
+            }
+          />
+          <Input
+            value={typeof row.timeout === 'number' ? String(row.timeout) : ''}
+            placeholder={t('devboxPage.runnerCmdTimeout')}
+            inputMode="numeric"
+            className="w-20 font-mono text-xs"
+            data-testid={`devbox-profile-runner-${i}-timeout`}
+            onChange={e =>
+              set(i, { timeout: e.target.value === '' ? undefined : Number(e.target.value) })
+            }
+          />
+          <Toggle
+            size="sm"
+            label={t('devboxPage.runnerCmdBackground')}
+            checked={row.background === true}
+            ariaLabel={t('devboxPage.runnerCmdBackground')}
+            onChange={next => set(i, { background: next })}
+          />
+          <Button
+            size="xs"
+            variant="ghost"
+            data-testid={`devbox-profile-runner-${i}-remove`}
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+          >
+            {t('devboxPage.rowRemove')}
+          </Button>
+        </div>
+      ))}
+      <Button
+        size="xs"
+        variant="ghost"
+        className="self-start"
+        data-testid="devbox-profile-runner-add"
+        onClick={() => onChange([...rows, { name: '', cmd: [] }])}
+      >
+        {t('devboxPage.runnerCmdAdd')}
+      </Button>
+    </div>
+  );
+}
+
+function HostServicesField({
+  value,
+  tip,
+  onChange,
+}: {
+  value: unknown;
+  tip: string;
+  onChange: (rows: RowObject[]) => void;
+}) {
+  const rows = rowObjects(value);
+  const set = (index: number, patch: RowObject) =>
+    onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  return (
+    <div className="col-span-2 flex flex-col gap-1.5" data-testid="devbox-profile-host-services">
+      <span className="flex items-center gap-1 text-2xs uppercase tracking-wider text-slate-400">
+        {t('devboxPage.formHostServices')}
+        <Tooltip content={tip}>
+          <Info size={11} className="text-slate-500" aria-hidden />
+        </Tooltip>
+      </span>
+      {rows.map((row, i) => (
+        <div
+          key={i}
+          className="flex flex-wrap items-center gap-1.5 rounded-lg border border-white/[0.06] px-2 py-1.5"
+          data-testid={`devbox-profile-service-${i}`}
+        >
+          <Input
+            value={typeof row.port === 'number' ? String(row.port) : ''}
+            placeholder={t('devboxPage.hostSvcPort')}
+            inputMode="numeric"
+            className="w-16 font-mono text-xs"
+            data-testid={`devbox-profile-service-${i}-port`}
+            onChange={e =>
+              set(i, { port: e.target.value === '' ? undefined : Number(e.target.value) })
+            }
+          />
+          <Select
+            value={typeof row.auth === 'string' ? row.auth : 'open'}
+            aria-label={t('devboxPage.hostSvcAuth')}
+            options={[
+              { value: 'open', label: t('devboxPage.hostSvcAuthOpen') },
+              { value: 'bearer', label: t('devboxPage.hostSvcAuthBearer') },
+            ]}
+            data-testid={`devbox-profile-service-${i}-auth`}
+            onValueChange={next => set(i, { auth: next })}
+          />
+          <Input
+            value={typeof row.cmd === 'string' ? row.cmd : ''}
+            placeholder={t('devboxPage.hostSvcCmd')}
+            spellCheck={false}
+            className="min-w-32 flex-1 font-mono text-xs"
+            data-testid={`devbox-profile-service-${i}-cmd`}
+            onChange={e => set(i, { cmd: e.target.value })}
+          />
+          <Input
+            value={typeof row.cwd === 'string' ? row.cwd : ''}
+            placeholder={t('devboxPage.hostSvcCwd')}
+            spellCheck={false}
+            className="w-28 font-mono text-xs"
+            data-testid={`devbox-profile-service-${i}-cwd`}
+            onChange={e => set(i, { cwd: e.target.value })}
+          />
+          <Button
+            size="xs"
+            variant="ghost"
+            data-testid={`devbox-profile-service-${i}-remove`}
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+          >
+            {t('devboxPage.rowRemove')}
+          </Button>
+        </div>
+      ))}
+      <Button
+        size="xs"
+        variant="ghost"
+        className="self-start"
+        data-testid="devbox-profile-service-add"
+        onClick={() => onChange([...rows, { port: 0, auth: 'open', cmd: '' }])}
+      >
+        {t('devboxPage.hostSvcAdd')}
+      </Button>
+    </div>
   );
 }
 
@@ -991,6 +1215,32 @@ export function DevboxProfiles({
                           value={model.port_deny}
                           tip={t('devboxPage.tipFieldPorts')}
                           onCommit={ports => updateModel({ port_deny: ports })}
+                        />
+                        <PortsField
+                          key={`ranges:${rangesToText(model.port_ranges)}`}
+                          label={t('devboxPage.formPortRanges')}
+                          testId="devbox-profile-field-port_ranges"
+                          value={model.port_ranges}
+                          tip={t('devboxPage.tipFieldPortRanges')}
+                          toText={rangesToText}
+                          fromText={textToRanges}
+                          onCommit={ranges => updateModel({ port_ranges: ranges })}
+                        />
+                        <RunnerCommandsField
+                          value={model.runner_commands}
+                          tip={t('devboxPage.tipRunnerCommands')}
+                          onChange={rows => {
+                            const patch: ProfileModel = { runner_commands: rows };
+                            if (rows.length > 0 && typeof model.runner_port !== 'number') {
+                              patch.runner_port = 8796;
+                            }
+                            updateModel(patch);
+                          }}
+                        />
+                        <HostServicesField
+                          value={model.host_services}
+                          tip={t('devboxPage.tipHostServices')}
+                          onChange={rows => updateModel({ host_services: rows })}
                         />
                       </div>
                     </div>
