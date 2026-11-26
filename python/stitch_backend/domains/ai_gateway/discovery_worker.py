@@ -72,6 +72,28 @@ VERIFICATION_BUDGET_SECONDS = 30.0
 VERIFICATION_MAX_TOKENS = 1
 NOT_RETURNED_BY_UPSTREAM = "not_returned_by_upstream"
 
+REFORMBOSS_BASE_URL = "https://api.reformboss.com/v1"
+
+
+def _normalize_base_url(url: Any) -> str:
+    return (url or "").strip().lower().rstrip("/") if isinstance(url, str) else ""
+
+
+def _catalog_verification_disabled(probe: dict[str, Any]) -> bool:
+    """True when the catalog-wide verification sweep must be skipped.
+
+    Two independent triggers: an explicit operator policy
+    (``health_policy.probePolicy.catalogVerification == "off"``) or the
+    ReformBoss default matcher (normalized base URL match).  Defensive on
+    shape: malformed policy means the default (verification runs).
+    """
+    policy = probe.get("health_policy")
+    if isinstance(policy, dict):
+        probe_policy = policy.get("probePolicy")
+        if isinstance(probe_policy, dict) and probe_policy.get("catalogVerification") == "off":
+            return True
+    return _normalize_base_url(probe.get("base_url")) == REFORMBOSS_BASE_URL
+
 _ENDPOINT_CLASS_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("rerank", ("rerank",)),
     ("embed", ("embed",)),
@@ -342,6 +364,7 @@ class DiscoveryWorker:
             "adapter_type": endpoint.adapter_type,
             "base_url": endpoint.base_url,
             "default_headers": endpoint.default_headers,
+            "health_policy": endpoint.health_policy,
             "credentials": usable,
             "known_model_ids": known,
         }
@@ -426,6 +449,7 @@ class DiscoveryWorker:
                     "adapter_type": endpoint.adapter_type,
                     "base_url": endpoint.base_url,
                     "default_headers": endpoint.default_headers,
+                    "health_policy": endpoint.health_policy,
                     "credentials": usable,
                     "known_model_ids": known,
                 })
@@ -519,7 +543,20 @@ class DiscoveryWorker:
         Returns a mapping ``model id -> probe row``.  A cycle with more than
         ``MAX_NEW_MODELS_TO_VERIFY`` new models is skipped: an upstream that
         suddenly returns hundreds of ids is not worth a full probe sweep.
+
+        Catalog-wide verification is skipped entirely for endpoints whose
+        ``health_policy.probePolicy.catalogVerification`` is ``"off"`` and
+        for endpoints matching the ReformBoss default matcher — their
+        catalog rotates too fast and carries too many models for a probe
+        sweep; health there is passive-first with exact-model probes only.
+        Discovery listing itself still runs; only the probe sweep is gated.
         """
+        if _catalog_verification_disabled(probe):
+            logger.info(
+                "DiscoveryWorker: catalog verification disabled for endpoint %s — skipping probe sweep",
+                probe["endpoint_id"],
+            )
+            return {}
         returned = {m.id for _cred, models in per_cred for m in models}
         new_ids = sorted(returned - probe["known_model_ids"])
         if not new_ids:

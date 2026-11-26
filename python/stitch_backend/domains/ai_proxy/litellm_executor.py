@@ -46,6 +46,9 @@ from stitch_backend.domains.ai_proxy.litellm_public_models import (
     auto_create_public_models_from_config,
 )
 from stitch_backend.domains.ai_proxy.litellm_streaming import (
+    StreamStallError,
+    _anthropic_frame_has_content,
+    _openai_frame_has_content,
     notify_stream_complete,
     prime_stream,
     stream_anthropic_response,
@@ -159,6 +162,23 @@ class _BudgetExhaustedError(UpstreamFailureError):
     def __init__(self, message: str, *, reason: str, retry_after: int | None) -> None:
         super().__init__(message, reason=reason, status_code=503)
         self.retry_after = retry_after
+
+
+def _distinct_model_cap(endpoint: Any) -> int | None:
+    """``health_policy.concurrency.distinctModelsPerKey`` for one endpoint.
+
+    Defensive: anything but a positive int disables the distinct-model cap.
+    """
+    policy = getattr(endpoint, "health_policy", None)
+    if not isinstance(policy, dict):
+        return None
+    concurrency = policy.get("concurrency")
+    if not isinstance(concurrency, dict):
+        return None
+    value = concurrency.get("distinctModelsPerKey")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
 
 
 def _hint_seconds(error: ClassifiedError | None) -> float:
@@ -656,7 +676,15 @@ class LiteLLMExecutor:
                         await self._release_inconclusive_probe(routing_result)
                         continue
                     credential_id = routing_result.credential.id
-                    if not key_inflight.try_acquire(credential_id):
+                    upstream_model_id = getattr(
+                        getattr(routing_result, "upstream_model", None), "upstream_model_id", None,
+                    )
+                    distinct_cap = _distinct_model_cap(routing_result.endpoint)
+                    if not key_inflight.try_acquire(
+                        credential_id,
+                        upstream_model_id,
+                        distinct_model_cap=distinct_cap,
+                    ):
                         logger.debug(
                             "Skipping candidate on credential %s - at in-flight cap",
                             credential_id[:8],
@@ -709,7 +737,7 @@ class LiteLLMExecutor:
                         )
                         return result
                     finally:
-                        key_inflight.release(credential_id)
+                        key_inflight.release(credential_id, upstream_model_id)
                         # The lease belongs to this one logical probe and must
                         # resolve for every outcome.  Normal health recording
                         # has already closed/reopened the breaker (making this
@@ -977,7 +1005,13 @@ class LiteLLMExecutor:
             tokens=tokens,
         )
 
-    async def _guard_stream(self, stream: Any, routing_result: Any) -> Any:
+    async def _guard_stream(
+        self,
+        stream: Any,
+        routing_result: Any,
+        *,
+        stall_timeout: float | None = None,
+    ) -> Any:
         """Wrap an upstream SSE iterator: on mid-stream failure, mark the
         credential/endpoint, then abort the client stream.
 
@@ -986,10 +1020,33 @@ class LiteLLMExecutor:
         it (cooldown/circuit breaker) and propagate.  A failure before the
         first line is left to the invoke pipeline, which can still fail
         over to the next candidate.
+
+        When ``stall_timeout`` is given, every frame pull is budgeted:
+        silence longer than the budget raises :class:`StreamStallError`.
+        Before the first frame the error escapes unrecorded (the pipeline
+        treats it like the TTFT watchdog — slowness, failover-safe); after
+        the first frame the stall is recorded as a *model-level* failure —
+        a reliability signal for this one upstream model, never endpoint
+        or credential blame.
         """
         started = False
+        iterator = stream.__aiter__()
         try:
-            async for line in stream:
+            while True:
+                try:
+                    if stall_timeout is not None:
+                        try:
+                            line = await asyncio.wait_for(
+                                iterator.__anext__(), stall_timeout,
+                            )
+                        except TimeoutError as exc:
+                            raise StreamStallError(
+                                f"upstream stream silent for {stall_timeout:.2f}s"
+                            ) from exc
+                    else:
+                        line = await iterator.__anext__()
+                except StopAsyncIteration:
+                    break
                 started = True
                 yield line
         except Exception as exc:
@@ -1001,6 +1058,20 @@ class LiteLLMExecutor:
                 routing_result.credential.id[:8],
                 _sanitize_error(captured, secret=routing_result.secret),
             )
+            if isinstance(captured, StreamStallError):
+                from stitch_backend.domains.ai_gateway.adapters.base import (
+                    ClassifiedError,
+                )
+
+                classified: Any = ClassifiedError(
+                    category="server_error",
+                    is_endpoint_wide=False,
+                    is_model_specific=True,
+                    scope="key",
+                    error_code="stream_stall",
+                )
+            else:
+                classified = routing_result.adapter.classify_error(captured)
             try:
                 async def _record(session):
                     await self._routing_engine.record_result(
@@ -1008,7 +1079,7 @@ class LiteLLMExecutor:
                         credential_id=routing_result.credential.id,
                         endpoint_id=routing_result.endpoint.id,
                         upstream_model_id=routing_result.upstream_model.id,
-                        error=routing_result.adapter.classify_error(captured),
+                        error=classified,
                         http_status=None,
                         probe_lease=getattr(routing_result, "probe_lease", None),
                     )
@@ -1026,6 +1097,7 @@ class LiteLLMExecutor:
         model: str | None = None,
         routing_result: Any | None = None,
         request_started_at: float | None = None,
+        ttft_timeout: float | None = None,
     ) -> StreamingResponse:
         """OpenAI-shaped SSE pass-through.
 
@@ -1038,6 +1110,11 @@ class LiteLLMExecutor:
         ``(input_tokens, output_tokens)`` (``None`` when unknown) plus an
         ``ok`` flag after the upstream stream ends, including on client
         disconnect.
+
+        ``ttft_timeout`` budgets the wait for the first *meaningful*
+        (content-bearing) frame; on expiry :class:`TtftWatchdogError`
+        raises here — still before the client stream opened, so failover
+        is safe.
         """
         timing = _StreamTiming()
         if model is not None and routing_result is not None:
@@ -1049,7 +1126,11 @@ class LiteLLMExecutor:
                 timing=timing,
                 request_started_at=request_started_at,
             )
-        primed = await prime_stream(response)
+        primed = await prime_stream(
+            response,
+            first_frame_timeout=ttft_timeout,
+            content_check=_openai_frame_has_content if ttft_timeout is not None else None,
+        )
         return await stream_openai_response(
             primed,
             holone_service=get_holone_service(),
@@ -1082,6 +1163,7 @@ class LiteLLMExecutor:
         model: str | None = None,
         routing_result: Any | None = None,
         request_started_at: float | None = None,
+        ttft_timeout: float | None = None,
     ) -> StreamingResponse:
         """Anthropic-shaped SSE pass-through (same contract as OpenAI)."""
         timing = _StreamTiming()
@@ -1094,7 +1176,11 @@ class LiteLLMExecutor:
                 timing=timing,
                 request_started_at=request_started_at,
             )
-        primed = await prime_stream(response)
+        primed = await prime_stream(
+            response,
+            first_frame_timeout=ttft_timeout,
+            content_check=_anthropic_frame_has_content if ttft_timeout is not None else None,
+        )
         return await stream_anthropic_response(
             primed,
             holone_service=get_holone_service(),

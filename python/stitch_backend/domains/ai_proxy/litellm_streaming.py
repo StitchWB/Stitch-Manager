@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from fastapi.responses import StreamingResponse
@@ -138,7 +140,32 @@ async def notify_stream_complete(
         await callback(usage, ok)
 
 
-async def prime_stream(response: Any) -> AsyncIterator[str]:
+class TtftWatchdogError(RuntimeError):
+    """The first meaningful upstream frame did not arrive in time.
+
+    Raised before any byte reached the client, so the executor may fail over
+    to the next candidate transparently.  This is a *slowness* signal, not a
+    health signal: it must never mark ``CredentialModelAccess`` unavailable or
+    feed credential/endpoint failure counters.
+    """
+
+
+class StreamStallError(RuntimeError):
+    """Silence on an upstream stream exceeded the stall budget.
+
+    Before the first frame this behaves like the TTFT watchdog (failover, no
+    health recording).  After the first frame the client already holds bytes,
+    so failover is impossible — the stream aborts and the stall is recorded as
+    a model-level reliability failure.
+    """
+
+
+async def prime_stream(
+    response: Any,
+    *,
+    first_frame_timeout: float | None = None,
+    content_check: Callable[[str], bool] | None = None,
+) -> AsyncIterator[str]:
     """Pull the first non-empty upstream line before the client stream opens.
 
     Streaming adapters open the upstream connection lazily, so a 429/5xx/
@@ -146,26 +173,60 @@ async def prime_stream(response: Any) -> AsyncIterator[str]:
     fail over to the next candidate instead of aborting an SSE stream that
     already sent 200 to the client.  An error frame delivered as the first
     line (HTTP 200 + SSE error) is raised for the same reason.
+
+    When ``first_frame_timeout`` is given, the pull is budgeted: lines are
+    buffered until a *meaningful* frame arrives — one passing
+    ``content_check`` when provided, else the first non-empty line.  If the
+    budget expires first, :class:`TtftWatchdogError` is raised while the
+    client stream is still unopened, so failover stays safe.  A stream that
+    ends before any content frame is not a timeout: it falls through to the
+    legacy empty-stream handling.
     """
     iterator = response.__aiter__()
-    first: str | None = None
+    buffered: list[str] = []
+    deadline = (
+        time.monotonic() + first_frame_timeout
+        if first_frame_timeout is not None
+        else None
+    )
     while True:
         try:
-            line = await iterator.__anext__()
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TtftWatchdogError(
+                        "first meaningful frame did not arrive within "
+                        f"{first_frame_timeout:.2f}s"
+                    )
+                try:
+                    line = await asyncio.wait_for(iterator.__anext__(), remaining)
+                except TimeoutError as exc:
+                    raise TtftWatchdogError(
+                        "first meaningful frame did not arrive within "
+                        f"{first_frame_timeout:.2f}s"
+                    ) from exc
+            else:
+                line = await iterator.__anext__()
         except StopAsyncIteration:
             break
-        if line:
-            first = line
+        if not line:
+            continue
+        buffered.append(line)
+        if deadline is None:
+            # Legacy behavior: the first non-empty line is enough.
+            break
+        if content_check is None or content_check(line):
             break
 
-    if first is not None and _is_error_frame(first):
-        raise RuntimeError(first)
-    if first is None:
+    for line in buffered:
+        if _is_error_frame(line):
+            raise RuntimeError(line)
+    if not buffered:
         raise RuntimeError("upstream returned an empty stream")
 
     async def _replay() -> AsyncIterator[str]:
-        if first is not None:
-            yield first
+        for line in buffered:
+            yield line
         async for line in iterator:
             yield line
 
