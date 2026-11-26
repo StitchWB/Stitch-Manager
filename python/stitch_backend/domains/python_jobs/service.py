@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -54,9 +55,16 @@ class PythonJobManager:
         cwd: str | None = None,
         timeout_ms: int = 300_000,
         correlation_id: str | None = None,
-        python_binary: str = "python",
+        python_binary: str = sys.executable,
     ) -> PythonJobState:
-        """Spawn a Python subprocess and track it."""
+        """Spawn a Python subprocess and track it.
+
+        The default interpreter must be the backend's own ``sys.executable``:
+        resolving bare ``python`` through PATH silently moves jobs out of the
+        application venv/bundle and onto whatever system Python happens to be
+        installed.  ``python_binary`` remains an explicit escape hatch for
+        callers that intentionally need another interpreter.
+        """
         job_id = uuid.uuid4().hex[:12]
         now = _iso_now()
 

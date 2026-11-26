@@ -21,7 +21,7 @@ import { useAppStore } from '../stores/app';
 import type { ContentBlock, ModelInfo } from '../types/generated';
 import { t } from '../lib/i18n';
 import { formatTime } from '../lib/utils';
-import { isVellyChatModel, isZaiChatModel, resolveChatCompletionsUrl, resolveWebBridgeProvider } from './chatRouting';
+import { isBackendRoutedChatModel, isVellyChatModel, isZaiChatModel, resolveChatCompletionsUrl, resolveWebBridgeProvider, selectPreferredChatModel } from './chatRouting';
 
 import {
   getAvailableModelsSafe as getAiProxyAvailableModels,
@@ -135,8 +135,9 @@ export default function Chat() {
   const activeRouteModel = modelList.find(m => m.id === model);
   const selectedModelUsesZaiRoute = isZaiChatModel(activeRouteModel);
   const selectedModelUsesVellyRoute = isVellyChatModel(activeRouteModel);
-  const usesBackendRoute = selectedModelUsesZaiRoute || selectedModelUsesVellyRoute;
-  const routeConnected = selectedModelUsesVellyRoute || proxyRunning;
+  const usesBackendRoute = isBackendRoutedChatModel(activeRouteModel);
+  const legacyProxyUsable = proxyRunning && proxyMode !== 'quota-only';
+  const routeConnected = usesBackendRoute || legacyProxyUsable;
   const chatApiUrl = resolveChatCompletionsUrl(activeRouteModel, proxyPort);
   const chatProvider = selectedModelUsesZaiRoute
     ? 'zai'
@@ -282,11 +283,23 @@ export default function Chat() {
   }, [fetchSetup]);
 
   useEffect(() => {
-    const modelExists = modelList.some(m => m.id === model);
-    if ((!model || !modelExists) && modelList.length > 0) {
-      setSessionModel(modelList[0].id);
+    const currentModel = modelList.find(m => m.id === model);
+    const modelExists = Boolean(currentModel);
+    const needsDefault = !model || model === 'auto' || !modelExists;
+    const activeSession = sessions.find(s => s.id === activeSessionId);
+    const currentIsUnusableLegacy =
+      modelExists &&
+      !isBackendRoutedChatModel(currentModel) &&
+      !legacyProxyUsable &&
+      activeSession?.modelPinned !== true;
+
+    if ((needsDefault || currentIsUnusableLegacy) && modelList.length > 0) {
+      const preferredModel = selectPreferredChatModel(modelList, legacyProxyUsable);
+      if (preferredModel && preferredModel !== model) {
+        setSessionModel(preferredModel, { pinned: false });
+      }
     }
-  }, [model, modelList, setSessionModel]);
+  }, [model, modelList, legacyProxyUsable, sessions, activeSessionId, setSessionModel]);
 
   const handleClearChat = useCallback(() => {
     if (messages.length > 0) {

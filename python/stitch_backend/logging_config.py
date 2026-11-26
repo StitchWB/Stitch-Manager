@@ -4,15 +4,63 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import Any, TypeVar
+
+_T = TypeVar("_T")
+
+
+class _UnicodeSafeStream:
+    """Delegate text writes, degrading unmappable Unicode to replacements."""
+
+    def __init__(self, stream: Any) -> None:
+        self._stream = stream
+
+    def write(self, data: str) -> Any:
+        try:
+            return self._stream.write(data)
+        except UnicodeEncodeError:
+            encoding = getattr(self._stream, "encoding", None) or "utf-8"
+            replacement = data.encode(encoding, errors="replace").decode(
+                encoding, errors="replace"
+            )
+            return self._stream.write(replacement)
+
+    def flush(self) -> Any:
+        return self._stream.flush()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._stream, name)
+
+
+def _force_utf8_replace(stream: _T) -> _T:
+    """Best-effort UTF-8/replace reconfiguration for console text streams.
+
+    Windows service and pywebview hosts often provide cp1251/cp866-backed
+    stdout/stderr.  Backend log messages are allowed to contain Unicode
+    provider/model text; a strict legacy encoding must never turn logging
+    into an application failure.
+    """
+    reconfigure = getattr(stream, "reconfigure", None)
+    if callable(reconfigure):
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            # Some capture/redirect objects expose reconfigure but reject it.
+            # StreamHandler itself handles ordinary emit failures; this is only
+            # a best-effort hardening of real console streams.
+            pass
+    return stream
 
 
 def configure_logging(level: str) -> None:
     """Configure logging to write INFO to stdout, ERROR/WARNING to stderr."""
-    stdout_handler = logging.StreamHandler(sys.stdout)
+    sys.stdout = _force_utf8_replace(sys.stdout)
+    sys.stderr = _force_utf8_replace(sys.stderr)
+    stdout_handler = logging.StreamHandler(_UnicodeSafeStream(sys.stdout))
     stdout_handler.setLevel(logging.DEBUG)
     stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
 
-    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler = logging.StreamHandler(_UnicodeSafeStream(sys.stderr))
     stderr_handler.setLevel(logging.WARNING)
 
     formatter = logging.Formatter(

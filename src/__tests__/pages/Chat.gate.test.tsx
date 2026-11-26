@@ -175,6 +175,36 @@ describe('Chat provider-setup gate', () => {
     expect(await screen.findByRole('button', { name: 'Velly · Sonnet • AI Proxy' })).toBeTruthy();
   });
 
+  it('auto-selects a backend-routed model instead of a disabled legacy-proxy model', async () => {
+    gateway.listCredentials.mockResolvedValue([gatewayCredential] as any);
+    (fetchProxyStatusNow as jest.Mock).mockResolvedValue({ running: false });
+    proxy.getAvailableModelsSafe.mockResolvedValue([
+      { id: 'gpt-4-turbo', provider: 'openai', ownedBy: 'openai', source: 'aiProxy' },
+      { id: 'velly/test/sonnet', name: 'Velly · Sonnet', provider: 'velly', ownedBy: 'velly', source: 'aiProxy' },
+    ] as any);
+    act(() => useChatStore.getState().setSessionModel('auto'));
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'Velly · Sonnet • AI Proxy' })).toBeTruthy();
+    expect(useChatStore.getState().activeSession()?.model).toBe('velly/test/sonnet');
+  });
+
+  it('does not override an explicitly selected legacy-proxy model', async () => {
+    gateway.listCredentials.mockResolvedValue([gatewayCredential] as any);
+    (fetchProxyStatusNow as jest.Mock).mockResolvedValue({ running: false });
+    proxy.getAvailableModelsSafe.mockResolvedValue([
+      { id: 'gpt-4-turbo', provider: 'openai', ownedBy: 'openai', source: 'aiProxy' },
+      { id: 'velly/test/sonnet', name: 'Velly · Sonnet', provider: 'velly', ownedBy: 'velly', source: 'aiProxy' },
+    ] as any);
+    act(() => useChatStore.getState().setSessionModel('gpt-4-turbo'));
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'gpt-4-turbo • AI Proxy' })).toBeTruthy();
+    expect(useChatStore.getState().activeSession()?.model).toBe('gpt-4-turbo');
+  });
+
   it('does not block Velly on the legacy proxy being stopped', async () => {
     gateway.listCredentials.mockResolvedValue([gatewayCredential] as any);
     (fetchProxyStatusNow as jest.Mock).mockResolvedValue({ running: false });
