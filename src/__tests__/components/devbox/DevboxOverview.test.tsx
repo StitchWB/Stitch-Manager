@@ -52,6 +52,7 @@ import {
   gatewayFixture,
   healthyCardsFixture,
   idleActionStatus,
+  ingressDownCardsFixture,
   noConnectionPromptFixture,
   observedPermissionsFixture,
   stoppedCardsFixture,
@@ -191,7 +192,7 @@ describe('DevboxOverview hero variants', () => {
     );
     expect(screen.getByTestId('devbox-overview-tools').textContent).toContain('0 / 16 tools');
     expect(screen.getByTestId('devbox-overview-pill-bridge').textContent).toContain('stopped');
-    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('stopped');
+    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unverified');
 
     fireEvent.click(screen.getByTestId('devbox-overview-hero-action'));
     await waitFor(() =>
@@ -364,5 +365,65 @@ describe('DevboxOverview activity and navigation', () => {
 
     fireEvent.click(screen.getByTestId('devbox-overview-stop-stack'));
     await waitFor(() => expect(devboxCallArgs(invokeMock, 'stack_down')).toEqual([{}]));
+  });
+});
+
+describe('DevboxOverview status matrix', () => {
+  it('blames the public path, not the bridge, when the probe fails on a healthy stack', async () => {
+    mockRoutes({ connection_check: connectionFailFixture });
+    await renderOverview();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('devbox-overview-hero-title').textContent).toBe(
+        'Public path is failing',
+      ),
+    );
+    expect(screen.getByTestId('devbox-overview-hero-state').textContent).toBe('Needs attention');
+    expect(screen.getByTestId('devbox-overview-pill-bridge').textContent).toContain(
+      '10 native + 6 control ready',
+    );
+    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unverified');
+    expect(screen.getByTestId('devbox-overview-hero-alert').textContent).toContain(
+      'bridge unreachable',
+    );
+
+    const before = devboxCalls(invokeMock, 'connection_check').length;
+    fireEvent.click(screen.getByTestId('devbox-overview-hero-action'));
+    await waitFor(() =>
+      expect(devboxCalls(invokeMock, 'connection_check').length).toBeGreaterThan(before),
+    );
+  });
+
+  it('blames the path when the ingress card is down even if the probe passes', async () => {
+    await renderOverview({ cards: ingressDownCardsFixture });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('devbox-overview-hero-title').textContent).toBe(
+        'Public path is failing',
+      ),
+    );
+    expect(screen.getByTestId('devbox-overview-pill-bridge').textContent).toContain(
+      '10 native + 6 control ready',
+    );
+    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('stopped');
+  });
+
+  it('keeps bridge blame only when the bridge card itself is down', async () => {
+    mockRoutes({ connection_check: connectionFailFixture });
+    await renderOverview({ cards: bridgeDownCardsFixture });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('devbox-overview-hero-title').textContent).toBe('Code bridge stopped'),
+    );
+    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unverified');
+  });
+
+  it('labels the endpoint as the agent address, not a generic public address', async () => {
+    await renderOverview();
+    await waitFor(() =>
+      expect(screen.getByTestId('devbox-overview-endpoint').textContent).toContain(
+        'Agent address',
+      ),
+    );
   });
 });

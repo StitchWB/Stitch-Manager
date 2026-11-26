@@ -189,8 +189,10 @@ export function DevboxProjects({
         {
           id: 'ports',
           label: t('devboxPage.projectsSummaryPorts'),
-          value: t('devboxPage.projectsSummaryRules', {
-            count: listLength(model?.allowed_ports) + listLength(model?.port_ranges),
+          value: t('devboxPage.projectsSummaryPortsValue', {
+            ranges: listLength(model?.port_ranges),
+            ports: listLength(model?.allowed_ports),
+            deny: listLength(model?.port_deny),
           }),
         },
         {
