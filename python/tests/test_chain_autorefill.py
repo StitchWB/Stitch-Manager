@@ -269,6 +269,25 @@ async def test_recent_model_failure_is_sticky_within_decay_window(db_session) ->
     assert await _chain_service(db_session).plan_rescue_refill(public_model_id="rb/lead") == []
 
 
+async def test_expired_model_failure_does_not_erase_tier_memory(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    upstream = await _add_evidence_upstream(
+        db_session,
+        endpoint,
+        "zminimax-m25",
+        failed_at=datetime.now(UTC) - timedelta(hours=7),
+    )
+    caps = dict(upstream.capabilities or {})
+    caps["verification_status"] = "failed"
+    caps["verification_error_code"] = "model_not_found"
+    upstream.capabilities = caps
+    await db_session.flush()
+    await _demote_all_role_targets(db_session)
+
+    actions = await _chain_service(db_session).plan_rescue_refill(public_model_id="rb/lead")
+    assert any(action["upstream_model_key"] == "zminimax-m25" for action in actions)
+
+
 async def test_shadow_mode_logs_without_writing(db_session, caplog) -> None:
     endpoint, _cred = await _seed_catalog(db_session)
     await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")

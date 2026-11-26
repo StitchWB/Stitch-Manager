@@ -301,21 +301,11 @@ class ChainRefillService:
             return False
         if caps.get("evidence_tier") not in ("strong", "mid", "fast", "emergency_tail"):
             return False
-        if caps.get("verification_status") == "failed":
-            # Key-class entitlement is not model-quality evidence.  Access rows
-            # already prevent routing for denied keys; the tier memory must stay
-            # valid for future key classes exactly as the design requires.
-            denial_markers = {
-                "model_access_denied",
-                "token_model_not_allowed",
-                "provider_forbidden",
-            }
-            failure_markers = {
-                str(caps.get("verification_reason") or ""),
-                str(caps.get("verification_error_code") or ""),
-            }
-            if not failure_markers & denial_markers:
-                return False
+        # Invocability failures do not erase coherence/tier memory.  Access
+        # rows and the exact-probe lifecycle already decide what may serve;
+        # refill uses only positive semantic evidence plus the model-death
+        # stickiness window below.  In particular, key-scoped entitlement
+        # denial must not veto tier memory for future key classes.
         failure_raw = caps.get("last_model_failure_at")
         if isinstance(failure_raw, str) and failure_raw:
             try:
