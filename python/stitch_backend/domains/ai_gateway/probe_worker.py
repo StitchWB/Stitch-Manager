@@ -36,6 +36,7 @@ from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialModelAccess,
     ProviderEndpoint,
+    RoleChainEntry,
     _utcnow,
 )
 from stitch_backend.domains.ai_gateway.service import (
@@ -368,6 +369,9 @@ class ProbeWorker:
             RouteTarget,
             UpstreamModel,
         )
+        from stitch_backend.domains.ai_gateway.role_catalog_service import (
+            REFORMBOSS_ENDPOINT_SELECTOR,
+        )
 
         async def _op(session: AsyncSession) -> list[dict[str, Any]]:
             now = _utcnow()
@@ -382,7 +386,6 @@ class ProbeWorker:
                     .where(
                         RouteTarget.managed_by == "role_catalog",
                         RouteTarget.lifecycle_status.in_(("quarantined", "demoted")),
-                        UpstreamModel.enabled.is_(True),
                         ProviderEndpoint.enabled.is_(True),
                     )
                     .order_by(RouteTarget.lifecycle_updated_at.asc())
@@ -391,10 +394,35 @@ class ProbeWorker:
             if not rows:
                 return []
 
+            # Exact probes are the recovery path for catalog-rotation flaps, so
+            # a disabled upstream is still probe-eligible while an ENABLED
+            # desired chain entry references it.  Conversely, rows that are no
+            # longer desired must not attract probes merely because their
+            # materialized target history is still quarantined/demoted.
+            desired_entries = (
+                await session.execute(
+                    select(
+                        RoleChainEntry.public_model_id,
+                        RoleChainEntry.upstream_model_key,
+                    ).where(
+                        RoleChainEntry.endpoint_selector == REFORMBOSS_ENDPOINT_SELECTOR,
+                        RoleChainEntry.enabled.is_(True),
+                    ),
+                )
+            ).all()
+            desired_pairs = {(public_id, upstream_key) for public_id, upstream_key in desired_entries}
+
             # Deduplicate upstreams; a target pair appearing in several role
             # chains is one exact probe, not many.
             upstreams: dict[str, tuple[UpstreamModel, ProviderEndpoint]] = {}
-            for _target, upstream, endpoint in rows:
+            for target, upstream, endpoint in rows:
+                if (target.public_model_id, upstream.upstream_model_id) not in desired_pairs:
+                    continue
+                if not upstream.enabled and not (upstream.capabilities or {}).get("retired_auto"):
+                    # Disabled-by-automation rows remain probe-eligible as the
+                    # catalog-rotation recovery path; manually disabled rows do
+                    # not (and probe success must not re-enable them).
+                    continue
                 upstreams.setdefault(upstream.id, (upstream, endpoint))
 
             cred_svc = CredentialService(session)

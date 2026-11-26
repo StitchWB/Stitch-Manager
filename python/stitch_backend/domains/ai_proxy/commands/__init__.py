@@ -17,6 +17,7 @@ from stitch_backend.domains.ai_proxy.commands.analytics import (
     cmd_get_cost_estimate,
     cmd_get_daily_stats,
     cmd_get_model_usage,
+    cmd_get_role_model_usage,
     cmd_get_weekly_stats,
 )
 from stitch_backend.domains.ai_proxy.commands.auth_files import (
@@ -90,6 +91,7 @@ __all__ = [
     "cmd_get_model_usage",
     "cmd_get_provider_capabilities",
     "cmd_get_provider_model_mappings",
+    "cmd_get_role_model_usage",
     "cmd_get_weekly_stats",
     "cmd_import_ai_proxy_accounts_payload",
     "cmd_model_sync_apply",

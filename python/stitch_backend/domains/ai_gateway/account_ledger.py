@@ -30,7 +30,8 @@ AFFINITY_TTL_SECONDS = 45 * 60
 _AFFINITY_MAX_ENTRIES = 4096
 _MESSAGE_TRUNCATE = 512
 
-_affinity: dict[str, tuple[str, str | None, float]] = {}
+# key -> (endpoint_id, account_group, upstream_model row id, monotonic expiry)
+_affinity: dict[str, tuple[str, str | None, str | None, float]] = {}
 
 
 def day_local_now(now: datetime | None = None) -> str:
@@ -173,14 +174,23 @@ def _affinity_key(
     model: str,
     messages: list[dict[str, Any]] | None,
     user: str | None,
+    session_hint: str | None = None,
 ) -> str | None:
-    if isinstance(user, str) and user.strip():
-        seed = f"user\x00{user.strip()}"
-    else:
+    """Return the model-scoped in-memory key for one client session.
+
+    The public model is always part of the seed — including when the hint is
+    an explicit user id — so ``rb/lead`` and ``rb/reviewer-*`` cannot pin one
+    another merely because the same client session uses both.
+    """
+    hint = session_hint.strip() if isinstance(session_hint, str) and session_hint.strip() else None
+    if hint is None and isinstance(user, str) and user.strip():
+        hint = f"user\x00{user.strip()}"
+    if hint is None:
         content = _first_user_content(messages)
         if not content:
             return None
-        seed = f"{model}\x00{content[:_MESSAGE_TRUNCATE]}"
+        hint = f"fp\x00{content[:_MESSAGE_TRUNCATE]}"
+    seed = f"{model}\x00{hint}"
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
@@ -189,20 +199,21 @@ def get_affinity(
     messages: list[dict[str, Any]] | None,
     user: str | None = None,
     *,
+    session_hint: str | None = None,
     now: float | None = None,
-) -> tuple[str, str | None] | None:
-    key = _affinity_key(model, messages, user)
+) -> tuple[str, str | None, str | None] | None:
+    key = _affinity_key(model, messages, user, session_hint)
     if key is None:
         return None
     entry = _affinity.get(key)
     if entry is None:
         return None
-    endpoint_id, account_group, expires_at = entry
+    endpoint_id, account_group, upstream_model_id, expires_at = entry
     current = time.monotonic() if now is None else now
     if current >= expires_at:
         _affinity.pop(key, None)
         return None
-    return (endpoint_id, account_group)
+    return (endpoint_id, account_group, upstream_model_id)
 
 
 def put_affinity(
@@ -211,11 +222,13 @@ def put_affinity(
     user: str | None,
     endpoint_id: str,
     account_group: str | None,
+    upstream_model_id: str | None = None,
     *,
+    session_hint: str | None = None,
     ttl_seconds: float = AFFINITY_TTL_SECONDS,
     now: float | None = None,
 ) -> None:
-    key = _affinity_key(model, messages, user)
+    key = _affinity_key(model, messages, user, session_hint)
     if key is None:
         return
     current = time.monotonic() if now is None else now
@@ -223,7 +236,7 @@ def put_affinity(
         _prune_affinity(current)
         if len(_affinity) >= _AFFINITY_MAX_ENTRIES:
             _affinity.clear()
-    _affinity[key] = (endpoint_id, account_group, current + ttl_seconds)
+    _affinity[key] = (endpoint_id, account_group, upstream_model_id, current + ttl_seconds)
 
 
 def clear_affinity(endpoint_id: str, account_group: str | None) -> None:
@@ -236,7 +249,7 @@ def clear_affinity(endpoint_id: str, account_group: str | None) -> None:
 
 
 def _prune_affinity(now: float) -> None:
-    stale = [key for key, value in _affinity.items() if value[2] <= now]
+    stale = [key for key, value in _affinity.items() if value[3] <= now]
     for key in stale:
         _affinity.pop(key, None)
 

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from fastapi import HTTPException
 
 from stitch_backend.core.event_bus import event_bus
-from stitch_backend.domains.ai_gateway import account_ledger
+from stitch_backend.domains.ai_gateway import account_ledger, model_latency
 from stitch_backend.domains.ai_gateway.adapters.error_vocab import parse_envelope
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_proxy.holone_inspector import (
@@ -50,7 +50,7 @@ def _required_messages(payload: GatewayRequest) -> list[dict[str, JsonValue]]:
 def _adapter_options(payload: GatewayRequest) -> dict[str, Any]:
     return payload.model_dump(mode="json", exclude_none=True, exclude={
         "model", "provider", "messages", "input", "stream", "base_url", "secret",
-        "default_headers", "max_wait_seconds",
+        "default_headers", "max_wait_seconds", "session_hint",
     })
 
 
@@ -411,6 +411,23 @@ async def _record_ledger_usage(
         logger.debug("Account ledger write failed", exc_info=True)
 
 
+def _record_ttft_observation(routing_result: Any, ttft_ms: float) -> None:
+    """Best-effort passive TTFT sample for latency-aware routing.
+
+    Keyed by the exact upstream row id, so the same model id on two endpoints
+    never shares performance evidence.  This is ordering data only — never a
+    health or lifecycle failure signal.
+    """
+    try:
+        model_latency.model_latency_tracker.record(
+            routing_result.credential.id,
+            routing_result.upstream_model.id,
+            ttft_ms,
+        )
+    except Exception:
+        logger.debug("TTFT observation failed", exc_info=True)
+
+
 def _remember_affinity(payload: GatewayRequest, routing_result: Any) -> None:
     try:
         account_ledger.put_affinity(
@@ -419,6 +436,8 @@ def _remember_affinity(payload: GatewayRequest, routing_result: Any) -> None:
             getattr(payload, "user", None),
             routing_result.endpoint.id,
             getattr(routing_result.credential, "account_group", None),
+            getattr(routing_result.upstream_model, "id", None),
+            session_hint=getattr(payload, "session_hint", None),
         )
     except Exception:
         logger.debug("Affinity write failed", exc_info=True)
@@ -606,6 +625,10 @@ async def invoke_via_gateway(
                 _cached_tokens(response),
             )
         _remember_affinity(payload, routing_result)
+        if not payload.stream:
+            # Non-stream adapters buffer the body, so total elapsed time is
+            # the accepted TTFT approximation for passive ordering.
+            _record_ttft_observation(routing_result, latency * 1000.0)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
@@ -810,6 +833,10 @@ async def invoke_via_gateway_messages(
                 _cached_tokens(response),
             )
         _remember_affinity(payload, routing_result)
+        if not payload.stream:
+            # Non-stream adapters buffer the body, so total elapsed time is
+            # the accepted TTFT approximation for passive ordering.
+            _record_ttft_observation(routing_result, latency * 1000.0)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(
@@ -1020,6 +1047,10 @@ async def invoke_via_gateway_responses(
                 _cached_tokens(response),
             )
         _remember_affinity(payload, routing_result)
+        if not payload.stream:
+            # Non-stream adapters buffer the body, so total elapsed time is
+            # the accepted TTFT approximation for passive ordering.
+            _record_ttft_observation(routing_result, latency * 1000.0)
 
         # success only after first chunk, else failure window is cleared
         await metrics_tracker.record_success(

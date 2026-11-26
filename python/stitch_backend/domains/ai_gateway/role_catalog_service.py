@@ -340,12 +340,20 @@ class RoleCatalogService:
         access.probe_failures = failures
         access.next_probe_at = now + timedelta(seconds=self._probe_backoff_seconds(failures))
         access.updated_at = now
-        self._merge_probe_capabilities(upstream, probe_row, now, success=False)
 
-        # The probe evidences one exact (credential, model) pair.  A target
-        # that is actively served through OTHER usable keys must not flap on
-        # this single failure; quarantined/demoted targets simply stay down.
+        # The probe evidences one exact (credential, model) pair.  Model-level
+        # ``verification_status="failed"`` is justified only when that evidence
+        # leaves no usable access path at all — the same condition as target
+        # demotion.  While sibling keys still serve, a single-key entitlement
+        # failure must not contaminate upstream-level metadata.
         has_usable = await self._has_usable_access(upstream.id)
+        self._merge_probe_capabilities(
+            upstream,
+            probe_row,
+            now,
+            success=False,
+            model_level_failure=not has_usable,
+        )
         for target in await self._role_targets_for_upstream(upstream.id):
             if target.enabled and target.lifecycle_status == "active" and has_usable:
                 continue
@@ -466,6 +474,11 @@ class RoleCatalogService:
                 entry.ordinal = max(0, int(updates["priority"]) // 10 - 1)
             entry.updated_at = _utcnow()
         target.managed_by = "manual"
+        if updates.get("enabled") is False and target.lifecycle_status == "active":
+            # A manually disabled target is definitionally not active runtime
+            # state.  Keep it verified (not demoted/quarantined): this was an
+            # operator choice, not negative health evidence.
+            target.lifecycle_status = "verified"
         target.lifecycle_reason = "manual_override"
         target.lifecycle_updated_at = _utcnow()
         await self._db.flush()
@@ -916,6 +929,16 @@ class RoleCatalogService:
         invalidate_resolve_caches()
 
     async def _activate_targets_after_probe(self, upstream: UpstreamModel, now: datetime) -> None:
+        caps = dict(upstream.capabilities or {})
+        if not upstream.enabled and caps.get("retired_auto") is True:
+            # A successful exact probe is positive evidence for this exact
+            # upstream model.  Re-enable only rows retired by catalog rotation;
+            # a probe must never override an operator's manual disable.
+            upstream.enabled = True
+            caps.pop("retired_auto", None)
+            upstream.capabilities = caps
+            upstream.updated_at = now
+            self._routing_transitioned = True
         for target in await self._role_targets_for_upstream(upstream.id):
             entry = await self._entry_for_upstream(
                 target.public_model_id,
@@ -960,11 +983,17 @@ class RoleCatalogService:
         now: datetime,
         *,
         success: bool,
+        model_level_failure: bool = True,
     ) -> None:
         caps = dict(upstream.capabilities or {})
         caps["source"] = "probe"
         caps["verified_at"] = _utc_iso(now)
-        caps["verification_status"] = "working" if success else "failed"
+        if success:
+            caps["verification_status"] = "working"
+        elif model_level_failure:
+            caps["verification_status"] = "failed"
+        # A pair-scoped failure while sibling credentials still serve is not
+        # upstream-model evidence: preserve any prior verification status.
         latency = probe_row.get("latencyMs")
         if isinstance(latency, int) and not isinstance(latency, bool):
             caps["probe_latency_ms"] = latency

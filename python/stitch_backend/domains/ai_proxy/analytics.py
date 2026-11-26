@@ -39,6 +39,14 @@ class ModelUsage(TypedDict):
     tokens: int
 
 
+class RoleModelUsage(TypedDict):
+    model: str
+    served_public_model: str | None
+    upstream_model: str
+    requests: int
+    tokens: int
+
+
 def _today_start() -> datetime:
     now = datetime.now(UTC)
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -105,6 +113,48 @@ class AiProxyAnalytics:
         rows = (await session.execute(stmt)).mappings().all()
         return [
             ModelUsage(model=r["model"], requests=r["requests"], tokens=r["tokens"])
+            for r in rows
+        ]
+
+    @classmethod
+    async def get_role_model_usage(
+        cls, session: AsyncSession, *, owner_id: int | None = None,
+    ) -> list[RoleModelUsage]:
+        """Usage grouped by requested role/model and the exact serving chain.
+
+        ``model`` remains the client-requested public model (often ``rb/lead``),
+        while ``served_public_model`` records the public model that ultimately
+        served after fallback and ``upstream_model`` the exact provider-side id.
+        This is additive beside :meth:`get_model_usage` so existing consumers do
+        not change shape or grouping semantics.
+        """
+        requests = func.count().label("requests")
+        stmt = (
+            select(
+                AiProxyRequestLog.model.label("model"),
+                AiProxyRequestLog.served_public_model.label("served_public_model"),
+                AiProxyRequestLog.upstream_model.label("upstream_model"),
+                requests,
+                func.coalesce(func.sum(AiProxyRequestLog.tokens_used), 0).label("tokens"),
+            )
+            .where(*_scope(_since(7), owner_id))
+            .group_by(
+                AiProxyRequestLog.model,
+                AiProxyRequestLog.served_public_model,
+                AiProxyRequestLog.upstream_model,
+            )
+            .order_by(requests.desc())
+            .limit(100)
+        )
+        rows = (await session.execute(stmt)).mappings().all()
+        return [
+            RoleModelUsage(
+                model=r["model"],
+                served_public_model=r["served_public_model"],
+                upstream_model=r["upstream_model"],
+                requests=r["requests"],
+                tokens=r["tokens"],
+            )
             for r in rows
         ]
 

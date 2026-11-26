@@ -13,7 +13,7 @@ from sqlalchemy import exc as sqlalchemy_exc
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_session
-from stitch_backend.domains.ai_gateway import circuit_breaker, model_throughput
+from stitch_backend.domains.ai_gateway import circuit_breaker, model_latency, model_throughput
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_gateway.pricing_cache import estimate_usd, get_pricing_cache
 from stitch_backend.domains.ai_gateway.routing_engine import (
@@ -94,6 +94,10 @@ class _RequestOutcome:
     failover_count: int = 0
     error_class: str | None = None
     persisted: bool = False
+    requested_model: str | None = None
+    served_public_model: str | None = None
+    attempt_reasons: list[str] = field(default_factory=list)
+    sticky_hit: bool = False
 
 
 @dataclass
@@ -151,6 +155,23 @@ def _status_for_category(category: str) -> int:
 def _canonical_failure_message(model: str, category: str) -> str:
     template = _FAILURE_MESSAGES.get(category, "No provider could serve model '{model}'.")
     return template.format(model=model)
+
+
+_MAX_ATTEMPT_REASONS = 16
+
+
+def _append_attempt_reason(reasons: list[str], reason: str) -> None:
+    """Append a bounded, machine-oriented failover reason (never free text)."""
+    if len(reasons) >= _MAX_ATTEMPT_REASONS:
+        return
+    if not reasons or reasons[-1] != reason:
+        reasons.append(reason[:160])
+
+
+def _classified_attempt_reason(error: ClassifiedError | None) -> str:
+    if error is None:
+        return "unknown"
+    return f"{error.category}:{error.error_code}" if error.error_code else error.category
 
 
 def _is_client_error(exc: HTTPException) -> bool:
@@ -248,6 +269,23 @@ class CompletionRouter(Protocol):
     ) -> JsonObject | BaseModel: ...
 
 
+def _record_ttft_observation(
+    routing_result: Any | None,
+    request_started_at: float | None,
+) -> None:
+    """Best-effort passive TTFT sample for routing order (never health state)."""
+    if routing_result is None or request_started_at is None:
+        return
+    try:
+        model_latency.model_latency_tracker.record(
+            routing_result.credential.id,
+            routing_result.upstream_model.id,
+            (time.time() - request_started_at) * 1000.0,
+        )
+    except Exception:
+        logger.debug("TTFT observation failed", exc_info=True)
+
+
 class LiteLLMExecutor:
     """AI Gateway routing executor.
 
@@ -275,6 +313,7 @@ class LiteLLMExecutor:
                 tools=payload.tools,
                 response_format=getattr(payload, "response_format", None),
                 user=getattr(payload, "user", None),
+                session_hint=getattr(payload, "session_hint", None),
             )
 
             async def _route(session):
@@ -423,10 +462,14 @@ class LiteLLMExecutor:
         latency_ms: float,
         failover_count: int,
         status: str,
+        requested_model: str | None = None,
+        served_public_model: str | None = None,
+        failover_reasons: list[str] | tuple[str, ...] = (),
     ) -> None:
         if routing_result is None:
             return
         endpoint = routing_result.endpoint
+        upstream = getattr(routing_result, "upstream_model", None)
         get_request_trace_store().record(
             RequestTrace(
                 model=model or "",
@@ -436,6 +479,13 @@ class LiteLLMExecutor:
                 failover_count=failover_count,
                 status=status,
                 timestamp=time.time(),
+                requested_model=requested_model,
+                served_public_model=served_public_model,
+                upstream_model=getattr(upstream, "upstream_model_id", None),
+                endpoint_id=getattr(endpoint, "id", None),
+                lifecycle_status=getattr(routing_result, "lifecycle_status", None),
+                sticky_hit=bool(getattr(routing_result, "sticky_hit", False)),
+                failover_reasons=tuple(failover_reasons[:_MAX_ATTEMPT_REASONS]),
             )
         )
 
@@ -570,6 +620,12 @@ class LiteLLMExecutor:
                     "credential_id": routing_result.credential.id[:8],
                     "attempts": failover_count,
                     "used_fallback": used_fallback,
+                    "upstream_model": getattr(
+                        getattr(routing_result, "upstream_model", None), "upstream_model_id", None,
+                    ),
+                    "endpoint_id": getattr(routing_result.endpoint, "id", None),
+                    "lifecycle_status": getattr(routing_result, "lifecycle_status", None),
+                    "sticky_hit": bool(getattr(routing_result, "sticky_hit", False)),
                 },
             )
         except Exception:
@@ -699,10 +755,18 @@ class LiteLLMExecutor:
                             getattr(routing_result, "probe_lease", None)
                             or probe_leases.get(endpoint_id)
                         )
-                        available, won_lease = await self._is_endpoint_available(
+                        availability = await self._is_endpoint_available(
                             endpoint_id,
                             carried_lease,
                         )
+                        # Production returns ``(available, won_lease)``.  Several
+                        # narrow executor unit-test doubles predate the probe-lease
+                        # API and return only the boolean; treat that as no new
+                        # lease rather than failing the failover walk.
+                        if isinstance(availability, tuple):
+                            available, won_lease = availability
+                        else:
+                            available, won_lease = availability, None
                         if won_lease is not None:
                             probe_leases[endpoint_id] = won_lease
                             if getattr(routing_result, "probe_lease", None) is None:
@@ -716,12 +780,14 @@ class LiteLLMExecutor:
                                 except (AttributeError, TypeError):
                                     pass
                         if not available:
+                            _append_attempt_reason(outcome.attempt_reasons, "circuit_open")
                             logger.debug(
                                 "Skipping candidate on endpoint %s — circuit open",
                                 endpoint_id,
                             )
                             continue
                         if await self._skip_insufficient_balance(payload, routing_result, model):
+                            _append_attempt_reason(outcome.attempt_reasons, "insufficient_balance")
                             # No early lease release here: the lease is shared by
                             # all same-endpoint candidates of this logical request,
                             # and a sibling may still serve as the probe.  The
@@ -737,6 +803,7 @@ class LiteLLMExecutor:
                             upstream_model_id,
                             distinct_model_cap=distinct_cap,
                         ):
+                            _append_attempt_reason(outcome.attempt_reasons, "inflight_cap")
                             logger.debug(
                                 "Skipping candidate on credential %s - at in-flight cap",
                                 credential_id[:8],
@@ -757,6 +824,10 @@ class LiteLLMExecutor:
                                 e,
                                 http_status=e.status_code,
                             )
+                            _append_attempt_reason(
+                                outcome.attempt_reasons,
+                                _classified_attempt_reason(last_classified),
+                            )
                             logger.warning(
                                 "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                                 model, routing_result.credential.id[:8],
@@ -765,6 +836,10 @@ class LiteLLMExecutor:
                         except Exception as e:
                             failed_attempts += 1
                             last_classified = _classify_invoke_failure(routing_result.adapter, e)
+                            _append_attempt_reason(
+                                outcome.attempt_reasons,
+                                _classified_attempt_reason(last_classified),
+                            )
                             logger.warning(
                                 "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                                 model, routing_result.credential.id[:8],
@@ -773,12 +848,18 @@ class LiteLLMExecutor:
                         else:
                             served_model = model
                             outcome.failover_count = failed_attempts
+                            outcome.requested_model = requested_model
+                            outcome.served_public_model = model
+                            outcome.sticky_hit = bool(getattr(routing_result, "sticky_hit", False))
                             self._record_request_trace(
                                 model=model,
                                 routing_result=routing_result,
                                 latency_ms=(time.time() - start_time) * 1000.0,
                                 failover_count=failed_attempts,
                                 status="success",
+                                requested_model=requested_model,
+                                served_public_model=model,
+                                failover_reasons=outcome.attempt_reasons,
                             )
                             await self._emit_failover_event(
                                 requested=requested_model,
@@ -839,14 +920,18 @@ class LiteLLMExecutor:
                 await asyncio.sleep(delay)
 
             outcome.failover_count = failed_attempts
+            outcome.requested_model = requested_model
             if outcome.routing_result is None:
                 outcome.routing_result = last_attempted
+            outcome.sticky_hit = bool(getattr(last_attempted, "sticky_hit", False))
             self._record_request_trace(
                 model=served_model,
                 routing_result=last_attempted,
                 latency_ms=(time.time() - start_time) * 1000.0,
                 failover_count=failed_attempts,
                 status="error",
+                requested_model=requested_model,
+                failover_reasons=outcome.attempt_reasons,
             )
             retry_after = await self._final_retry_after(requested_model, budget_expired)
             raise self._final_error(
@@ -876,6 +961,7 @@ class LiteLLMExecutor:
             input_tokens=outcome.input_tokens,
             output_tokens=outcome.output_tokens,
             latency_ms=(time.time() - outcome.started_at) * 1000.0,
+            served_public_model=outcome.served_public_model,
             owner_id=outcome.owner_id,
             failover_count=outcome.failover_count,
             error_class=outcome.error_class,
@@ -904,6 +990,7 @@ class LiteLLMExecutor:
         outcome = _RequestOutcome(
             model=payload.model or "",
             owner_id=pool.owner_user_id if pool else None,
+            requested_model=payload.model or "",
         )
         try:
             result = await self._run_failover(
@@ -943,6 +1030,7 @@ class LiteLLMExecutor:
         outcome = _RequestOutcome(
             model=payload.model or "",
             owner_id=pool.owner_user_id if pool else None,
+            requested_model=payload.model or "",
         )
         try:
             result = await self._run_failover(
@@ -982,6 +1070,7 @@ class LiteLLMExecutor:
         outcome = _RequestOutcome(
             model=payload.model or "",
             owner_id=pool.owner_user_id if pool else None,
+            requested_model=payload.model or "",
         )
         try:
             result = await self._run_failover(
@@ -1190,6 +1279,7 @@ class LiteLLMExecutor:
             first_frame_timeout=ttft_timeout,
             content_check=_openai_frame_has_content if ttft_timeout is not None else None,
         )
+        _record_ttft_observation(routing_result, request_started_at)
         return await stream_openai_response(
             primed,
             holone_service=get_holone_service(),
@@ -1240,6 +1330,7 @@ class LiteLLMExecutor:
             first_frame_timeout=ttft_timeout,
             content_check=_anthropic_frame_has_content if ttft_timeout is not None else None,
         )
+        _record_ttft_observation(routing_result, request_started_at)
         return await stream_anthropic_response(
             primed,
             holone_service=get_holone_service(),

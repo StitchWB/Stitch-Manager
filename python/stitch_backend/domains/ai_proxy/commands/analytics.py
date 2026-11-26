@@ -38,6 +38,13 @@ async def cmd_get_model_usage(db: AsyncSession, params: dict) -> list:
     return await AiProxyAnalytics.get_model_usage(db, owner_id=_alias_owner_id(params))
 
 
+@command("get_role_model_usage", readonly=True)
+async def cmd_get_role_model_usage(db: AsyncSession, params: dict) -> list:
+    from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics
+
+    return await AiProxyAnalytics.get_role_model_usage(db, owner_id=_alias_owner_id(params))
+
+
 @command("get_cost_estimate", readonly=True)
 async def cmd_get_cost_estimate(db: AsyncSession, params: dict) -> float:
     from stitch_backend.domains.ai_proxy.service import AiProxyAnalytics

@@ -23,9 +23,17 @@ class RequestTrace:
     failover_count: int
     status: str
     timestamp: float
+    requested_model: str | None = None
+    served_public_model: str | None = None
+    upstream_model: str | None = None
+    endpoint_id: str | None = None
+    lifecycle_status: str | None = None
+    sticky_hit: bool = False
+    failover_reasons: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            # Legacy aliases retained for existing UI/API consumers.
             "model": self.model,
             "target": self.target,
             "credential_id": self.credential_id,
@@ -33,6 +41,14 @@ class RequestTrace:
             "failover_count": self.failover_count,
             "status": self.status,
             "timestamp": self.timestamp,
+            # Additive routing observability.
+            "requested_model": self.requested_model,
+            "served_public_model": self.served_public_model,
+            "upstream_model": self.upstream_model,
+            "endpoint_id": self.endpoint_id,
+            "lifecycle_status": self.lifecycle_status,
+            "sticky_hit": self.sticky_hit,
+            "failover_reasons": list(self.failover_reasons),
         }
 
 

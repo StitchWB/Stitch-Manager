@@ -64,6 +64,10 @@ class RouteTargetResponse(BaseModel):
     priority: int
     weight: float
     cost_modifier: float = Field(alias="costModifier")
+    managed_by: str | None = Field(None, alias="managedBy")
+    lifecycle_status: str | None = Field(None, alias="lifecycleStatus")
+    lifecycle_reason: str | None = Field(None, alias="lifecycleReason")
+    lifecycle_updated_at: datetime | None = Field(None, alias="lifecycleUpdatedAt")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime | None = Field(None, alias="updatedAt")
 
@@ -77,6 +81,10 @@ class RouteTargetResponse(BaseModel):
             priority=obj.priority,
             weight=obj.weight,
             cost_modifier=obj.cost_modifier,
+            managed_by=obj.managed_by,
+            lifecycle_status=obj.lifecycle_status,
+            lifecycle_reason=obj.lifecycle_reason,
+            lifecycle_updated_at=obj.lifecycle_updated_at,
             created_at=obj.created_at,
             updated_at=obj.updated_at,
         )
