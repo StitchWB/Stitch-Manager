@@ -430,7 +430,7 @@ class ProbeWorker:
         else:
             # Transport error (no HTTP status)
             classified = ClassifiedError(
-                category="transport_error", is_endpoint_wide=True,
+                category="transport_error", is_endpoint_wide=True, scope="endpoint",
             )
 
         return {

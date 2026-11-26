@@ -11,7 +11,8 @@ States (stored on ``ProviderEndpoint.circuit_state``):
     closed    — normal operation; recent failures tracked in-process.
     open      — reject all requests; ``circuit_retry_at`` holds the earliest
                 time to attempt a half-open probe.
-    half_open — one probe request is allowed; success → closed, failure → open.
+    half_open — exactly one leased probe request is allowed; success → closed,
+                endpoint failure → open, inconclusive outcome → short retry.
 
 Transitions::
 
@@ -28,7 +29,9 @@ every change; the column is authoritative across restart.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
@@ -52,28 +55,52 @@ FAILURE_WINDOW_SECONDS = 60
 COOLDOWN_SECONDS = 30
 """How long the circuit stays open before a half-open probe is allowed."""
 
-HALF_OPEN_PROBE_GRACE_SECONDS = 5.0
-"""Admission window of one half-open probe.
-
-The probe request itself checks availability several times in quick
-succession (once per route target in ``RoutingEngine.route`` and once more in
-the executor right before invoking); checks within this window of the probe
-start are the same logical probe.  Once the grace elapses, further requests
-are rejected until the probe resolves — concurrent traffic can no longer
-stampede the sick endpoint through the half-open state.
-"""
-
 HALF_OPEN_PROBE_TIMEOUT_SECONDS = 120.0
-"""How long a probe may be in flight before its slot is considered lost
+"""How long a probe may be in flight before its lease is considered lost
 (e.g. the outcome was never recorded because the DB write failed) and a new
 probe may be admitted."""
+
+HALF_OPEN_PROBE_INCONCLUSIVE_RETRY_SECONDS = 2.0
+"""Short retry after a probe outcome that says nothing about endpoint health.
+
+A key-scoped or model-scoped failure must neither close nor condemn the
+endpoint.  Re-opening for a short interval (rather than immediately allowing
+another probe) avoids a probe-spin loop when the requested model/key is
+persistently unhealthy while still letting subsequent routing rounds retest
+the endpoint quickly.
+"""
 
 # In-process fast path; ProviderEndpoint.circuit_failures is authoritative across restart.
 _recent_failures: dict[str, list[datetime]] = defaultdict(list)
 
-# In-process half-open probe slots: endpoint_id → probe start time.
+
+@dataclass(frozen=True)
+class ProbeLease:
+    """Exclusive half-open probe admission token.
+
+    One logical probe checks the breaker several times (route resolution and
+    the executor pre-invoke re-check).  The token is carried on the routing
+    result so those checks can prove they belong to the same call chain;
+    independent callers have no token and are rejected while the lease is
+    active.
+    """
+
+    endpoint_id: str
+    token: str
+    started_at: datetime
+
+
+# In-process half-open probe leases: endpoint_id → lease.
 # In-memory only by design — after a restart no probe can be in flight.
-_half_open_probes: dict[str, datetime] = {}
+_half_open_probes: dict[str, ProbeLease] = {}
+
+
+def _new_lease(endpoint_id: str, now: datetime) -> ProbeLease:
+    return ProbeLease(
+        endpoint_id=endpoint_id,
+        token=uuid.uuid4().hex,
+        started_at=now,
+    )
 
 
 def _seed_window(endpoint: ProviderEndpoint) -> list[datetime]:
@@ -115,10 +142,28 @@ def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
+def _lease_matches(current: ProbeLease | None, lease: ProbeLease | None) -> bool:
+    """Whether *lease* is the active lease.
+
+    ``lease=None`` is accepted for backwards-compatible internal callers and
+    direct breaker tests.  Production routing always carries the concrete
+    token, which prevents a timed-out older probe from resolving a newer one.
+    """
+    return lease is None or (current is not None and lease.token == current.token)
+
+
+def _pop_lease_if_matches(endpoint_id: str, lease: ProbeLease | None) -> None:
+    current = _half_open_probes.get(endpoint_id)
+    if _lease_matches(current, lease):
+        _half_open_probes.pop(endpoint_id, None)
+
+
 async def record_endpoint_result(
     session: AsyncSession,
     endpoint_id: str,
     success: bool,
+    *,
+    lease: ProbeLease | None = None,
 ) -> None:
     """Record a request outcome against an endpoint and update circuit state.
 
@@ -130,6 +175,9 @@ async def record_endpoint_result(
     ``FAILURE_WINDOW_SECONDS``.
     On failure in ``open``: records the timestamp (extends evidence) but
     does not extend the cooldown.
+
+    In ``half_open`` a stale lease token is ignored: a timed-out older probe
+    must not close or reopen the circuit for the probe that replaced it.
     """
     svc = ProviderEndpointService(session)
     endpoint = await svc.get_by_pk(endpoint_id)
@@ -144,6 +192,12 @@ async def record_endpoint_result(
     # ── Success ──────────────────────────────────────────────────────────
     if success:
         if state == "half_open":
+            current = _half_open_probes.get(endpoint_id)
+            if not _lease_matches(current, lease):
+                logger.debug(
+                    "Ignoring stale half-open success for endpoint %s", endpoint_id,
+                )
+                return
             endpoint.circuit_state = "closed"
             endpoint.circuit_opened_at = None
             endpoint.circuit_retry_at = None
@@ -159,6 +213,12 @@ async def record_endpoint_result(
 
     # ── Failure ──────────────────────────────────────────────────────────
     if state == "half_open":
+        current = _half_open_probes.get(endpoint_id)
+        if not _lease_matches(current, lease):
+            logger.debug(
+                "Ignoring stale half-open failure for endpoint %s", endpoint_id,
+            )
+            return
         # Probe failed → reopen.
         endpoint.circuit_state = "open"
         endpoint.circuit_opened_at = now
@@ -187,34 +247,65 @@ async def record_endpoint_result(
     await session.flush()
 
 
-async def is_endpoint_available(
+async def resolve_endpoint_probe_inconclusive(
     session: AsyncSession,
     endpoint_id: str,
-) -> bool:
-    """Check whether an endpoint should accept requests.
+    *,
+    lease: ProbeLease | None = None,
+) -> None:
+    """Resolve a half-open probe whose outcome carries no endpoint evidence.
 
-    Returns ``True`` for ``closed`` and ``half_open``.  For ``open``, lazily
-    transitions to ``half_open`` if ``circuit_retry_at`` has elapsed (and
-    then returns ``True`` to allow one probe).  Otherwise returns ``False``.
+    Key-scoped and model-scoped failures are inconclusive for endpoint health:
+    they must free the lease for every outcome, but must neither close the
+    circuit nor arm the full failure cooldown.  The endpoint returns to
+    ``open`` with a short retry delay; this serializes probes and prevents a
+    spin loop while still allowing quick recovery evidence to arrive.
+    """
+    svc = ProviderEndpointService(session)
+    endpoint = await svc.get_by_pk(endpoint_id)
+    if endpoint is None or endpoint.circuit_state != "half_open":
+        return
+    current = _half_open_probes.get(endpoint_id)
+    if not _lease_matches(current, lease):
+        logger.debug(
+            "Ignoring stale inconclusive probe for endpoint %s", endpoint_id,
+        )
+        return
+    now = _utcnow()
+    endpoint.circuit_state = "open"
+    endpoint.circuit_opened_at = now
+    endpoint.circuit_retry_at = now + timedelta(
+        seconds=HALF_OPEN_PROBE_INCONCLUSIVE_RETRY_SECONDS,
+    )
+    endpoint.updated_at = now
+    _half_open_probes.pop(endpoint_id, None)
+    await session.flush()
 
-    This function has a side effect: it may mutate ``circuit_state`` from
-    ``open`` → ``half_open`` when the cooldown has expired.  This is the
-    standard lazy-transition pattern for circuit breakers.
 
-    The open→half_open transition uses an atomic UPDATE ... WHERE to ensure
-    only one concurrent caller wins the transition (preventing multiple
-    probe requests from escaping the circuit breaker).
+async def check_endpoint_availability(
+    session: AsyncSession,
+    endpoint_id: str,
+    *,
+    lease: ProbeLease | None = None,
+) -> tuple[bool, ProbeLease | None]:
+    """Detailed availability check used by routing.
+
+    Returns ``(available, lease)``.  In half-open state only the caller
+    carrying the active lease token is admitted; independent concurrent
+    callers are rejected.  The caller that wins the open→half_open transition
+    receives a new lease and must pass it through the request lifecycle and
+    back into outcome recording.
     """
     svc = ProviderEndpointService(session)
     endpoint = await svc.get_by_pk(endpoint_id)
     if endpoint is None:
-        return False
+        return False, None
 
     now = _utcnow()
     state = endpoint.circuit_state
 
     if state == "closed":
-        return True
+        return True, None
 
     if state == "open":
         if (
@@ -233,29 +324,42 @@ async def is_endpoint_available(
             )
             await session.flush()
             if int(cast("Any", result).rowcount or 0) > 0:
-                _half_open_probes[endpoint_id] = now
-                return True
-            return False
-        return False
+                probe_lease = _new_lease(endpoint_id, now)
+                _half_open_probes[endpoint_id] = probe_lease
+                return True, probe_lease
+            return False, None
+        return False, None
 
     if state == "half_open":
-        # Single-probe semantics: only ONE probe request may test the endpoint.
-        # The probe itself checks availability several times in quick succession
-        # (route resolution + executor re-check), so checks within the admission
-        # grace of the probe start are the same logical probe and pass.  After
-        # the grace, further requests are rejected until the probe resolves or
-        # its slot times out — before this, every concurrent request slipped
-        # through the half-open state and stampeded the sick endpoint.
-        probe_started = _half_open_probes.get(endpoint_id)
-        if probe_started is None:
-            # Restarted while half-open (in-memory slot lost) — admit one probe.
-            _half_open_probes[endpoint_id] = now
-            return True
-        elapsed = (now - _as_utc(probe_started)).total_seconds()
+        current = _half_open_probes.get(endpoint_id)
+        if current is None:
+            # Restarted while half-open (in-memory lease lost) — admit one probe.
+            probe_lease = _new_lease(endpoint_id, now)
+            _half_open_probes[endpoint_id] = probe_lease
+            return True, probe_lease
+        elapsed = (now - _as_utc(current.started_at)).total_seconds()
         if elapsed >= HALF_OPEN_PROBE_TIMEOUT_SECONDS:
-            # Probe outcome never recorded — free the slot for a new probe.
-            _half_open_probes[endpoint_id] = now
-            return True
-        return elapsed <= HALF_OPEN_PROBE_GRACE_SECONDS
+            # Probe outcome never recorded — replace the lost lease.
+            probe_lease = _new_lease(endpoint_id, now)
+            _half_open_probes[endpoint_id] = probe_lease
+            return True, probe_lease
+        if lease is not None and lease.token == current.token:
+            return True, current
+        return False, None
 
-    return False
+    return False, None
+
+
+async def is_endpoint_available(
+    session: AsyncSession,
+    endpoint_id: str,
+) -> bool:
+    """Check whether an endpoint should accept requests.
+
+    Compatibility wrapper around :func:`check_endpoint_availability` for
+    callers outside the routing lifecycle.  Production routing uses the
+    detailed API because the probe lease must be propagated to the executor
+    and to outcome recording.
+    """
+    available, _lease = await check_endpoint_availability(session, endpoint_id)
+    return available

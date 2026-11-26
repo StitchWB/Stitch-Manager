@@ -58,6 +58,20 @@ class EmptyCompletionError(RuntimeError):
     """
 
 
+class UpstreamErrorEnvelopeError(RuntimeError):
+    """Upstream answered HTTP 200 with a top-level ``{\"error\": ...}`` body.
+
+    Some OpenAI-compatible gateways incorrectly transport failures as a
+    successful HTTP response.  Raising here re-enters the normal failure
+    pipeline; the exception text is the original JSON body so the adapter's
+    machine-readable error-vocabulary classifier can attribute scope correctly.
+    """
+
+    def __init__(self, envelope: dict[str, Any]) -> None:
+        self.envelope = envelope
+        super().__init__(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")))
+
+
 def _choice_is_empty(choice: Any) -> bool:
     """True when a chat-completion choice carries no content at all.
 
@@ -87,8 +101,16 @@ def _choice_is_empty(choice: Any) -> bool:
 
 
 def _reject_empty_completion(result: Any) -> None:
+    """Reject invalid HTTP-200 upstream bodies before they can count as success.
+
+    Error envelopes are checked first: a 200 carrying ``error`` is a failure
+    even when it also has empty/no completion fields.  The normal empty-body
+    validation then catches successful envelopes with no usable content.
+    """
     if not isinstance(result, dict):
         return
+    if result.get("error") is not None:
+        raise UpstreamErrorEnvelopeError(result)
     choices = result.get("choices")
     if isinstance(choices, list):
         if not choices:
@@ -104,7 +126,12 @@ def _reject_empty_completion(result: Any) -> None:
         raise EmptyCompletionError("upstream returned an empty completion")
 
 
-def _classify_invoke_failure(adapter: Any, exc: BaseException) -> Any:
+def _classify_invoke_failure(
+    adapter: Any,
+    exc: BaseException,
+    *,
+    http_status: int | None = None,
+) -> Any:
     """Classify an invoke failure, honouring pipeline-raised error types.
 
     ``EmptyCompletionError`` is a model-level retryable failure: the endpoint
@@ -122,6 +149,8 @@ def _classify_invoke_failure(adapter: Any, exc: BaseException) -> Any:
             is_model_specific=True,
             scope="key",
         )
+    if http_status is not None:
+        return adapter.classify_error(exc, http_status=http_status)
     return adapter.classify_error(exc)
 
 
@@ -149,6 +178,8 @@ def _failure_metadata(classified: Any, exc: BaseException) -> RequestLogFailureM
             body_text = response.text
         except Exception:  # noqa: BLE001
             body_text = ""
+    elif isinstance(exc, UpstreamErrorEnvelopeError):
+        body_text = str(exc)
     envelope = parse_envelope(body_text)
     return RequestLogFailureMetadata(
         getattr(classified, "category", type(exc).__name__),
@@ -222,6 +253,7 @@ async def _record_stream_usage(
     outcome: _RequestOutcome,
     *,
     run_in_session: Callable[..., Awaitable[Any]],
+    failure_reason: str | None = None,
 ) -> None:
     input_tokens, output_tokens = usage if usage is not None else (0, 0)
     await executor._record_group_usage_for(
@@ -234,8 +266,61 @@ async def _record_stream_usage(
     outcome.output_tokens = output_tokens
     outcome.ok = ok
     outcome.routing_result = routing_result
-    outcome.error_class = None if ok else "stream_interrupted"
+    outcome.error_class = None if ok else (failure_reason or "stream_interrupted")
+    if not ok and failure_reason == "empty_completion":
+        # A role/metadata-only stream is the streaming form of an empty
+        # completion.  Bytes may already have reached the client, so failover
+        # is impossible here, but health attribution must still be model-level
+        # rather than a generic transport failure or, worse, a success.
+        classified = _classify_invoke_failure(
+            routing_result.adapter,
+            EmptyCompletionError("upstream returned an empty completion"),
+        )
+        try:
+            async def _record_empty_stream(session):
+                await executor._routing_engine.record_result(
+                    session,
+                    credential_id=routing_result.credential.id,
+                    endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
+                    error=classified,
+                    http_status=200,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
+                )
+            await run_in_session(_record_empty_stream)
+        except Exception:
+            logger.warning("Failed to record empty stream to routing engine", exc_info=True)
     await executor._persist_outcome(outcome)
+
+
+def _stream_usage_callback(
+    executor: LiteLLMExecutor,
+    pool: PoolScope | None,
+    routing_result: Any,
+    payload: GatewayRequest,
+    outcome: _RequestOutcome,
+    *,
+    run_in_session: Callable[..., Awaitable[Any]],
+) -> Callable[..., Awaitable[None]]:
+    """Build the three-argument stream-completion callback for one invoke."""
+    async def _callback(
+        usage: tuple[int, int] | None,
+        ok: bool,
+        failure_reason: str | None = None,
+    ) -> None:
+        await _record_stream_usage(
+            executor,
+            pool,
+            routing_result,
+            payload,
+            usage,
+            ok,
+            outcome,
+            run_in_session=run_in_session,
+            failure_reason=failure_reason,
+        )
+
+    return _callback
 
 
 async def invoke_via_gateway(
@@ -293,8 +378,12 @@ async def invoke_via_gateway(
             result = await executor._stream_response(
                 executor._guard_stream(response, routing_result),
                 client_has_tools=client_has_tools,
-                on_complete=lambda usage, ok: _record_stream_usage(
-                    executor, pool, routing_result, payload, usage, ok, outcome,
+                on_complete=_stream_usage_callback(
+                    executor,
+                    pool,
+                    routing_result,
+                    payload,
+                    outcome,
                     run_in_session=run_in_session,
                 ),
                 model=payload.model,
@@ -354,6 +443,7 @@ async def invoke_via_gateway(
                     upstream_model_id=routing_result.upstream_model.id,
                     error=None,
                     http_status=200,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
                 )
             await run_in_session(_record_success)
         except Exception:
@@ -394,6 +484,7 @@ async def invoke_via_gateway(
                     upstream_model_id=routing_result.upstream_model.id,
                     error=classified,
                     http_status=None,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
                 )
             await run_in_session(_record_failure)
         except Exception:
@@ -457,8 +548,12 @@ async def invoke_via_gateway_messages(
             result = await executor._stream_anthropic_response(
                 executor._guard_stream(response, routing_result),
                 client_has_tools=client_has_tools,
-                on_complete=lambda usage, ok: _record_stream_usage(
-                    executor, pool, routing_result, payload, usage, ok, outcome,
+                on_complete=_stream_usage_callback(
+                    executor,
+                    pool,
+                    routing_result,
+                    payload,
+                    outcome,
                     run_in_session=run_in_session,
                 ),
                 model=payload.model,
@@ -520,6 +615,7 @@ async def invoke_via_gateway_messages(
                     upstream_model_id=routing_result.upstream_model.id,
                     error=None,
                     http_status=200,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
                 )
             await run_in_session(_record_success)
         except Exception:
@@ -560,6 +656,7 @@ async def invoke_via_gateway_messages(
                     upstream_model_id=routing_result.upstream_model.id,
                     error=classified,
                     http_status=None,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
                 )
             await run_in_session(_record_failure)
         except Exception:
@@ -629,8 +726,12 @@ async def invoke_via_gateway_responses(
             result = await executor._stream_response(
                 executor._guard_stream(response, routing_result),
                 client_has_tools=client_has_tools,
-                on_complete=lambda usage, ok: _record_stream_usage(
-                    executor, pool, routing_result, payload, usage, ok, outcome,
+                on_complete=_stream_usage_callback(
+                    executor,
+                    pool,
+                    routing_result,
+                    payload,
+                    outcome,
                     run_in_session=run_in_session,
                 ),
                 model=payload.model,
@@ -692,6 +793,7 @@ async def invoke_via_gateway_responses(
                     upstream_model_id=routing_result.upstream_model.id,
                     error=None,
                     http_status=200,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
                 )
             await run_in_session(_record_success)
         except Exception:
@@ -732,6 +834,7 @@ async def invoke_via_gateway_responses(
                     upstream_model_id=routing_result.upstream_model.id,
                     error=classified,
                     http_status=None,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
                 )
             await run_in_session(_record_failure)
         except Exception:

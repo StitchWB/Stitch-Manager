@@ -128,6 +128,12 @@ class RoutingResult:
     default_headers: dict[str, str]
     group_id_hit: str | None = None
     """Share row that made the credential visible (``None`` via owner/instance-shared)."""
+    probe_lease: circuit_breaker.ProbeLease | None = field(default=None, repr=False)
+    """Half-open probe lease carried through executor re-checks and outcome recording."""
+    access_status: str = "available"
+    """CredentialModelAccess status captured when the candidate was resolved."""
+    access_row: CredentialModelAccess | None = field(default=None, repr=False)
+    """Already-loaded access row used for cheap defensive cache-hit revalidation."""
 
 
 class RoutingError(Exception):
@@ -198,6 +204,11 @@ _resolve_cache_generation = 0
 def _invalidate_resolve_caches() -> None:
     global _resolve_cache_generation
     _resolve_cache_generation += 1
+
+
+def invalidate_resolve_caches() -> None:
+    """Drop process-local route-resolution caches after an authoritative mutation."""
+    _invalidate_resolve_caches()
 
 
 @event_bus.on("credential.state_changed")
@@ -462,12 +473,31 @@ class RoutingEngine:
             if cached_result.endpoint.enabled is False:
                 continue
             credential = cached_result.credential
+            # Cached rows are snapshots.  Mutations normally invalidate the
+            # generation, but re-check the already-loaded authoritative fields
+            # defensively so a stale object can never resurrect a disabled or
+            # parked credential.  This stays cheap: no extra database reads.
+            if not credential.enabled:
+                continue
+            if credential.runtime_status not in ("active", "unknown"):
+                continue
+            access_status = (
+                cached_result.access_row.status
+                if cached_result.access_row is not None
+                else cached_result.access_status
+            )
+            if access_status != "available":
+                continue
             if credential.next_retry_at is not None and credential.next_retry_at > now:
                 continue
             secret = await cred_svc.resolve_invocation_secret(credential)
             if secret is None:
                 continue
-            results.append(replace(cached_result, secret=secret))
+            results.append(replace(
+                cached_result,
+                secret=secret,
+                access_status=access_status,
+            ))
         if not results:
             return None
         if pool.group_ids:
@@ -607,16 +637,22 @@ class RoutingEngine:
         over_quota = await _over_quota_group_ids(session, pool, model=request.model)
         if over_quota:
             cred_rows = [
-                (uid_, cred, gid)
-                for uid_, cred, gid in cred_rows
+                (uid_, cred, gid, access_status, access_row)
+                for uid_, cred, gid, access_status, access_row in cred_rows
                 if gid is None or gid not in over_quota
             ]
 
-        # cred_rows: list[(upstream_model_id, Credential, group_id_hit)]
-        # Index by upstream_model_id for in-memory per-target lookup.
-        creds_by_upstream: dict[str, list[tuple[Credential, str | None]]] = {}
-        for upstream_id, cred, group_id_hit in cred_rows:
-            creds_by_upstream.setdefault(upstream_id, []).append((cred, group_id_hit))
+        # cred_rows: list[(upstream_model_id, Credential, group_id_hit,
+        # access_status, access_row)] — index by upstream_model_id for
+        # in-memory per-target lookup.
+        creds_by_upstream: dict[
+            str,
+            list[tuple[Credential, str | None, str, CredentialModelAccess]],
+        ] = {}
+        for upstream_id, cred, group_id_hit, access_status, access_row in cred_rows:
+            creds_by_upstream.setdefault(upstream_id, []).append(
+                (cred, group_id_hit, access_status, access_row),
+            )
 
         # 6. Per-target in-memory filtering + selection.
         cred_svc = CredentialService(session)
@@ -625,22 +661,33 @@ class RoutingEngine:
             request.model, request.messages, getattr(request, "user", None),
         )
         headroom_cache: dict[str, float] = {}
+        probe_leases: dict[str, circuit_breaker.ProbeLease] = {}
 
         for _target, upstream in candidates:
             eligible = creds_by_upstream.get(upstream.id, [])
             # Filter out credentials in cooldown (next_retry_at > now).
             eligible = [
-                (c, gid) for c, gid in eligible
+                (c, gid, access_status, access_row)
+                for c, gid, access_status, access_row in eligible
                 if c.next_retry_at is None or c.next_retry_at <= now
             ]
             if not eligible:
                 continue
 
-            # 7. Check endpoint circuit breaker.
-            if not await circuit_breaker.is_endpoint_available(
-                session, upstream.provider_endpoint_id,
-            ):
+            # 7. Check endpoint circuit breaker.  A half-open endpoint admits
+            # exactly one leased logical probe; reuse the lease across targets
+            # of this same routing call and reject unrelated callers.
+            endpoint_id = upstream.provider_endpoint_id
+            available, probe_lease = await circuit_breaker.check_endpoint_availability(
+                session,
+                endpoint_id,
+                lease=probe_leases.get(endpoint_id),
+            )
+            if not available:
                 continue
+            if probe_lease is not None:
+                probe_leases[endpoint_id] = probe_lease
+            endpoint_probe_lease = probe_leases.get(endpoint_id)
 
             # 9. Get endpoint + adapter (shared by all credentials below).
             from stitch_backend.domains.ai_gateway.service import ProviderEndpointService
@@ -659,7 +706,7 @@ class RoutingEngine:
                 )
                 continue
 
-            for credential, _group_id_hit in eligible:
+            for credential, _group_id_hit, _access_status, _access_row in eligible:
                 if credential.id in headroom_cache:
                     continue
                 headroom_cache[credential.id] = await account_ledger.headroom_ratio(
@@ -674,9 +721,9 @@ class RoutingEngine:
                 ),
             )
             # квота дня сидит на аккаунте: ключи одной группы — одна квота, разводим группы
-            picked: list[tuple[Any, str | None]] = []
+            picked: list[tuple[Any, str | None, str, CredentialModelAccess]] = []
             seen_groups: set[str] = set()
-            deferred: list[tuple[Any, str | None]] = []
+            deferred: list[tuple[Any, str | None, str, CredentialModelAccess]] = []
             for pair in eligible:
                 group = pair[0].account_group
                 if group is None or group not in seen_groups:
@@ -689,7 +736,7 @@ class RoutingEngine:
                 if len(picked) >= MAX_CANDIDATES_PER_TARGET:
                     break
                 picked.append(pair)
-            for cred, group_id_hit in picked[:MAX_CANDIDATES_PER_TARGET]:
+            for cred, group_id_hit, access_status, access_row in picked[:MAX_CANDIDATES_PER_TARGET]:
                 secret = await cred_svc.resolve_invocation_secret(cred)
                 if secret is None:
                     continue
@@ -708,6 +755,9 @@ class RoutingEngine:
                     secret=secret,
                     default_headers=endpoint.default_headers or {},
                     group_id_hit=group_id_hit,
+                    probe_lease=endpoint_probe_lease,
+                    access_status=access_status,
+                    access_row=access_row,
                 ))
 
         if not results:
@@ -719,14 +769,18 @@ class RoutingEngine:
                 )
             raise RoutingError(f"No eligible credentials found for {request.model!r}")
 
-        self._cache_store(
-            cache_key,
-            _CachedResolution(
-                min_context=min_context,
-                results=[replace(r, secret="") for r in results],
-                headroom=dict(headroom_cache),
-            ),
-        )
+        # Half-open probe resolutions are intentionally not cached: the lease
+        # belongs to this one logical request, and a cached copy would either
+        # be unusable or (worse) reusable by unrelated traffic.
+        if not any(r.probe_lease is not None for r in results):
+            self._cache_store(
+                cache_key,
+                _CachedResolution(
+                    min_context=min_context,
+                    results=[replace(r, secret="") for r in results],
+                    headroom=dict(headroom_cache),
+                ),
+            )
         return results
 
     async def record_result(
@@ -738,14 +792,33 @@ class RoutingEngine:
         http_status: int | None,
         upstream_model_id: str | None = None,
         latency_ms: float | None = None,
+        probe_lease: circuit_breaker.ProbeLease | None = None,
     ) -> None:
-        """Record the outcome of a routed request — updates credential state and circuit breaker."""
+        """Record the outcome of a routed request.
+
+        Attribution is scope-first:
+
+        * key/account-scoped failures affect only the credential state machine;
+        * model-scoped failures affect only ``CredentialModelAccess``;
+        * endpoint/global-scoped failures affect only the endpoint breaker and
+          never degrade a blameless credential;
+        * successes still recover both the credential and the endpoint.
+
+        Half-open probe leases are resolved for every outcome.  Non-endpoint
+        evidence is inconclusive about endpoint health, so it frees the lease
+        and re-arms only a short retry instead of either wedging the endpoint
+        or spinning probes back-to-back.
+        """
+        endpoint_attributed = error is None or error.is_endpoint_wide or error.scope in (
+            "endpoint", "global",
+        )
         credential_state.record_outcome(
             credential_id=credential_id,
             endpoint_id=endpoint_id,
             ok=error is None,
             latency_ms=latency_ms,
             error_kind=credential_state.classify_error_kind(error, http_status),
+            include_endpoint=endpoint_attributed,
         )
         if error is not None and error.is_model_specific:
             if upstream_model_id is not None:
@@ -763,23 +836,32 @@ class RoutingEngine:
                     await session.flush()
                     if transitioned:
                         _invalidate_resolve_caches()
-            return
-        await credential_state.transition_credential(
-            session, credential_id, error, http_status,
-        )
-        # Scope attribution: only endpoint-attributed outcomes reach the circuit
-        # breaker.  A key-scoped failure (auth/quota/rate-limit of one key) says
-        # nothing about the endpoint — counting it would open the circuit on a
-        # healthy endpoint because of one dead key.  Model-specific errors
-        # already returned above.  Successes always reach the breaker so a
-        # half-open probe can close the circuit.
-        endpoint_attributed = error is None or error.is_endpoint_wide or error.scope in (
-            "endpoint", "global",
-        )
-        if endpoint_attributed:
-            await circuit_breaker.record_endpoint_result(
-                session, endpoint_id, success=(error is None),
+            await circuit_breaker.resolve_endpoint_probe_inconclusive(
+                session, endpoint_id, lease=probe_lease,
             )
+            return
+
+        if not endpoint_attributed:
+            await credential_state.transition_credential(
+                session, credential_id, error, http_status,
+            )
+            await circuit_breaker.resolve_endpoint_probe_inconclusive(
+                session, endpoint_id, lease=probe_lease,
+            )
+            return
+
+        # Successes are credential evidence as well as endpoint evidence.
+        # Endpoint/global failures, by definition, are not.
+        if error is None:
+            await credential_state.transition_credential(
+                session, credential_id, error, http_status,
+            )
+        await circuit_breaker.record_endpoint_result(
+            session,
+            endpoint_id,
+            success=(error is None),
+            lease=probe_lease,
+        )
 
     async def get_available_public_models(
         self,
@@ -910,12 +992,14 @@ async def _fetch_pool_credentials(
     session: AsyncSession,
     pool: PoolScope,
     upstream_ids: list[str],
-) -> list[tuple[str, Credential, str | None]]:
+) -> list[tuple[str, Credential, str | None, str, CredentialModelAccess]]:
     """ONE prefetch: eligible credentials grouped by upstream_model_id.
 
-    Returns a list of ``(upstream_model_id, Credential, group_id_hit)`` tuples
-    where ``group_id_hit`` is the share row that made the credential visible
-    (``None`` when visible via owner_id or instance-shared).
+    Returns a list of ``(upstream_model_id, Credential, group_id_hit,
+    access_status, access_row)`` tuples where ``group_id_hit`` is the share row
+    that made the credential visible (``None`` when visible via owner_id or
+    instance-shared).  The access row itself is retained so cached resolutions
+    can cheaply revalidate a routing-visible status already loaded in memory.
 
     Applies the pool predicate + existing enabled/runtime_status filters.
     """
@@ -928,6 +1012,8 @@ async def _fetch_pool_credentials(
             CredentialModelAccess.upstream_model_id,
             Credential,
             cgs_alias.group_id.label("group_id_hit"),
+            CredentialModelAccess.status.label("access_status"),
+            CredentialModelAccess,
         )
         .select_from(Credential)
         .join(
@@ -959,6 +1045,12 @@ async def _fetch_pool_credentials(
     )
     result = await session.execute(stmt)
     return [
-        (row.upstream_model_id, row.Credential, row.group_id_hit)
+        (
+            row.upstream_model_id,
+            row.Credential,
+            row.group_id_hit,
+            row.access_status,
+            row.CredentialModelAccess,
+        )
         for row in result.all()
     ]

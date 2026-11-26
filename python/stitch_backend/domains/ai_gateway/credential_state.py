@@ -204,10 +204,17 @@ def record_outcome(
     ok: bool,
     latency_ms: float | None,
     error_kind: str | None = None,
+    include_endpoint: bool = True,
 ) -> None:
-    """Record one outcome against both the credential and its endpoint."""
+    """Record one outcome against the credential and, when endpoint-attributed, its endpoint.
+
+    Key- and model-scoped failures are useful evidence against that key/model
+    but must not skew endpoint health ordering, so callers that have already
+    classified scope pass ``include_endpoint=False`` for them.
+    """
     metrics_store.record(credential_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
-    metrics_store.record(endpoint_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
+    if include_endpoint:
+        metrics_store.record(endpoint_id, ok=ok, latency_ms=latency_ms, error_kind=error_kind)
 
 
 async def _emit_state_changed(credential_id: str, runtime_status: str) -> None:
@@ -427,6 +434,16 @@ async def transition_credential(
         return
 
     category = error.category
+
+    # Endpoint/global evidence is not credential evidence.  In particular a
+    # TCP reset or generic upstream 5xx must open the endpoint breaker without
+    # parking every key that happened to discover the outage.
+    if error.is_endpoint_wide or error.scope in ("endpoint", "global"):
+        logger.debug(
+            "transition_credential: endpoint/global-scoped %r bypasses credential %s",
+            category, credential_id,
+        )
+        return
 
     # ── No-op categories (not the credential's fault) ────────────────────
     if category in ("model_not_found", "model_access_denied", "client_error", "unknown"):

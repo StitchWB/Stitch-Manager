@@ -42,12 +42,26 @@ async def cmd_upsert_credential_model_access(db: AsyncSession, params: dict) -> 
     if result.scalar_one_or_none() is None:
         return None
     svc = CredentialModelAccessService(db)
+    existing_rows = await svc.list_access(req.credential_id, req.upstream_model_id)
+    existing = existing_rows[0] if existing_rows else None
+    # ``upsert_access`` mutates and returns the same ORM instance, so snapshot
+    # the pre-write values before calling it; comparing object attributes
+    # afterwards would always report "unchanged".
+    previous = (
+        (existing.status, existing.last_error) if existing is not None else None
+    )
     access = await svc.upsert_access(
         req.credential_id,
         req.upstream_model_id,
         status=req.status,
         last_error=req.last_error,
     )
+    changed = previous != (access.status, access.last_error)
+    if changed:
+        from stitch_backend.domains.ai_gateway.routing_engine import (
+            invalidate_resolve_caches,
+        )
+        invalidate_resolve_caches()
     return CredentialModelAccessResponse.from_orm_model(access)
 
 
@@ -89,4 +103,9 @@ async def cmd_delete_credential_model_access(params: dict) -> dict:
         return await svc.delete_by_pk(req.id)
 
     deleted = await run_in_session(_op)
+    if deleted:
+        from stitch_backend.domains.ai_gateway.routing_engine import (
+            invalidate_resolve_caches,
+        )
+        invalidate_resolve_caches()
     return {"success": deleted}
