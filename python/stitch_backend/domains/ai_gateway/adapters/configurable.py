@@ -514,7 +514,14 @@ class ConfigurableAdapter:
 
         if status is None:
             if _is_transport_failure(exc):
-                return ClassifiedError(category="transport_error", is_endpoint_wide=True)
+                # A TCP reset/connect timeout is evidence about reachability of
+                # the endpoint transport, not about the credential that happened
+                # to carry the request.
+                return ClassifiedError(
+                    category="transport_error",
+                    is_endpoint_wide=True,
+                    scope="endpoint",
+                )
             return ClassifiedError(
                 category=_category_from_body(lowered_body), is_endpoint_wide=False,
                 outcome_confirmed=_outcome_confirmed(envelope),

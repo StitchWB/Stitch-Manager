@@ -155,13 +155,24 @@ async def cmd_update_credential(db: AsyncSession, params: dict) -> Any:
     credential = result.scalar_one_or_none()
     if credential is None:
         return None
+    changed = False
     for key, value in updates.items():
         if hasattr(credential, key):
+            if getattr(credential, key) != value:
+                changed = True
             setattr(credential, key, value)
     if hasattr(credential, "updated_at"):
         credential.updated_at = _utcnow()
     await db.flush()
     await db.refresh(credential)
+    if changed:
+        # enabled/account_group are routing inputs; even label-only mutations
+        # invalidate conservatively because cached RoutingResult objects carry
+        # the credential row snapshot.
+        from stitch_backend.domains.ai_gateway.routing_engine import (
+            invalidate_resolve_caches,
+        )
+        invalidate_resolve_caches()
     return CredentialResponse.from_orm_model(credential)
 
 
@@ -188,6 +199,11 @@ async def cmd_rotate_credential_secret(db: AsyncSession, params: dict) -> Any:
         return None
     svc = CredentialService(db)
     credential = await svc.rotate_secret(req.id, req.new_secret)
+    if credential is not None:
+        from stitch_backend.domains.ai_gateway.routing_engine import (
+            invalidate_resolve_caches,
+        )
+        invalidate_resolve_caches()
     return CredentialResponse.from_orm_model(credential) if credential else None
 
 
@@ -213,4 +229,9 @@ async def cmd_delete_credential(params: dict) -> dict:
         return True
 
     deleted = await run_in_session(_op)
+    if deleted:
+        from stitch_backend.domains.ai_gateway.routing_engine import (
+            invalidate_resolve_caches,
+        )
+        invalidate_resolve_caches()
     return {"success": deleted}

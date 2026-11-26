@@ -586,6 +586,7 @@ class DiscoveryWorker:
         model_svc = UpstreamModelService(session)
         access_svc = CredentialModelAccessService(session)
         changed_endpoints: list[str] = []
+        access_status_changed = False
 
         for item in results:
             probe = item["probe"]
@@ -632,11 +633,14 @@ class DiscoveryWorker:
                     for cred, models in item["credentials"]:
                         returned = {m.id for m in models}
                         for mid, upstream in upstream_rows.items():
-                            await cls._reconcile_access(
-                                access_svc,
-                                cred["credential_id"],
-                                upstream,
-                                present=mid in returned,
+                            access_status_changed = (
+                                await cls._reconcile_access(
+                                    access_svc,
+                                    cred["credential_id"],
+                                    upstream,
+                                    present=mid in returned,
+                                )
+                                or access_status_changed
                             )
 
                     for mid, upstream in upstream_rows.items():
@@ -679,6 +683,15 @@ class DiscoveryWorker:
         except Exception as _exc:
             logger.warning("DiscoveryWorker: model promotion failed: %s", _exc)
 
+        if access_status_changed:
+            # Access rows are authoritative routing input.  Catalog discovery
+            # does not necessarily change the upstream-enabled set, so it must
+            # invalidate cached route resolutions independently.
+            from stitch_backend.domains.ai_gateway.routing_engine import (
+                invalidate_resolve_caches,
+            )
+            invalidate_resolve_caches()
+
         return changed_endpoints
 
     @classmethod
@@ -689,11 +702,17 @@ class DiscoveryWorker:
         upstream: Any,
         *,
         present: bool,
-    ) -> None:
+    ) -> bool:
         """Reconcile one (credential, model) access row.
 
-        ``denied`` is never overwritten, manual ``unavailable`` survives, and
-        a model the key stopped returning becomes ``unavailable`` (soft).
+        ``denied`` is never overwritten and manual ``unavailable`` survives.
+        A runtime ``temporarily_unavailable`` mark is *not* probe evidence:
+        when the model reappears in the catalog the mark must survive until
+        ProbeWorker/invocation evidence expires or clears it.  Catalog absence
+        is a different state, however, so an absent model still reconciles to
+        soft ``unavailable`` with ``not_returned_by_upstream``.
+
+        Returns True only when the routing-visible status transitioned.
         """
         rows = await access_svc.list_access(
             credential_id=credential_id,
@@ -712,26 +731,35 @@ class DiscoveryWorker:
                     status="unavailable",
                     last_error=NOT_RETURNED_BY_UPSTREAM,
                 )
-            return
+            return True
         if existing.status == "denied":
-            return
+            return False
         manual_unavailable = (
             existing.status == "unavailable"
             and existing.last_error != NOT_RETURNED_BY_UPSTREAM
         )
         if manual_unavailable:
-            return
+            return False
         if present:
+            if existing.status == "temporarily_unavailable":
+                return False
+            if existing.status == "available" and existing.last_error is None:
+                return False
             await access_svc.upsert_access(
                 credential_id, upstream.id, status="available", last_error=None,
             )
-            return
+            return existing.status != "available"
+        new_status = "unavailable"
+        transitioned = existing.status != new_status
+        if not transitioned and existing.last_error == NOT_RETURNED_BY_UPSTREAM:
+            return False
         await access_svc.upsert_access(
             credential_id,
             upstream.id,
-            status="unavailable",
+            status=new_status,
             last_error=NOT_RETURNED_BY_UPSTREAM,
         )
+        return transitioned
 
     @staticmethod
     def _merge_capabilities(

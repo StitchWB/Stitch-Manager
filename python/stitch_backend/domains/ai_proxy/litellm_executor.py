@@ -34,6 +34,7 @@ from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
 from stitch_backend.domains.ai_proxy.litellm_errors import is_managed_routing_error
 from stitch_backend.domains.ai_proxy.litellm_gateway import _earliest_recovery_seconds
 from stitch_backend.domains.ai_proxy.litellm_invoke_pipeline import (
+    _classify_invoke_failure,
     invoke_via_gateway,
     invoke_via_gateway_messages,
     invoke_via_gateway_responses,
@@ -45,6 +46,7 @@ from stitch_backend.domains.ai_proxy.litellm_public_models import (
     auto_create_public_models_from_config,
 )
 from stitch_backend.domains.ai_proxy.litellm_streaming import (
+    notify_stream_complete,
     prime_stream,
     stream_anthropic_response,
     stream_anthropic_response_buffered,
@@ -294,16 +296,41 @@ class LiteLLMExecutor:
                 logger.warning("AI Gateway route error for %s: %s", payload.model, e)
             return None
 
-    async def _is_endpoint_available(self, endpoint_id: str) -> bool:
+    async def _is_endpoint_available(
+        self,
+        endpoint_id: str,
+        probe_lease: circuit_breaker.ProbeLease | None = None,
+    ) -> bool:
         """Re-check the circuit breaker for an endpoint before invoking.
 
         Routing checked availability once per candidate, but a failure on
         candidate N may have opened the circuit for an endpoint that candidate
-        N+1 shares. Cheap: one row read + atomic CAS.
+        N+1 shares.  Half-open probes carry their lease token into this
+        re-check so the same logical request is admitted exactly once while
+        concurrent callers stay outside the circuit.
         """
         async def _check(session):
-            return await circuit_breaker.is_endpoint_available(session, endpoint_id)
+            available, _lease = await circuit_breaker.check_endpoint_availability(
+                session, endpoint_id, lease=probe_lease,
+            )
+            return available
         return await run_in_session(_check)
+
+    async def _release_inconclusive_probe(self, routing_result: Any) -> None:
+        """Free a half-open lease when local filtering prevents the probe call."""
+        lease = getattr(routing_result, "probe_lease", None)
+        if lease is None:
+            return
+
+        async def _release(session):
+            await circuit_breaker.resolve_endpoint_probe_inconclusive(
+                session, routing_result.endpoint.id, lease=lease,
+            )
+
+        try:
+            await run_in_session(_release)
+        except Exception:
+            logger.debug("Failed to release inconclusive half-open probe", exc_info=True)
 
     async def _skip_insufficient_balance(
         self, payload: Any, routing_result: Any, model: str,
@@ -430,16 +457,19 @@ class LiteLLMExecutor:
 
     def _throughput_on_complete(
         self,
-        on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None,
+        on_complete: Callable[..., Awaitable[None]] | None,
         *,
         model: str | None,
         routing_result: Any,
         timing: _StreamTiming,
         request_started_at: float | None,
-    ) -> Callable[[tuple[int, int] | None, bool], Awaitable[None]]:
-        async def _callback(usage: tuple[int, int] | None, ok: bool) -> None:
-            if on_complete is not None:
-                await on_complete(usage, ok)
+    ) -> Callable[..., Awaitable[None]]:
+        async def _callback(
+            usage: tuple[int, int] | None,
+            ok: bool,
+            failure_reason: str | None = None,
+        ) -> None:
+            await notify_stream_complete(on_complete, usage, ok, failure_reason)
             if not ok:
                 return
             prompt_tokens, completion_tokens = usage if usage is not None else (0, 0)
@@ -613,13 +643,17 @@ class LiteLLMExecutor:
                         budget_expired = True
                         stop_round = True
                         break
-                    if not await self._is_endpoint_available(routing_result.endpoint.id):
+                    if not await self._is_endpoint_available(
+                        routing_result.endpoint.id,
+                        getattr(routing_result, "probe_lease", None),
+                    ):
                         logger.debug(
                             "Skipping candidate on endpoint %s — circuit open",
                             routing_result.endpoint.id,
                         )
                         continue
                     if await self._skip_insufficient_balance(payload, routing_result, model):
+                        await self._release_inconclusive_probe(routing_result)
                         continue
                     credential_id = routing_result.credential.id
                     if not key_inflight.try_acquire(credential_id):
@@ -627,6 +661,7 @@ class LiteLLMExecutor:
                             "Skipping candidate on credential %s - at in-flight cap",
                             credential_id[:8],
                         )
+                        await self._release_inconclusive_probe(routing_result)
                         continue
                     try:
                         last_attempted = routing_result
@@ -637,8 +672,10 @@ class LiteLLMExecutor:
                         if _is_client_error(e):
                             raise
                         failed_attempts += 1
-                        last_classified = routing_result.adapter.classify_error(
-                            e, http_status=e.status_code,
+                        last_classified = _classify_invoke_failure(
+                            routing_result.adapter,
+                            e,
+                            http_status=e.status_code,
                         )
                         logger.warning(
                             "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
@@ -647,7 +684,7 @@ class LiteLLMExecutor:
                         )
                     except Exception as e:
                         failed_attempts += 1
-                        last_classified = routing_result.adapter.classify_error(e)
+                        last_classified = _classify_invoke_failure(routing_result.adapter, e)
                         logger.warning(
                             "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
                             model, routing_result.credential.id[:8],
@@ -673,6 +710,13 @@ class LiteLLMExecutor:
                         return result
                     finally:
                         key_inflight.release(credential_id)
+                        # The lease belongs to this one logical probe and must
+                        # resolve for every outcome.  Normal health recording
+                        # has already closed/reopened the breaker (making this
+                        # a no-op); if that recording itself failed, this still
+                        # prevents the half-open slot from wedging until the
+                        # lost-probe timeout.
+                        await self._release_inconclusive_probe(routing_result)
 
                     round_hint = _hint_seconds(last_classified)
                     if last_classified.scope == "global":
@@ -966,6 +1010,7 @@ class LiteLLMExecutor:
                         upstream_model_id=routing_result.upstream_model.id,
                         error=routing_result.adapter.classify_error(captured),
                         http_status=None,
+                        probe_lease=getattr(routing_result, "probe_lease", None),
                     )
                 await run_in_session(_record)
             except Exception:
