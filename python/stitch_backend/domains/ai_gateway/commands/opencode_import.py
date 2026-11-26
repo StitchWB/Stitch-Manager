@@ -5,7 +5,10 @@ from __future__ import annotations
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.core.exceptions import StitchError
 from stitch_backend.database import run_in_read_session, run_in_session
-from stitch_backend.domains.ai_gateway.commands._common import _caller_uid
+from stitch_backend.domains.ai_gateway.commands._common import (
+    _caller_uid,
+    _owner_uid_for_create,
+)
 
 
 @register_command("import_opencode_providers")
@@ -69,7 +72,10 @@ async def cmd_import_opencode_providers(params: dict) -> dict:
 
     async def _op(session):
         return await import_opencode_providers(
-            session, providers, owner_id=uid, share_group_id=group_id,
+            session,
+            providers,
+            owner_id=_owner_uid_for_create(params),
+            share_group_id=group_id,
         )
 
     report: dict = await run_in_session(_op)

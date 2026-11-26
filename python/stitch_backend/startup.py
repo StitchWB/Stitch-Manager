@@ -128,6 +128,44 @@ async def run_ai_gateway_auto_migration() -> None:
         logger.warning("AI Gateway auto-migration skipped: %s", _exc)
 
 
+async def backfill_desktop_gateway_instance_shared(settings: Settings) -> None:
+    """One-time desktop-only backfill for pre-fix owner-bound gateway rows.
+
+    ``desktop_mode`` is the explicit single-user machine marker (never set on
+    the VDS).  The backfill is guarded by a settings flag so an operator can
+    still intentionally claim rows later with ``gateway_claim_legacy`` without
+    startup undoing that explicit choice on every boot.  Hosted/multi-user
+    backends return before touching any row.
+    """
+    if not settings.desktop_mode:
+        return
+    try:
+        from stitch_backend.database import get_session_factory
+        from stitch_backend.domains.ai_gateway.ownership import (
+            backfill_desktop_instance_shared,
+        )
+        from stitch_backend.domains.settings.service import SettingsService
+
+        factory = get_session_factory()
+        async with factory() as _db:
+            settings_service = SettingsService(_db)
+            stored = await settings_service.get_all()
+            if stored.get("ai_gateway_desktop_shared_backfill_v1_done"):
+                return
+            counts = await backfill_desktop_instance_shared(_db)
+            await settings_service.update(
+                {"ai_gateway_desktop_shared_backfill_v1_done": True}
+            )
+            await _db.commit()
+            if any(counts.values()):
+                logger.info(
+                    "AI Gateway desktop ownership backfill: %s",
+                    counts,
+                )
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning("AI Gateway desktop ownership backfill skipped: %s", _exc)
+
+
 async def migrate_legacy_group_usage() -> None:
     # Idempotent (INSERT OR IGNORE) copy into group_usage_by_model (model='').
     try:

@@ -60,8 +60,9 @@ _BOOL_KEYS = {
     # Compression layer toggles (persisted; restored at startup).
     "compressionEnabled", "rtkEnabled", "cavemanEnabled",
     "inputCompressionEnabled", "outputCompressionEnabled", "preserveSystemPrompt",
-    # AI Gateway one-time legacy→gateway auto-migration guard (written by startup, not the UI).
+    # AI Gateway one-time startup migration guards (written by startup, not the UI).
     "ai_gateway_migration_v1_done",
+    "ai_gateway_desktop_shared_backfill_v1_done",
     # Key-health semantic chat probe — opt-in, default off (key_health domain).
     "keyHealthProbeEnabled",
 }

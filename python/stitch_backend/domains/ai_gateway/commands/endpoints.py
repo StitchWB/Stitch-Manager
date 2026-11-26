@@ -14,6 +14,7 @@ from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway.commands._common import (
     _caller_uid,
     _owner_filter,
+    _owner_uid_for_create,
 )
 from stitch_backend.domains.ai_gateway.models import ProviderEndpoint, _utcnow
 from stitch_backend.domains.ai_gateway.schemas import (
@@ -60,7 +61,7 @@ async def _reconcile_role_catalog_best_effort(
 @command("create_provider_endpoint")
 async def cmd_create_provider_endpoint(db: AsyncSession, params: dict) -> Any:
     req = ProviderEndpointCreateRequest.model_validate(params)
-    owner_id = _caller_uid(params)
+    owner_id = _owner_uid_for_create(params)
 
     svc = ProviderEndpointService(db)
     endpoint = await svc.create_endpoint(

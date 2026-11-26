@@ -143,6 +143,7 @@ PUBLIC_ONLY_FILES = {
     "python/tests/test_chain_autorefill.py": "public-only regression test",
     "python/tests/test_discovery_verification_gate.py": "public-only regression test",
     "python/tests/test_gateway_integration_phase2.py": "public-only regression test",
+    "python/tests/test_gateway_owner_isolation.py": "public-only regression test",
     "python/tests/test_inference_integrity.py": "public-only regression test",
     "python/tests/test_install_proxy_keys.py": "public-only regression test",
     "python/tests/test_key_inflight_models.py": "public-only regression test",

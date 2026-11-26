@@ -13,6 +13,7 @@ from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway.commands._common import (
     _caller_uid,
     _owner_filter,
+    _owner_uid_for_create,
 )
 from stitch_backend.domains.ai_gateway.models import PublicModel, _utcnow
 from stitch_backend.domains.ai_gateway.schemas import (
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 @command("create_public_model")
 async def cmd_create_public_model(db: AsyncSession, params: dict) -> Any:
     req = PublicModelCreateRequest.model_validate(params)
-    owner_id = _caller_uid(params)
+    owner_id = _owner_uid_for_create(params)
 
     svc = PublicModelService(db)
     model = await svc.create_public_model(
@@ -208,7 +209,7 @@ async def cmd_unmerge_route_target(db: AsyncSession, params: dict) -> Any:
             req.new_public_model_id,
             display_name=req.new_public_model_id,
             enabled=True,
-            owner_id=owner_id,
+            owner_id=_owner_uid_for_create(params),
         )
 
     existing = await RouteTargetService(db).list_targets_for_public_model(new_public.id)

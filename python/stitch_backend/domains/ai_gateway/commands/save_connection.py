@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from stitch_backend.core.command_decorator import command
 from stitch_backend.domains.ai_gateway.adapters.base import list_adapter_capabilities
-from stitch_backend.domains.ai_gateway.commands._common import _caller_uid
+from stitch_backend.domains.ai_gateway.commands._common import _owner_uid_for_create
 from stitch_backend.domains.ai_gateway.connection_service import save_connection
 from stitch_backend.domains.ai_gateway.schemas import (
     AdapterCapabilitiesResponse,
@@ -25,7 +25,7 @@ async def cmd_save_connection(db: AsyncSession, params: dict) -> Any:
     connectivity checks are separate commands the frontend may run after.
     """
     req = SaveConnectionRequest.model_validate(params)
-    return await save_connection(db, req, _caller_uid(params))
+    return await save_connection(db, req, _owner_uid_for_create(params))
 
 
 @command("get_adapter_capabilities", readonly=True)

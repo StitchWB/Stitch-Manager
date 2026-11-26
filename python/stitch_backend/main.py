@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await startup.migrate_plaintext_secrets()
     await startup.run_legacy_auto_migration()
     await startup.run_ai_gateway_auto_migration()
+    await startup.backfill_desktop_gateway_instance_shared(settings)
     await startup.migrate_legacy_group_usage()
     await startup.convert_legacy_labels()
     await startup.auto_create_public_models()
