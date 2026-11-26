@@ -12,6 +12,8 @@ export const pluginUi: PluginUiTranslations = {
     pluginNotInstalledDescription: "The plugin is not installed or is unavailable.",
     noData: "No data",
     emptyHint: "Data will appear here once it becomes available.",
+    showSecret: "Show",
+    hideSecret: "Hide",
     runtime: {
       enabled: "Enabled",
       enable: "Enable",

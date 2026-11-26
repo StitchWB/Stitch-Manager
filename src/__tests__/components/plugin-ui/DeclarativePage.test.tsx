@@ -84,7 +84,17 @@ jest.mock('@/components/ui', () => ({
       {children}
     </button>
   ),
-  Input: ({ label, value, readOnly, onChange, placeholder }: any) => (
+  IconButton: ({ children, onClick, ...rest }: any) => (
+    <button
+      type="button"
+      data-testid={rest['data-testid']}
+      aria-label={rest['aria-label']}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  ),
+  Input: ({ label, value, readOnly, onChange, placeholder, type, rightElement, ...rest }: any) => (
     <div data-testid="ui-input">
       {label && <label>{label}</label>}
       <input
@@ -92,9 +102,32 @@ jest.mock('@/components/ui', () => ({
         readOnly={readOnly}
         onChange={onChange}
         placeholder={placeholder}
+        type={type}
+        data-testid={rest['data-testid']}
+      />
+      {rightElement}
+    </div>
+  ),
+  Textarea: ({ label, value, readOnly, onChange, placeholder, rows }: any) => (
+    <div data-testid="ui-textarea">
+      {label && <label>{label}</label>}
+      <textarea
+        value={value ?? ''}
+        readOnly={readOnly}
+        onChange={onChange}
+        placeholder={placeholder}
+        rows={rows}
       />
     </div>
   ),
+  Modal: ({ isOpen, title, children, onClose }: any) =>
+    isOpen ? (
+      <div data-testid="ui-modal">
+        <h2>{title}</h2>
+        <button data-testid="modal-close" onClick={onClose}>Close</button>
+        {children}
+      </div>
+    ) : null,
   Select: ({ label, value, options, disabled, onChange, placeholder }: any) => (
     <div data-testid="ui-select">
       {label && <label>{label}</label>}
@@ -300,7 +333,7 @@ describe('DeclarativePage', () => {
     expect(container.innerHTML.length).toBeGreaterThan(0);
   });
 
-  it('(d) safeInvoke rejection triggers appToast.error with pluginUi.actionFailed', async () => {
+  it('(d) safeInvoke rejection surfaces the server error text in the toast', async () => {
     (safeInvoke as jest.Mock).mockRejectedValueOnce(new Error('backend down'));
 
     render(<DeclarativePage pluginId="test" schema={buttonOnlySchema} />);
@@ -310,7 +343,42 @@ describe('DeclarativePage', () => {
     });
 
     await waitFor(() => {
+      expect(appToast.error).toHaveBeenCalledWith('pluginUi.actionFailed: backend down');
+    });
+  });
+
+  it('(d2) rejection without a usable message falls back to the generic key', async () => {
+    (safeInvoke as jest.Mock).mockRejectedValueOnce({ weird: true });
+
+    render(<DeclarativePage pluginId="test" schema={buttonOnlySchema} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Ping'));
+    });
+
+    await waitFor(() => {
       expect(appToast.error).toHaveBeenCalledWith('pluginUi.actionFailed');
+    });
+  });
+
+  it('(d3) long server error text is truncated in the toast', async () => {
+    const longMessage = `Plugin 'x' error: ${'a'.repeat(400)}`;
+    (safeInvoke as jest.Mock).mockRejectedValueOnce(new Error(longMessage));
+
+    render(<DeclarativePage pluginId="test" schema={buttonOnlySchema} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Ping'));
+    });
+
+    await waitFor(() => {
+      const calls = (appToast.error as jest.Mock).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const text = String(calls[0][0]);
+      expect(text.startsWith("pluginUi.actionFailed: Plugin 'x' error: ")).toBe(true);
+      // Generic prefix + at most 200 chars of the detail + ellipsis.
+      expect(text.length).toBeLessThanOrEqual('pluginUi.actionFailed: '.length + 200);
+      expect(text.endsWith('…')).toBe(true);
     });
   });
 
@@ -1470,6 +1538,95 @@ describe('DeclarativePage', () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  // ── textarea / secret fields (v2.3) ───────────────────────────────────────
+
+  it('(ta1) textarea field renders a multiline input with default rows and binds through paramsFrom', async () => {
+    const schema: PluginPageSchema = {
+      nodes: [
+        { kind: 'field', field: 'textarea', id: 'creds', label: 'Credentials' },
+        {
+          kind: 'button',
+          id: 'save',
+          label: 'Save',
+          command: 'save_creds',
+          paramsFrom: { blob: 'creds' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    const textarea = document.querySelector('textarea');
+    expect(textarea).toBeTruthy();
+    expect(textarea?.getAttribute('rows')).toBe('5');
+
+    fireEvent.change(textarea as HTMLElement, {
+      target: { value: '{\n  "token": "abc"\n}' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Save'));
+    });
+
+    expect(safeInvoke).toHaveBeenCalledWith('plugin.test.save_creds', {
+      blob: '{\n  "token": "abc"\n}',
+    });
+  });
+
+  it('(ta2) textarea respects a custom rows value and clamps it into 2-20', async () => {
+    const schema: PluginPageSchema = {
+      nodes: [
+        { kind: 'field', field: 'textarea', id: 'big', label: 'Big', rows: 12 },
+        { kind: 'field', field: 'textarea', id: 'huge', label: 'Huge', rows: 99 },
+        { kind: 'field', field: 'textarea', id: 'tiny', label: 'Tiny', rows: 0 },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    const textareas = document.querySelectorAll('textarea');
+    expect(textareas).toHaveLength(3);
+    expect(textareas[0].getAttribute('rows')).toBe('12');
+    expect(textareas[1].getAttribute('rows')).toBe('20');
+    expect(textareas[2].getAttribute('rows')).toBe('2');
+  });
+
+  it('(ta3) secret field renders masked, toggles visibility and binds through paramsFrom', async () => {
+    const schema: PluginPageSchema = {
+      nodes: [
+        { kind: 'field', field: 'secret', id: 'api-key', label: 'API key' },
+        {
+          kind: 'button',
+          id: 'save',
+          label: 'Save',
+          command: 'save_key',
+          paramsFrom: { key: 'api-key' },
+        },
+      ],
+    };
+
+    render(<DeclarativePage pluginId="test" schema={schema} />);
+
+    const input = screen.getByTestId('secret-input') as HTMLInputElement;
+    expect(input.getAttribute('type')).toBe('password');
+
+    // Visibility toggle switches the input type.
+    fireEvent.click(screen.getByTestId('secret-visibility-toggle'));
+    expect(input.getAttribute('type')).toBe('text');
+    fireEvent.click(screen.getByTestId('secret-visibility-toggle'));
+    expect(input.getAttribute('type')).toBe('password');
+
+    fireEvent.change(input, { target: { value: 'sk-live-123' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Save'));
+    });
+
+    expect(safeInvoke).toHaveBeenCalledWith('plugin.test.save_key', {
+      key: 'sk-live-123',
+    });
   });
 
   // ── Job node (job) ────────────────────────────────────────────────────────

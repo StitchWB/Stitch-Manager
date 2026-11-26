@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useParams } from 'react-router-dom';
-import { Inbox, Power, Puzzle } from 'lucide-react';
+import { Eye, EyeOff, Inbox, Power, Puzzle } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { appToast } from '@/lib/observability/toast';
 import { hasFetched, setServicePluginEnabled } from '@/lib/backend/modules/servicePlugins';
@@ -17,6 +17,7 @@ import { useEffectiveAdmin } from '@/hooks/useEffectiveAdmin';
 import { PluginRuntimeStrip } from '@/components/plugins/ServicePluginRuntimeControls';
 import {
   Button,
+  IconButton,
   Input,
   Modal,
   Select,
@@ -287,6 +288,34 @@ function copyableEntries(payload?: Record<string, unknown>): CommandResultEntry[
   return entries;
 }
 
+/** Toast cap for server error text — long payloads (e.g. bridge messages) are truncated. */
+const ERROR_TOAST_MAX_CHARS = 200;
+
+/**
+ * Human-readable toast text for a command invocation failure. safeInvoke
+ * already unwraps the FastAPI/bridge error shapes into BackendError.message
+ * (nested `{detail: {detail: …}}` included, traceback stripped — see
+ * extractInvokeErrorMessage); here we only trim, truncate and fall back to
+ * the generic key when nothing meaningful survived.
+ */
+function invokeErrorToastText(err: unknown): string {
+  const raw =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : '';
+  const cleaned = raw.replace(/\s+/g, ' ').trim();
+  if (cleaned === '') {
+    return t('pluginUi.actionFailed');
+  }
+  const truncated =
+    cleaned.length > ERROR_TOAST_MAX_CHARS
+      ? `${cleaned.slice(0, ERROR_TOAST_MAX_CHARS - 1)}…`
+      : cleaned;
+  return `${t('pluginUi.actionFailed')}: ${truncated}`;
+}
+
 /** Shared invoke path: success → actionSucceeded toast, business error → error toast with the reason text. */
 async function runPluginCommand(
   pluginId: string,
@@ -319,8 +348,8 @@ async function runPluginCommand(
       return { ok: true, payload: rest };
     }
     return { ok: true, payload: record };
-  } catch {
-    appToast.error(t('pluginUi.actionFailed'));
+  } catch (err) {
+    appToast.error(invokeErrorToastText(err));
     return { ok: false };
   }
 }
@@ -545,6 +574,51 @@ function SourceToggle({
   );
 }
 
+/**
+ * Masked single-line input for `secret` fields with a show/hide toggle
+ * button (the eye affordance is the conventional pattern; the value is
+ * never written anywhere besides the page field state).
+ */
+function SecretInput({
+  label,
+  value,
+  placeholder,
+  readOnly,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  readOnly?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <Input
+      label={label}
+      type={visible ? 'text' : 'password'}
+      value={value}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      autoComplete="off"
+      data-testid="secret-input"
+      rightElement={
+        <IconButton
+          size="sm"
+          variant="ghost"
+          aria-label={visible ? t('pluginUi.hideSecret') : t('pluginUi.showSecret')}
+          data-testid="secret-visibility-toggle"
+          className="mr-1.5"
+          onClick={() => setVisible(v => !v)}
+        >
+          {visible ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+        </IconButton>
+      }
+      onChange={e => onChange(e.target.value)}
+    />
+  );
+}
+
 function renderNode(
   pluginId: string,
   node: UiNode,
@@ -618,6 +692,35 @@ function renderNode(
               placeholder={placeholder}
               readOnly={node.readonly}
               onChange={e => fields.onChange(node.id, e.target.value)}
+            />
+          </div>
+        );
+      }
+      if (node.field === 'textarea') {
+        const rows = Math.min(Math.max(node.rows ?? 5, 2), 20);
+        return (
+          <div key={index} className="max-w-xl">
+            <Textarea
+              label={label}
+              value={String(value ?? '')}
+              placeholder={placeholder}
+              readOnly={node.readonly}
+              rows={rows}
+              className="font-mono text-[13px]"
+              onChange={e => fields.onChange(node.id, e.target.value)}
+            />
+          </div>
+        );
+      }
+      if (node.field === 'secret') {
+        return (
+          <div key={index} className="max-w-md">
+            <SecretInput
+              label={label}
+              value={String(value ?? '')}
+              placeholder={placeholder}
+              readOnly={node.readonly}
+              onChange={v => fields.onChange(node.id, v)}
             />
           </div>
         );

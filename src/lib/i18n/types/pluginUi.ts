@@ -10,6 +10,8 @@ export interface PluginUiTranslations {
     pluginNotInstalledDescription: string;
     noData: string;
     emptyHint: string;
+    showSecret: string;
+    hideSecret: string;
     runtime: {
       enabled: string;
       enable: string;

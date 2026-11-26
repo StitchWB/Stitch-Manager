@@ -132,6 +132,17 @@ function extractInvokeErrorMessage(error: unknown): string {
   if (typeof detail === 'string' && detail.trim()) {
     return detail;
   }
+  // Plugin bridge nested shape: { detail: { detail: "Plugin 'x' error: ...", kind, traceback } }.
+  // Recurse so the deepest meaningful detail wins; the traceback never surfaces.
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    // Strip the traceback before recursing — it must never reach a toast,
+    // even through the JSON-serialization fallback below.
+    const { traceback: _traceback, ...rest } = detail as Record<string, unknown>;
+    const nested = extractInvokeErrorMessage(rest);
+    if (nested) {
+      return nested;
+    }
+  }
   if (Array.isArray(detail) && detail.length > 0) {
     const first = detail[0];
     if (first && typeof first === 'object') {
@@ -152,8 +163,12 @@ function extractInvokeErrorMessage(error: unknown): string {
   }
 
   // Fallback: preserve structured payload for easier debugging.
+  // `traceback` values are dropped at any depth — they are debug noise that
+  // must never reach a user-facing toast even through this last-resort path.
   try {
-    const serialized = JSON.stringify(error);
+    const serialized = JSON.stringify(error, (key, value) =>
+      key === 'traceback' ? undefined : value,
+    );
     return serialized && serialized !== '{}' ? serialized : '';
   } catch {
     return '';

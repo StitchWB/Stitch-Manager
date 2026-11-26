@@ -102,6 +102,54 @@ describe('safeInvoke', () => {
       code: 'BACKEND_OFFLINE',
     });
   });
+
+  it('surfaces a flat FastAPI detail string as the BackendError message', async () => {
+    globalThis.fetch = mockFetchError(400, { detail: 'Invalid credentials payload' }) as typeof fetch;
+
+    await expect(safeInvoke('flat_detail_cmd')).rejects.toMatchObject({
+      message: 'Invalid credentials payload',
+    });
+  });
+
+  it('unwraps the nested plugin-bridge detail and never leaks the traceback', async () => {
+    globalThis.fetch = mockFetchError(400, {
+      detail: {
+        detail: "Plugin 'kiro' error: captcha token expired",
+        kind: 'plugin_error',
+        traceback: 'Traceback (most recent call last): ...',
+      },
+    }) as typeof fetch;
+
+    let caught: unknown;
+    await safeInvoke('nested_detail_cmd').catch(err => {
+      caught = err;
+    });
+
+    expect(caught).toBeInstanceOf(BackendError);
+    expect((caught as InstanceType<typeof BackendError>).message).toBe(
+      "Plugin 'kiro' error: captcha token expired",
+    );
+    expect((caught as InstanceType<typeof BackendError>).message).not.toContain('Traceback');
+  });
+
+  it('keeps working when nested detail has no inner detail (traceback still stripped)', async () => {
+    globalThis.fetch = mockFetchError(400, {
+      detail: {
+        kind: 'plugin_error',
+        traceback: 'Traceback (most recent call last): super secret internals',
+      },
+    }) as typeof fetch;
+
+    let caught: unknown;
+    await safeInvoke('traceback_only_cmd').catch(err => {
+      caught = err;
+    });
+
+    expect(caught).toBeInstanceOf(BackendError);
+    const message = (caught as InstanceType<typeof BackendError>).message;
+    expect(message).not.toContain('Traceback');
+    expect(message).not.toContain('super secret internals');
+  });
 });
 
 describe('safeInvokeWithRetry', () => {

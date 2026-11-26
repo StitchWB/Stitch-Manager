@@ -439,7 +439,7 @@ that need them stay `core_page`.
 |------|---------|------------|
 | `heading` | Section heading. | `text`, `level?` (1-6). |
 | `section` | Group of nodes with an optional title. | `title?`, `nodes: UiNode[]`, `collapsible?: boolean`, `defaultOpen?: boolean`. Collapsible sections use native disclosure and start closed unless `defaultOpen` is true. |
-| `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"`, `id`, `label`, `value?`, `options?` (for select), `readonly?`, `placeholder?` (text/select hint; plain string or i18n key, resolved like `label`), `source?` + `valueKey?` (toggle only, v2.1: readonly switch bound to a fetched boolean - see below). |
+| `field` | Input field. | `field`: `"text"` \| `"select"` \| `"toggle"` \| `"textarea"` \| `"secret"` (v2.3: multiline / masked-with-toggle input), `id`, `label`, `value?`, `options?` (for select), `readonly?`, `rows?` (textarea only, default 5), `placeholder?` (text/select/textarea/secret hint; plain string or i18n key, resolved like `label`), `source?` + `valueKey?` (toggle only, v2.1: readonly switch bound to a fetched boolean - see below). |
 | `table` | Data table with optional per-row actions. | `id`, `columns: [{key, label}]`, `source: {command, params?, refreshMs?}`, `rowsKey?`, `rowActions?` (per-row action buttons; see below), `empty?` (v2.1 i18n key shown when the source returns no rows). `source.command` must be a readonly command returning rows. |
 | `button` | Action button. | `id`, `label`, `command`, `params?`, `paramsFrom?` (param key → field `id` binding), `variant?`: `"primary"` \| `"secondary"` \| `"ghost"` \| `"danger"`, `confirm?` (v2.1 prompt string; see below), `refreshOnSuccess?` (v2.1 node ids refetched after success). |
 | `card_grid` | Responsive grid of cards (additive revision). | `id`, `source: {command, params?, refreshMs?}`, `card: {title, subtitle?, body?, image?, tone?, hint?, action?}`, `empty?` (v2.1). `source.command` must be a readonly command returning an array of row objects (or an object wrapping it under `"rows"`); each row renders one card. `tone` (v2.1, row key first / literal `"ok"`\|`"warn"`\|`"down"` fallback) renders a colored dot + border; `hint` (v2.1) renders a small line under the body, resolved like a label. |
@@ -688,7 +688,7 @@ at **dev-install**, at **publish**, and in CI
 (`manifest-lint '../plugins-src/*/plugin.json'`). It blocks on:
 
 - a node kind outside the frozen vocabulary, or a `field` type outside
-  `text`/`select`/`toggle`;
+  `text`/`select`/`toggle`/`textarea`/`secret`;
 - a command reference (button, `source.command`, `rowActions`,
   `card.action`, toggle `action.command`, job start/status/cancel) that is
   not declared in `contributions.commands`;
