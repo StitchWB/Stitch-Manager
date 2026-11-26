@@ -102,6 +102,25 @@ DEFAULT_ROLE_CHAIN_SPECS: dict[str, tuple[RoleChainStep, ...]] = {
     ),
 }
 
+# Per-role latency contracts from the rb routing design notes.  ``stall`` is
+# deliberately 2x TTFT: once a stream has started, brief upstream pauses are
+# still tolerable for reasoning models, while a totally silent stream beyond
+# roughly two TTFT budgets is treated as wedged.  These are seeded operational
+# defaults, not hidden constants: operators may tune them on the PublicModel
+# contract, and reconciliation only fills absent keys.
+DEFAULT_ROLE_LATENCY_MS: dict[str, tuple[int, int]] = {
+    "rb/small": (8_000, 16_000),
+    "rb/builder-fast": (12_000, 24_000),
+    "rb/verifier": (15_000, 30_000),
+    "rb/builder": (20_000, 40_000),
+    "rb/lead": (25_000, 50_000),
+    "rb/planner": (30_000, 60_000),
+    "rb/reviewer-correctness": (30_000, 60_000),
+    "rb/reviewer-adversarial": (30_000, 60_000),
+    "rb/researcher": (30_000, 60_000),
+}
+
+
 _MODEL_SCOPED_REASONS = frozenset(
     {
         "model_not_found",
@@ -125,6 +144,7 @@ _DENIED_REASONS = frozenset(
 def _empty_stats() -> dict[str, int]:
     return {
         "public_models_created": 0,
+        "public_models_updated": 0,
         "role_entries_created": 0,
         "role_entries_updated": 0,
         "upstream_models_created": 0,
@@ -192,8 +212,12 @@ class RoleCatalogService:
 
         This is passive-only: it demotes active role targets when no eligible
         ``available`` credential/model access row remains.  It never probes the
-        network and never reactivates anything — exact probe success is the
-        only activation path.
+        network.  One narrow repair is allowed: a target previously demoted as
+        ``no_usable_access`` may become active again when usable capacity is
+        already evidenced by an ``available`` access row on a healthy credential
+        (typically after credential-wide recovery).  That does not bypass exact
+        probe activation — the access row is itself positive exact/manual probe
+        evidence; model-failure demotions stay down until a fresh exact probe.
         """
         stats = _empty_stats()
         rows = (
@@ -211,9 +235,18 @@ class RoleCatalogService:
                 if await self._disable_target_for_desired_disabled(target):
                     stats["route_targets_updated"] += 1
                 continue
-            if target.lifecycle_status != "active":
+            has_usable = await self._has_usable_access(upstream.id)
+            if has_usable:
+                if (
+                    entry is not None
+                    and entry.enabled
+                    and target.lifecycle_status == "demoted"
+                    and target.lifecycle_reason == "no_usable_access"
+                ):
+                    self._enable_target(target, "active", "capacity_restored", _utcnow())
+                    stats["route_targets_updated"] += 1
                 continue
-            if await self._has_usable_access(upstream.id):
+            if target.lifecycle_status != "active":
                 continue
             self._disable_target(target, "demoted", "no_usable_access")
             stats["route_targets_updated"] += 1
@@ -514,6 +547,7 @@ class RoleCatalogService:
     async def _ensure_role_public_models(self, stats: dict[str, int]) -> set[str]:
         conflicts: set[str] = set()
         for role in DEFAULT_ROLE_CHAIN_SPECS:
+            contract = self._default_role_contract(role)
             public = await self._db.get(PublicModel, role)
             if public is None:
                 self._db.add(
@@ -522,6 +556,7 @@ class RoleCatalogService:
                         display_name=role,
                         enabled=True,
                         owner_id=None,
+                        contract=contract,
                         created_at=_utcnow(),
                     )
                 )
@@ -534,8 +569,54 @@ class RoleCatalogService:
                     role,
                     public.owner_id,
                 )
+                continue
+            if self._patch_role_latency_contract(public, role):
+                stats["public_models_updated"] += 1
+                # Cached routing results embed the public-model contract; a
+                # patched latency policy must reach the watchdog without a
+                # process restart even though no target enabled flag flipped.
+                self._routing_transitioned = True
         await self._db.flush()
         return conflicts
+
+    @staticmethod
+    def _default_role_contract(role: str) -> dict[str, dict[str, int]]:
+        max_ttft, stall = DEFAULT_ROLE_LATENCY_MS[role]
+        return {"latency": {"maxTtftMs": max_ttft, "stallTimeoutMs": stall}}
+
+    @staticmethod
+    def _patch_role_latency_contract(public: PublicModel, role: str) -> bool:
+        """Add missing automation-owned latency keys to an existing role row.
+
+        Merge semantics are deliberately conservative: automation fills only
+        absent keys and never overwrites a key already present in the operator-
+        visible contract.  Other top-level/nested contract keys are preserved.
+        A non-dict ``latency`` value is treated as operator-owned (albeit
+        malformed) and left untouched rather than clobbered.
+        """
+        max_ttft, stall = DEFAULT_ROLE_LATENCY_MS[role]
+        contract = dict(public.contract or {})
+        raw_latency = contract.get("latency")
+        if raw_latency is None:
+            latency: dict[str, Any] = {}
+        elif isinstance(raw_latency, dict):
+            latency = dict(raw_latency)
+        else:
+            return False
+
+        changed = False
+        if "maxTtftMs" not in latency:
+            latency["maxTtftMs"] = max_ttft
+            changed = True
+        if "stallTimeoutMs" not in latency:
+            latency["stallTimeoutMs"] = stall
+            changed = True
+        if not changed:
+            return False
+        contract["latency"] = latency
+        public.contract = contract
+        public.updated_at = _utcnow()
+        return True
 
     async def _seed_default_entries(
         self,

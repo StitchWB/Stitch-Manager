@@ -454,6 +454,9 @@ async def _record_stream_usage(
     *,
     run_in_session: Callable[..., Awaitable[Any]],
     failure_reason: str | None = None,
+    metrics_tracker: Any | None = None,
+    cost_tracker: Any | None = None,
+    prime_latency: float = 0.0,
 ) -> None:
     input_tokens, output_tokens = usage if usage is not None else (0, 0)
     await executor._record_group_usage_for(
@@ -467,6 +470,39 @@ async def _record_stream_usage(
     outcome.ok = ok
     outcome.routing_result = routing_result
     outcome.error_class = None if ok else (failure_reason or "stream_interrupted")
+    if ok:
+        # Streaming success is completion evidence, not prime-time liveness.
+        # Recording here prevents a primed-but-empty/interrupted stream from
+        # first entering success windows and then being recorded as a failure.
+        if metrics_tracker is not None:
+            await metrics_tracker.record_success(
+                key_id=routing_result.credential.id,
+                provider=routing_result.endpoint.name,
+                latency=prime_latency,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        if cost_tracker is not None:
+            await cost_tracker.record_usage(
+                key_id=routing_result.credential.id,
+                model=routing_result.upstream_model.upstream_model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        try:
+            async def _record_stream_success(session):
+                await executor._routing_engine.record_result(
+                    session,
+                    credential_id=routing_result.credential.id,
+                    endpoint_id=routing_result.endpoint.id,
+                    upstream_model_id=routing_result.upstream_model.id,
+                    error=None,
+                    http_status=200,
+                    probe_lease=getattr(routing_result, "probe_lease", None),
+                )
+            await run_in_session(_record_stream_success)
+        except Exception:
+            logger.warning("Failed to record stream success to routing engine", exc_info=True)
     if not ok and failure_reason == "empty_completion":
         # A role/metadata-only stream is the streaming form of an empty
         # completion.  Bytes may already have reached the client, so failover
@@ -501,24 +537,48 @@ def _stream_usage_callback(
     outcome: _RequestOutcome,
     *,
     run_in_session: Callable[..., Awaitable[Any]],
+    metrics_tracker: Any | None = None,
+    cost_tracker: Any | None = None,
+    prime_latency: float = 0.0,
 ) -> Callable[..., Awaitable[None]]:
     """Build the three-argument stream-completion callback for one invoke."""
+    try:
+        # Lets the executor distinguish production stream wrappers (which
+        # release ownership at completion) from arbitrary test/custom invoke
+        # doubles that merely return a StreamingResponse object.
+        routing_result.inflight_slot_stream_owned = True
+    except (AttributeError, TypeError):
+        pass
+
     async def _callback(
         usage: tuple[int, int] | None,
         ok: bool,
         failure_reason: str | None = None,
     ) -> None:
-        await _record_stream_usage(
-            executor,
-            pool,
-            routing_result,
-            payload,
-            usage,
-            ok,
-            outcome,
-            run_in_session=run_in_session,
-            failure_reason=failure_reason,
-        )
+        try:
+            await _record_stream_usage(
+                executor,
+                pool,
+                routing_result,
+                payload,
+                usage,
+                ok,
+                outcome,
+                run_in_session=run_in_session,
+                failure_reason=failure_reason,
+                metrics_tracker=metrics_tracker,
+                cost_tracker=cost_tracker,
+                prime_latency=prime_latency,
+            )
+        finally:
+            release_slot = getattr(routing_result, "inflight_slot_release", None)
+            if callable(release_slot):
+                release_slot()
+            # A half-open probe lease is outcome ownership for the whole
+            # stream, not merely its first frame.  Success/failure recording
+            # resolves it when available; this best-effort inconclusive release
+            # covers client-disconnect/unknown outcomes and recording failures.
+            await executor._release_inconclusive_probe(routing_result)
 
     return _callback
 
@@ -597,6 +657,9 @@ async def invoke_via_gateway(
                     payload,
                     outcome,
                     run_in_session=run_in_session,
+                    metrics_tracker=metrics_tracker,
+                    cost_tracker=cost_tracker,
+                    prime_latency=latency,
                 ),
                 model=payload.model,
                 routing_result=routing_result,
@@ -630,41 +693,48 @@ async def invoke_via_gateway(
             # the accepted TTFT approximation for passive ordering.
             _record_ttft_observation(routing_result, latency * 1000.0)
 
-        # success only after first chunk, else failure window is cleared
-        await metrics_tracker.record_success(
-            key_id=routing_result.credential.id,
-            provider=routing_result.endpoint.name,
-            latency=latency,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
-        await cost_tracker.record_usage(
-            key_id=routing_result.credential.id,
-            model=routing_result.upstream_model.upstream_model_id,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
+        # Non-stream success is known when the body has been validated.
+        # Streaming success is deferred to the completion callback: prime-time
+        # liveness must not enter success windows because the stream may still
+        # finish empty or interrupted.
+        if not payload.stream:
+            await metrics_tracker.record_success(
+                key_id=routing_result.credential.id,
+                provider=routing_result.endpoint.name,
+                latency=latency,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            await cost_tracker.record_usage(
+                key_id=routing_result.credential.id,
+                model=routing_result.upstream_model.upstream_model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
 
         logger.info(
             "✅ AI Gateway %s | latency=%.2fs | tokens=%d/%d",
             routing_result.upstream_model.upstream_model_id, latency, input_tokens, output_tokens,
         )
 
-        # Record success (non-fatal if DB is unavailable)
-        try:
-            async def _record_success(session):
-                await executor._routing_engine.record_result(
-                    session,
-                    credential_id=routing_result.credential.id,
-                    endpoint_id=routing_result.endpoint.id,
-                    upstream_model_id=routing_result.upstream_model.id,
-                    error=None,
-                    http_status=200,
-                    probe_lease=getattr(routing_result, "probe_lease", None),
-                )
-            await run_in_session(_record_success)
-        except Exception:
-            logger.warning("Failed to record gateway success to routing engine", exc_info=True)
+        # Record non-stream success (non-fatal if DB is unavailable).  The
+        # streaming equivalent runs in ``_record_stream_usage`` only after the
+        # upstream stream completes with actual content.
+        if not payload.stream:
+            try:
+                async def _record_success(session):
+                    await executor._routing_engine.record_result(
+                        session,
+                        credential_id=routing_result.credential.id,
+                        endpoint_id=routing_result.endpoint.id,
+                        upstream_model_id=routing_result.upstream_model.id,
+                        error=None,
+                        http_status=200,
+                        probe_lease=getattr(routing_result, "probe_lease", None),
+                    )
+                await run_in_session(_record_success)
+            except Exception:
+                logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
         if not payload.stream:
             outcome.input_tokens = input_tokens
@@ -803,6 +873,9 @@ async def invoke_via_gateway_messages(
                     payload,
                     outcome,
                     run_in_session=run_in_session,
+                    metrics_tracker=metrics_tracker,
+                    cost_tracker=cost_tracker,
+                    prime_latency=latency,
                 ),
                 model=payload.model,
                 routing_result=routing_result,
@@ -838,41 +911,48 @@ async def invoke_via_gateway_messages(
             # the accepted TTFT approximation for passive ordering.
             _record_ttft_observation(routing_result, latency * 1000.0)
 
-        # success only after first chunk, else failure window is cleared
-        await metrics_tracker.record_success(
-            key_id=routing_result.credential.id,
-            provider=routing_result.endpoint.name,
-            latency=latency,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
-        await cost_tracker.record_usage(
-            key_id=routing_result.credential.id,
-            model=routing_result.upstream_model.upstream_model_id,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
+        # Non-stream success is known when the body has been validated.
+        # Streaming success is deferred to the completion callback: prime-time
+        # liveness must not enter success windows because the stream may still
+        # finish empty or interrupted.
+        if not payload.stream:
+            await metrics_tracker.record_success(
+                key_id=routing_result.credential.id,
+                provider=routing_result.endpoint.name,
+                latency=latency,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            await cost_tracker.record_usage(
+                key_id=routing_result.credential.id,
+                model=routing_result.upstream_model.upstream_model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
 
         logger.info(
             "✅ AI Gateway messages %s | latency=%.2fs | tokens=%d/%d",
             routing_result.upstream_model.upstream_model_id, latency, input_tokens, output_tokens,
         )
 
-        # Record success (non-fatal if DB is unavailable)
-        try:
-            async def _record_success(session):
-                await executor._routing_engine.record_result(
-                    session,
-                    credential_id=routing_result.credential.id,
-                    endpoint_id=routing_result.endpoint.id,
-                    upstream_model_id=routing_result.upstream_model.id,
-                    error=None,
-                    http_status=200,
-                    probe_lease=getattr(routing_result, "probe_lease", None),
-                )
-            await run_in_session(_record_success)
-        except Exception:
-            logger.warning("Failed to record gateway success to routing engine", exc_info=True)
+        # Record non-stream success (non-fatal if DB is unavailable).  The
+        # streaming equivalent runs in ``_record_stream_usage`` only after the
+        # upstream stream completes with actual content.
+        if not payload.stream:
+            try:
+                async def _record_success(session):
+                    await executor._routing_engine.record_result(
+                        session,
+                        credential_id=routing_result.credential.id,
+                        endpoint_id=routing_result.endpoint.id,
+                        upstream_model_id=routing_result.upstream_model.id,
+                        error=None,
+                        http_status=200,
+                        probe_lease=getattr(routing_result, "probe_lease", None),
+                    )
+                await run_in_session(_record_success)
+            except Exception:
+                logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
         if not payload.stream:
             outcome.input_tokens = input_tokens
@@ -1017,6 +1097,9 @@ async def invoke_via_gateway_responses(
                     payload,
                     outcome,
                     run_in_session=run_in_session,
+                    metrics_tracker=metrics_tracker,
+                    cost_tracker=cost_tracker,
+                    prime_latency=latency,
                 ),
                 model=payload.model,
                 routing_result=routing_result,
@@ -1052,41 +1135,48 @@ async def invoke_via_gateway_responses(
             # the accepted TTFT approximation for passive ordering.
             _record_ttft_observation(routing_result, latency * 1000.0)
 
-        # success only after first chunk, else failure window is cleared
-        await metrics_tracker.record_success(
-            key_id=routing_result.credential.id,
-            provider=routing_result.endpoint.name,
-            latency=latency,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
-        await cost_tracker.record_usage(
-            key_id=routing_result.credential.id,
-            model=routing_result.upstream_model.upstream_model_id,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
+        # Non-stream success is known when the body has been validated.
+        # Streaming success is deferred to the completion callback: prime-time
+        # liveness must not enter success windows because the stream may still
+        # finish empty or interrupted.
+        if not payload.stream:
+            await metrics_tracker.record_success(
+                key_id=routing_result.credential.id,
+                provider=routing_result.endpoint.name,
+                latency=latency,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            await cost_tracker.record_usage(
+                key_id=routing_result.credential.id,
+                model=routing_result.upstream_model.upstream_model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
 
         logger.info(
             "✅ AI Gateway responses %s | latency=%.2fs | tokens=%d/%d",
             routing_result.upstream_model.upstream_model_id, latency, input_tokens, output_tokens,
         )
 
-        # Record success (non-fatal if DB is unavailable)
-        try:
-            async def _record_success(session):
-                await executor._routing_engine.record_result(
-                    session,
-                    credential_id=routing_result.credential.id,
-                    endpoint_id=routing_result.endpoint.id,
-                    upstream_model_id=routing_result.upstream_model.id,
-                    error=None,
-                    http_status=200,
-                    probe_lease=getattr(routing_result, "probe_lease", None),
-                )
-            await run_in_session(_record_success)
-        except Exception:
-            logger.warning("Failed to record gateway success to routing engine", exc_info=True)
+        # Record non-stream success (non-fatal if DB is unavailable).  The
+        # streaming equivalent runs in ``_record_stream_usage`` only after the
+        # upstream stream completes with actual content.
+        if not payload.stream:
+            try:
+                async def _record_success(session):
+                    await executor._routing_engine.record_result(
+                        session,
+                        credential_id=routing_result.credential.id,
+                        endpoint_id=routing_result.endpoint.id,
+                        upstream_model_id=routing_result.upstream_model.id,
+                        error=None,
+                        http_status=200,
+                        probe_lease=getattr(routing_result, "probe_lease", None),
+                    )
+                await run_in_session(_record_success)
+            except Exception:
+                logger.warning("Failed to record gateway success to routing engine", exc_info=True)
 
         if not payload.stream:
             outcome.input_tokens = input_tokens

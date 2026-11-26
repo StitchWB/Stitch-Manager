@@ -25,7 +25,7 @@ import pytest
 from starlette.responses import StreamingResponse
 
 from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
-from stitch_backend.domains.ai_proxy import litellm_invoke_pipeline
+from stitch_backend.domains.ai_proxy import key_inflight, litellm_invoke_pipeline
 from stitch_backend.domains.ai_proxy.key_metrics import get_metrics_tracker
 from stitch_backend.domains.ai_proxy.litellm_executor import LiteLLMExecutor
 from stitch_backend.domains.ai_proxy.litellm_gateway import GatewayRequest
@@ -121,6 +121,7 @@ async def _collect(resp) -> str:
 def _reset_singletons():
     get_rate_limiter().limiters.clear()
     get_metrics_tracker().metrics.clear()
+    key_inflight.reset()
     litellm_invoke_pipeline._reset_latency_cache()
 
 
@@ -385,10 +386,9 @@ async def test_midstream_stall_aborts_stream_and_records_model_level(monkeypatch
     error = stall_records[0]["error"]
     assert error.is_model_specific is True
     assert error.is_endpoint_wide is False
-    # NOTE: the invoke pipeline records a success right after the first chunk
-    # (pre-existing "success after first chunk" semantics); the later stall
-    # record is the final health write and must be the model-level failure
-    # asserted above.
+    # No success is written at prime time: the stall record is the only health
+    # write for this stream and must be the model-level failure asserted above.
+    assert len(cred1) == len(stall_records)
 
 
 async def test_pre_first_byte_stall_fails_over_without_recording(monkeypatch) -> None:
@@ -408,3 +408,104 @@ async def test_pre_first_byte_stall_fails_over_without_recording(monkeypatch) ->
     assert "hello" in body
     cred1 = [r for r in recorded if r.get("credential_id") == "cred-1"]
     assert cred1 == [], f"pre-first-byte stall must not reach record_result: {cred1}"
+
+
+# ── Stream completion ownership (Integ-III) ─────────────────────────────────
+
+
+async def test_streaming_inflight_slot_held_until_stream_completion() -> None:
+    adapter = _StreamingAdapter([
+        (0.0, _content_line("hello")),
+        (0.08, "data: [DONE]"),
+    ])
+    executor, _recorded = _executor_with_routes([
+        _route(adapter, endpoint_id="ep-1", credential_id="cred-1"),
+    ])
+
+    result = await _chat(executor, stream=True)
+
+    # ``chat()`` returns right after stream prime, while upstream generation is
+    # still ongoing.  The credential concurrency slot must therefore still be
+    # occupied; releasing at prime time was the Integ-III undercounting bug.
+    assert key_inflight.in_flight("cred-1") == 1
+    body = await _collect(result)
+    assert "hello" in body
+    assert key_inflight.in_flight("cred-1") == 0
+
+
+async def test_streaming_success_recorded_once_at_completion_not_prime() -> None:
+    adapter = _StreamingAdapter([(0.0, _content_line("hello")), (0.0, "data: [DONE]")])
+    executor, recorded = _executor_with_routes([
+        _route(adapter, endpoint_id="ep-1", credential_id="cred-1"),
+    ])
+
+    result = await _chat(executor, stream=True)
+    assert recorded == [], "prime-time liveness must not count as success evidence"
+    body = await _collect(result)
+    assert "hello" in body
+
+    cred1 = [r for r in recorded if r.get("credential_id") == "cred-1"]
+    assert len(cred1) == 1
+    assert cred1[0]["error"] is None
+
+
+async def test_empty_completion_stream_records_no_success_evidence() -> None:
+    adapter = _StreamingAdapter([(0.0, _ROLE_LINE), (0.0, "data: [DONE]")])
+    executor, recorded = _executor_with_routes([
+        _route(adapter, endpoint_id="ep-1", credential_id="cred-1"),
+    ])
+
+    result = await _chat(executor, stream=True)
+    assert recorded == []
+    await _collect(result)
+
+    cred1 = [r for r in recorded if r.get("credential_id") == "cred-1"]
+    assert len(cred1) == 1
+    assert cred1[0]["error"] is not None
+    assert not [r for r in cred1 if r.get("error") is None]
+
+
+async def test_concurrent_streaming_requests_enforce_inflight_cap_for_stream_duration(
+    monkeypatch,
+) -> None:
+    adapter = _StreamingAdapter([
+        (0.0, _content_line("hello")),
+        (0.08, "data: [DONE]"),
+    ])
+    executor, _recorded = _executor_with_routes([
+        _route(adapter, endpoint_id="ep-1", credential_id="cred-1"),
+    ])
+    real_try_acquire = key_inflight.try_acquire
+
+    def try_acquire_cap_one(
+        credential_id,
+        upstream_model_id=None,
+        *,
+        cap=key_inflight.PER_CREDENTIAL_CAP,
+        distinct_model_cap=None,
+    ):
+        return real_try_acquire(
+            credential_id,
+            upstream_model_id,
+            cap=1,
+            distinct_model_cap=distinct_model_cap,
+        )
+
+    monkeypatch.setattr(key_inflight, "try_acquire", try_acquire_cap_one)
+
+    first = await _chat(executor, stream=True)
+    assert key_inflight.in_flight("cred-1") == 1
+
+    # The second logical request is rejected while the first upstream stream is
+    # still generating; before Integ-III the first slot vanished at prime time
+    # and this request incorrectly consumed concurrent capacity.
+    with pytest.raises(Exception):
+        await _chat(executor, stream=True)
+
+    await _collect(first)
+    assert key_inflight.in_flight("cred-1") == 0
+
+    second = await _chat(executor, stream=True)
+    assert key_inflight.in_flight("cred-1") == 1
+    await _collect(second)
+    assert key_inflight.in_flight("cred-1") == 0
