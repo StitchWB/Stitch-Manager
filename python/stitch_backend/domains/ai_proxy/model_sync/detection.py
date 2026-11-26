@@ -76,17 +76,64 @@ def _windows_sibling_variants(candidate: Path) -> list[Path]:
     return _dedupe_paths(ordered)
 
 
+def _desktop_opencode_cli_candidates() -> list[Path]:
+    """Bundled OpenCode Desktop v2 CLI locations, newest version first.
+
+    OpenCode Desktop does not rely on the npm ``opencode2`` shim being on the
+    backend process PATH.  On Windows it unpacks versioned runners under
+    ``%APPDATA%\\ai.opencode.desktop\\cli\\<version>-<arch>`` and launches
+    ``opencode-cli.exe`` directly.  Model-sync detection must therefore probe
+    that layout independently; otherwise a real desktop install is reported as
+    absent on machines whose npm bin directory is not inherited by the backend.
+    """
+    appdata = os.environ.get("APPDATA")
+    if not appdata:
+        return []
+    root = Path(appdata) / "ai.opencode.desktop" / "cli"
+    try:
+        version_dirs = [path for path in root.iterdir() if path.is_dir()]
+    except OSError:
+        return []
+
+    def version_key(path: Path) -> tuple[int, int, int, str]:
+        match = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", path.name)
+        if match is None:
+            return (0, 0, 0, path.name)
+        return (
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3) or 0),
+            path.name,
+        )
+
+    candidates: list[Path] = []
+    for directory in sorted(version_dirs, key=version_key, reverse=True):
+        for filename in (
+            "opencode-cli.exe",
+            "opencode-cli.cmd",
+            "opencode-cli.bat",
+            "opencode-cli",
+        ):
+            candidate = directory / filename
+            if candidate.exists():
+                candidates.append(candidate)
+    return _dedupe_paths(candidates)
+
+
 def opencode_binary_candidates(binary_name: str = "opencode") -> list[Path]:
     """Candidate paths for an opencode-family binary, shim variants included."""
     candidates: list[Path] = []
     search_dirs: list[Path] = []
 
-    for name in ("opencode", "opencode2"):
+    for name in ("opencode", "opencode2", "opencode-cli"):
         found = shutil.which(name)
+        requested = name == binary_name or (
+            binary_name == "opencode2" and name == "opencode-cli"
+        )
         if found:
             found_path = Path(found)
             search_dirs.append(found_path.parent)
-            if name == binary_name:
+            if requested:
                 candidates.append(found_path)
         # On Windows PATHEXT sometimes hides the .cmd shim from which(); ask
         # for it explicitly as well.  On POSIX this simply returns None.
@@ -94,7 +141,7 @@ def opencode_binary_candidates(binary_name: str = "opencode") -> list[Path]:
         if found_cmd:
             found_cmd_path = Path(found_cmd)
             search_dirs.append(found_cmd_path.parent)
-            if name == binary_name:
+            if requested:
                 candidates.append(found_cmd_path)
 
     home = Path.home()
@@ -108,6 +155,11 @@ def opencode_binary_candidates(binary_name: str = "opencode") -> list[Path]:
         if os.name == "nt":
             for suffix in _WINDOWS_SHIM_SUFFIXES:
                 candidates.append(directory / f"{binary_name}{suffix}")
+
+    if binary_name == "opencode2":
+        # The desktop-bundled runner is the runtime OpenCode Desktop actually
+        # launches, so prefer it over an older npm shim when both are present.
+        candidates = [*_desktop_opencode_cli_candidates(), *candidates]
 
     expanded: list[Path] = []
     for candidate in candidates:

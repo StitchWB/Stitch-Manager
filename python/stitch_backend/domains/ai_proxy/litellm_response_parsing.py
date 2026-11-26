@@ -81,3 +81,41 @@ def _json_object(response: JsonObject | BaseModel) -> JsonObject:
     if isinstance(response, BaseModel):
         return response.model_dump(mode="json")
     return response
+
+
+def _shape_response_model(
+    response: JsonObject,
+    public_model: str | None,
+    upstream_model: str | None,
+) -> JsonObject:
+    """Expose the public role name while preserving upstream attribution.
+
+    Upstream passthrough bodies commonly echo the concrete upstream model id
+    (for example ``qwen-max``) in the standard ``model`` field.  Gateway
+    clients asked for a public role (``rb/lead``) and use the response field
+    for their own accounting, so the client-facing shape must echo that role
+    back.  The concrete id remains available in the additive ``x-stitch``
+    extension; request traces/logs also keep their independent upstream-model
+    columns for operator debugging.
+    """
+    if not public_model or not isinstance(response, dict):
+        return response
+
+    observed = response.get("model")
+    observed_upstream = observed if isinstance(observed, str) and observed else None
+    response["model"] = public_model
+
+    preserved = (
+        observed_upstream
+        if observed_upstream and observed_upstream != public_model
+        else upstream_model
+    )
+    if not preserved or preserved == public_model:
+        return response
+
+    extension = response.get("x-stitch")
+    if not isinstance(extension, dict):
+        extension = {}
+    extension["upstream_model"] = preserved
+    response["x-stitch"] = extension
+    return response

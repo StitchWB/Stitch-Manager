@@ -5,7 +5,7 @@ import inspect
 import json
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from fastapi.responses import StreamingResponse
 
@@ -52,6 +52,67 @@ def _sse_json(line: str) -> dict[str, Any] | None:
     except ValueError:
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _rewrite_sse_model_line(
+    line: str,
+    *,
+    public_model: str | None,
+    upstream_model: str | None,
+) -> str:
+    """Rewrite model fields in one SSE data frame to the public role name.
+
+    OpenAI chunks carry ``model`` at the top level; Anthropic ``message_start``
+    and Responses-API frames carry it inside ``message``/``response``.  Frames
+    without a model field are passed through byte-for-byte.  When a rewrite
+    happens the observed upstream id is preserved in the additive top-level
+    ``x-stitch.upstream_model`` extension.
+    """
+    if not public_model:
+        return line
+    data = _sse_json(line)
+    if data is None:
+        return line
+
+    containers: list[dict[str, Any]] = []
+    if isinstance(data.get("model"), str):
+        containers.append(data)
+    for key in ("message", "response"):
+        nested = data.get(key)
+        if isinstance(nested, dict) and isinstance(nested.get("model"), str):
+            containers.append(nested)
+    if not containers:
+        return line
+
+    observed = [cast("str", container["model"]) for container in containers]
+    rewritten_upstream = next((value for value in observed if value != public_model), None)
+    if rewritten_upstream is None:
+        return line
+
+    for container in containers:
+        container["model"] = public_model
+    preserved = rewritten_upstream or upstream_model
+    if preserved and preserved != public_model:
+        extension = data.get("x-stitch")
+        if not isinstance(extension, dict):
+            extension = {}
+        extension["upstream_model"] = preserved
+        data["x-stitch"] = extension
+    return "data: " + json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+
+
+async def _rewrite_stream_model_lines(
+    response: Any,
+    *,
+    public_model: str | None,
+    upstream_model: str | None,
+) -> AsyncIterator[str]:
+    async for line in response:
+        yield _rewrite_sse_model_line(
+            line,
+            public_model=public_model,
+            upstream_model=upstream_model,
+        )
 
 
 def _openai_frame_has_content(line: str) -> bool:
@@ -249,7 +310,14 @@ async def stream_openai_response(
     holone_service: HoloneService,
     client_has_tools: bool = False,
     on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None = None,
+    public_model: str | None = None,
+    upstream_model: str | None = None,
 ) -> StreamingResponse:
+    response = _rewrite_stream_model_lines(
+        response,
+        public_model=public_model,
+        upstream_model=upstream_model,
+    )
     if holone_service.config.enabled:
         return await stream_openai_response_buffered(
             response,
@@ -336,7 +404,14 @@ async def stream_openai_response_buffered(
     holone_service: HoloneService,
     client_has_tools: bool,
     on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None,
+    public_model: str | None = None,
+    upstream_model: str | None = None,
 ) -> StreamingResponse:
+    response = _rewrite_stream_model_lines(
+        response,
+        public_model=public_model,
+        upstream_model=upstream_model,
+    )
     lines: list[str] = []
     input_tokens = 0
     output_tokens = 0
@@ -378,7 +453,14 @@ async def stream_anthropic_response(
     holone_service: HoloneService,
     client_has_tools: bool = False,
     on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None = None,
+    public_model: str | None = None,
+    upstream_model: str | None = None,
 ) -> StreamingResponse:
+    response = _rewrite_stream_model_lines(
+        response,
+        public_model=public_model,
+        upstream_model=upstream_model,
+    )
     if holone_service.config.enabled:
         return await stream_anthropic_response_buffered(
             response,
@@ -462,7 +544,14 @@ async def stream_anthropic_response_buffered(
     holone_service: HoloneService,
     client_has_tools: bool,
     on_complete: Callable[[tuple[int, int] | None, bool], Awaitable[None]] | None,
+    public_model: str | None = None,
+    upstream_model: str | None = None,
 ) -> StreamingResponse:
+    response = _rewrite_stream_model_lines(
+        response,
+        public_model=public_model,
+        upstream_model=upstream_model,
+    )
     lines: list[str] = []
     input_tokens = 0
     output_tokens = 0

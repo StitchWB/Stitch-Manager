@@ -1327,6 +1327,10 @@ class LiteLLMExecutor:
             holone_service=get_holone_service(),
             client_has_tools=client_has_tools,
             on_complete=on_complete,
+            public_model=model,
+            upstream_model=getattr(
+                getattr(routing_result, "upstream_model", None), "upstream_model_id", None,
+            ),
         )
 
     async def _stream_response_buffered(
@@ -1378,6 +1382,10 @@ class LiteLLMExecutor:
             holone_service=get_holone_service(),
             client_has_tools=client_has_tools,
             on_complete=on_complete,
+            public_model=model,
+            upstream_model=getattr(
+                getattr(routing_result, "upstream_model", None), "upstream_model_id", None,
+            ),
         )
 
     async def _stream_anthropic_response_buffered(
