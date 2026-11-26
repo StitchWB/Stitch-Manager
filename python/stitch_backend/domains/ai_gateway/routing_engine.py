@@ -134,6 +134,13 @@ class RoutingResult:
     """CredentialModelAccess status captured when the candidate was resolved."""
     access_row: CredentialModelAccess | None = field(default=None, repr=False)
     """Already-loaded access row used for cheap defensive cache-hit revalidation."""
+    public_model_contract: dict[str, Any] | None = field(default=None, repr=False)
+    """The public model's contract (e.g. latency watchdog policy) as resolved.
+
+    Carried so the invoke pipeline can honor per-model contracts without a
+    redundant database re-read; the pipeline keeps its TTL-cache fallback for
+    candidates built outside routing.
+    """
 
 
 class RoutingError(Exception):
@@ -758,6 +765,7 @@ class RoutingEngine:
                     probe_lease=endpoint_probe_lease,
                     access_status=access_status,
                     access_row=access_row,
+                    public_model_contract=public_model.contract or None,
                 ))
 
         if not results:
@@ -820,7 +828,8 @@ class RoutingEngine:
             error_kind=credential_state.classify_error_kind(error, http_status),
             include_endpoint=endpoint_attributed,
         )
-        if error is not None and error.is_model_specific:
+        model_specific = error is not None and error.is_model_specific
+        if error is not None and model_specific:
             if upstream_model_id is not None:
                 row = (await session.execute(select(CredentialModelAccess).where(
                     CredentialModelAccess.credential_id == credential_id,
@@ -836,32 +845,53 @@ class RoutingEngine:
                     await session.flush()
                     if transitioned:
                         _invalidate_resolve_caches()
+
+        if model_specific:
+            # Model-scoped failure: nothing about the credential or endpoint.
             await circuit_breaker.resolve_endpoint_probe_inconclusive(
                 session, endpoint_id, lease=probe_lease,
             )
-            return
-
-        if not endpoint_attributed:
+        elif not endpoint_attributed:
+            # Key/account-scoped failure: credential evidence only.
             await credential_state.transition_credential(
                 session, credential_id, error, http_status,
             )
             await circuit_breaker.resolve_endpoint_probe_inconclusive(
                 session, endpoint_id, lease=probe_lease,
             )
-            return
-
-        # Successes are credential evidence as well as endpoint evidence.
-        # Endpoint/global failures, by definition, are not.
-        if error is None:
-            await credential_state.transition_credential(
-                session, credential_id, error, http_status,
+        else:
+            # Successes are credential evidence as well as endpoint evidence.
+            # Endpoint/global failures, by definition, are not.
+            if error is None:
+                await credential_state.transition_credential(
+                    session, credential_id, error, http_status,
+                )
+            await circuit_breaker.record_endpoint_result(
+                session,
+                endpoint_id,
+                success=(error is None),
+                lease=probe_lease,
             )
-        await circuit_breaker.record_endpoint_result(
-            session,
-            endpoint_id,
-            success=(error is None),
-            lease=probe_lease,
-        )
+
+        # Role-catalog health hook: re-evaluate role-managed targets after the
+        # access-row writes above, in the same write session.  Only meaningful
+        # for model-scoped failures; the service ignores everything else.
+        if upstream_model_id is not None and error is not None:
+            try:
+                from stitch_backend.domains.ai_gateway.role_catalog_service import (
+                    RoleCatalogService,
+                )
+                await RoleCatalogService(session).note_upstream_outcome(
+                    endpoint_id=endpoint_id,
+                    upstream_model_id=upstream_model_id,
+                    error=error,
+                    credential_id=credential_id,
+                )
+            except Exception:
+                logger.warning(
+                    "Role-catalog outcome hook failed for %s/%s",
+                    endpoint_id, upstream_model_id, exc_info=True,
+                )
 
     async def get_available_public_models(
         self,
