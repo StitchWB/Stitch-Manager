@@ -513,6 +513,121 @@ async def test_non_model_error_does_not_demote_role_target(db_session) -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# C0. Role latency contracts + passive health reconciliation
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def test_role_public_models_seed_latency_contracts(db_session) -> None:
+    await _seed_role_catalog(db_session)
+    from sqlalchemy import select
+
+    rows = (await db_session.execute(select(PublicModel))).scalars().all()
+    contracts = {row.id: row.contract for row in rows if row.id.startswith("rb/")}
+    assert contracts["rb/small"]["latency"] == {
+        "maxTtftMs": 8000,
+        "stallTimeoutMs": 16000,
+    }
+    assert contracts["rb/builder-fast"]["latency"]["maxTtftMs"] == 12000
+    assert contracts["rb/verifier"]["latency"]["maxTtftMs"] == 15000
+    assert contracts["rb/builder"]["latency"]["maxTtftMs"] == 20000
+    assert contracts["rb/lead"]["latency"]["maxTtftMs"] == 25000
+    for role in (
+        "rb/planner",
+        "rb/reviewer-correctness",
+        "rb/reviewer-adversarial",
+        "rb/researcher",
+    ):
+        assert contracts[role]["latency"] == {
+            "maxTtftMs": 30000,
+            "stallTimeoutMs": 60000,
+        }
+
+
+async def test_role_contract_reconcile_patches_only_absent_latency_keys(db_session) -> None:
+    await _seed_role_catalog(db_session)
+    public = await db_session.get(PublicModel, "rb/small")
+    assert public is not None
+    public.contract = {
+        "latency": {"maxTtftMs": 1111},
+        "operator": {"keep": True},
+    }
+    await db_session.commit()
+
+    stats = await RoleCatalogService(db_session).reconcile_all()
+    await db_session.commit()
+
+    assert stats["public_models_updated"] == 1
+    assert public.contract == {
+        "latency": {"maxTtftMs": 1111, "stallTimeoutMs": 16000},
+        "operator": {"keep": True},
+    }
+
+
+async def test_reconcile_health_demotes_and_repairs_credential_wide_capacity_loss(
+    db_session,
+) -> None:
+    _endpoint, cred = await _seed_role_catalog(db_session)
+    service = RoleCatalogService(db_session)
+    await service.apply_model_probe_result(
+        credential_id=cred.id,
+        upstream_model_id="glm-5.4",
+        probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
+    )
+    await db_session.commit()
+    target, _upstream = await _target_for(db_session, "rb/builder", "glm-5.4")
+    assert target.lifecycle_status == "active"
+
+    # Credential-wide death writes no model-scoped event.  The passive sweep is
+    # what notices that the previously serving capacity is no longer usable.
+    cred.runtime_status = "auth_failed"
+    await db_session.commit()
+    await service.reconcile_health()
+    await db_session.commit()
+    await db_session.refresh(target)
+    assert target.enabled is False
+    assert target.lifecycle_status == "demoted"
+    assert target.lifecycle_reason == "no_usable_access"
+
+    # Once the credential itself recovers, the pre-existing exact-model access
+    # evidence is usable again.  Only this no_usable_access state is repaired;
+    # model-failure demotions still require a fresh exact probe.
+    cred.runtime_status = "active"
+    await db_session.commit()
+    await service.reconcile_health()
+    await db_session.commit()
+    await db_session.refresh(target)
+    assert target.enabled is True
+    assert target.lifecycle_status == "active"
+    assert target.lifecycle_reason == "capacity_restored"
+
+
+async def test_probe_worker_pass_wires_reconcile_health(db_session, monkeypatch) -> None:
+    await _seed_role_catalog(db_session)
+    calls = 0
+    original = RoleCatalogService.reconcile_health
+
+    async def spy(self):
+        nonlocal calls
+        calls += 1
+        return await original(self)
+
+    async def no_exact_probes(**_kwargs):
+        return None
+
+    async def no_targets(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(RoleCatalogService, "reconcile_health", spy)
+    monkeypatch.setattr(pw.ProbeWorker, "_probe_role_model_candidates", no_exact_probes)
+    monkeypatch.setattr(pw.ProbeWorker, "_load_probe_targets", no_targets)
+    monkeypatch.setattr(pw.ProbeWorker, "_load_quota_targets", no_targets)
+    _patch_worker_db(monkeypatch, db_session)
+
+    await pw.ProbeWorker._probe_all()
+    assert calls == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # C. Exact-model probe recovery in ProbeWorker
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -593,9 +708,14 @@ async def test_probe_catalog_detected_arms_endpoint_backoff_without_model_blame(
     adapter = _ExactProbeAdapter(failure)
     _patch_worker_db(monkeypatch, db_session)
     with patch.object(pw, "get_adapter", return_value=adapter):
-        await pw.ProbeWorker._probe_role_model_candidates()
+        monkeypatch.setattr(pw, "_PROBE_WORKER_STARTED_AT", datetime.now(UTC))
+        await pw.ProbeWorker._probe_role_model_candidates(
+            cold_start_budget=pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+        )
 
-    # No access row was blamed for the probed model...
+    # No access row was blamed for the probed model.  Even though the pass was
+    # given a cold-start burst budget, endpoint pushback stops the rest of that
+    # burst immediately rather than only in the next pass.
     assert len(adapter.calls) == 1
     target_rows = await _targets_for_upstream_key(db_session, adapter.calls[0]["model"])
     assert target_rows
@@ -676,6 +796,205 @@ async def test_probe_max_one_per_endpoint_per_pass(db_session, monkeypatch) -> N
     # Many quarantined upstreams exist on this one endpoint, but the pass
     # probes exactly one exact model.
     assert len(adapter.calls) == 1
+
+
+async def test_cold_start_probe_budget_probes_up_to_five_recovery_models(
+    db_session, monkeypatch,
+) -> None:
+    await _seed_role_catalog(db_session)
+    adapter = _ExactProbeAdapter("ok")
+    _patch_worker_db(monkeypatch, db_session)
+    monkeypatch.setattr(pw, "_PROBE_WORKER_STARTED_AT", datetime.now(UTC))
+    with patch.object(pw, "get_adapter", return_value=adapter):
+        await pw.ProbeWorker._probe_role_model_candidates(
+            cold_start_budget=pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+        )
+    assert len(adapter.calls) == pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS
+    assert len({call["model"] for call in adapter.calls}) == len(adapter.calls)
+
+
+async def test_cold_start_budget_decays_after_materialization_window(
+    db_session, monkeypatch,
+) -> None:
+    await _seed_role_catalog(db_session)
+    _patch_worker_db(monkeypatch, db_session)
+    # Isolate the endpoint-addition anchor from the process-start anchor.
+    monkeypatch.setattr(
+        pw,
+        "_PROBE_WORKER_STARTED_AT",
+        datetime.now(UTC) - timedelta(seconds=pw.ROLE_PROBE_COLD_START_WINDOW_SECONDS + 1),
+    )
+
+    fresh = await pw.ProbeWorker._load_role_probe_candidates(
+        cold_start_budget=pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+    )
+    assert len(fresh) == pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS
+    assert {candidate["probe_kind"] for candidate in fresh} == {"recovery"}
+
+    from sqlalchemy import select
+
+    # A first-pass probe failure must not collapse the cold-start window: the
+    # anchor is target materialization, not the moving lifecycle timestamp.
+    first_target = (
+        await db_session.execute(select(RouteTarget).order_by(RouteTarget.id))
+    ).scalars().first()
+    assert first_target is not None
+    first_target.lifecycle_reason = "probe_failed"
+    first_target.lifecycle_updated_at = datetime.now(UTC)
+    await db_session.commit()
+    after_failure = await pw.ProbeWorker._load_role_probe_candidates(
+        cold_start_budget=pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+    )
+    assert len(after_failure) == pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS
+
+
+    stale_time = datetime.now(UTC) - timedelta(
+        seconds=pw.ROLE_PROBE_COLD_START_WINDOW_SECONDS + 1,
+    )
+    targets = (await db_session.execute(select(RouteTarget))).scalars().all()
+    for target in targets:
+        # Materialization time is the cold-start anchor.  Lifecycle timestamps
+        # continue moving as probes fail/succeed and must not extend the burst.
+        target.created_at = stale_time
+    await db_session.commit()
+
+    steady = await pw.ProbeWorker._load_role_probe_candidates(
+        cold_start_budget=pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+    )
+    assert len(steady) == pw.ROLE_PROBE_MAX_PER_ENDPOINT_PER_PASS
+
+
+async def test_process_restart_itself_uses_bounded_cold_start_budget(
+    db_session, monkeypatch,
+) -> None:
+    """Even an old materialized catalog gets the short burst after a process
+    restart; endpoint addition is separately anchored by target created_at."""
+    await _seed_role_catalog(db_session)
+    _patch_worker_db(monkeypatch, db_session)
+    stale_time = datetime.now(UTC) - timedelta(
+        seconds=pw.ROLE_PROBE_COLD_START_WINDOW_SECONDS + 1,
+    )
+    from sqlalchemy import select
+
+    targets = (await db_session.execute(select(RouteTarget))).scalars().all()
+    for target in targets:
+        target.created_at = stale_time
+    await db_session.commit()
+
+    monkeypatch.setattr(pw, "_PROBE_WORKER_STARTED_AT", datetime.now(UTC))
+    candidates = await pw.ProbeWorker._load_role_probe_candidates(
+        cold_start_budget=pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+    )
+    assert len(candidates) == pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS
+
+
+async def test_endpoint_addition_cold_budget_is_per_endpoint_not_global(
+    db_session, monkeypatch,
+) -> None:
+    first_endpoint, _first_cred = await _seed_role_catalog(db_session)
+    service = RoleCatalogService(db_session)
+    second_endpoint = await ProviderEndpointService(db_session).create_endpoint(
+        name="RB second", adapter_type="openai_compatible", base_url=REFORMBOSS_BASE_URL,
+    )
+    await CredentialService(db_session).create_credential(
+        second_endpoint.id, "key-2", "api_key", "sk-test-2",
+    )
+    await db_session.commit()
+    await service.reconcile_endpoint(second_endpoint)
+    await db_session.commit()
+
+    stale_time = datetime.now(UTC) - timedelta(
+        seconds=pw.ROLE_PROBE_COLD_START_WINDOW_SECONDS + 1,
+    )
+    monkeypatch.setattr(pw, "_PROBE_WORKER_STARTED_AT", stale_time)
+    from sqlalchemy import select
+
+    rows = (await db_session.execute(
+        select(RouteTarget, UpstreamModel)
+        .join(UpstreamModel, UpstreamModel.id == RouteTarget.upstream_model_id)
+    )).all()
+    for target, upstream in rows:
+        if upstream.provider_endpoint_id == first_endpoint.id:
+            target.created_at = stale_time
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+
+    candidates = await pw.ProbeWorker._load_role_probe_candidates(
+        cold_start_budget=pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+    )
+    counts = {
+        endpoint_id: len([
+            candidate for candidate in candidates if candidate["endpoint_id"] == endpoint_id
+        ])
+        for endpoint_id in (first_endpoint.id, second_endpoint.id)
+    }
+    assert counts[first_endpoint.id] == pw.ROLE_PROBE_MAX_PER_ENDPOINT_PER_PASS
+    assert counts[second_endpoint.id] == pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS
+
+
+async def test_sibling_probe_activates_second_key_and_prevents_single_key_demotion(
+    db_session, monkeypatch,
+) -> None:
+    endpoint, first = await _seed_role_catalog(db_session)
+    service = RoleCatalogService(db_session)
+    selected = "glm-5.4"
+    await service.apply_model_probe_result(
+        credential_id=first.id,
+        upstream_model_id=selected,
+        probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
+    )
+
+    # Restrict desired state to the already-active upstream.  Otherwise the
+    # lower-priority sibling probe would correctly lose the pass to ordinary
+    # quarantined-catalog recovery work.
+    from sqlalchemy import select
+
+    entries = (await db_session.execute(select(RoleChainEntry))).scalars().all()
+    for entry in entries:
+        if entry.upstream_model_key != selected:
+            entry.enabled = False
+    await db_session.commit()
+
+    second = await CredentialService(db_session).create_credential(
+        endpoint.id, "key-2", "api_key", "sk-test-2",
+    )
+    await db_session.commit()
+
+    adapter = _ExactProbeAdapter("ok")
+    _patch_worker_db(monkeypatch, db_session)
+    with patch.object(pw, "get_adapter", return_value=adapter):
+        await pw.ProbeWorker._probe_role_model_candidates()
+
+    assert len(adapter.calls) == 1
+    assert adapter.calls[0]["model"] == selected
+    target, upstream = await _target_for(db_session, "rb/builder", selected)
+    second_access = (
+        await CredentialModelAccessService(db_session).list_access(
+            credential_id=second.id, upstream_model_id=upstream.id,
+        )
+    )[0]
+    assert second_access.status == "available"
+
+    # A terminal entitlement failure on the first key is no longer a target-
+    # level outage: the sibling key is real serving capacity, so the target
+    # must not flap down.
+    denied = ClassifiedError(
+        category="model_access_denied",
+        is_endpoint_wide=False,
+        is_model_specific=True,
+        scope="key",
+        error_code="model_access_denied",
+    )
+    await service.note_upstream_outcome(
+        endpoint_id=endpoint.id,
+        upstream_model_id=selected,
+        error=denied,
+        credential_id=first.id,
+    )
+    await db_session.commit()
+    await db_session.refresh(target)
+    assert target.enabled is True
+    assert target.lifecycle_status == "active"
 
 
 async def test_probe_skips_open_circuit_endpoint(db_session, monkeypatch) -> None:
@@ -886,6 +1205,30 @@ async def test_latency_policy_prefers_routing_carried_contract() -> None:
     assert policy is not None
     assert policy.ttft_seconds() == 20.0
     assert policy.stall_seconds() == 30.0
+
+
+async def test_active_rb_role_route_carries_seeded_latency_contract(db_session) -> None:
+    """End-to-end rb path: reconcile seeds the contract, exact probe activates
+    the target, and routing carries that contract to the TTFT watchdog."""
+    _endpoint, cred = await _seed_role_catalog(db_session)
+    await RoleCatalogService(db_session).apply_model_probe_result(
+        credential_id=cred.id,
+        upstream_model_id="glm-5.4",
+        probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
+    )
+    await db_session.commit()
+
+    request = re_mod.GatewayRequest(
+        model="rb/builder", messages=[{"role": "user", "content": "hi"}],
+    )
+    results = await RoutingEngine().route(db_session, request)
+    assert results
+    assert results[0].upstream_model.upstream_model_id == "glm-5.4"
+    assert results[0].public_model_contract is not None
+    assert results[0].public_model_contract["latency"] == {
+        "maxTtftMs": 20000,
+        "stallTimeoutMs": 40000,
+    }
 
 
 async def test_latency_policy_falls_back_without_carried_contract() -> None:

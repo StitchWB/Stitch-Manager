@@ -71,7 +71,29 @@ _QUOTA_ADAPTER_TYPE = "openai_compatible"
 # Recovery of quarantined/demoted role targets is probe-driven ONLY: there is
 # no TTL resurrection.  Probes are rare, exact, budgeted and backed off — the
 # upstream must never see a catalog-wide sweep or a fingerprintable ping.
+# Steady-state recovery probing stays deliberately scarce: one exact model per
+# endpoint per pass.  Newly materialized, never-verified role targets get a
+# small burst for roughly the first three passes (900s at the standard 300s
+# cadence) because a fresh rb/* install otherwise needs about an hour to
+# verify its catalog.  Even the burst is tiny in token terms (at most
+# 5 probes/pass x 3 passes x ROLE_PROBE_MAX_TOKENS completion tokens, plus
+# prompts) and remains endpoint-backoff aware; after the warm-up window
+# automation decays to 1/pass.  The window starts either at process restart
+# or at target materialization time, so an endpoint added after process
+# startup still gets the same cold-start treatment without extending the
+# burst for long-lived endpoints.
 ROLE_PROBE_MAX_PER_ENDPOINT_PER_PASS = 1
+ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS = 5
+ROLE_PROBE_COLD_START_WINDOW_SECONDS = 900
+# Sibling coverage is lower priority than recovery but gets one additional
+# exact pair per endpoint/pass.  This bounds the steady-state probe cost to at
+# most two exact probes/endpoint/pass while making multi-key failover real.
+ROLE_PROBE_SIBLING_MAX_PER_ENDPOINT_PER_PASS = 1
+# Refreshed in ``start()`` so the cold-start window is process/worker-local
+# (as required for restarts); endpoint addition is detected separately from
+# target materialization time below.  Module import is only a fallback for
+# direct ``_probe_all`` invocations in tests/tools.
+_PROBE_WORKER_STARTED_AT = _utcnow()
 ROLE_PROBE_BUDGET_SECONDS = 8.0
 ROLE_PROBE_BACKOFF_BASE_SECONDS = 300
 ROLE_PROBE_BACKOFF_CAP_SECONDS = 3600
@@ -102,10 +124,12 @@ class ProbeWorker:
     @classmethod
     async def start(cls, *, interval_seconds: int = 300) -> None:
         """Start the periodic probe loop."""
+        global _PROBE_WORKER_STARTED_AT
         if cls._task is not None:
             logger.warning("ProbeWorker already running")
             return
         cls._interval_seconds = interval_seconds
+        _PROBE_WORKER_STARTED_AT = _utcnow()
         cls._task = asyncio.create_task(cls._loop())
         logger.info("ProbeWorker started — interval=%ds", interval_seconds)
 
@@ -199,8 +223,22 @@ class ProbeWorker:
 
         await cls._probe_quota_all()
 
+        # Passive role-health reconciliation runs once per probe pass (startup
+        # warmup + every 300s steady-state).  It is SQL-only and cheap, and this
+        # cadence matches the credential recovery evidence it consumes: a key
+        # recovered earlier in this pass can immediately repair a target whose
+        # only problem was credential-wide capacity loss.  Running it before
+        # exact probing also makes freshly demoted targets probe-eligible in
+        # the same pass without adding network cost.
         try:
-            await cls._probe_role_model_candidates()
+            await cls._reconcile_role_catalog_health()
+        except Exception:
+            logger.exception("ProbeWorker: role catalog health reconciliation failed")
+
+        try:
+            await cls._probe_role_model_candidates(
+                cold_start_budget=ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS,
+            )
         except Exception:
             logger.exception("ProbeWorker: role model probe phase failed")
 
@@ -357,13 +395,35 @@ class ProbeWorker:
     # ── Exact-model role-target probes ───────────────────────────────────────
 
     @classmethod
-    async def _load_role_probe_candidates(cls) -> list[dict[str, Any]]:
-        """Read phase: pick at most one exact (credential, model) pair per endpoint.
+    async def _reconcile_role_catalog_health(cls) -> None:
+        """Run the passive role-target health sweep in one short write session."""
+        from stitch_backend.domains.ai_gateway.role_catalog_service import (
+            RoleCatalogService,
+        )
 
-        Only role-catalog-managed targets in ``quarantined``/``demoted``
-        lifecycle are eligible — never the whole catalog.  A pair is skipped
-        when the credential is unusable, the access row is terminally
-        ``denied``, or its probe backoff has not expired yet.
+        async def _op(session: AsyncSession) -> None:
+            await RoleCatalogService(session).reconcile_health()
+
+        await run_in_session(_op)
+
+    @classmethod
+    async def _load_role_probe_candidates(
+        cls,
+        *,
+        recovery_budget: int = ROLE_PROBE_MAX_PER_ENDPOINT_PER_PASS,
+        sibling_budget: int = ROLE_PROBE_SIBLING_MAX_PER_ENDPOINT_PER_PASS,
+        cold_start_budget: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Read phase: pick exact (credential, model) pairs for one pass.
+
+        Recovery work (``quarantined``/``demoted`` targets) has priority and is
+        capped by ``recovery_budget`` per endpoint.  Once targets are active,
+        lower-priority sibling coverage probes at most ``sibling_budget``
+        additional unprobed/unknown ``(credential, upstream)`` pairs per
+        endpoint; this is what turns multi-key routing capacity from theory
+        into real failover inventory.  Terminal ``denied`` pairs, unusable
+        credentials, backed-off pairs, non-closed endpoint breakers, and
+        endpoint-level probe backoff are never eligible for either class.
         """
         from stitch_backend.domains.ai_gateway.models import (
             RouteTarget,
@@ -385,7 +445,7 @@ class ProbeWorker:
                     )
                     .where(
                         RouteTarget.managed_by == "role_catalog",
-                        RouteTarget.lifecycle_status.in_(("quarantined", "demoted")),
+                        RouteTarget.lifecycle_status.in_(("quarantined", "demoted", "active")),
                         ProviderEndpoint.enabled.is_(True),
                     )
                     .order_by(RouteTarget.lifecycle_updated_at.asc())
@@ -412,9 +472,31 @@ class ProbeWorker:
             ).all()
             desired_pairs = {(public_id, upstream_key) for public_id, upstream_key in desired_entries}
 
+            base_recovery_budget = recovery_budget
+            cold_endpoints: set[str] = set()
+            if cold_start_budget is not None:
+                cold_cutoff = now - timedelta(seconds=ROLE_PROBE_COLD_START_WINDOW_SECONDS)
+                if _PROBE_WORKER_STARTED_AT >= cold_cutoff:
+                    base_recovery_budget = max(recovery_budget, cold_start_budget)
+                for target, _upstream, endpoint in rows:
+                    # Anchor endpoint addition to target materialization, not
+                    # lifecycle update time.  A failed first probe changes the
+                    # lifecycle reason/timestamp, but must not collapse the
+                    # bounded cold-start window before the rest of that fresh
+                    # endpoint's catalog had its chance; conversely repeated
+                    # probe failures must not keep re-arming the burst forever.
+                    created = target.created_at
+                    if created is not None and created.tzinfo is None:
+                        created = created.replace(tzinfo=UTC)
+                    if created is not None and created >= cold_cutoff:
+                        cold_endpoints.add(endpoint.id)
+
             # Deduplicate upstreams; a target pair appearing in several role
-            # chains is one exact probe, not many.
-            upstreams: dict[str, tuple[UpstreamModel, ProviderEndpoint]] = {}
+            # chains is one exact probe, not many.  Recovery and sibling classes
+            # are separated because active-target coverage must never starve
+            # quarantined/demoted recovery work.
+            recovery_upstreams: dict[str, tuple[UpstreamModel, ProviderEndpoint]] = {}
+            active_upstreams: dict[str, tuple[UpstreamModel, ProviderEndpoint]] = {}
             for target, upstream, endpoint in rows:
                 if (target.public_model_id, upstream.upstream_model_id) not in desired_pairs:
                     continue
@@ -423,64 +505,135 @@ class ProbeWorker:
                     # catalog-rotation recovery path; manually disabled rows do
                     # not (and probe success must not re-enable them).
                     continue
-                upstreams.setdefault(upstream.id, (upstream, endpoint))
+                if target.lifecycle_status in ("quarantined", "demoted"):
+                    recovery_upstreams.setdefault(upstream.id, (upstream, endpoint))
+                elif target.lifecycle_status == "active":
+                    active_upstreams.setdefault(upstream.id, (upstream, endpoint))
 
             cred_svc = CredentialService(session)
-            picked: list[dict[str, Any]] = []
-            endpoints_picked: set[str] = set()
-            for upstream, endpoint in upstreams.values():
-                if endpoint.id in endpoints_picked:
-                    continue  # MAX_PER_ENDPOINT_PER_PASS = 1
+            credentials_cache: dict[str, list[Credential]] = {}
+
+            async def _credentials_for(endpoint: ProviderEndpoint) -> list[Credential]:
+                if endpoint.id not in credentials_cache:
+                    credentials_cache[endpoint.id] = await cred_svc.list_all_credentials(
+                        provider_endpoint_id=endpoint.id,
+                    )
+                return credentials_cache[endpoint.id]
+
+            async def _access_for(
+                credential_id: str,
+                upstream_row_id: str,
+            ) -> CredentialModelAccess | None:
+                return (
+                    await session.execute(
+                        select(CredentialModelAccess).where(
+                            CredentialModelAccess.credential_id == credential_id,
+                            CredentialModelAccess.upstream_model_id == upstream_row_id,
+                        ),
+                    )
+                ).scalar_one_or_none()
+
+            def _pair_backoff_active(access: CredentialModelAccess | None) -> bool:
+                if access is None or access.next_probe_at is None:
+                    return False
+                next_probe = access.next_probe_at
+                if next_probe.tzinfo is None:
+                    next_probe = next_probe.replace(tzinfo=UTC)
+                return next_probe > now
+
+            def _endpoint_blocked(endpoint: ProviderEndpoint) -> bool:
                 if cls._endpoint_probe_backoff_active(endpoint.id, now):
-                    continue
+                    return True
                 # Never probe into a non-closed breaker: the exact probe is
                 # model evidence, not endpoint recovery, and must not sneak
                 # traffic past an open/half-open circuit.
-                if (endpoint.circuit_state or "closed") != "closed":
-                    continue
-                credentials = await cred_svc.list_all_credentials(
-                    provider_endpoint_id=endpoint.id,
-                )
-                chosen: dict[str, Any] | None = None
-                for cred in credentials:
+                return (endpoint.circuit_state or "closed") != "closed"
+
+            async def _candidate_for(
+                cred: Credential,
+                endpoint: ProviderEndpoint,
+                upstream: UpstreamModel,
+            ) -> dict[str, Any] | None:
+                secret = await cred_svc.resolve_invocation_secret(cred)
+                if secret is None:
+                    return None
+                return {
+                    "credential_id": cred.id,
+                    "endpoint_id": endpoint.id,
+                    "adapter_type": endpoint.adapter_type,
+                    "base_url": endpoint.base_url,
+                    "default_headers": endpoint.default_headers,
+                    "secret": secret,
+                    "upstream_row_id": upstream.id,
+                    "upstream_model_id": upstream.upstream_model_id,
+                }
+
+            async def _choose_pair(
+                endpoint: ProviderEndpoint,
+                upstream: UpstreamModel,
+                *,
+                sibling: bool,
+            ) -> dict[str, Any] | None:
+                fallback: dict[str, Any] | None = None
+                for cred in await _credentials_for(endpoint):
                     if not cred.enabled:
                         continue
                     if cred.runtime_status not in ("active", "unknown"):
                         continue
-                    access = (
-                        await session.execute(
-                            select(CredentialModelAccess).where(
-                                CredentialModelAccess.credential_id == cred.id,
-                                CredentialModelAccess.upstream_model_id == upstream.id,
-                            ),
-                        )
-                    ).scalar_one_or_none()
-                    if access is not None:
-                        if access.status == "denied":
-                            continue  # terminal for automation
-                        if access.next_probe_at is not None:
-                            next_probe = access.next_probe_at
-                            if next_probe.tzinfo is None:
-                                next_probe = next_probe.replace(tzinfo=UTC)
-                            if next_probe > now:
-                                continue  # pair backoff not expired
-                    secret = await cred_svc.resolve_invocation_secret(cred)
-                    if secret is None:
+                    access = await _access_for(cred.id, upstream.id)
+                    if access is not None and access.status == "denied":
+                        continue  # terminal for automation
+                    if _pair_backoff_active(access):
+                        continue  # pair backoff not expired
+                    if sibling and access is not None and access.status != "unknown":
+                        # Coverage probing is only for pairs with no evidence
+                        # yet (no row) or explicit unknown state.
                         continue
-                    chosen = {
-                        "credential_id": cred.id,
-                        "endpoint_id": endpoint.id,
-                        "adapter_type": endpoint.adapter_type,
-                        "base_url": endpoint.base_url,
-                        "default_headers": endpoint.default_headers,
-                        "secret": secret,
-                        "upstream_row_id": upstream.id,
-                        "upstream_model_id": upstream.upstream_model_id,
-                    }
-                    break
+                    candidate = await _candidate_for(cred, endpoint, upstream)
+                    if candidate is None:
+                        continue
+                    if sibling or access is None or access.status == "unknown":
+                        return candidate
+                    # Recovery preserves legacy behavior as fallback: when no
+                    # never-probed pair exists, re-probe the first due pair
+                    # (including an available row) because exact success is the
+                    # activation authority for quarantined/demoted targets.
+                    if fallback is None:
+                        fallback = candidate
+                return None if sibling else fallback
+
+            picked: list[dict[str, Any]] = []
+            probed_upstreams: set[str] = set()
+            recovery_counts: dict[str, int] = {}
+            for upstream, endpoint in recovery_upstreams.values():
+                endpoint_recovery_budget = base_recovery_budget
+                if endpoint.id in cold_endpoints:
+                    endpoint_recovery_budget = max(recovery_budget, cold_start_budget or recovery_budget)
+                if recovery_counts.get(endpoint.id, 0) >= endpoint_recovery_budget:
+                    continue
+                if _endpoint_blocked(endpoint):
+                    continue
+                chosen = await _choose_pair(endpoint, upstream, sibling=False)
                 if chosen is None:
                     continue
-                endpoints_picked.add(endpoint.id)
+                chosen["probe_kind"] = "recovery"
+                recovery_counts[endpoint.id] = recovery_counts.get(endpoint.id, 0) + 1
+                probed_upstreams.add(upstream.id)
+                picked.append(chosen)
+
+            sibling_counts: dict[str, int] = {}
+            for upstream, endpoint in active_upstreams.values():
+                if upstream.id in probed_upstreams:
+                    continue  # never probe the same model twice in one pass
+                if sibling_counts.get(endpoint.id, 0) >= sibling_budget:
+                    continue
+                if _endpoint_blocked(endpoint):
+                    continue
+                chosen = await _choose_pair(endpoint, upstream, sibling=True)
+                if chosen is None:
+                    continue
+                chosen["probe_kind"] = "sibling_coverage"
+                sibling_counts[endpoint.id] = sibling_counts.get(endpoint.id, 0) + 1
                 picked.append(chosen)
             return picked
 
@@ -596,8 +749,13 @@ class ProbeWorker:
         return None
 
     @classmethod
-    async def _probe_role_model_candidates(cls) -> None:
-        """Probe exact (credential, model) pairs for quarantined/demoted role targets.
+    async def _probe_role_model_candidates(
+        cls,
+        *,
+        recovery_budget: int = ROLE_PROBE_MAX_PER_ENDPOINT_PER_PASS,
+        cold_start_budget: int | None = None,
+    ) -> None:
+        """Probe exact (credential, model) pairs for role-target health.
 
         Three-phase discipline: read dicts in a read session → network calls
         outside any session → one short write session.  Success is the sole
@@ -609,14 +767,31 @@ class ProbeWorker:
             RoleCatalogService,
         )
 
-        targets = await cls._load_role_probe_candidates()
+        targets = await cls._load_role_probe_candidates(
+            recovery_budget=recovery_budget,
+            cold_start_budget=cold_start_budget,
+        )
         if not targets:
             return
 
         results: list[dict[str, Any]] = []
         for target in targets:
+            # Candidates were selected before any network evidence from this
+            # pass.  Because probes run sequentially, re-check the endpoint
+            # backoff immediately before each call: a catalog_probe_detected
+            # result must stop not only future passes but also the remaining
+            # cold-start burst for that endpoint.
+            if cls._endpoint_probe_backoff_active(target["endpoint_id"], _utcnow()):
+                continue
             try:
-                results.append(await cls._probe_exact_model(target))
+                result = await cls._probe_exact_model(target)
+                results.append(result)
+                classified = result.get("classified")
+                scope = getattr(classified, "scope", None) or ""
+                error_code = getattr(classified, "error_code", None) or ""
+                if error_code == "catalog_probe_detected" or scope in ("endpoint", "global"):
+                    cls._arm_endpoint_probe_backoff(target["endpoint_id"])
+                    result["endpoint_backoff_armed"] = True
             except Exception:
                 logger.exception(
                     "ProbeWorker: exact model probe failed for %s on credential %s",
@@ -681,8 +856,12 @@ class ProbeWorker:
         error_code = getattr(classified, "error_code", None) or ""
         if error_code == "catalog_probe_detected" or scope in ("endpoint", "global"):
             # The endpoint is pushing back on probing or is itself unhealthy:
-            # back off probing this endpoint, never blame the model.
-            cls._arm_endpoint_probe_backoff(result["endpoint_id"])
+            # back off probing this endpoint, never blame the model.  Usually
+            # this was already armed in the network loop so later burst
+            # candidates stop immediately; keep the write-path fallback for
+            # manually constructed results/tests.
+            if not result.get("endpoint_backoff_armed"):
+                cls._arm_endpoint_probe_backoff(result["endpoint_id"])
             logger.info(
                 "ProbeWorker: endpoint-scoped probe outcome (%s) on %s — endpoint backoff",
                 error_code or classified.category,

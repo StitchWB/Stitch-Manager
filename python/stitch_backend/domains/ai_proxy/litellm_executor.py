@@ -707,6 +707,7 @@ class LiteLLMExecutor:
         budget_expired = False
 
         probe_leases: dict[str, circuit_breaker.ProbeLease] = {}
+        streaming_probe_lease_transferred: circuit_breaker.ProbeLease | None = None
         try:
             while True:
                 round_no += 1
@@ -810,6 +811,29 @@ class LiteLLMExecutor:
                             )
                             # Lease release deferred to the outer finally — see above.
                             continue
+
+                        slot_released = False
+
+                        def _release_inflight_slot(
+                            bound_credential_id: str = credential_id,
+                            bound_upstream_model_id: str | None = upstream_model_id,
+                        ) -> None:
+                            nonlocal slot_released
+                            if slot_released:
+                                return
+                            slot_released = True
+                            key_inflight.release(bound_credential_id, bound_upstream_model_id)
+
+                        # Streaming responses outlive ``invoke()`` by tens of
+                        # seconds.  Hand the completion callback an idempotent
+                        # releaser so the concurrency slot remains occupied for
+                        # the actual generation, while failed/non-streaming
+                        # invokes still release in the local finally below.
+                        try:
+                            routing_result.inflight_slot_release = _release_inflight_slot
+                        except (AttributeError, TypeError):
+                            pass
+                        streaming_slot_transferred = False
                         try:
                             last_attempted = routing_result
                             invocations += 1
@@ -868,16 +892,28 @@ class LiteLLMExecutor:
                                 failover_count=failed_attempts,
                                 used_fallback=model_index > 0,
                             )
+                            if payload.stream and getattr(
+                                routing_result, "inflight_slot_stream_owned", False,
+                            ):
+                                streaming_slot_transferred = True
+                                streaming_probe_lease_transferred = getattr(
+                                    routing_result, "probe_lease", None,
+                                )
                             return result
                         finally:
-                            key_inflight.release(credential_id, upstream_model_id)
-                            # The lease belongs to this one logical probe and must
-                            # resolve for every outcome.  Normal health recording
-                            # has already closed/reopened the breaker (making this
-                            # a no-op); if that recording itself failed, this still
-                            # prevents the half-open slot from wedging until the
-                            # lost-probe timeout.
-                            await self._release_inconclusive_probe(routing_result)
+                            if not streaming_slot_transferred:
+                                _release_inflight_slot()
+                                # The lease belongs to this one logical probe and
+                                # must resolve for every outcome.  Normal health
+                                # recording has already closed/reopened the
+                                # breaker (making this a no-op); if that recording
+                                # itself failed, this still prevents the half-open
+                                # slot from wedging until the lost-probe timeout.
+                                await self._release_inconclusive_probe(routing_result)
+                            # For a successfully primed stream both the in-flight
+                            # slot and the half-open lease transfer to stream
+                            # completion: prime time is only liveness, not the
+                            # final endpoint/credential outcome.
 
                         round_hint = _hint_seconds(last_classified)
                         if last_classified.scope == "global":
@@ -943,6 +979,12 @@ class LiteLLMExecutor:
             # Release every lease seen on any routing result on every exit path;
             # the resolve is a no-op when outcome recording already settled it.
             for endpoint_id, lease in probe_leases.items():
+                if lease is streaming_probe_lease_transferred:
+                    # Ownership moved to the stream-completion callback together
+                    # with the in-flight slot.  Releasing it here at prime time
+                    # would make the real stream outcome too late to resolve the
+                    # half-open probe.
+                    continue
                 await self._release_probe_lease(endpoint_id, lease)
 
     async def _persist_outcome(self, outcome: _RequestOutcome) -> None:
