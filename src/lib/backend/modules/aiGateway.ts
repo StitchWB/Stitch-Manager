@@ -113,6 +113,23 @@ export interface RouteTarget {
   priority: number;
   weight: number;
   costModifier: number;
+  managedBy?: string | null;
+  lifecycleStatus?: string | null;
+  lifecycleReason?: string | null;
+  lifecycleUpdatedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface RoleChainEntry {
+  id: string;
+  publicModelId: string;
+  endpointSelector: string;
+  upstreamModelKey: string;
+  family?: string | null;
+  ordinal: number;
+  enabled: boolean;
+  source: string;
   createdAt: string;
   updatedAt?: string | null;
 }
@@ -401,6 +418,36 @@ export async function updateRouteTarget(params: {
 
 export async function deleteRouteTarget(id: number): Promise<{ success: boolean }> {
   return safeInvoke('delete_route_target', { id });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Role-chain desired state API (rb/* virtual roles)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function listRoleChainEntries(params?: {
+  publicModelId?: string;
+  endpointSelector?: string;
+}): Promise<RoleChainEntry[]> {
+  return safeInvoke('list_role_chain_entries', params ?? {});
+}
+
+export async function upsertRoleChainEntry(params: {
+  publicModelId: string;
+  upstreamModelKey: string;
+  endpointSelector?: string;
+  family?: string | null;
+  ordinal?: number;
+  enabled?: boolean;
+}): Promise<RoleChainEntry> {
+  return safeInvoke('upsert_role_chain_entry', params, { noCache: true });
+}
+
+export async function disableRoleChainEntry(id: string): Promise<RoleChainEntry | null> {
+  return safeInvoke('disable_role_chain_entry', { id }, { noCache: true });
+}
+
+export async function resetRoleChainEntryToDefault(id: string): Promise<RoleChainEntry | null> {
+  return safeInvoke('reset_role_chain_entry_to_default', { id }, { noCache: true });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

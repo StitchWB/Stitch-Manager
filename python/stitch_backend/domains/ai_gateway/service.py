@@ -40,6 +40,7 @@ from stitch_backend.domains.ai_gateway.proxy_key_service import (
     flush_last_used_at,
     mark_used,
 )
+from stitch_backend.domains.ai_gateway.role_catalog_service import RoleCatalogService
 
 __all__ = [
     "CredentialModelAccessService",
@@ -47,6 +48,7 @@ __all__ = [
     "ModelIdentityService",
     "ProviderEndpointService",
     "PublicModelService",
+    "RoleCatalogService",
     "RouteTargetService",
     "UpstreamModelService",
     "UserProxyKeyService",

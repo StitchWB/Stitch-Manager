@@ -77,6 +77,12 @@ from stitch_backend.domains.ai_gateway.schemas.public_models import (
     PublicModelUpdateRequest,
     UnmergeRouteTargetRequest,
 )
+from stitch_backend.domains.ai_gateway.schemas.role_chain import (
+    ListRoleChainEntriesRequest,
+    RoleChainEntryIdRequest,
+    RoleChainEntryResponse,
+    UpsertRoleChainEntryRequest,
+)
 from stitch_backend.domains.ai_gateway.schemas.route_targets import (
     ListRouteTargetsForPublicModelRequest,
     RouteTargetCreateRequest,
@@ -109,6 +115,7 @@ __all__ = [
     "ListModelHealthRequest",
     "ListModelThroughputRequest",
     "ListPublicModelsRequest",
+    "ListRoleChainEntriesRequest",
     "ListRouteTargetsForPublicModelRequest",
     "ListUpstreamModelsRequest",
     "MergePublicModelsRequest",
@@ -130,6 +137,8 @@ __all__ = [
     "PublicModelRouteTarget",
     "PublicModelUpdateRequest",
     "RefreshEndpointModelsRequest",
+    "RoleChainEntryIdRequest",
+    "RoleChainEntryResponse",
     "RotateCredentialSecretRequest",
     "RouteTargetCreateRequest",
     "RouteTargetIdRequest",
@@ -144,4 +153,5 @@ __all__ = [
     "UpstreamModelListResponse",
     "UpstreamModelResponse",
     "UpstreamModelUpdateRequest",
+    "UpsertRoleChainEntryRequest",
 ]
