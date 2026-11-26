@@ -22,10 +22,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select
 
 from stitch_backend.database import run_in_read_session, run_in_session
 from stitch_backend.domains.ai_gateway.adapters.base import (
@@ -62,11 +62,32 @@ _PROBE_STATES = (
     "unknown",
 )
 
-# у non-velly кред метку temporarily_unavailable не пересчитывает никто — это односторонняя дверь
-_MODEL_MARK_TTL_SECONDS = 600
 QUOTA_PROBE_INTERVAL_SECONDS = 600
 _QUOTA_PROBE_CONCURRENCY = 4
 _QUOTA_ADAPTER_TYPE = "openai_compatible"
+
+# ── Exact-model role-target probes (spec §6C) ───────────────────────────────
+# Recovery of quarantined/demoted role targets is probe-driven ONLY: there is
+# no TTL resurrection.  Probes are rare, exact, budgeted and backed off — the
+# upstream must never see a catalog-wide sweep or a fingerprintable ping.
+ROLE_PROBE_MAX_PER_ENDPOINT_PER_PASS = 1
+ROLE_PROBE_BUDGET_SECONDS = 8.0
+ROLE_PROBE_BACKOFF_BASE_SECONDS = 300
+ROLE_PROBE_BACKOFF_CAP_SECONDS = 3600
+ROLE_PROBE_MAX_TOKENS = 8
+# Deliberately NOT a trivially fingerprintable "ping".
+ROLE_PROBE_PROMPT = "Briefly confirm you are operational in one short sentence."
+
+# In-memory endpoint-level probe backoff, armed when the upstream detects and
+# pushes back on catalog probing (``catalog_probe_detected``) or otherwise
+# answers endpoint-scoped failure to an exact probe.  Blaming the model for
+# that would be wrong; hammering the endpoint would be worse.
+_role_probe_endpoint_backoff: dict[str, tuple[datetime, int]] = {}
+
+
+def _reset_role_probe_backoff() -> None:
+    """Clear in-memory endpoint probe backoff. Intended for tests."""
+    _role_probe_endpoint_backoff.clear()
 
 
 class ProbeWorker:
@@ -144,7 +165,10 @@ class ProbeWorker:
         """
         start = time.monotonic()
 
-        await cls._expire_stale_model_marks()
+        # NOTE: there is deliberately no TTL-based resurrection of
+        # ``temporarily_unavailable`` model marks.  Recovery happens only
+        # through a successful exact (credential, upstream_model) probe in
+        # ``_probe_role_model_candidates`` (or a manual operator probe).
 
         # 1. Load probe targets (read-only).
         targets = await cls._load_probe_targets(include_active=include_active)
@@ -173,6 +197,11 @@ class ProbeWorker:
             logger.debug("ProbeWorker: no credentials to probe")
 
         await cls._probe_quota_all()
+
+        try:
+            await cls._probe_role_model_candidates()
+        except Exception:
+            logger.exception("ProbeWorker: role model probe phase failed")
 
         elapsed = time.monotonic() - start
         logger.info("ProbeWorker: pass complete in %.1fs", elapsed)
@@ -313,34 +342,378 @@ class ProbeWorker:
 
     @classmethod
     async def _expire_stale_model_marks(cls) -> None:
-        """Reset ``temporarily_unavailable`` access marks older than the TTL."""
+        """No-op transitional shim — TTL resurrection was removed.
 
-        async def _op(session: AsyncSession) -> None:
-            cutoff = _utcnow() - timedelta(seconds=_MODEL_MARK_TTL_SECONDS)
-            result = await session.execute(
-                update(CredentialModelAccess)
-                .where(
-                    CredentialModelAccess.status == "temporarily_unavailable",
-                    CredentialModelAccess.last_verified_at < cutoff,
-                )
-                .values(status="available")
-            )
-            await session.flush()
-            # Models became routable again — drop stale route resolutions.
-            # Only when rows actually transitioned: a no-op sweep must not
-            # churn the cache.
-            transitioned = int(getattr(result, "rowcount", 0) or 0)
-            if transitioned:
-                from stitch_backend.core.event_bus import event_bus
-                await event_bus.emit(
-                    "credential.model_access_changed",
-                    {"transitions": transitioned},
-                )
+        ``temporarily_unavailable`` access marks are runtime health evidence,
+        not cache entries: time alone must never make a model routable again.
+        The only recovery path is a successful exact ``(credential,
+        upstream_model)`` probe (see :meth:`_probe_role_model_candidates`) or
+        a manual operator probe.  Kept as a shim so embedders/tests calling
+        the hook directly degrade gracefully instead of crashing.
+        """
+        return
 
+    # ── Exact-model role-target probes ───────────────────────────────────────
+
+    @classmethod
+    async def _load_role_probe_candidates(cls) -> list[dict[str, Any]]:
+        """Read phase: pick at most one exact (credential, model) pair per endpoint.
+
+        Only role-catalog-managed targets in ``quarantined``/``demoted``
+        lifecycle are eligible — never the whole catalog.  A pair is skipped
+        when the credential is unusable, the access row is terminally
+        ``denied``, or its probe backoff has not expired yet.
+        """
+        from stitch_backend.domains.ai_gateway.models import (
+            RouteTarget,
+            UpstreamModel,
+        )
+
+        async def _op(session: AsyncSession) -> list[dict[str, Any]]:
+            now = _utcnow()
+            rows = (
+                await session.execute(
+                    select(RouteTarget, UpstreamModel, ProviderEndpoint)
+                    .join(UpstreamModel, UpstreamModel.id == RouteTarget.upstream_model_id)
+                    .join(
+                        ProviderEndpoint,
+                        ProviderEndpoint.id == UpstreamModel.provider_endpoint_id,
+                    )
+                    .where(
+                        RouteTarget.managed_by == "role_catalog",
+                        RouteTarget.lifecycle_status.in_(("quarantined", "demoted")),
+                        UpstreamModel.enabled.is_(True),
+                        ProviderEndpoint.enabled.is_(True),
+                    )
+                    .order_by(RouteTarget.lifecycle_updated_at.asc())
+                )
+            ).all()
+            if not rows:
+                return []
+
+            # Deduplicate upstreams; a target pair appearing in several role
+            # chains is one exact probe, not many.
+            upstreams: dict[str, tuple[UpstreamModel, ProviderEndpoint]] = {}
+            for _target, upstream, endpoint in rows:
+                upstreams.setdefault(upstream.id, (upstream, endpoint))
+
+            cred_svc = CredentialService(session)
+            picked: list[dict[str, Any]] = []
+            endpoints_picked: set[str] = set()
+            for upstream, endpoint in upstreams.values():
+                if endpoint.id in endpoints_picked:
+                    continue  # MAX_PER_ENDPOINT_PER_PASS = 1
+                if cls._endpoint_probe_backoff_active(endpoint.id, now):
+                    continue
+                # Never probe into a non-closed breaker: the exact probe is
+                # model evidence, not endpoint recovery, and must not sneak
+                # traffic past an open/half-open circuit.
+                if (endpoint.circuit_state or "closed") != "closed":
+                    continue
+                credentials = await cred_svc.list_all_credentials(
+                    provider_endpoint_id=endpoint.id,
+                )
+                chosen: dict[str, Any] | None = None
+                for cred in credentials:
+                    if not cred.enabled:
+                        continue
+                    if cred.runtime_status not in ("active", "unknown"):
+                        continue
+                    access = (
+                        await session.execute(
+                            select(CredentialModelAccess).where(
+                                CredentialModelAccess.credential_id == cred.id,
+                                CredentialModelAccess.upstream_model_id == upstream.id,
+                            ),
+                        )
+                    ).scalar_one_or_none()
+                    if access is not None:
+                        if access.status == "denied":
+                            continue  # terminal for automation
+                        if access.next_probe_at is not None:
+                            next_probe = access.next_probe_at
+                            if next_probe.tzinfo is None:
+                                next_probe = next_probe.replace(tzinfo=UTC)
+                            if next_probe > now:
+                                continue  # pair backoff not expired
+                    secret = await cred_svc.resolve_invocation_secret(cred)
+                    if secret is None:
+                        continue
+                    chosen = {
+                        "credential_id": cred.id,
+                        "endpoint_id": endpoint.id,
+                        "adapter_type": endpoint.adapter_type,
+                        "base_url": endpoint.base_url,
+                        "default_headers": endpoint.default_headers,
+                        "secret": secret,
+                        "upstream_row_id": upstream.id,
+                        "upstream_model_id": upstream.upstream_model_id,
+                    }
+                    break
+                if chosen is None:
+                    continue
+                endpoints_picked.add(endpoint.id)
+                picked.append(chosen)
+            return picked
+
+        return await run_in_read_session(_op)
+
+    @staticmethod
+    def _endpoint_probe_backoff_active(endpoint_id: str, now: datetime) -> bool:
+        entry = _role_probe_endpoint_backoff.get(endpoint_id)
+        if entry is None:
+            return False
+        until, _failures = entry
+        return until > now
+
+    @staticmethod
+    def _arm_endpoint_probe_backoff(endpoint_id: str) -> None:
+        now = _utcnow()
+        _until, failures = _role_probe_endpoint_backoff.get(
+            endpoint_id, (now, 0),
+        )
+        failures += 1
+        exponent = min(max(0, failures - 1), 4)
+        delay = min(
+            ROLE_PROBE_BACKOFF_CAP_SECONDS,
+            ROLE_PROBE_BACKOFF_BASE_SECONDS * (2**exponent),
+        )
+        _role_probe_endpoint_backoff[endpoint_id] = (
+            now + timedelta(seconds=delay),
+            failures,
+        )
+
+    @classmethod
+    async def _probe_exact_model(cls, target: dict[str, Any]) -> dict[str, Any]:
+        """Network phase (outside any DB session): one exact model probe.
+
+        Success requires actual content — an HTTP 200 with an empty
+        completion is the exact failure mode this probe exists to catch.
+        A budget timeout is *slowness*, not death: it never produces
+        model-scoped failure evidence.
+        """
+        adapter = get_adapter(target["adapter_type"])
+        start = time.monotonic()
+        result: dict[str, Any] = {
+            "credential_id": target["credential_id"],
+            "endpoint_id": target["endpoint_id"],
+            "upstream_row_id": target["upstream_row_id"],
+            "upstream_model_id": target["upstream_model_id"],
+        }
         try:
-            await run_in_session(_op)
-        except Exception:
-            logger.exception("ProbeWorker: failed to expire stale model marks")
+            data = await asyncio.wait_for(
+                adapter.invoke(
+                    base_url=target["base_url"],
+                    secret=target["secret"],
+                    model=target["upstream_model_id"],
+                    messages=[{"role": "user", "content": ROLE_PROBE_PROMPT}],
+                    stream=False,
+                    default_headers=target["default_headers"],
+                    max_tokens=ROLE_PROBE_MAX_TOKENS,
+                ),
+                timeout=ROLE_PROBE_BUDGET_SECONDS,
+            )
+        except TimeoutError:
+            result.update({
+                "outcome": "timeout",
+                "latency_ms": int((time.monotonic() - start) * 1000),
+                "classified": None,
+            })
+            return result
+        except Exception as exc:
+            classified = adapter.classify_error(exc)
+            result.update({
+                "outcome": "error",
+                "latency_ms": int((time.monotonic() - start) * 1000),
+                "classified": classified,
+            })
+            return result
+
+        latency_ms = int((time.monotonic() - start) * 1000)
+        text = cls._extract_completion_text(data)
+        if text:
+            result.update({
+                "outcome": "ok",
+                "latency_ms": latency_ms,
+                "classified": None,
+            })
+            return result
+        # HTTP 200 but no usable content: the empty-completion failure mode.
+        result.update({
+            "outcome": "error",
+            "latency_ms": latency_ms,
+            "classified": ClassifiedError(
+                category="server_error",
+                is_endpoint_wide=False,
+                is_model_specific=True,
+                scope="key",
+                error_code="empty_completion",
+            ),
+        })
+        return result
+
+    @staticmethod
+    def _extract_completion_text(data: Any) -> str | None:
+        if not isinstance(data, dict):
+            return None
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            message = choices[0].get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str) and content.strip():
+                    return content
+                if message.get("tool_calls") or message.get("reasoning_content"):
+                    return "<non-text-completion>"
+        return None
+
+    @classmethod
+    async def _probe_role_model_candidates(cls) -> None:
+        """Probe exact (credential, model) pairs for quarantined/demoted role targets.
+
+        Three-phase discipline: read dicts in a read session → network calls
+        outside any session → one short write session.  Success is the sole
+        automatic activation path for role targets; model-scoped failure
+        backs off the exact pair; endpoint-scoped pushback arms an
+        endpoint-level probe backoff instead of blaming the model.
+        """
+        from stitch_backend.domains.ai_gateway.role_catalog_service import (
+            RoleCatalogService,
+        )
+
+        targets = await cls._load_role_probe_candidates()
+        if not targets:
+            return
+
+        results: list[dict[str, Any]] = []
+        for target in targets:
+            try:
+                results.append(await cls._probe_exact_model(target))
+            except Exception:
+                logger.exception(
+                    "ProbeWorker: exact model probe failed for %s on credential %s",
+                    target["upstream_model_id"],
+                    target["credential_id"],
+                )
+        if not results:
+            return
+
+        async def _write(session: AsyncSession) -> None:
+            service = RoleCatalogService(session)
+            for result in results:
+                try:
+                    async with session.begin_nested():
+                        await cls._apply_exact_probe_result(session, service, result)
+                        await session.flush()
+                except Exception:
+                    logger.exception(
+                        "ProbeWorker: failed to persist exact probe for %s",
+                        result["upstream_model_id"],
+                    )
+
+        await run_in_session(_write)
+
+    @classmethod
+    async def _apply_exact_probe_result(
+        cls,
+        session: AsyncSession,
+        service: Any,
+        result: dict[str, Any],
+    ) -> None:
+        """Write phase for one exact probe outcome (inside a savepoint)."""
+        outcome = result["outcome"]
+        classified: ClassifiedError | None = result["classified"]
+
+        if outcome == "ok":
+            await service.apply_model_probe_result(
+                credential_id=result["credential_id"],
+                upstream_model_id=result["upstream_model_id"],
+                probe_row={
+                    "ok": True,
+                    "reason": "ok",
+                    "latencyMs": result["latency_ms"],
+                },
+            )
+            logger.info(
+                "ProbeWorker: exact probe SUCCESS %s (credential=%s) — promotion path",
+                result["upstream_model_id"],
+                result["credential_id"][:8],
+            )
+            return
+
+        if outcome == "timeout":
+            # Slowness is not death: no access-row demotion, no blame — but
+            # back the pair off so a consistently slow model is not re-probed
+            # every pass.  (Latency-aware lifecycle is a later phase.)
+            await cls._backoff_pair(session, result)
+            return
+
+        assert classified is not None
+        scope = getattr(classified, "scope", None) or ""
+        error_code = getattr(classified, "error_code", None) or ""
+        if error_code == "catalog_probe_detected" or scope in ("endpoint", "global"):
+            # The endpoint is pushing back on probing or is itself unhealthy:
+            # back off probing this endpoint, never blame the model.
+            cls._arm_endpoint_probe_backoff(result["endpoint_id"])
+            logger.info(
+                "ProbeWorker: endpoint-scoped probe outcome (%s) on %s — endpoint backoff",
+                error_code or classified.category,
+                result["endpoint_id"],
+            )
+            return
+        if scope in ("key", "account") and not getattr(
+            classified, "is_model_specific", False,
+        ):
+            # Key/account evidence is the credential state machine's business,
+            # not the model's.  Nothing is written for the pair.
+            return
+
+        await service.apply_model_probe_result(
+            credential_id=result["credential_id"],
+            upstream_model_id=result["upstream_model_id"],
+            probe_row={
+                "ok": False,
+                "reason": classified.category,
+                "errorCode": error_code or None,
+                "latencyMs": result["latency_ms"],
+            },
+        )
+
+    @classmethod
+    async def _backoff_pair(
+        cls,
+        session: AsyncSession,
+        result: dict[str, Any],
+    ) -> None:
+        """Increment probe backoff for one exact pair without health blame."""
+        now = _utcnow()
+        access = (
+            await session.execute(
+                select(CredentialModelAccess).where(
+                    CredentialModelAccess.credential_id == result["credential_id"],
+                    CredentialModelAccess.upstream_model_id == result["upstream_row_id"],
+                ),
+            )
+        ).scalar_one_or_none()
+        if access is None:
+            access = CredentialModelAccess(
+                credential_id=result["credential_id"],
+                upstream_model_id=result["upstream_row_id"],
+                status="unknown",
+                created_at=now,
+            )
+            session.add(access)
+            await session.flush()
+        failures = int(access.probe_failures or 0) + 1
+        exponent = min(max(0, failures - 1), 4)
+        backoff = min(
+            ROLE_PROBE_BACKOFF_CAP_SECONDS,
+            ROLE_PROBE_BACKOFF_BASE_SECONDS * (2**exponent),
+        )
+        access.probe_failures = failures
+        access.next_probe_at = now + timedelta(seconds=int(backoff))
+        access.updated_at = now
+        await session.flush()
 
     @classmethod
     async def _load_probe_targets(cls, *, include_active: bool = False) -> list[dict[str, Any]]:
@@ -450,6 +823,14 @@ class ProbeWorker:
         async def _op(session: AsyncSession) -> None:
             for result in results:
                 classified: ClassifiedError | None = result["classified"]
+                # Key-scoped probe failures are evidence about that key only:
+                # they must not pollute the endpoint's rolling metrics.
+                include_endpoint = (
+                    result["success"]
+                    or classified is None
+                    or classified.is_endpoint_wide
+                    or classified.scope in ("endpoint", "global")
+                )
                 credential_state.record_outcome(
                     credential_id=result["credential_id"],
                     endpoint_id=result["endpoint_id"],
@@ -458,6 +839,7 @@ class ProbeWorker:
                     error_kind=credential_state.classify_error_kind(
                         classified, result["http_status"],
                     ),
+                    include_endpoint=include_endpoint,
                 )
                 # ponytail: per-credential savepoint so one failure doesn't
                 # discard earlier credentials' successful transitions.
