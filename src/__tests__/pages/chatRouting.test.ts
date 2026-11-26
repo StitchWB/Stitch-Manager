@@ -4,6 +4,7 @@ import {
   isZaiChatModel,
   resolveChatCompletionsUrl,
   resolveWebBridgeProvider,
+  selectPreferredChatModel,
 } from '../../pages/chatRouting';
 
 describe('chat routing', () => {
@@ -79,6 +80,39 @@ describe('chat routing', () => {
     expect(isWebBridgeChatModel(model)).toBe(true);
     expect(resolveWebBridgeProvider(model)).toBe('web-gemini');
     expect(resolveChatCompletionsUrl(model, 25584)).toBe('/api/v1/chat/completions');
+  });
+
+  it('prefers a backend-routed model over an unavailable legacy-proxy default', () => {
+    const models = [
+      { id: 'gpt-4o-mini', provider: 'openai', ownedBy: 'openai' },
+      { id: 'velly/anthropic/sonnet', provider: 'velly', ownedBy: 'velly' },
+    ];
+
+    expect(selectPreferredChatModel(models, false)).toBe('velly/anthropic/sonnet');
+  });
+
+  it('chooses a backend-routed model when the proxy is unavailable', () => {
+    const models = [
+      { id: 'gpt-4o-mini', provider: 'openai', ownedBy: 'openai' },
+      { id: 'glm-4.5', provider: 'zai', ownedBy: 'zai' },
+    ];
+
+    expect(selectPreferredChatModel(models, false)).toBe('glm-4.5');
+  });
+
+  it('keeps legacy-proxy models eligible when the proxy is usable', () => {
+    const models = [
+      { id: 'gpt-4o-mini', provider: 'openai', ownedBy: 'openai' },
+      { id: 'velly/anthropic/sonnet', provider: 'velly', ownedBy: 'velly' },
+    ];
+
+    expect(selectPreferredChatModel(models, true)).toBe('gpt-4o-mini');
+  });
+
+  it('returns no automatic selection when every model needs an unavailable legacy proxy', () => {
+    const models = [{ id: 'gpt-4o-mini', provider: 'openai', ownedBy: 'openai' }];
+
+    expect(selectPreferredChatModel(models, false)).toBeUndefined();
   });
 
   it('routes other models via the unified gateway', () => {

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 from typing import Any
 
 from stitch_backend.core.event_bus import event_bus
@@ -241,7 +242,9 @@ class SchedulerWorker:
         logger.info("[TaskExecutor] Running script: %s", script_path)
         try:
             proc = await asyncio.create_subprocess_exec(
-                "python", script_path,
+                # Scheduled user scripts must inherit the backend interpreter
+                # (venv/bundle), not whatever `python` resolves to on PATH.
+                sys.executable, script_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

@@ -56,6 +56,8 @@ export interface ChatSession {
   title: string;
   messages: ChatMessage[];
   model: string;
+  /** True when the user explicitly picked this model; false/undefined means automatic. */
+  modelPinned?: boolean;
   systemPrompt: string;
   createdAt: number;
   updatedAt: number;
@@ -81,7 +83,7 @@ interface ChatState {
   switchSession: (id: string) => void;
   deleteSession: (id: string) => void;
   renameSession: (id: string, title: string) => void;
-  setSessionModel: (model: string) => void;
+  setSessionModel: (model: string, options?: { pinned?: boolean }) => void;
   setSessionSystemPrompt: (prompt: string) => void;
 
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
@@ -257,10 +259,13 @@ export const useChatStore = createAsyncStore<ChatState>({
       }));
     },
 
-    setSessionModel: (model: string) => {
+    setSessionModel: (model: string, options?: { pinned?: boolean }) => {
+      const modelPinned = options?.pinned ?? true;
       set(state => ({
         sessions: state.sessions.map(s =>
-          s.id === state.activeSessionId ? { ...s, model, updatedAt: Date.now() } : s
+          s.id === state.activeSessionId
+            ? { ...s, model, modelPinned, updatedAt: Date.now() }
+            : s
         ),
       }));
     },

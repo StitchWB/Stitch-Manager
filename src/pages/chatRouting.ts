@@ -29,6 +29,31 @@ export function resolveWebBridgeProvider(model: ChatRouteModel | undefined): str
   return undefined;
 }
 
+/** True when a model is served directly by the FastAPI backend rather than the legacy proxy. */
+export function isBackendRoutedChatModel(model: ChatRouteModel | undefined): boolean {
+  return (
+    isVellyChatModel(model) ||
+    isZaiChatModel(model) ||
+    model?.provider.toLowerCase() === 'qoder' ||
+    isWebBridgeChatModel(model)
+  );
+}
+
+/**
+ * Pick the first model that can actually be used now. Backend-routed models are
+ * always candidates; legacy-proxy models are candidates only when the legacy
+ * proxy itself is usable. Return undefined when no usable route exists rather
+ * than silently selecting a dead legacy-proxy model.
+ */
+export function selectPreferredChatModel<T extends ChatRouteModel>(
+  models: T[],
+  legacyProxyUsable: boolean,
+): string | undefined {
+  return models.find(
+    model => isBackendRoutedChatModel(model) || legacyProxyUsable,
+  )?.id;
+}
+
 export function resolveChatCompletionsUrl(model: ChatRouteModel | undefined, proxyPort: number): string {
   if (isVellyChatModel(model)) return `${API_BASE_URL}/v1/${model?.protocol === 'messages' ? 'messages' : 'chat/completions'}`;
   if (

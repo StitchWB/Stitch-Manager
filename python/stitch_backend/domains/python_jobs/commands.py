@@ -6,6 +6,7 @@ Generic subprocess job management: start, cancel, status, control, run.
 from __future__ import annotations
 
 import asyncio
+import sys
 
 from stitch_backend.core.command_registry import register_command
 
@@ -35,7 +36,7 @@ async def cmd_start_python_job(params: dict) -> dict:
         cwd=req.get("cwd"),
         timeout_ms=req.get("timeoutMs", 300_000),
         correlation_id=req.get("correlationId"),
-        python_binary=req.get("pythonBinary", "python"),
+        python_binary=req.get("pythonBinary") or sys.executable,
     )
     return {"jobId": job.id}
 
@@ -91,7 +92,7 @@ async def cmd_run_python_script(params: dict) -> str:
     if not script:
         return "error: scriptPath is required"
 
-    python_binary = params.get("pythonBinary", "python")
+    python_binary = params.get("pythonBinary") or sys.executable
     args = params.get("args") or []
     timeout_secs = params.get("timeoutMs", 120_000) / 1000.0
 

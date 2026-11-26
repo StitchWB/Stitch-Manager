@@ -8,10 +8,20 @@ import { VellyConnectionCard } from '@/components/ai-proxy/VellyConnectionCard';
 import Header from '@/components/layout/Header';
 import { Button, GlassCard, Input, PageHeader, StatusBadge } from '@/components/ui';
 import { askConfirm } from '@/components/ui/ConfirmDialogHost';
+import { API_BASE_URL } from '@/lib/backend/core/invoke';
 import { getLocalChatToken } from '@/lib/backend/modules/aiProxy';
+import { modelSyncStatus } from '@/lib/backend/modules/modelSync';
 import { t } from '@/lib/i18n';
 import { useAppStore } from '@/stores/app';
 import { useAiProvidersController } from './hooks/useAiProvidersController';
+
+function fallbackGatewayBaseUrl(): string {
+  try {
+    return new URL(`${API_BASE_URL}/v1`, window.location.origin).href;
+  } catch {
+    return `${API_BASE_URL}/v1`;
+  }
+}
 
 interface AiIntegrationsProps {
   baseUrl?: string;
@@ -23,6 +33,8 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
   const language = useAppStore(state => state.language);
   const [copied, setCopied] = useState<'url' | 'key' | null>(null);
   const [localToken, setLocalToken] = useState('');
+  const [gatewayBaseUrl, setGatewayBaseUrl] = useState(() => fallbackGatewayBaseUrl());
+  const [gatewayRunning, setGatewayRunning] = useState(true);
   const [transferMode, setTransferMode] = useState<'import' | 'export' | null>(null);
   const controller = useAiProvidersController();
 
@@ -34,6 +46,17 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
       })
       .catch(() => {
         if (!disposed) setLocalToken('');
+      });
+    modelSyncStatus()
+      .then(status => {
+        if (disposed) return;
+        if (typeof status.baseUrl === 'string' && status.baseUrl.trim()) {
+          setGatewayBaseUrl(status.baseUrl.trim());
+        }
+        setGatewayRunning(status.gatewayRunning !== false);
+      })
+      .catch(() => {
+        if (!disposed) setGatewayRunning(true);
       });
     return () => {
       disposed = true;
@@ -65,17 +88,27 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
     effectiveExportIncludeSecrets,
   } = controller;
 
-  const baseUrl = baseUrlOverride ?? detectedBaseUrl;
+  const baseUrl = baseUrlOverride ?? gatewayBaseUrl;
   const effectiveClientApiKey = clientApiKey ?? localToken;
   const isRu = language === 'ru';
   const copy = isRu
     ? {
-      workspaceTitle: 'Единое API',
+      workspaceTitle: 'AI Gateway',
       workspaceDescription:
-        'Один endpoint и ключ для любого OpenAI-совместимого клиента. Proxy должен быть запущен.',
-      endpointTitle: 'Endpoint и ключ',
-      endpointHint: 'Значения можно скопировать без ручного выделения.',
-      proxySettings: 'Настройки Proxy',
+        'OpenAI-совместимый endpoint встроен в backend Stitch. Внешний proxy для него не нужен.',
+      endpointTitle: 'Gateway endpoint и ключ',
+      endpointHint:
+        'Укажите Base URL в клиенте и передавайте ключ как Authorization: Bearer <key>. Локальный ключ ниже действует только на этом компьютере; Model Sync записывает в opencode/omp отдельные install-ключи с ограниченным доступом.',
+      gatewayRunning: 'AI Gateway работает',
+      gatewayStopped: 'AI Gateway недоступен',
+      localTokenLabel: 'Локальный gateway-ключ',
+      installKeyHint:
+        'Не вставляйте этот локальный ключ в конфиги opencode/omp вручную: кнопка Model Sync создаёт отдельные install-ключи, которые можно отозвать без смены локального токена.',
+      legacyTitle: 'Legacy AI Proxy',
+      legacyDescription:
+        'Совместимость для старых клиентов. Новые подключения должны использовать AI Gateway выше.',
+      legacyRunning: 'Legacy proxy работает',
+      proxySettings: 'Настройки Gateway',
       testInChat: 'Проверить в чате',
       transferTitle: 'Перенос аккаунтов',
       transferDescription:
@@ -84,19 +117,27 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
         'Вставьте JSON-бэкап аккаунтов. Данные будут проверены до импорта.',
       importAccounts: 'Импорт JSON',
       exportAccounts: 'Экспорт',
-      running: 'Proxy работает',
-      stopped: 'Proxy остановлен',
       copyFailed: 'Не удалось скопировать значение',
       copied: 'Скопировано',
       sensitiveConfirm: 'Скопировать значение с секретами в буфер обмена?',
     }
     : {
-      workspaceTitle: 'Unified API',
+      workspaceTitle: 'AI Gateway',
       workspaceDescription:
-        'One endpoint and key for any OpenAI-compatible client. The proxy must be running.',
-      endpointTitle: 'Endpoint and key',
-      endpointHint: 'Copy values without selecting them manually.',
-      proxySettings: 'Proxy settings',
+        'An OpenAI-compatible endpoint built into the Stitch backend. No external proxy is required.',
+      endpointTitle: 'Gateway endpoint and key',
+      endpointHint:
+        'Use this Base URL in your client and send the key as Authorization: Bearer <key>. The local key below works only on this machine; Model Sync provisions separate least-privilege install keys for opencode/omp.',
+      gatewayRunning: 'AI Gateway is running',
+      gatewayStopped: 'AI Gateway is unavailable',
+      localTokenLabel: 'Local gateway key',
+      installKeyHint:
+        'Do not paste this local key into opencode/omp configs manually: Model Sync creates separate install keys that can be revoked without rotating the local token.',
+      legacyTitle: 'Legacy AI Proxy',
+      legacyDescription:
+        'Compatibility endpoint for older clients. New connections should use the AI Gateway above.',
+      legacyRunning: 'Legacy proxy is running',
+      proxySettings: 'Gateway settings',
       testInChat: 'Test in Chat',
       transferTitle: 'Move accounts',
       transferDescription:
@@ -105,8 +146,6 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
         'Paste an account JSON backup. The data is validated before import.',
       importAccounts: 'Import JSON',
       exportAccounts: 'Export',
-      running: 'Proxy is running',
-      stopped: 'Proxy is stopped',
       copyFailed: 'Could not copy the value',
       copied: 'Copied',
       sensitiveConfirm: 'Copy a value containing secrets to the clipboard?',
@@ -146,7 +185,7 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
     [copy.copied, copy.copyFailed, copy.sensitiveConfirm]
   );
 
-  const running = Boolean(proxyStatus?.running);
+  const legacyRunning = Boolean(proxyStatus?.running);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-void-base">
@@ -165,8 +204,8 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
               <h2 className="text-sm font-semibold text-white">{copy.workspaceTitle}</h2>
               <p className="mt-0.5 text-[11px] text-slate-500">{copy.endpointHint}</p>
             </div>
-            <StatusBadge status={running ? 'active' : 'inactive'} size="sm" withDot>
-              {running ? copy.running : copy.stopped}
+            <StatusBadge status={gatewayRunning ? 'active' : 'inactive'} size="sm" withDot>
+              {gatewayRunning ? copy.gatewayRunning : copy.gatewayStopped}
             </StatusBadge>
           </div>
 
@@ -199,7 +238,7 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
                   }
                 />
                 <Input
-                  label={t('aiHub.integrations.apiKey')}
+                  label={copy.localTokenLabel}
                   value={effectiveClientApiKey}
                   readOnly
                   className="font-mono text-xs"
@@ -222,6 +261,10 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
                   }
                 />
               </div>
+
+              <p className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-4 text-slate-400">
+                {copy.installKeyHint}
+              </p>
 
               <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
                 <Button
@@ -266,6 +309,38 @@ export function AiIntegrations({ baseUrl: baseUrlOverride, clientApiKey }: AiInt
               </div>
             </section>
           </div>
+
+          {legacyRunning ? (
+            <section className="border-t border-white/[0.06] px-4 py-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold text-white">{copy.legacyTitle}</h3>
+                  <p className="mt-0.5 text-[11px] text-slate-500">{copy.legacyDescription}</p>
+                </div>
+                <StatusBadge status="active" size="sm" withDot>
+                  {copy.legacyRunning}
+                </StatusBadge>
+              </div>
+              <Input
+                label={t('aiHub.integrations.baseUrl')}
+                value={detectedBaseUrl}
+                readOnly
+                className="font-mono text-xs"
+                rightElement={
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() =>
+                      void handleCopy(copy.legacyTitle, detectedBaseUrl, false)
+                    }
+                    leftIcon={<Copy size={13} />}
+                  >
+                    {t('common.copy')}
+                  </Button>
+                }
+              />
+            </section>
+          ) : null}
         </GlassCard>
         <VellyConnectionCard />
       </div>

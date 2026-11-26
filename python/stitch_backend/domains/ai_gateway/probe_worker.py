@@ -49,6 +49,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_log(level: int, message: str, *args: Any, **kwargs: Any) -> None:
+    """Best-effort logging that can never break persistence/control flow."""
+    try:
+        logger.log(level, message, *args, **kwargs)
+    except Exception:
+        # Logging must be observational only.  Custom handlers, closed capture
+        # streams, and legacy console encodings are not reasons to roll back a
+        # database savepoint or abort a probe batch.
+        pass
+
 # Credentials in these states are candidates for recovery probing.
 # ponytail: "unknown" is included so a freshly-created credential whose first
 # probe hasn't run yet still gets probed by the worker — trade-off is one
@@ -1058,26 +1069,30 @@ class ProbeWorker:
                             http_status=result["http_status"],
                             source="probe",
                         )
-
-                        if result["success"]:
-                            logger.info(
-                                "ProbeWorker: credential %s recovered → active",
-                                result["credential_id"],
-                            )
-                        else:
-                            category = (
-                                classified.category if classified else "unknown"
-                            )
-                            logger.info(
-                                "ProbeWorker: credential %s still unhealthy (%s)",
-                                result["credential_id"], category,
-                            )
-
                         await session.flush()
+
+                    # Keep informational logging outside the savepoint.  A
+                    # logging failure must not reach begin_nested().__aexit__
+                    # and roll back an otherwise successful transition.
+                    if result["success"]:
+                        _safe_log(
+                            logging.INFO,
+                            "ProbeWorker: credential %s recovered → active",
+                            result["credential_id"],
+                        )
+                    else:
+                        category = classified.category if classified else "unknown"
+                        _safe_log(
+                            logging.INFO,
+                            "ProbeWorker: credential %s still unhealthy (%s)",
+                            result["credential_id"], category,
+                        )
                 except Exception:
-                    logger.exception(
+                    _safe_log(
+                        logging.ERROR,
                         "ProbeWorker: failed for credential %s",
                         result["credential_id"],
+                        exc_info=True,
                     )
                     # savepoint auto-rolled back; outer transaction continues
 
