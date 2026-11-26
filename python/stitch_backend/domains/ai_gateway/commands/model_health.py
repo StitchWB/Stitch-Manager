@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 REASON_GROUPS = {
     "quota_exhausted": "balance",
     "server_error": "channel",
+    "upstream_unavailable": "channel",
     "auth_failed": "auth",
     "rate_limited": "rate",
     "model_access_denied": "access",

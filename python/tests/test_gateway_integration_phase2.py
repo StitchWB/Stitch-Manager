@@ -239,6 +239,32 @@ async def test_entitlement_model_failure_marks_exact_pair_denied_not_temporary(d
     assert access.last_error == "token_model_not_allowed"
 
 
+async def test_entitlement_shaped_503_marks_pair_transient_not_terminal(db_session):
+    endpoint, cred, upstream, _pub = await _seed_route(db_session)
+    engine = RoutingEngine()
+    error = ClassifiedError(
+        category="model_access_denied",
+        is_model_specific=True,
+        error_code="token_model_not_allowed",
+    )
+
+    await engine.record_result(
+        db_session,
+        cred.id,
+        endpoint.id,
+        error=error,
+        http_status=503,
+        upstream_model_id=upstream.id,
+    )
+    await db_session.commit()
+
+    access = (
+        await CredentialModelAccessService(db_session).list_access(cred.id, upstream.id)
+    )[0]
+    assert access.status == "temporarily_unavailable"
+    assert access.last_error == "upstream_unavailable"
+
+
 async def test_successful_probe_reenables_auto_retired_upstream(db_session):
     _endpoint, cred, upstream, _pub = await _seed_route(db_session)
     upstream.enabled = False

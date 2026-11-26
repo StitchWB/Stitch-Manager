@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -173,6 +174,47 @@ ROLE_PROBE_LEVEL2_PROMPT = (
     "with no separator. Do not add anything else."
 )
 ROLE_PROBE_LEVEL2_EXPECTED = "gammagamma"
+# Real instruction-following noise is mostly presentation, not semantic failure:
+# models capitalize, quote, punctuate, insert whitespace, or spell a separator
+# ("gamma and gamma").  Normalize that noise before looking for the expected
+# token sequence.  The check remains content-sensitive: unrelated prose or the
+# wrong word does not pass merely because it is non-empty.
+_LEVEL2_SEPARATOR_WORDS = (
+    "and",
+    "then",
+    "plus",
+    "with",
+    "comma",
+    "hyphen",
+    "dash",
+    "underscore",
+    "separator",
+    "space",
+)
+_LEVEL2_SEPARATOR_RE = re.compile(
+    r"\b(?:" + "|".join(_LEVEL2_SEPARATOR_WORDS) + r")\b",
+    re.IGNORECASE,
+)
+_LEVEL2_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _level2_response_passes(text: str) -> bool:
+    """Return whether a level-2 answer carries ``gammagamma`` through noise."""
+    without_separator_words = _LEVEL2_SEPARATOR_RE.sub("", text.lower())
+    compact = _LEVEL2_NON_ALNUM_RE.sub("", without_separator_words)
+    return ROLE_PROBE_LEVEL2_EXPECTED in compact
+
+
+def _exception_http_status(exc: BaseException) -> int | None:
+    """Best-effort HTTP status extraction without coupling to one exception type."""
+    for value in (
+        getattr(exc, "http_status", None),
+        getattr(exc, "status_code", None),
+        getattr(getattr(exc, "response", None), "status_code", None),
+    ):
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
 
 # In-memory endpoint-level probe backoff, armed when the upstream detects and
 # pushes back on catalog probing (``catalog_probe_detected``) or otherwise
@@ -480,9 +522,20 @@ class ProbeWorker:
         )
 
         async def _op(session: AsyncSession) -> None:
-            await ChainRefillService(session).detect_and_apply_refill(
+            service = ChainRefillService(session)
+            actions = await service.detect_and_apply_refill(
                 probe_pass_seconds=cls._interval_seconds,
             )
+            if actions:
+                roles = {action["public_model_id"] for action in actions}
+                logger.info(
+                    "Chain refill: applied %d refill entries across %d roles (%s)",
+                    len(actions),
+                    len(roles),
+                    ",".join(sorted(roles)),
+                )
+            else:
+                await service.log_rescue_inactivity()
 
         await run_in_session(_op)
 
@@ -871,6 +924,8 @@ class ProbeWorker:
             "usage_sane": None,
             "usage_reason": None,
             "level2_passed": None,
+            "evidence_probe": evidence_probe,
+            "http_status": None,
         }
 
         async def _invoke(prompt: str, timeout: float) -> Any:
@@ -915,6 +970,7 @@ class ProbeWorker:
                 "outcome": "error",
                 "latency_ms": int((time.monotonic() - start) * 1000),
                 "classified": classified,
+                "http_status": _exception_http_status(exc),
             })
             return result
 
@@ -950,12 +1006,7 @@ class ProbeWorker:
                 if level2_data is not None:
                     level2_text = cls._extract_completion_text(level2_data)
                     if isinstance(level2_text, str):
-                        # Exact instruction following, not substring overlap:
-                        # separators/extra words fail the level-2 canary.  Only
-                        # surrounding whitespace and terminal sentence punctuation
-                        # are tolerated.
-                        normalized = level2_text.strip().lower().strip(".!?,;:\"'")
-                        level2_passed = normalized == ROLE_PROBE_LEVEL2_EXPECTED
+                        level2_passed = _level2_response_passes(level2_text)
                     level2_sane, level2_reason = _usage_evidence(
                         level2_data,
                         ROLE_PROBE_LEVEL2_PROMPT,
@@ -1054,7 +1105,14 @@ class ProbeWorker:
                 classified = result.get("classified")
                 scope = getattr(classified, "scope", None) or ""
                 error_code = getattr(classified, "error_code", None) or ""
-                if error_code == "catalog_probe_detected" or scope in ("endpoint", "global"):
+                endpoint_wide = bool(getattr(classified, "is_endpoint_wide", False)) and not getattr(
+                    classified, "is_model_specific", False,
+                )
+                if (
+                    error_code == "catalog_probe_detected"
+                    or scope in ("endpoint", "global")
+                    or endpoint_wide
+                ):
                     cls._arm_endpoint_probe_backoff(target["endpoint_id"])
                     result["endpoint_backoff_armed"] = True
             except Exception:
@@ -1105,11 +1163,18 @@ class ProbeWorker:
                     "level2Passed": result.get("level2_passed"),
                 },
             )
-            logger.info(
-                "ProbeWorker: exact probe SUCCESS %s (credential=%s) — promotion path",
-                result["upstream_model_id"],
-                result["credential_id"][:8],
-            )
+            if result.get("evidence_probe"):
+                logger.info(
+                    "ProbeWorker: exact probe SUCCESS %s (credential=%s) — evidence trickle, no route promotion",
+                    result["upstream_model_id"],
+                    result["credential_id"][:8],
+                )
+            else:
+                logger.info(
+                    "ProbeWorker: exact probe SUCCESS %s (credential=%s) — promotion path",
+                    result["upstream_model_id"],
+                    result["credential_id"][:8],
+                )
             return
 
         if outcome == "timeout":
@@ -1122,7 +1187,14 @@ class ProbeWorker:
         assert classified is not None
         scope = getattr(classified, "scope", None) or ""
         error_code = getattr(classified, "error_code", None) or ""
-        if error_code == "catalog_probe_detected" or scope in ("endpoint", "global"):
+        endpoint_wide = bool(getattr(classified, "is_endpoint_wide", False)) and not getattr(
+            classified, "is_model_specific", False,
+        )
+        if (
+            error_code == "catalog_probe_detected"
+            or scope in ("endpoint", "global")
+            or endpoint_wide
+        ):
             # The endpoint is pushing back on probing or is itself unhealthy:
             # back off probing this endpoint, never blame the model.  Usually
             # this was already armed in the network loop so later burst
@@ -1150,6 +1222,7 @@ class ProbeWorker:
                 "ok": False,
                 "reason": classified.category,
                 "errorCode": error_code or None,
+                "httpStatus": result.get("http_status"),
                 "latencyMs": result["latency_ms"],
                 "usageSane": result.get("usage_sane"),
                 "usageReason": result.get("usage_reason"),

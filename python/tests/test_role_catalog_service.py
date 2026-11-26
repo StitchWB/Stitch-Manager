@@ -449,6 +449,132 @@ async def test_apply_model_probe_result_model_failure_demotes_and_backs_off(db_s
     assert target.lifecycle_reason == "model_not_found"
 
 
+async def _lead_target_and_access_after_probe(
+    db_session,
+    probe_row: dict,
+) -> tuple[RouteTarget, CredentialModelAccess]:
+    endpoint = await _add_endpoint(db_session)
+    credential = await _add_credential(db_session, endpoint)
+    svc = RoleCatalogService(db_session)
+    await svc.reconcile_all()
+    target = (await db_session.execute(
+        select(RouteTarget).where(RouteTarget.public_model_id == "rb/lead")
+        .order_by(RouteTarget.priority.asc())
+    )).scalars().first()
+    assert target is not None
+    target.enabled = True
+    target.lifecycle_status = "active"
+    await db_session.flush()
+
+    await svc.apply_model_probe_result(
+        credential_id=credential.id,
+        upstream_model_id=target.upstream_model_id,
+        probe_row={"ok": False, "latencyMs": 17, **probe_row},
+    )
+    access = (await db_session.execute(select(CredentialModelAccess))).scalar_one()
+    return target, access
+
+
+async def test_probe_denial_with_5xx_is_transient_not_terminal(db_session) -> None:
+    target, access = await _lead_target_and_access_after_probe(
+        db_session,
+        {
+            "reason": "model_access_denied",
+            "errorCode": "token_model_not_allowed",
+            "httpStatus": 503,
+        },
+    )
+
+    assert access.status == "temporarily_unavailable"
+    assert access.last_error == "upstream_unavailable"
+    assert access.next_probe_at is not None
+    await db_session.refresh(target)
+    assert target.lifecycle_reason == "upstream_unavailable"
+
+
+async def test_probe_model_not_found_with_5xx_is_upstream_transient(db_session) -> None:
+    _target, access = await _lead_target_and_access_after_probe(
+        db_session,
+        {"reason": "model_not_found", "errorCode": "model_not_found", "httpStatus": 503},
+    )
+
+    assert access.status == "temporarily_unavailable"
+    assert access.last_error == "upstream_unavailable"
+    assert access.next_probe_at is not None
+
+
+async def test_probe_server_error_with_5xx_uses_pair_backoff_not_denial(db_session) -> None:
+    _target, access = await _lead_target_and_access_after_probe(
+        db_session,
+        {"reason": "server_error", "httpStatus": 503},
+    )
+
+    assert access.status == "temporarily_unavailable"
+    assert access.last_error == "upstream_unavailable"
+    assert access.next_probe_at is not None
+
+
+async def test_probe_explicit_model_denial_on_4xx_remains_terminal_for_key(db_session) -> None:
+    _target, access = await _lead_target_and_access_after_probe(
+        db_session,
+        {
+            "reason": "model_access_denied",
+            "errorCode": "token_model_not_allowed",
+            "httpStatus": 403,
+        },
+    )
+
+    assert access.status == "denied"
+    assert access.last_error == "model_access_denied"
+
+
+async def test_probe_explicit_denial_without_http_status_remains_terminal_for_key(db_session) -> None:
+    _target, access = await _lead_target_and_access_after_probe(
+        db_session,
+        {"reason": "model_access_denied", "errorCode": "token_model_not_allowed"},
+    )
+
+    assert access.status == "denied"
+    assert access.last_error == "model_access_denied"
+
+
+async def test_note_upstream_outcome_5xx_denial_shape_does_not_escalate_terminal(db_session) -> None:
+    endpoint = await _add_endpoint(db_session)
+    credential = await _add_credential(db_session, endpoint)
+    svc = RoleCatalogService(db_session)
+    await svc.reconcile_all()
+    target = (await db_session.execute(
+        select(RouteTarget).where(RouteTarget.public_model_id == "rb/lead")
+        .order_by(RouteTarget.priority.asc())
+    )).scalars().first()
+    assert target is not None
+    access = CredentialModelAccess(
+        credential_id=credential.id,
+        upstream_model_id=target.upstream_model_id,
+        status="temporarily_unavailable",
+        created_at=_utcnow(),
+    )
+    db_session.add(access)
+    await db_session.flush()
+
+    await svc.note_upstream_outcome(
+        endpoint_id=endpoint.id,
+        upstream_model_id=target.upstream_model_id,
+        error=ClassifiedError(
+            category="model_access_denied",
+            is_model_specific=True,
+            error_code="token_model_not_allowed",
+        ),
+        credential_id=credential.id,
+        http_status=503,
+    )
+
+    await db_session.refresh(access)
+    assert access.status == "temporarily_unavailable"
+    await db_session.refresh(target)
+    assert target.lifecycle_reason == "upstream_unavailable"
+
+
 async def test_note_upstream_outcome_demotes_only_when_no_usable_access_remains(db_session) -> None:
     endpoint = await _add_endpoint(db_session)
     credential = await _add_credential(db_session, endpoint)
