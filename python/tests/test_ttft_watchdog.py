@@ -18,6 +18,7 @@ Rules under test:
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -34,6 +35,7 @@ from stitch_backend.domains.ai_proxy.litellm_streaming import (
     prime_stream,
 )
 from stitch_backend.domains.ai_proxy.rate_limiter import get_rate_limiter
+from stitch_backend.domains.ai_proxy.request_trace import get_request_trace_store
 
 # ── Fakes ────────────────────────────────────────────────────────────────────
 
@@ -94,12 +96,12 @@ def _content_line(text: str) -> str:
 _ROLE_LINE = 'data: {"id":"1","choices":[{"delta":{"role":"assistant"}}]}'
 
 
-def _route(adapter, *, endpoint_id: str, credential_id: str):
+def _route(adapter, *, endpoint_id: str, credential_id: str, upstream_model_id: str = "qwen2.8"):
     return SimpleNamespace(
         adapter=adapter,
         endpoint=SimpleNamespace(id=endpoint_id, name=endpoint_id, base_url="https://upstream.invalid"),
         credential=SimpleNamespace(id=credential_id, owner_id=None),
-        upstream_model=SimpleNamespace(id=f"um-{endpoint_id}", upstream_model_id="qwen2.8"),
+        upstream_model=SimpleNamespace(id=f"um-{endpoint_id}", upstream_model_id=upstream_model_id),
         secret="sk-test-secret",
         default_headers={},
         group_id_hit=None,
@@ -123,6 +125,7 @@ def _reset_singletons():
     get_metrics_tracker().metrics.clear()
     key_inflight.reset()
     litellm_invoke_pipeline._reset_latency_cache()
+    get_request_trace_store().clear()
 
 
 def _executor_with_routes(routes):
@@ -143,9 +146,9 @@ def _patch_policy(monkeypatch, policy: litellm_invoke_pipeline.LatencyPolicy | N
     monkeypatch.setattr(litellm_invoke_pipeline, "load_latency_policy", _fake_load)
 
 
-async def _chat(executor, *, stream: bool):
+async def _chat(executor, *, stream: bool, model: str = "qwen2.8"):
     payload = GatewayRequest(
-        model="qwen2.8", messages=[{"role": "user", "content": "hi"}],
+        model=model, messages=[{"role": "user", "content": "hi"}],
         stream=stream, max_wait_seconds=0,
     )
     with patch("stitch_backend.domains.ai_proxy.litellm_executor.run_in_session", _fake_run_in_session):
@@ -509,3 +512,61 @@ async def test_concurrent_streaming_requests_enforce_inflight_cap_for_stream_dur
     assert key_inflight.in_flight("cred-1") == 1
     await _collect(second)
     assert key_inflight.in_flight("cred-1") == 0
+
+
+# ── Public model response shaping ────────────────────────────────────────────
+
+
+async def test_nonstream_response_model_is_public_role_and_upstream_traceable() -> None:
+    body = _completion_body("answer")
+    body["model"] = "qwen-max"
+    adapter = _NonStreamAdapter(delay=0.0, body=body)
+    executor, _recorded = _executor_with_routes([
+        _route(
+            adapter,
+            endpoint_id="ep-1",
+            credential_id="cred-1",
+            upstream_model_id="qwen-max",
+        ),
+    ])
+
+    result = await _chat(executor, stream=False, model="rb/lead")
+
+    assert isinstance(result, dict)
+    assert result["model"] == "rb/lead"
+    assert result["x-stitch"]["upstream_model"] == "qwen-max"
+    traces = get_request_trace_store().list(1)
+    assert traces[0]["served_public_model"] == "rb/lead"
+    assert traces[0]["upstream_model"] == "qwen-max"
+
+
+async def test_streaming_response_model_is_public_role_and_upstream_traceable() -> None:
+    upstream_chunk = {
+        "id": "chatcmpl-1",
+        "model": "qwen-max",
+        "choices": [{"delta": {"content": "hello"}}],
+    }
+    line = "data: " + json.dumps(upstream_chunk, separators=(",", ":"))
+    adapter = _StreamingAdapter([(0.0, line), (0.0, "data: [DONE]")])
+    executor, _recorded = _executor_with_routes([
+        _route(
+            adapter,
+            endpoint_id="ep-1",
+            credential_id="cred-1",
+            upstream_model_id="qwen-max",
+        ),
+    ])
+
+    result = await _chat(executor, stream=True, model="rb/lead")
+    body = await _collect(result)
+
+    frames = [
+        json.loads(part[len("data: "):])
+        for part in body.split("\n\n")
+        if part.startswith("data: {")
+    ]
+    assert frames[0]["model"] == "rb/lead"
+    assert frames[0]["x-stitch"]["upstream_model"] == "qwen-max"
+    traces = get_request_trace_store().list(1)
+    assert traces[0]["served_public_model"] == "rb/lead"
+    assert traces[0]["upstream_model"] == "qwen-max"

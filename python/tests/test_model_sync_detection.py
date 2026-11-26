@@ -42,6 +42,64 @@ def test_windows_cmd_shim_is_probeable(tmp_path: Path, monkeypatch: pytest.Monke
     assert cmd in seen
 
 
+def _install_desktop_cli_fixture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    appdata = tmp_path / "Roaming"
+    cli = appdata / "ai.opencode.desktop" / "cli" / "2.4.1-x64" / "opencode-cli.exe"
+    cli.parent.mkdir(parents=True)
+    cli.write_text("fake desktop cli placeholder", encoding="utf-8")
+    monkeypatch.setenv("APPDATA", str(appdata))
+    monkeypatch.setattr(detection.shutil, "which", lambda _name: None)
+
+    def fake_run(binary: Path, timeout: float) -> str | None:
+        return "opencode v2.4.1" if binary == cli else None
+
+    monkeypatch.setattr(detection, "_run_version_probe", fake_run)
+    return cli
+
+
+def test_desktop_bundled_opencode_cli_is_probeable_as_v2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli = _install_desktop_cli_fixture(tmp_path, monkeypatch)
+
+    probed = detection._probe_one_opencode_binary("opencode2", 0.1)
+
+    assert probed is not None
+    assert probed["version"] == "2.4.1"
+    assert probed["schema"] == "v2"
+    assert probed["path"] == str(cli)
+
+
+def test_real_world_v2_config_layout_and_desktop_cli_detected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli = _install_desktop_cli_fixture(tmp_path, monkeypatch)
+    config_dir = tmp_path / "home" / ".config" / "opencode"
+    config_dir.mkdir(parents=True)
+    (config_dir / "opencode.json").write_text(
+        json.dumps({
+            "$schema": "https://opencode.ai/config.json",
+            "providers": {},
+            "agents": {},
+        }),
+        encoding="utf-8",
+    )
+    (config_dir / "cli.json").write_text("{}", encoding="utf-8")
+
+    result = detection.detect_opencode_version(
+        config_dir,
+        binary_probe=lambda: detection.probe_opencode_binaries(0.1),
+    )
+
+    assert result["version"] == "v2"
+    assert result["source"] == "binary"
+    assert result["binary"] == "opencode2"
+    assert result["binaries"]["opencode2"]["path"] == str(cli)
+
+
 def test_both_binaries_reported_and_v2_wins(tmp_path: Path) -> None:
     binaries = {
         "opencode": {"version": "1.19.4", "schema": "v1", "path": "x", "raw": "1.19.4"},

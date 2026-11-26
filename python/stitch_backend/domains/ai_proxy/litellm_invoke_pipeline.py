@@ -15,7 +15,11 @@ from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_proxy.holone_inspector import (
     default_engine as _holone_default_engine,
 )
-from stitch_backend.domains.ai_proxy.litellm_response_parsing import _json_object, _usage_split
+from stitch_backend.domains.ai_proxy.litellm_response_parsing import (
+    _json_object,
+    _shape_response_model,
+    _usage_split,
+)
 from stitch_backend.domains.ai_proxy.litellm_streaming import (
     StreamStallError,
     TtftWatchdogError,
@@ -749,7 +753,14 @@ async def invoke_via_gateway(
                 ttft_timeout=ttft_remaining,
             )
         else:
-            result = cast("Any", _json_object(response))
+            result = cast(
+                "Any",
+                _shape_response_model(
+                    _json_object(response),
+                    payload.model,
+                    getattr(routing_result.upstream_model, "upstream_model_id", None),
+                ),
+            )
             _reject_empty_completion(result)
             _sanitize_usage_arithmetic(
                 result, routing_result, request_text_chars=_request_text_chars(messages),
@@ -968,7 +979,14 @@ async def invoke_via_gateway_messages(
                 ttft_timeout=ttft_remaining,
             )
         else:
-            result = cast("Any", _json_object(response))
+            result = cast(
+                "Any",
+                _shape_response_model(
+                    _json_object(response),
+                    payload.model,
+                    getattr(routing_result.upstream_model, "upstream_model_id", None),
+                ),
+            )
             _reject_empty_completion(result)
             _sanitize_usage_arithmetic(
                 result, routing_result, request_text_chars=_request_text_chars(messages),
@@ -1195,7 +1213,14 @@ async def invoke_via_gateway_responses(
                 ttft_timeout=ttft_remaining,
             )
         else:
-            result = cast("Any", _json_object(response))
+            result = cast(
+                "Any",
+                _shape_response_model(
+                    _json_object(response),
+                    payload.model,
+                    getattr(routing_result.upstream_model, "upstream_model_id", None),
+                ),
+            )
             _reject_empty_completion(result)
             if isinstance(input_data, str):
                 request_chars = len(input_data)
