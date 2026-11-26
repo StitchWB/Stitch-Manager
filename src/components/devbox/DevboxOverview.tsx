@@ -23,7 +23,7 @@ import { devboxEventLine } from './eventLine';
 import { devboxIngressModeLabel } from './labels';
 import { DEVBOX_TOTAL_TOOLS, type DevboxTab, type UseDevboxConnectResult } from './useDevboxConnect';
 
-type HeroVariant = 'ok' | 'plugin' | 'stack' | 'bridge' | 'blocked' | 'fallback' | 'session';
+type HeroVariant = 'ok' | 'plugin' | 'stack' | 'bridge' | 'blocked' | 'fallback' | 'session' | 'path';
 
 interface HeroCopy {
   titleKey: string;
@@ -107,6 +107,16 @@ const HERO_COPY: Record<HeroVariant, HeroCopy> = {
     badgeVariant: 'warning',
     alertVariant: 'warning',
   },
+  path: {
+    titleKey: 'devboxPage.overviewHeroPathTitle',
+    subKey: 'devboxPage.overviewHeroPathSub',
+    stateKey: 'devboxPage.overviewHeroPathState',
+    alertTitleKey: 'devboxPage.overviewHeroPathAlertTitle',
+    alertTextKey: 'devboxPage.overviewHeroPathAlertText',
+    actionKey: 'devboxPage.overviewHeroPathAction',
+    badgeVariant: 'warning',
+    alertVariant: 'warning',
+  },
 };
 
 function Metric({ label, value, testId }: { label: string; value: string; testId: string }) {
@@ -148,14 +158,16 @@ export function DevboxOverview({
     if (connect.resolvedUrl === '') return 'blocked';
     if (connect.stackState === 'down' || connect.stackState === 'unknown') return 'stack';
     if (connect.bridgeState !== 'healthy') return 'bridge';
+    if (connect.ingressState !== 'healthy') return 'path';
     if (connect.handoffStale || connect.connectionStale) return 'session';
     if (connect.fallbackActive) return 'fallback';
     if (connect.probeOk) return 'ok';
-    return 'bridge';
+    return 'path';
   }, [
     connect.resolvedUrl,
     connect.stackState,
     connect.bridgeState,
+    connect.ingressState,
     connect.handoffStale,
     connect.connectionStale,
     connect.fallbackActive,
@@ -177,9 +189,13 @@ export function DevboxOverview({
   const heroAlertText =
     heroVariant === 'blocked'
       ? t(hero.alertTextKey, { reason })
-      : heroVariant === 'plugin' && pollError !== null
-        ? t(hero.alertTextKey, { error: pollError })
-        : t(hero.alertTextKey);
+      : heroVariant === 'path'
+        ? t(hero.alertTextKey, {
+            reason: connect.blockedReason ?? t('devboxPage.overviewHeroPathAlertFallback'),
+          })
+        : heroVariant === 'plugin' && pollError !== null
+          ? t(hero.alertTextKey, { error: pollError })
+          : t(hero.alertTextKey);
 
   const approvalCount = permissions?.rows.length ?? 0;
   const mcpCount = gateway?.exposed_mcps.length ?? 0;
@@ -211,6 +227,10 @@ export function DevboxOverview({
     }
     if (heroVariant === 'stack' || heroVariant === 'bridge') {
       connect.startStack();
+      return;
+    }
+    if (heroVariant === 'path') {
+      void connect.runCheck();
       return;
     }
     if (heroVariant === 'session') {
@@ -416,9 +436,22 @@ export function DevboxOverview({
                   ? t('devboxPage.overviewBridgeReady')
                   : t('devboxPage.overviewBridgeStopped')}
               </Badge>
-              <Badge variant={connect.probeOk ? 'success' : 'warning'} data-testid="devbox-overview-pill-path">
+              <Badge
+                variant={
+                  connect.ingressState !== 'healthy'
+                    ? 'danger'
+                    : connect.probeOk
+                      ? 'success'
+                      : 'warning'
+                }
+                data-testid="devbox-overview-pill-path"
+              >
                 {t('devboxPage.overviewPillPath')} ·{' '}
-                {connect.probeOk ? t('devboxPage.overviewFocusOnline') : t('devboxPage.overviewFocusStopped')}
+                {connect.ingressState !== 'healthy'
+                  ? t('devboxPage.overviewFocusStopped')
+                  : connect.probeOk
+                    ? t('devboxPage.overviewFocusOnline')
+                    : t('devboxPage.overviewFocusUnverified')}
               </Badge>
               <Badge
                 variant={connect.handoffStale ? 'warning' : 'success'}

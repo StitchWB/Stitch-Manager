@@ -370,6 +370,15 @@ export const stoppedCardsFixture: DevboxVitalCard[] = [
   gatewayVitalCard('down'),
 ];
 
+export const ingressDownCardsFixture: DevboxVitalCard[] = [
+  { id: 'profile', title: 'Profile', value: 'midsai', tone: 'ok', updatedAt: 1791536987.76 },
+  { id: 'ingress', title: 'Ingress', value: 'down', tone: 'down', updatedAt: 1791536987.76 },
+  { id: 'bridge', title: 'Bridge', value: 'up', tone: 'ok', updatedAt: 1791536987.76 },
+  { id: 'runner', title: 'Runner', value: 'up', tone: 'ok', updatedAt: 1791536987.76 },
+  { id: 'watchdog', title: 'Watchdog', value: 'on', tone: 'ok', updatedAt: 1791536987.76 },
+  gatewayVitalCard('ok'),
+];
+
 export const bridgeDownCardsFixture: DevboxVitalCard[] = [
   { id: 'profile', title: 'Profile', value: 'midsai', tone: 'ok', updatedAt: 1791536987.76 },
   { id: 'ingress', title: 'Ingress', value: 'up', tone: 'ok', updatedAt: 1791536987.76 },

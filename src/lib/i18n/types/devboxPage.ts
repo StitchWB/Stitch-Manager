@@ -403,6 +403,13 @@ export interface DevboxPageTranslations {
     overviewHeroPluginAlertTitle: string;
     overviewHeroPluginAlertText: string;
     overviewHeroPluginAction: string;
+    overviewHeroPathTitle: string;
+    overviewHeroPathSub: string;
+    overviewHeroPathState: string;
+    overviewHeroPathAlertTitle: string;
+    overviewHeroPathAlertText: string;
+    overviewHeroPathAlertFallback: string;
+    overviewHeroPathAction: string;
     overviewEndpointLabel: string;
     overviewEndpointCopy: string;
     overviewEndpointMissing: string;
@@ -467,6 +474,7 @@ export interface DevboxPageTranslations {
     overviewFocusReady: string;
     overviewFocusStopped: string;
     overviewFocusOnline: string;
+    overviewFocusUnverified: string;
     overviewFocusStale: string;
     overviewActionStart: string;
     overviewActionRestart: string;
@@ -717,6 +725,7 @@ export interface DevboxPageTranslations {
     projectsSummaryMcp: string;
     projectsSummaryNone: string;
     projectsSummaryRules: string;
+    projectsSummaryPortsValue: string;
     projectsSummaryItems: string;
     projectsEnvTitle: string;
     projectsEnvTimeout: string;
