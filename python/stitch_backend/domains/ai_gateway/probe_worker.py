@@ -38,12 +38,14 @@ from stitch_backend.domains.ai_gateway.models import (
     CredentialModelAccess,
     ProviderEndpoint,
     RoleChainEntry,
+    UpstreamModel,
     _utcnow,
 )
 from stitch_backend.domains.ai_gateway.service import (
     CredentialService,
     ProviderEndpointService,
 )
+from stitch_backend.domains.ai_gateway.usage_integrity import assess_usage_arithmetic
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,6 +103,15 @@ ROLE_PROBE_COLD_START_WINDOW_SECONDS = 900
 # exact pair per endpoint/pass.  This bounds the steady-state probe cost to at
 # most two exact probes/endpoint/pass while making multi-key failover real.
 ROLE_PROBE_SIBLING_MAX_PER_ENDPOINT_PER_PASS = 1
+# Unknown-tier catalog models are information-gathering work, strictly lower
+# priority than recovery and sibling coverage.  The trickle is deliberately
+# one model per endpoint per pass; aggressive rotation rediscovery is a later
+# design phase and must not be implicit here.
+ROLE_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS = 1
+# Candidate evidence probes are allowed to observe slow-but-coherent emergency
+# tails.  Ordinary activation probes keep the tighter budget above; only the
+# single lowest-priority candidate probe may wait this long.
+ROLE_CANDIDATE_PROBE_BUDGET_SECONDS = 90.0
 # Refreshed in ``start()`` so the cold-start window is process/worker-local
 # (as required for restarts); endpoint addition is detected separately from
 # target materialization time below.  Module import is only a fallback for
@@ -143,6 +154,13 @@ def _select_canary_word() -> str:
 
 def _canary_probe_prompt(word: str) -> str:
     return f'Reply with exactly one word: "{word}". Do not add anything else.'
+
+
+ROLE_PROBE_LEVEL2_PROMPT = (
+    "Reply with the third word of: alpha beta gamma delta, repeated twice "
+    "with no separator. Do not add anything else."
+)
+ROLE_PROBE_LEVEL2_EXPECTED = "gammagamma"
 
 # In-memory endpoint-level probe backoff, armed when the upstream detects and
 # pushes back on catalog probing (``catalog_probe_detected``) or otherwise
@@ -284,6 +302,11 @@ class ProbeWorker:
             )
         except Exception:
             logger.exception("ProbeWorker: role model probe phase failed")
+
+        try:
+            await cls._run_chain_refill()
+        except Exception:
+            logger.exception("ProbeWorker: chain refill phase failed")
 
         elapsed = time.monotonic() - start
         logger.info("ProbeWorker: pass complete in %.1fs", elapsed)
@@ -436,6 +459,18 @@ class ProbeWorker:
         return
 
     # ── Exact-model role-target probes ───────────────────────────────────────
+
+    @classmethod
+    async def _run_chain_refill(cls) -> None:
+        """Run rescue-only chain refill in one short write session."""
+        from stitch_backend.domains.ai_gateway.chain_refill_service import (
+            ChainRefillService,
+        )
+
+        async def _op(session: AsyncSession) -> None:
+            await ChainRefillService(session).apply_rescue_refill()
+
+        await run_in_session(_op)
 
     @classmethod
     async def _reconcile_role_catalog_health(cls) -> None:
@@ -677,6 +712,80 @@ class ProbeWorker:
                     continue
                 chosen["probe_kind"] = "sibling_coverage"
                 sibling_counts[endpoint.id] = sibling_counts.get(endpoint.id, 0) + 1
+                probed_upstreams.add(upstream.id)
+                picked.append(chosen)
+
+            # Lowest-priority evidence trickle: at most one never-probed,
+            # unknown-tier catalog model per endpoint/pass.  Name hints order
+            # this queue only; they never admit a model to a chain or tier.
+            desired_key_rows = (
+                await session.execute(
+                    select(RoleChainEntry.upstream_model_key).where(
+                        RoleChainEntry.endpoint_selector == REFORMBOSS_ENDPOINT_SELECTOR,
+                    ),
+                )
+            ).all()
+            desired_keys = {row[0] for row in desired_key_rows}
+            endpoint_ids = {endpoint.id for _target, _upstream, endpoint in rows}
+            catalog_rows: list[tuple[UpstreamModel, ProviderEndpoint]] = []
+            if endpoint_ids:
+                raw_catalog_rows = (
+                    await session.execute(
+                        select(UpstreamModel, ProviderEndpoint)
+                        .join(
+                            ProviderEndpoint,
+                            ProviderEndpoint.id == UpstreamModel.provider_endpoint_id,
+                        )
+                        .where(
+                            UpstreamModel.provider_endpoint_id.in_(endpoint_ids),
+                            UpstreamModel.enabled.is_(True),
+                            ProviderEndpoint.enabled.is_(True),
+                        )
+                        .order_by(UpstreamModel.created_at.asc(), UpstreamModel.id.asc()),
+                    )
+                ).all()
+                catalog_rows = [
+                    (upstream, endpoint) for upstream, endpoint in raw_catalog_rows
+                ]
+
+            def _name_queue_prior(model_id: str) -> int:
+                lowered = model_id.lower()
+                if any(token in lowered for token in ("pro", "max", "high", "ultra")):
+                    return 0
+                if any(token in lowered for token in ("flash", "fast", "mini", "lite")):
+                    return 2
+                return 1
+
+            def _unknown_evidence_tier(upstream: UpstreamModel) -> bool:
+                caps = upstream.capabilities or {}
+                return "coherence_passed" not in caps and "evidence_tier" not in caps
+
+            candidate_rows = sorted(
+                (
+                    (upstream, endpoint)
+                    for upstream, endpoint in catalog_rows
+                    if upstream.id not in probed_upstreams
+                    and upstream.upstream_model_id not in desired_keys
+                    and _unknown_evidence_tier(upstream)
+                ),
+                key=lambda item: (_name_queue_prior(item[0].upstream_model_id), item[0].upstream_model_id),
+            )
+            candidate_counts: dict[str, int] = {}
+            for upstream, endpoint in candidate_rows:
+                if candidate_counts.get(endpoint.id, 0) >= ROLE_PROBE_CANDIDATE_MAX_PER_ENDPOINT_PER_PASS:
+                    continue
+                if _endpoint_blocked(endpoint):
+                    continue
+                # Catalog presence may already have marked the pair available;
+                # unlike sibling coverage, candidate evidence probing is still
+                # needed because catalog presence is not coherence evidence.
+                chosen = await _choose_pair(endpoint, upstream, sibling=False)
+                if chosen is None:
+                    continue
+                chosen["probe_kind"] = "candidate_evidence"
+                chosen["evidence_probe"] = True
+                candidate_counts[endpoint.id] = candidate_counts.get(endpoint.id, 0) + 1
+                probed_upstreams.add(upstream.id)
                 picked.append(chosen)
             return picked
 
@@ -713,34 +822,60 @@ class ProbeWorker:
 
         Success requires coherent content: the probe asks for one specific
         canary word and passes ONLY when the response content contains it.
-        HTTP 200 with an empty completion — or with plausible text that does
-        not carry the canary — is the exact failure mode this probe exists to
-        catch: some upstreams serve garbage or nothing with a 200 status.
+        Candidate-evidence probes add the cheap level-2 instruction-following
+        canary and use a longer observation budget so slow-but-coherent
+        emergency tails become evidence instead of invisible timeouts.
         A budget timeout is *slowness*, not death: it never produces
         model-scoped failure evidence.
         """
         adapter = get_adapter(target["adapter_type"])
         start = time.monotonic()
         canary_word = _select_canary_word()
+        evidence_probe = bool(target.get("evidence_probe"))
+        budget = (
+            ROLE_CANDIDATE_PROBE_BUDGET_SECONDS
+            if evidence_probe
+            else ROLE_PROBE_BUDGET_SECONDS
+        )
         result: dict[str, Any] = {
             "credential_id": target["credential_id"],
             "endpoint_id": target["endpoint_id"],
             "upstream_row_id": target["upstream_row_id"],
             "upstream_model_id": target["upstream_model_id"],
+            "usage_sane": None,
+            "usage_reason": None,
+            "level2_passed": None,
         }
-        try:
-            data = await asyncio.wait_for(
+
+        async def _invoke(prompt: str, timeout: float) -> Any:
+            return await asyncio.wait_for(
                 adapter.invoke(
                     base_url=target["base_url"],
                     secret=target["secret"],
                     model=target["upstream_model_id"],
-                    messages=[{"role": "user", "content": _canary_probe_prompt(canary_word)}],
+                    messages=[{"role": "user", "content": prompt}],
                     stream=False,
                     default_headers=target["default_headers"],
                     max_tokens=ROLE_PROBE_MAX_TOKENS,
                 ),
-                timeout=ROLE_PROBE_BUDGET_SECONDS,
+                timeout=timeout,
             )
+
+        def _usage_evidence(data: Any, prompt: str) -> tuple[bool | None, str | None]:
+            if not isinstance(data, dict):
+                return None, None
+            # The probe prompt is known to be a multi-token instruction even
+            # when its character count falls below the live-traffic heuristic
+            # threshold, so candidate probes evaluate it as substantial.
+            sane, reason, _detail = assess_usage_arithmetic(
+                data.get("usage"),
+                request_text_chars=max(len(prompt), 120),
+            )
+            return sane, reason
+
+        level1_prompt = _canary_probe_prompt(canary_word)
+        try:
+            data = await _invoke(level1_prompt, budget)
         except TimeoutError:
             result.update({
                 "outcome": "timeout",
@@ -758,16 +893,57 @@ class ProbeWorker:
             return result
 
         latency_ms = int((time.monotonic() - start) * 1000)
+        usage_sane, usage_reason = _usage_evidence(data, level1_prompt)
+        result["usage_sane"] = usage_sane
+        result["usage_reason"] = usage_reason
         text = cls._extract_completion_text(data)
         if (
             text
             and text != "<non-text-completion>"
             and canary_word.lower() in text.lower()
         ):
+            level2_passed: bool | None = None
+            level2_endpoint_classified: ClassifiedError | None = None
+            if evidence_probe:
+                level2_passed = False
+                remaining = max(1.0, budget - (time.monotonic() - start))
+                try:
+                    level2_data = await _invoke(ROLE_PROBE_LEVEL2_PROMPT, remaining)
+                except Exception as exc:
+                    # Level-2 failure/timeout is tier evidence only.  The
+                    # level-1 canary already proved baseline coherence, and a
+                    # key/model error here must not turn into model death.
+                    # Endpoint-scoped pushback still arms the hard endpoint
+                    # backoff through the returned classified object.
+                    classified = adapter.classify_error(exc)
+                    scope = getattr(classified, "scope", None) or ""
+                    error_code = getattr(classified, "error_code", None) or ""
+                    if error_code == "catalog_probe_detected" or scope in ("endpoint", "global"):
+                        level2_endpoint_classified = classified
+                    level2_data = None
+                if level2_data is not None:
+                    level2_text = cls._extract_completion_text(level2_data)
+                    if isinstance(level2_text, str):
+                        # Exact instruction following, not substring overlap:
+                        # separators/extra words fail the level-2 canary.  Only
+                        # surrounding whitespace and terminal sentence punctuation
+                        # are tolerated.
+                        normalized = level2_text.strip().lower().strip(".!?,;:\"'")
+                        level2_passed = normalized == ROLE_PROBE_LEVEL2_EXPECTED
+                    level2_sane, level2_reason = _usage_evidence(
+                        level2_data,
+                        ROLE_PROBE_LEVEL2_PROMPT,
+                    )
+                    if level2_sane is False:
+                        usage_sane = False
+                        usage_reason = level2_reason or usage_reason
+                result["level2_passed"] = level2_passed
+                result["usage_sane"] = usage_sane
+                result["usage_reason"] = usage_reason
             result.update({
                 "outcome": "ok",
                 "latency_ms": latency_ms,
-                "classified": None,
+                "classified": level2_endpoint_classified,
             })
             return result
         if text is None or text == "<non-text-completion>":
@@ -898,6 +1074,9 @@ class ProbeWorker:
                     "ok": True,
                     "reason": "ok",
                     "latencyMs": result["latency_ms"],
+                    "usageSane": result.get("usage_sane"),
+                    "usageReason": result.get("usage_reason"),
+                    "level2Passed": result.get("level2_passed"),
                 },
             )
             logger.info(
@@ -946,6 +1125,9 @@ class ProbeWorker:
                 "reason": classified.category,
                 "errorCode": error_code or None,
                 "latencyMs": result["latency_ms"],
+                "usageSane": result.get("usage_sane"),
+                "usageReason": result.get("usage_reason"),
+                "level2Passed": result.get("level2_passed"),
             },
         )
 
@@ -983,6 +1165,19 @@ class ProbeWorker:
         access.probe_failures = failures
         access.next_probe_at = now + timedelta(seconds=int(backoff))
         access.updated_at = now
+        upstream = await session.get(UpstreamModel, result["upstream_row_id"])
+        if upstream is not None:
+            # A timeout is not negative coherence evidence, but the latency
+            # observation itself is useful evidence: slow candidates remain
+            # visible instead of disappearing into probe noise.
+            caps = dict(upstream.capabilities or {})
+            latency = result.get("latency_ms")
+            if isinstance(latency, int) and not isinstance(latency, bool):
+                caps["probe_latency_ms"] = latency
+            caps["probe_timed_out"] = True
+            caps["probed_at"] = now.astimezone(UTC).isoformat()
+            upstream.capabilities = caps
+            upstream.updated_at = now
         await session.flush()
 
     @classmethod

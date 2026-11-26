@@ -276,9 +276,7 @@ def _reject_empty_completion(result: Any) -> None:
 # handful of characters for natural text; even pathological single tokens
 # stay far below this bound).  Used only as conservative corroborating
 # evidence for the low-prompt-tokens heuristic — never as a failure signal.
-_LOW_PROMPT_MIN_REQUEST_CHARS = 120
-
-
+# The shared numeric threshold lives in ai_gateway.usage_integrity.
 def _request_text_chars(messages: list[dict[str, JsonValue]]) -> int:
     """Total characters of textual content across request messages."""
     total = 0
@@ -326,27 +324,11 @@ def _sanitize_usage_arithmetic(
     usage = result.get("usage")
     if not isinstance(usage, dict):
         return
-    details = usage.get("prompt_tokens_details")
-    cached = details.get("cached_tokens") if isinstance(details, dict) else None
-    prompt_tokens = usage.get("prompt_tokens")
-    if not isinstance(prompt_tokens, int) or isinstance(prompt_tokens, bool):
-        prompt_tokens = None
-    if not isinstance(cached, int) or isinstance(cached, bool):
-        cached = None
-
-    reason: str | None = None
-    detail: str | None = None
-    if cached is not None and cached > 0 and prompt_tokens is not None and cached > prompt_tokens:
-        reason = "cached_exceeds_prompt"
-        detail = f"cached_tokens={cached} > prompt_tokens={prompt_tokens}"
-    elif (
-        prompt_tokens == 1
-        and request_text_chars >= _LOW_PROMPT_MIN_REQUEST_CHARS
-    ):
-        reason = "implausibly_low_prompt_tokens"
-        detail = f"prompt_tokens={prompt_tokens} for ~{request_text_chars} request chars"
-
-    if reason is None:
+    sane, reason, detail = usage_integrity.assess_usage_arithmetic(
+        usage,
+        request_text_chars=request_text_chars,
+    )
+    if sane or reason is None:
         return
 
     endpoint_id = getattr(getattr(routing_result, "endpoint", None), "id", "") or ""

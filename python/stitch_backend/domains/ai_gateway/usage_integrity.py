@@ -24,6 +24,41 @@ from dataclasses import dataclass, field
 
 _MAX_TRACKED_PAIRS = 4096
 
+# A multi-token probe/request billed as one prompt token is fabricated
+# accounting.  The character threshold is deliberately conservative; zero is
+# not flagged because many upstreams legitimately omit input accounting.
+LOW_PROMPT_MIN_REQUEST_CHARS = 120
+
+
+def assess_usage_arithmetic(
+    usage: object,
+    *,
+    request_text_chars: int = 0,
+) -> tuple[bool, str | None, str | None]:
+    """Assess whether one OpenAI-shaped usage block is arithmetically sane.
+
+    Returns ``(sane, reason, detail)``.  This is shared by live-traffic
+    sanitization and exact candidate probes so both paths consume the same
+    fabrication rules instead of drifting into two validators.
+    """
+    if not isinstance(usage, dict):
+        return True, None, None
+    details = usage.get("prompt_tokens_details")
+    cached = details.get("cached_tokens") if isinstance(details, dict) else None
+    prompt_tokens = usage.get("prompt_tokens")
+    if not isinstance(prompt_tokens, int) or isinstance(prompt_tokens, bool):
+        prompt_tokens = None
+    if not isinstance(cached, int) or isinstance(cached, bool):
+        cached = None
+
+    if cached is not None and cached > 0 and prompt_tokens is not None and cached > prompt_tokens:
+        detail = f"cached_tokens={cached} > prompt_tokens={prompt_tokens}"
+        return False, "cached_exceeds_prompt", detail
+    if prompt_tokens == 1 and request_text_chars >= LOW_PROMPT_MIN_REQUEST_CHARS:
+        detail = f"prompt_tokens={prompt_tokens} for ~{request_text_chars} request chars"
+        return False, "implausibly_low_prompt_tokens", detail
+    return True, None, None
+
 
 @dataclass
 class SuspicionEntry:
