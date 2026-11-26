@@ -908,6 +908,16 @@ export interface AiHubTranslations {
         missing: string;
         manual: string;
       };
+      trust: {
+        verifiedCoherent: string;
+        untested: string;
+        degraded: string;
+        usageFabricationSuspect: string;
+        tierLine: string;
+        probedAt: string;
+        suspicionCount: string;
+        supplierIntegrity: string;
+      };
     }
     throughput: {
       title: string;

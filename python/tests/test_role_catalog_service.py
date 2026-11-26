@@ -769,3 +769,152 @@ async def test_role_routing_status_preserves_manual_override_and_disabled_entrie
     assert small["steps"][0]["managed_by"] == "manual"
     assert small["steps"][1]["state"] == "disabled"
     assert small["steps"][1]["desired_enabled"] is False
+
+
+async def test_role_routing_status_exposes_trust_evidence_per_step(db_session) -> None:
+    endpoint = await _add_endpoint(db_session)
+    await RoleCatalogService(db_session).reconcile_all()
+
+    upstream = await db_session.scalar(
+        select(UpstreamModel).where(
+            UpstreamModel.provider_endpoint_id == endpoint.id,
+            UpstreamModel.upstream_model_id == "gemini-4-carbon",
+        ),
+    )
+    assert upstream is not None
+    upstream.capabilities = {
+        "source": "probe",
+        "probed_at": "2026-01-01T00:00:00+00:00",
+        "verification_status": "working",
+        "coherence_passed": True,
+        "level2_passed": True,
+        "usage_sane": True,
+        "evidence_tier": "strong",
+        "probe_latency_ms": 1234,
+    }
+    fabricator = await db_session.scalar(
+        select(UpstreamModel).where(
+            UpstreamModel.provider_endpoint_id == endpoint.id,
+            UpstreamModel.upstream_model_id == "deepseek-v4-pro",
+        ),
+    )
+    assert fabricator is not None
+    fabricator.capabilities = {
+        "source": "probe",
+        "probed_at": "2026-01-01T00:00:00+00:00",
+        "verification_status": "working",
+        "coherence_passed": True,
+        "usage_sane": False,
+        "usage_reason": "cached_exceeds_prompt",
+    }
+    failed = await db_session.scalar(
+        select(UpstreamModel).where(
+            UpstreamModel.provider_endpoint_id == endpoint.id,
+            UpstreamModel.upstream_model_id == "glm-5.3",
+        ),
+    )
+    assert failed is not None
+    failed.capabilities = {
+        "source": "probe",
+        "probed_at": "2026-01-01T00:00:00+00:00",
+        "verification_status": "failed",
+        "coherence_passed": False,
+    }
+    await db_session.flush()
+
+    roles = await RoleCatalogService(db_session).role_routing_status()
+    lead = next(role for role in roles if role["id"] == "rb/lead")
+    first, second, third = lead["steps"][0], lead["steps"][1], lead["steps"][2]
+
+    assert first["trust_state"] == "verified_coherent"
+    assert first["coherence_passed"] is True
+    assert first["level2_passed"] is True
+    assert first["usage_sane"] is True
+    assert first["evidence_tier"] == "strong"
+    assert first["probe_latency_ms"] == 1234
+    assert first["probed_at"] == "2026-01-01T00:00:00+00:00"
+    assert first["usage_suspicion_count"] == 0
+
+    assert second["trust_state"] == "usage_fabrication_suspect"
+    assert second["usage_sane"] is False
+    assert second["usage_reason"] == "cached_exceeds_prompt"
+
+    assert third["trust_state"] == "degraded"
+
+    # Supplier integrity aggregates across all probed models of the endpoint:
+    # three probed here, one fabricating.
+    integrity = first["supplier_integrity"]
+    assert integrity is not None
+    assert integrity["probed_models"] == 3
+    assert integrity["fabrication_suspect_models"] == 1
+    assert integrity["fabrication_share"] == pytest.approx(1 / 3)
+
+    # A step whose upstream row has no probe evidence at all is untested.
+    small = next(role for role in roles if role["id"] == "rb/small")
+    untested = [
+        step
+        for step in small["steps"]
+        if step["upstream_model_key"] not in {"gemini-4-carbon", "deepseek-v4-pro", "glm-5.3"}
+    ]
+    assert untested, "expected at least one never-probed chain step"
+    assert all(step["trust_state"] == "untested" for step in untested)
+    assert all(step["coherence_passed"] is None for step in untested)
+
+
+async def test_role_routing_status_surfaces_usage_suspicion_registry_counts(db_session) -> None:
+    from stitch_backend.domains.ai_gateway.usage_integrity import usage_integrity_tracker
+
+    usage_integrity_tracker.reset()
+    try:
+        endpoint = await _add_endpoint(db_session)
+        await RoleCatalogService(db_session).reconcile_all()
+
+        upstream = await db_session.scalar(
+            select(UpstreamModel).where(
+                UpstreamModel.provider_endpoint_id == endpoint.id,
+                UpstreamModel.upstream_model_id == "gemini-4-carbon",
+            ),
+        )
+        assert upstream is not None
+
+        usage_integrity_tracker.record(
+            endpoint.id,
+            upstream.id,
+            "cached_exceeds_prompt",
+            detail="cached=9 > prompt=3",
+        )
+        usage_integrity_tracker.record(endpoint.id, upstream.id, "cached_exceeds_prompt")
+        usage_integrity_tracker.record(endpoint.id, upstream.id, "implausibly_low_prompt_tokens")
+
+        roles = await RoleCatalogService(db_session).role_routing_status()
+        lead = next(role for role in roles if role["id"] == "rb/lead")
+        first = lead["steps"][0]
+        assert first["upstream_model_key"] == "gemini-4-carbon"
+        assert first["usage_suspicion_count"] == 3
+        assert first["usage_suspicion_reasons"] == [
+            "cached_exceeds_prompt",
+            "implausibly_low_prompt_tokens",
+        ]
+
+        # Other steps on the same endpoint carry no suspicion counts.
+        assert all(step["usage_suspicion_count"] == 0 for step in lead["steps"][1:])
+    finally:
+        usage_integrity_tracker.reset()
+
+
+def test_derive_trust_state_priority_order() -> None:
+    from stitch_backend.domains.ai_gateway.model_evidence import derive_trust_state
+
+    assert derive_trust_state(None) == "untested"
+    assert derive_trust_state({}) == "untested"
+    assert derive_trust_state({"probed_at": "x"}) == "untested"
+    assert derive_trust_state({"coherence_passed": True}) == "verified_coherent"
+    assert derive_trust_state({"coherence_passed": False}) == "degraded"
+    assert derive_trust_state({"verification_status": "failed"}) == "degraded"
+    # Fabrication is more specific than generic coherence and must win.
+    assert (
+        derive_trust_state({"coherence_passed": True, "usage_sane": False})
+        == "usage_fabrication_suspect"
+    )
+    # Negative probe evidence outranks everything.
+    assert derive_trust_state({"coherence_passed": False, "usage_sane": False}) == "degraded"

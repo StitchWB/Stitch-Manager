@@ -58,6 +58,21 @@ const statusFixture = {
             nextProbeAt: null,
             lastVerifiedAt: '2026-01-01T00:00:00Z',
           },
+          trustState: 'usage_fabrication_suspect' as const,
+          coherencePassed: true,
+          level2Passed: true,
+          usageSane: false,
+          usageReason: 'cached_exceeds_prompt',
+          evidenceTier: 'mid',
+          probeLatencyMs: 1234,
+          probedAt: '2026-01-01T00:00:00Z',
+          usageSuspicionCount: 3,
+          usageSuspicionReasons: ['cached_exceeds_prompt'],
+          supplierIntegrity: {
+            probedModels: 4,
+            fabricationSuspectModels: 3,
+            fabricationShare: 0.75,
+          },
         },
         {
           entryId: 'entry-2',
@@ -91,6 +106,21 @@ const statusFixture = {
             nextProbeAt: null,
             lastVerifiedAt: null,
           },
+          trustState: 'untested' as const,
+          coherencePassed: null,
+          level2Passed: null,
+          usageSane: null,
+          usageReason: null,
+          evidenceTier: null,
+          probeLatencyMs: null,
+          probedAt: null,
+          usageSuspicionCount: 0,
+          usageSuspicionReasons: [],
+          supplierIntegrity: {
+            probedModels: 4,
+            fabricationSuspectModels: 3,
+            fabricationShare: 0.75,
+          },
         },
       ],
     },
@@ -122,5 +152,41 @@ describe('RoleChainBoard', () => {
     expect(within(role).getByText('1 denied')).toBeTruthy();
     expect(within(role).getByText('1 temporary')).toBeTruthy();
     expect(within(role).getByText('awaiting_exact_model_probe')).toBeTruthy();
+  });
+
+  it('renders trust badges, fabrication evidence and supplier integrity warning', async () => {
+    render(<RoleChainBoard />);
+
+    const role = await screen.findByTestId('role-chain-role-rb/lead');
+    // Fabrication-suspect badge on the coherent-but-fabricating first step,
+    // untested on the never-probed second step.
+    expect(within(role).getByText('usage suspect')).toBeTruthy();
+    expect(within(role).getByText('untested')).toBeTruthy();
+    // Evidence detail lines: tier+latency, usage reason, live suspicion count.
+    expect(within(role).getByText('tier mid · 1234 ms')).toBeTruthy();
+    expect(within(role).getByText('cached_exceeds_prompt')).toBeTruthy();
+    expect(within(role).getByText('3 fabricated-usage responses observed')).toBeTruthy();
+    // Endpoint-level supplier integrity warning (3/4 probed models fabricate).
+    const warning = within(role).getByTestId('supplier-integrity-warning-rb/lead');
+    expect(warning.textContent).toContain('3/4');
+  });
+
+  it('hides supplier integrity warning when fabrication share is small', async () => {
+    const cleanFixture = {
+      ...statusFixture,
+      roles: statusFixture.roles.map(role => ({
+        ...role,
+        steps: role.steps.map(step => ({
+          ...step,
+          supplierIntegrity: { probedModels: 4, fabricationSuspectModels: 1, fabricationShare: 0.25 },
+        })),
+      })),
+    };
+    mockedGetStatus.mockResolvedValue(cleanFixture);
+    useAiGatewayStore.setState({ routingStatus: cleanFixture });
+    render(<RoleChainBoard />);
+
+    const role = await screen.findByTestId('role-chain-role-rb/lead');
+    expect(within(role).queryByTestId('supplier-integrity-warning-rb/lead')).toBeNull();
   });
 });
