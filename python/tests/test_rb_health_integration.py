@@ -1048,6 +1048,144 @@ async def test_probe_never_iterates_non_role_targets(db_session, monkeypatch) ->
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+async def _persist_catalog_snapshot(db_session, endpoint, cred, model_ids: list[str]) -> None:
+    """Persist one discovery snapshot directly, without adapter/network setup."""
+    from stitch_backend.domains.ai_gateway.adapters.base import ModelMetadata
+    from stitch_backend.domains.ai_gateway.discovery_worker import DiscoveryWorker
+
+    await DiscoveryWorker._persist_results(
+        db_session,
+        [{
+            "probe": {
+                "endpoint_id": endpoint.id,
+                "endpoint_name": endpoint.name,
+                "base_url": endpoint.base_url,
+                "health_policy": endpoint.health_policy,
+            },
+            "credentials": [(
+                {"credential_id": cred.id},
+                [ModelMetadata(id=model_id) for model_id in model_ids],
+            )],
+            "verification": {},
+            "pricing": {},
+        }],
+    )
+
+
+async def test_catalog_flap_does_not_clobber_probe_activated_access(db_session) -> None:
+    """Live P0 regression: ReformBoss catalog absence is not invocability
+    evidence.  A probe-activated rb access row and route must survive a flap."""
+    endpoint, cred = await _seed_role_catalog(db_session)
+    service = RoleCatalogService(db_session)
+    await service.apply_model_probe_result(
+        credential_id=cred.id,
+        upstream_model_id="deepseek-v4-pro",
+        probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
+    )
+    await db_session.commit()
+
+    target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
+    assert target.lifecycle_status == "active"
+    assert target.lifecycle_reason == "probe_success"
+
+    # The next catalog poll omits the model entirely (the observed live flap).
+    await _persist_catalog_snapshot(db_session, endpoint, cred, [])
+    await db_session.commit()
+
+    rows = await CredentialModelAccessService(db_session).list_access(
+        credential_id=cred.id,
+        upstream_model_id=upstream.id,
+    )
+    assert rows[0].status == "available"
+    assert rows[0].last_error is None
+
+    target, _upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
+    assert target.enabled is True
+    assert target.lifecycle_status == "active"
+
+    request = re_mod.GatewayRequest(
+        model="rb/builder", messages=[{"role": "user", "content": "hi"}],
+    )
+    results = await RoutingEngine().route(db_session, request)
+    assert results
+    assert results[0].upstream_model.upstream_model_id == "deepseek-v4-pro"
+
+
+async def test_exact_probe_retirement_still_demotes_after_catalog_flap(db_session) -> None:
+    """Probe authority cuts both ways: catalog absence must neither activate
+    nor retire, but a later exact ``model_not_found`` probe remains decisive."""
+    endpoint, cred = await _seed_role_catalog(db_session)
+    service = RoleCatalogService(db_session)
+    await service.apply_model_probe_result(
+        credential_id=cred.id,
+        upstream_model_id="deepseek-v4-pro",
+        probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
+    )
+    await db_session.commit()
+    _target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
+
+    await _persist_catalog_snapshot(db_session, endpoint, cred, [])
+    await service.apply_model_probe_result(
+        credential_id=cred.id,
+        upstream_model_id="deepseek-v4-pro",
+        probe_row={
+            "ok": False,
+            "reason": "model_not_found",
+            "errorCode": "no_channel",
+        },
+    )
+    await db_session.commit()
+
+    rows = await CredentialModelAccessService(db_session).list_access(
+        credential_id=cred.id,
+        upstream_model_id=upstream.id,
+    )
+    assert rows[0].status == "temporarily_unavailable"
+    assert rows[0].last_error == "model_not_found"
+
+    target, _upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
+    assert target.enabled is False
+    assert target.lifecycle_status == "demoted"
+    assert target.lifecycle_reason == "model_not_found"
+
+    # A subsequent catalog flap must not overwrite the exact-probe failure
+    # with weaker catalog-absence evidence either.
+    await _persist_catalog_snapshot(db_session, endpoint, cred, [])
+    await db_session.commit()
+    rows = await CredentialModelAccessService(db_session).list_access(
+        credential_id=cred.id,
+        upstream_model_id=upstream.id,
+    )
+    assert rows[0].status == "temporarily_unavailable"
+    assert rows[0].last_error == "model_not_found"
+
+    request = re_mod.GatewayRequest(
+        model="rb/builder", messages=[{"role": "user", "content": "hi"}],
+    )
+    with pytest.raises(re_mod.RoutingError, match="No enabled route targets"):
+        await RoutingEngine().route(db_session, request)
+
+
+async def test_catalog_absence_still_demotes_non_role_upstream(db_session) -> None:
+    """The probe-authority exemption is scoped to desired rb chain upstreams;
+    ordinary catalog-discovered rows on the same endpoint keep legacy semantics."""
+    endpoint, cred = await _seed_role_catalog(db_session)
+    upstream = await UpstreamModelService(db_session).upsert_model(
+        endpoint.id,
+        "catalog-only-model",
+    )
+    access_svc = CredentialModelAccessService(db_session)
+    await access_svc.upsert_access(cred.id, upstream.id, status="available")
+    await db_session.commit()
+
+    await _persist_catalog_snapshot(db_session, endpoint, cred, [])
+    await db_session.commit()
+
+    rows = await access_svc.list_access(credential_id=cred.id, upstream_model_id=upstream.id)
+    assert rows[0].status == "unavailable"
+    assert rows[0].last_error == "not_returned_by_upstream"
+
+
 async def test_discovery_persistence_invokes_role_reconcile(db_session, monkeypatch) -> None:
     """Endpoint-added-later: discovery persistence must trigger role catalog
     reconciliation for that endpoint (best-effort, no restart needed)."""
