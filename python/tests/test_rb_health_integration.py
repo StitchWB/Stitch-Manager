@@ -392,13 +392,13 @@ def _model_error(code: str = "no_channel", category: str = "model_not_found") ->
 
 async def test_record_result_demotes_target_when_no_usable_access_remains(db_session) -> None:
     endpoint, cred = await _seed_role_catalog(db_session)
-    target, upstream = await _target_for(db_session, "rb/builder", "glm-5.4")
+    target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
     # Activate the target first (as a successful probe would).
     access_svc = CredentialModelAccessService(db_session)
     await access_svc.upsert_access(cred.id, upstream.id, status="available")
     await RoleCatalogService(db_session).apply_model_probe_result(
         credential_id=cred.id,
-        upstream_model_id="glm-5.4",
+        upstream_model_id="deepseek-v4-pro",
         probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
     )
     await db_session.commit()
@@ -431,13 +431,13 @@ async def test_record_result_does_not_flap_target_while_other_keys_serve(db_sess
     cred2 = await CredentialService(db_session).create_credential(
         endpoint.id, "key-2", "api_key", "sk-other",
     )
-    target, upstream = await _target_for(db_session, "rb/builder", "glm-5.4")
+    target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
     access_svc = CredentialModelAccessService(db_session)
     await access_svc.upsert_access(cred.id, upstream.id, status="available")
     await access_svc.upsert_access(cred2.id, upstream.id, status="available")
     await RoleCatalogService(db_session).apply_model_probe_result(
         credential_id=cred.id,
-        upstream_model_id="glm-5.4",
+        upstream_model_id="deepseek-v4-pro",
         probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
     )
     await db_session.commit()
@@ -461,7 +461,7 @@ async def test_record_result_does_not_flap_target_while_other_keys_serve(db_sess
 
 async def test_entitlement_failure_marks_pair_denied(db_session) -> None:
     endpoint, cred = await _seed_role_catalog(db_session)
-    target, upstream = await _target_for(db_session, "rb/builder", "glm-5.4")
+    target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
     access_svc = CredentialModelAccessService(db_session)
     await access_svc.upsert_access(cred.id, upstream.id, status="available")
     await db_session.commit()
@@ -486,12 +486,12 @@ async def test_entitlement_failure_marks_pair_denied(db_session) -> None:
 
 async def test_non_model_error_does_not_demote_role_target(db_session) -> None:
     endpoint, cred = await _seed_role_catalog(db_session)
-    target, upstream = await _target_for(db_session, "rb/builder", "glm-5.4")
+    target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
     access_svc = CredentialModelAccessService(db_session)
     await access_svc.upsert_access(cred.id, upstream.id, status="available")
     await RoleCatalogService(db_session).apply_model_probe_result(
         credential_id=cred.id,
-        upstream_model_id="glm-5.4",
+        upstream_model_id="deepseek-v4-pro",
         probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
     )
     await db_session.commit()
@@ -570,11 +570,11 @@ async def test_reconcile_health_demotes_and_repairs_credential_wide_capacity_los
     service = RoleCatalogService(db_session)
     await service.apply_model_probe_result(
         credential_id=cred.id,
-        upstream_model_id="glm-5.4",
+        upstream_model_id="deepseek-v4-pro",
         probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
     )
     await db_session.commit()
-    target, _upstream = await _target_for(db_session, "rb/builder", "glm-5.4")
+    target, _upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
     assert target.lifecycle_status == "active"
 
     # Credential-wide death writes no model-scoped event.  The passive sweep is
@@ -937,7 +937,7 @@ async def test_sibling_probe_activates_second_key_and_prevents_single_key_demoti
 ) -> None:
     endpoint, first = await _seed_role_catalog(db_session)
     service = RoleCatalogService(db_session)
-    selected = "glm-5.4"
+    selected = "deepseek-v4-pro"
     await service.apply_model_probe_result(
         credential_id=first.id,
         upstream_model_id=selected,
@@ -1074,7 +1074,7 @@ async def test_discovery_persistence_invokes_role_reconcile(db_session, monkeypa
     await db_session.commit()
 
     # The role catalog materialized against the late-arriving endpoint.
-    target, upstream = await _target_for(db_session, "rb/builder", "glm-5.4")
+    target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
     assert target.lifecycle_status == "quarantined"
     assert target.managed_by == "role_catalog"
 
@@ -1213,7 +1213,7 @@ async def test_active_rb_role_route_carries_seeded_latency_contract(db_session) 
     _endpoint, cred = await _seed_role_catalog(db_session)
     await RoleCatalogService(db_session).apply_model_probe_result(
         credential_id=cred.id,
-        upstream_model_id="glm-5.4",
+        upstream_model_id="deepseek-v4-pro",
         probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
     )
     await db_session.commit()
@@ -1223,7 +1223,7 @@ async def test_active_rb_role_route_carries_seeded_latency_contract(db_session) 
     )
     results = await RoutingEngine().route(db_session, request)
     assert results
-    assert results[0].upstream_model.upstream_model_id == "glm-5.4"
+    assert results[0].upstream_model.upstream_model_id == "deepseek-v4-pro"
     assert results[0].public_model_contract is not None
     assert results[0].public_model_contract["latency"] == {
         "maxTtftMs": 20000,
