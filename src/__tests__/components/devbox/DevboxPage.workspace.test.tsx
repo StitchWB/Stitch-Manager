@@ -105,6 +105,14 @@ function isHidden(element: HTMLElement): boolean {
   return element.classList.contains('hidden');
 }
 
+// Profiles load async relative to the stack badge; fireEvent.change on an
+// option-less select is a no-op, so tests must wait for options first.
+async function profileOptionsLoaded(select: HTMLSelectElement): Promise<void> {
+  await waitFor(() => {
+    expect(select.querySelectorAll('option').length).toBeGreaterThan(0);
+  });
+}
+
 describe('Devbox page poll contract', () => {
   it('polls the batched bundle on a 4000ms interval', async () => {
     jest.useFakeTimers();
@@ -326,6 +334,7 @@ describe('Devbox page header control bar', () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
+    await profileOptionsLoaded(select);
 
     fireEvent.change(select, { target: { value: 'example-simple' } });
 
@@ -343,6 +352,7 @@ describe('Devbox page header control bar', () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
+    await profileOptionsLoaded(select);
 
     fireEvent.change(select, { target: { value: 'example-simple' } });
 
@@ -358,6 +368,9 @@ describe('Devbox page header control bar', () => {
   it('selecting the already active profile does not ask for confirmation', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
+    await profileOptionsLoaded(
+      screen.getByTestId('devbox-profile-select') as HTMLSelectElement,
+    );
 
     fireEvent.change(screen.getByTestId('devbox-profile-select'), {
       target: { value: 'midsai' },
@@ -371,6 +384,7 @@ describe('Devbox page header control bar', () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
+    await profileOptionsLoaded(select);
 
     const options = Array.from(select.querySelectorAll('option'));
     expect(options.map(option => option.value)).toEqual([
