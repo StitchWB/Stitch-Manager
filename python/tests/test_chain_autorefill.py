@@ -457,10 +457,12 @@ async def test_key_scoped_denial_does_not_veto_tier_evidence(db_session) -> None
 async def test_full_rotation_refill_probe_activation_then_chain_serves(db_session) -> None:
     endpoint, cred = await _seed_catalog(db_session)
     rescue = await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
-    await _demote_all_role_targets(db_session)
+    for role in DEFAULT_ROLE_CHAIN_SPECS:
+        await _demote_all_role_targets(db_session, role)
 
-    actions = await _chain_service(db_session).apply_rescue_refill(public_model_id="rb/lead")
+    actions = await _chain_service(db_session).apply_rescue_refill()
     assert actions
+    assert {action["public_model_id"] for action in actions} == set(DEFAULT_ROLE_CHAIN_SPECS)
     entry = await RoleCatalogService(db_session)._entry_by_key(
         "rb/lead", "reformboss", "zminimax-m25",
     )
