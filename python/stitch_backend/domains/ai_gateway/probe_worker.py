@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -108,9 +109,40 @@ _PROBE_WORKER_STARTED_AT = _utcnow()
 ROLE_PROBE_BUDGET_SECONDS = 8.0
 ROLE_PROBE_BACKOFF_BASE_SECONDS = 300
 ROLE_PROBE_BACKOFF_CAP_SECONDS = 3600
-ROLE_PROBE_MAX_TOKENS = 8
-# Deliberately NOT a trivially fingerprintable "ping".
-ROLE_PROBE_PROMPT = "Briefly confirm you are operational in one short sentence."
+# 64 tokens, not fewer: reasoning models burn tokens before the final answer
+# and truncate with EMPTY content at tiny budgets (observed failure mode:
+# finish_reason=length with empty content at max_tokens=10), which would
+# false-positive a coherent model.  Cost stays bounded — probes are rare,
+# exact and backed off, so the worst case is a handful of 64-token probes
+# per endpoint per pass.
+ROLE_PROBE_MAX_TOKENS = 64
+
+# ── Canary coherence probing ─────────────────────────────────────────────
+# HTTP 200 is not proof of life: some upstreams answer plausible-but-collapsed
+# garbage text (or nothing) with a 200 status.  The probe therefore asks for
+# one specific unobvious word and passes ONLY when the response content
+# contains it.  The word rotates per probe from a small list so a mock
+# upstream cannot hardcode a single echo.  Selection goes through
+# ``_select_canary_word`` so tests can pin it.
+ROLE_PROBE_CANARY_WORDS = (
+    "cascade",
+    "zephyr",
+    "lattice",
+    "tundra",
+    "quartz",
+    "willow",
+    "ember",
+    "harbor",
+)
+
+
+def _select_canary_word() -> str:
+    """Pick the canary word for one exact probe (random rotation)."""
+    return random.choice(ROLE_PROBE_CANARY_WORDS)
+
+
+def _canary_probe_prompt(word: str) -> str:
+    return f'Reply with exactly one word: "{word}". Do not add anything else.'
 
 # In-memory endpoint-level probe backoff, armed when the upstream detects and
 # pushes back on catalog probing (``catalog_probe_detected``) or otherwise
@@ -679,13 +711,17 @@ class ProbeWorker:
     async def _probe_exact_model(cls, target: dict[str, Any]) -> dict[str, Any]:
         """Network phase (outside any DB session): one exact model probe.
 
-        Success requires actual content — an HTTP 200 with an empty
-        completion is the exact failure mode this probe exists to catch.
+        Success requires coherent content: the probe asks for one specific
+        canary word and passes ONLY when the response content contains it.
+        HTTP 200 with an empty completion — or with plausible text that does
+        not carry the canary — is the exact failure mode this probe exists to
+        catch: some upstreams serve garbage or nothing with a 200 status.
         A budget timeout is *slowness*, not death: it never produces
         model-scoped failure evidence.
         """
         adapter = get_adapter(target["adapter_type"])
         start = time.monotonic()
+        canary_word = _select_canary_word()
         result: dict[str, Any] = {
             "credential_id": target["credential_id"],
             "endpoint_id": target["endpoint_id"],
@@ -698,7 +734,7 @@ class ProbeWorker:
                     base_url=target["base_url"],
                     secret=target["secret"],
                     model=target["upstream_model_id"],
-                    messages=[{"role": "user", "content": ROLE_PROBE_PROMPT}],
+                    messages=[{"role": "user", "content": _canary_probe_prompt(canary_word)}],
                     stream=False,
                     default_headers=target["default_headers"],
                     max_tokens=ROLE_PROBE_MAX_TOKENS,
@@ -723,14 +759,30 @@ class ProbeWorker:
 
         latency_ms = int((time.monotonic() - start) * 1000)
         text = cls._extract_completion_text(data)
-        if text:
+        if (
+            text
+            and text != "<non-text-completion>"
+            and canary_word.lower() in text.lower()
+        ):
             result.update({
                 "outcome": "ok",
                 "latency_ms": latency_ms,
                 "classified": None,
             })
             return result
-        # HTTP 200 but no usable content: the empty-completion failure mode.
+        if text is None or text == "<non-text-completion>":
+            # HTTP 200 but no usable content: the empty-completion failure
+            # mode.  A reasoning/tool-only frame carries no verifiable answer
+            # either — for a one-word prompt that is empty content, truncated
+            # or degenerate, never proof of life.
+            error_code = "empty_completion"
+        else:
+            # HTTP 200 with plausible text that does NOT carry the requested
+            # canary word: the upstream is not actually performing the asked
+            # inference (collapsed/mock/garbage completion).  Same
+            # model-scoped failure evidence as an empty completion, distinct
+            # code for observability.
+            error_code = "canary_mismatch"
         result.update({
             "outcome": "error",
             "latency_ms": latency_ms,
@@ -739,7 +791,7 @@ class ProbeWorker:
                 is_endpoint_wide=False,
                 is_model_specific=True,
                 scope="key",
-                error_code="empty_completion",
+                error_code=error_code,
             ),
         })
         return result

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from fastapi import HTTPException
 
 from stitch_backend.core.event_bus import event_bus
-from stitch_backend.domains.ai_gateway import account_ledger, model_latency
+from stitch_backend.domains.ai_gateway import account_ledger, model_latency, usage_integrity
 from stitch_backend.domains.ai_gateway.adapters.error_vocab import parse_envelope
 from stitch_backend.domains.ai_gateway.adapters.utils import _sanitize_error
 from stitch_backend.domains.ai_proxy.holone_inspector import (
@@ -269,6 +269,106 @@ def _reject_empty_completion(result: Any) -> None:
     content = result.get("content")
     if isinstance(content, list) and not content and "stop_reason" in result:
         raise EmptyCompletionError("upstream returned an empty completion")
+
+
+# A request with at least this many characters of message text can never
+# tokenize to a single token in any real tokenizer (one token is at most a
+# handful of characters for natural text; even pathological single tokens
+# stay far below this bound).  Used only as conservative corroborating
+# evidence for the low-prompt-tokens heuristic — never as a failure signal.
+_LOW_PROMPT_MIN_REQUEST_CHARS = 120
+
+
+def _request_text_chars(messages: list[dict[str, JsonValue]]) -> int:
+    """Total characters of textual content across request messages."""
+    total = 0
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    total += len(part["text"])
+    return total
+
+
+def _sanitize_usage_arithmetic(
+    result: Any,
+    routing_result: Any,
+    *,
+    request_text_chars: int = 0,
+) -> None:
+    """Validate usage arithmetic of a non-stream upstream response.
+
+    Observability + sanitization only — NEVER raises and never fails the
+    user-visible request.  Two fabrication signals:
+
+    - ``cached_tokens > prompt_tokens`` (hard invariant): arithmetically
+      impossible for any real inference server — cached tokens are a subset
+      of prompt tokens by definition.
+    - ``prompt_tokens == 1`` while the request carried substantial message
+      text (secondary heuristic, conservative): a multi-token prompt billed
+      as one token is fabricated accounting.  Zero is deliberately NOT
+      flagged — many upstreams legitimately omit input accounting, while
+      ``1`` is a counted-but-impossible number.
+
+    On either signal: log a warning, record a suspicion entry against the
+    endpoint in ``usage_integrity_tracker``, and strip the fabricated
+    ``prompt_tokens_details`` so downstream cost/ledger accounting never
+    consumes fake cache numbers.  ``prompt_tokens`` itself is left in place
+    for observability; the completion content is never touched.
+    """
+    if not isinstance(result, dict):
+        return
+    usage = result.get("usage")
+    if not isinstance(usage, dict):
+        return
+    details = usage.get("prompt_tokens_details")
+    cached = details.get("cached_tokens") if isinstance(details, dict) else None
+    prompt_tokens = usage.get("prompt_tokens")
+    if not isinstance(prompt_tokens, int) or isinstance(prompt_tokens, bool):
+        prompt_tokens = None
+    if not isinstance(cached, int) or isinstance(cached, bool):
+        cached = None
+
+    reason: str | None = None
+    detail: str | None = None
+    if cached is not None and cached > 0 and prompt_tokens is not None and cached > prompt_tokens:
+        reason = "cached_exceeds_prompt"
+        detail = f"cached_tokens={cached} > prompt_tokens={prompt_tokens}"
+    elif (
+        prompt_tokens == 1
+        and request_text_chars >= _LOW_PROMPT_MIN_REQUEST_CHARS
+    ):
+        reason = "implausibly_low_prompt_tokens"
+        detail = f"prompt_tokens={prompt_tokens} for ~{request_text_chars} request chars"
+
+    if reason is None:
+        return
+
+    endpoint_id = getattr(getattr(routing_result, "endpoint", None), "id", "") or ""
+    upstream_row_id = getattr(getattr(routing_result, "upstream_model", None), "id", "") or ""
+    endpoint_name = getattr(getattr(routing_result, "endpoint", None), "name", "?")
+    upstream_model = getattr(getattr(routing_result, "upstream_model", None), "upstream_model_id", "?")
+    logger.warning(
+        "⚠️ Fabricated usage arithmetic from %s/%s: %s — stripping prompt_tokens_details",
+        endpoint_name, upstream_model, detail,
+    )
+    try:
+        usage_integrity.usage_integrity_tracker.record(
+            endpoint_id,
+            upstream_row_id,
+            reason,
+            detail=detail,
+        )
+    except Exception:
+        logger.debug("Usage integrity recording failed", exc_info=True)
+    # The details block is fabrication-shaped regardless of which signal
+    # fired: once the arithmetic is fake, no part of it may reach the ledger.
+    usage.pop("prompt_tokens_details", None)
 
 
 def _classify_invoke_failure(
@@ -669,6 +769,9 @@ async def invoke_via_gateway(
         else:
             result = cast("Any", _json_object(response))
             _reject_empty_completion(result)
+            _sanitize_usage_arithmetic(
+                result, routing_result, request_text_chars=_request_text_chars(messages),
+            )
             if holone_service.config.enabled:
                 result, findings, blocked = holone_service.inspect_response_openai(
                     result, client_has_tools=client_has_tools
@@ -885,6 +988,9 @@ async def invoke_via_gateway_messages(
         else:
             result = cast("Any", _json_object(response))
             _reject_empty_completion(result)
+            _sanitize_usage_arithmetic(
+                result, routing_result, request_text_chars=_request_text_chars(messages),
+            )
             if compression_service.config.enabled:
                 result = compression_service.compress_output(result)
             if holone_service.config.enabled:
@@ -1109,6 +1215,15 @@ async def invoke_via_gateway_responses(
         else:
             result = cast("Any", _json_object(response))
             _reject_empty_completion(result)
+            if isinstance(input_data, str):
+                request_chars = len(input_data)
+            elif isinstance(input_data, list):
+                request_chars = _request_text_chars(input_data)
+            else:
+                request_chars = 0
+            _sanitize_usage_arithmetic(
+                result, routing_result, request_text_chars=request_chars,
+            )
             if compression_service.config.enabled:
                 result = compression_service.compress_output(result)
             if holone_service.config.enabled:

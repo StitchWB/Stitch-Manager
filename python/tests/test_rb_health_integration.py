@@ -165,14 +165,21 @@ class _ExactProbeAdapter:
     async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
         self.calls.append({"model": model, "messages": messages, "kwargs": kwargs})
         if self.outcome == "ok":
-            return {"choices": [{"message": {"role": "assistant", "content": "Operational."}}]}
+            # Coherent upstream: answer the canary probe with the requested
+            # word, extracted from the quoted prompt — probe coherence
+            # checking means fixed plausible text no longer passes.
+            prompt = messages[0]["content"]
+            word = prompt.split('"')[1] if '"' in prompt else "operational"
+            return {"choices": [{"message": {"role": "assistant", "content": word}}]}
         if self.outcome == "empty":
             return {"choices": [{"message": {"role": "assistant", "content": ""}}]}
         if isinstance(self.outcome, BaseException):
             raise self.outcome
         if isinstance(self.outcome, tuple) and self.outcome[0] == "sleep":
             await asyncio.sleep(self.outcome[1])
-            return {"choices": [{"message": {"role": "assistant", "content": "late"}}]}
+            prompt = messages[0]["content"]
+            word = prompt.split('"')[1] if '"' in prompt else "late"
+            return {"choices": [{"message": {"role": "assistant", "content": word}}]}
         raise RuntimeError(f"unscripted outcome {self.outcome!r}")
 
     def classify_error(self, exc, **_kwargs):
@@ -661,8 +668,12 @@ async def test_probe_success_activates_quarantined_target(db_session, monkeypatc
     probed_model = adapter.calls[0]["model"]
     prompt = adapter.calls[0]["messages"][0]["content"]
     assert prompt != "ping"
-    assert "operational" in prompt
-    assert adapter.calls[0]["kwargs"]["max_tokens"] <= 16
+    # Canary coherence contract: the prompt requests one specific quoted word
+    # and the budget leaves headroom for reasoning models (truncation at tiny
+    # budgets produces empty content — a false positive, not evidence).
+    assert '"' in prompt
+    assert "one word" in prompt
+    assert 32 <= adapter.calls[0]["kwargs"]["max_tokens"] <= 128
 
     # Every role target of the probed upstream is now active + enabled.
     rows = await _targets_for_upstream_key(db_session, probed_model)
