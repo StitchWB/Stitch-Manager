@@ -267,6 +267,7 @@ async def stream_openai_response(
         saw_done = False
         saw_content = False
         failed = False
+        client_gone = False
         try:
             try:
                 async for line in response:
@@ -282,6 +283,14 @@ async def stream_openai_response(
                         input_tokens = max(input_tokens, usage[0])
                         output_tokens = max(output_tokens, usage[1])
                     yield f"{line}\n\n"
+            except (GeneratorExit, asyncio.CancelledError):
+                # Client disconnect/cancellation is not upstream evidence.
+                # These BaseException paths bypass the broad ``except
+                # Exception`` below, so without this the finally block would
+                # report a false ``empty_completion`` model mark for a stream
+                # the client simply walked away from before the first byte.
+                client_gone = True
+                raise
             except Exception:
                 failed = True
                 logger.warning("Upstream stream failed after first chunk; terminating SSE", exc_info=True)
@@ -289,12 +298,33 @@ async def stream_openai_response(
             if not saw_done:
                 yield "data: [DONE]\n\n"
         finally:
-            empty = not failed and not saw_content
+            # Outcome semantics:
+            #   upstream error          → stream_interrupted (failure)
+            #   no content, no error,
+            #     stream consumed       → empty_completion (model-level failure)
+            #   client disconnect       → never empty: after content it is a
+            #                             successful delivery as far as observed
+            #                             (usage still counts); before the first
+            #                             content byte the outcome is unknown —
+            #                             neither a success claim nor a model mark.
+            empty = not failed and not client_gone and not saw_content
+            if client_gone:
+                ok = saw_content
+                reason = None if saw_content else "client_disconnect"
+            elif failed:
+                ok = False
+                reason = "stream_interrupted"
+            elif empty:
+                ok = False
+                reason = "empty_completion"
+            else:
+                ok = True
+                reason = None
             await notify_stream_complete(
                 on_complete,
                 (input_tokens, output_tokens) if found_usage else None,
-                not failed and not empty,
-                "empty_completion" if empty else ("stream_interrupted" if failed else None),
+                ok,
+                reason,
             )
 
     return StreamingResponse(body_gen(), media_type="text/event-stream")
@@ -366,6 +396,7 @@ async def stream_anthropic_response(
         saw_done = False
         saw_content = False
         failed = False
+        client_gone = False
         try:
             try:
                 async for line in response:
@@ -381,6 +412,11 @@ async def stream_anthropic_response(
                         input_tokens = max(input_tokens, usage[0])
                         output_tokens = max(output_tokens, usage[1])
                     yield f"{line}\n\n"
+            except (GeneratorExit, asyncio.CancelledError):
+                # Client disconnect/cancellation is not upstream evidence —
+                # see the OpenAI variant above.
+                client_gone = True
+                raise
             except Exception:
                 failed = True
                 logger.warning("Upstream stream failed after first chunk; terminating SSE", exc_info=True)
@@ -388,12 +424,33 @@ async def stream_anthropic_response(
             if not saw_done:
                 yield "data: [DONE]\n\n"
         finally:
-            empty = not failed and not saw_content
+            # Outcome semantics:
+            #   upstream error          → stream_interrupted (failure)
+            #   no content, no error,
+            #     stream consumed       → empty_completion (model-level failure)
+            #   client disconnect       → never empty: after content it is a
+            #                             successful delivery as far as observed
+            #                             (usage still counts); before the first
+            #                             content byte the outcome is unknown —
+            #                             neither a success claim nor a model mark.
+            empty = not failed and not client_gone and not saw_content
+            if client_gone:
+                ok = saw_content
+                reason = None if saw_content else "client_disconnect"
+            elif failed:
+                ok = False
+                reason = "stream_interrupted"
+            elif empty:
+                ok = False
+                reason = "empty_completion"
+            else:
+                ok = True
+                reason = None
             await notify_stream_complete(
                 on_complete,
                 (input_tokens, output_tokens) if found_usage else None,
-                not failed and not empty,
-                "empty_completion" if empty else ("stream_interrupted" if failed else None),
+                ok,
+                reason,
             )
 
     return StreamingResponse(body_gen(), media_type="text/event-stream")
