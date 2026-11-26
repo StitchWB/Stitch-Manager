@@ -11,6 +11,11 @@ export function isZaiChatModel(model: ChatRouteModel | undefined): boolean {
   return model?.provider.toLowerCase() === 'zai' || model?.ownedBy.toLowerCase() === 'zai';
 }
 
+/** rb/* virtual roles are native public models of the embedded AI gateway. */
+export function isRbChatModel(model: ChatRouteModel | undefined): boolean {
+  return model?.id.startsWith('rb/') === true;
+}
+
 /**
  * Web-bridge (web2api) family: providers whose ids start with ``web-``
  * (web-gemini, web-deepseek, ...). Models may also arrive with the
@@ -32,6 +37,7 @@ export function resolveWebBridgeProvider(model: ChatRouteModel | undefined): str
 /** True when a model is served directly by the FastAPI backend rather than the legacy proxy. */
 export function isBackendRoutedChatModel(model: ChatRouteModel | undefined): boolean {
   return (
+    isRbChatModel(model) ||
     isVellyChatModel(model) ||
     isZaiChatModel(model) ||
     model?.provider.toLowerCase() === 'qoder' ||
@@ -55,7 +61,7 @@ export function selectPreferredChatModel<T extends ChatRouteModel>(
 }
 
 export function resolveChatCompletionsUrl(model: ChatRouteModel | undefined, proxyPort: number): string {
-  if (isVellyChatModel(model)) return `${API_BASE_URL}/v1/${model?.protocol === 'messages' ? 'messages' : 'chat/completions'}`;
+  if (isRbChatModel(model) || isVellyChatModel(model)) return `${API_BASE_URL}/v1/${model?.protocol === 'messages' ? 'messages' : 'chat/completions'}`;
   if (
     isZaiChatModel(model) ||
     model?.provider.toLowerCase() === 'qoder' ||

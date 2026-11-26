@@ -129,14 +129,21 @@ export const dashboard: DashboardTranslations = {
       ariaLabel: "System status",
       stateOn: "On",
       stateOff: "Off",
+      gateway: {
+        label: "Gateway",
+        runningAt: "Embedded · :{port}",
+        stopped: "Unavailable",
+        checking: "Checking…",
+        tooltip: "Primary embedded AI gateway used by rb/* roles and new OpenAI-compatible clients",
+      },
       proxy: {
-        label: "AI Proxy",
+        label: "Legacy Proxy",
         running: "Running",
         runningAt: "Running on :{port}",
         stopped: "Stopped",
-        tooltipStart: "Start AI Proxy",
-        tooltipStop: "Stop AI Proxy",
-        toggleFailed: "Failed to toggle AI Proxy",
+        tooltipStart: "Start legacy AI proxy",
+        tooltipStop: "Stop legacy AI proxy",
+        toggleFailed: "Failed to toggle legacy AI proxy",
       },
       replenish: {
         label: "Auto-Replenish",
@@ -146,7 +153,7 @@ export const dashboard: DashboardTranslations = {
       autoSwitch: {
         label: "Auto-Switch",
         tooltip: "Switch active AI account when credits run out",
-        tooltipDisabled: "Start AI Proxy to enable auto-switch",
+        tooltipDisabled: "Start legacy AI proxy to enable auto-switch",
         toggleFailed: "Failed to toggle auto-switch",
       },
       scheduler: {

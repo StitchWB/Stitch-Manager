@@ -448,6 +448,283 @@ class RoleCatalogService:
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
+    async def role_routing_status(self) -> list[dict[str, Any]]:
+        """Return rb/* desired chains joined with materialized runtime state.
+
+        This is a read-only aggregation used by the operator UI.  Desired
+        entries remain the ordering source of truth; runtime targets, endpoint
+        circuit state and exact credential/model probe evidence are attached
+        without changing either layer.  The method deliberately does not seed
+        or reconcile anything: reconciliation is a write side effect and this
+        method is served by a read-only command.
+        """
+        entries = await self.list_entries()
+        present_role_ids = {entry.public_model_id for entry in entries}
+        role_ids = [role for role in DEFAULT_ROLE_CHAIN_SPECS if role in present_role_ids]
+        role_ids.extend(sorted(present_role_ids.difference(DEFAULT_ROLE_CHAIN_SPECS)))
+        if not entries:
+            return []
+
+        endpoint_rows = list(
+            (
+                await self._db.execute(
+                    select(ProviderEndpoint).order_by(
+                        ProviderEndpoint.created_at.asc(),
+                        ProviderEndpoint.id.asc(),
+                    ),
+                )
+            ).scalars().all()
+        )
+
+        endpoints_by_selector: dict[str, ProviderEndpoint | None] = {}
+        for selector in sorted({entry.endpoint_selector for entry in entries}):
+            tagged = [
+                row
+                for row in endpoint_rows
+                if isinstance(row.health_policy, dict)
+                and row.health_policy.get("roleCatalog") == selector
+            ]
+            endpoint = tagged[0] if tagged else None
+            if endpoint is None and selector == REFORMBOSS_ENDPOINT_SELECTOR:
+                endpoint = next(
+                    (
+                        row
+                        for row in endpoint_rows
+                        if _normalized_base_url(row.base_url) == REFORMBOSS_BASE_URL
+                    ),
+                    None,
+                )
+            endpoints_by_selector[selector] = endpoint
+
+        endpoint_ids = {
+            endpoint.id for endpoint in endpoints_by_selector.values() if endpoint is not None
+        }
+        upstream_keys = {entry.upstream_model_key for entry in entries}
+        upstream_rows: list[UpstreamModel] = []
+        if endpoint_ids and upstream_keys:
+            upstream_rows = list(
+                (
+                    await self._db.execute(
+                        select(UpstreamModel).where(
+                            UpstreamModel.provider_endpoint_id.in_(endpoint_ids),
+                            UpstreamModel.upstream_model_id.in_(upstream_keys),
+                        ),
+                    )
+                ).scalars().all()
+            )
+        upstream_by_key = {
+            (row.provider_endpoint_id, row.upstream_model_id): row for row in upstream_rows
+        }
+        upstream_row_ids = [row.id for row in upstream_rows]
+
+        target_rows: list[RouteTarget] = []
+        if upstream_row_ids:
+            target_rows = list(
+                (
+                    await self._db.execute(
+                        select(RouteTarget).where(
+                            RouteTarget.public_model_id.in_(role_ids),
+                            RouteTarget.upstream_model_id.in_(upstream_row_ids),
+                        ),
+                    )
+                ).scalars().all()
+            )
+        target_by_key = {
+            (row.public_model_id, row.upstream_model_id): row for row in target_rows
+        }
+
+        access_summary: dict[str, dict[str, Any]] = {}
+        if upstream_row_ids:
+            access_rows = (
+                await self._db.execute(
+                    select(CredentialModelAccess, Credential)
+                    .join(Credential, Credential.id == CredentialModelAccess.credential_id)
+                    .where(CredentialModelAccess.upstream_model_id.in_(upstream_row_ids)),
+                )
+            ).all()
+            for access_row, credential in access_rows:
+                summary = access_summary.setdefault(
+                    access_row.upstream_model_id,
+                    {
+                        "available": 0,
+                        "denied": 0,
+                        "temporarily_unavailable": 0,
+                        "unknown": 0,
+                        "next_probe_at": None,
+                        "last_verified_at": None,
+                    },
+                )
+                if (
+                    access_row.status == "available"
+                    and credential.enabled
+                    and credential.runtime_status == "active"
+                ):
+                    summary["available"] += 1
+                elif access_row.status == "denied":
+                    summary["denied"] += 1
+                elif access_row.status == "temporarily_unavailable":
+                    summary["temporarily_unavailable"] += 1
+                else:
+                    summary["unknown"] += 1
+
+                if access_row.next_probe_at is not None and (
+                    summary["next_probe_at"] is None
+                    or access_row.next_probe_at < summary["next_probe_at"]
+                ):
+                    summary["next_probe_at"] = access_row.next_probe_at
+                if access_row.last_verified_at is not None and (
+                    summary["last_verified_at"] is None
+                    or access_row.last_verified_at > summary["last_verified_at"]
+                ):
+                    summary["last_verified_at"] = access_row.last_verified_at
+
+        public_rows = list(
+            (
+                await self._db.execute(select(PublicModel).where(PublicModel.id.in_(role_ids)))
+            ).scalars().all()
+        )
+        public_by_id = {row.id: row for row in public_rows}
+        entries_by_role: dict[str, list[RoleChainEntry]] = {
+            role_id: [] for role_id in role_ids
+        }
+        for entry in entries:
+            entries_by_role.setdefault(entry.public_model_id, []).append(entry)
+
+        def empty_access() -> dict[str, Any]:
+            return {
+                "available": 0,
+                "denied": 0,
+                "temporarily_unavailable": 0,
+                "unknown": 0,
+                "next_probe_at": None,
+                "last_verified_at": None,
+            }
+
+        roles: list[dict[str, Any]] = []
+        for role_id in role_ids:
+            steps: list[dict[str, Any]] = []
+            for entry in sorted(
+                entries_by_role.get(role_id, []),
+                key=lambda row: (row.ordinal, row.upstream_model_key),
+            ):
+                endpoint = endpoints_by_selector.get(entry.endpoint_selector)
+                upstream = (
+                    upstream_by_key.get((endpoint.id, entry.upstream_model_key))
+                    if endpoint is not None
+                    else None
+                )
+                target = (
+                    target_by_key.get((entry.public_model_id, upstream.id))
+                    if upstream is not None
+                    else None
+                )
+                access = dict(access_summary.get(upstream.id, empty_access())) if upstream else empty_access()
+
+                if not entry.enabled:
+                    state = "disabled"
+                elif endpoint is None or upstream is None or target is None:
+                    state = "missing"
+                elif not endpoint.enabled or not upstream.enabled:
+                    state = "disabled"
+                elif target.lifecycle_status == "demoted":
+                    state = "demoted"
+                elif target.enabled and target.lifecycle_status == "active":
+                    state = "active"
+                elif (
+                    target.managed_by == "manual"
+                    or target.lifecycle_reason == "manual_override"
+                    or (target.lifecycle_status == "verified" and not target.enabled)
+                ):
+                    state = "manual"
+                else:
+                    # ``quarantined``/``discovered``/NULL all mean the exact
+                    # probe path has not produced positive evidence yet.
+                    state = "probing"
+
+                steps.append(
+                    {
+                        "entry_id": entry.id,
+                        "ordinal": entry.ordinal,
+                        "desired_enabled": entry.enabled,
+                        "source": entry.source,
+                        "endpoint_selector": entry.endpoint_selector,
+                        "upstream_model_key": entry.upstream_model_key,
+                        "family": entry.family,
+                        "endpoint_id": endpoint.id if endpoint else None,
+                        "endpoint_name": endpoint.name if endpoint else None,
+                        "endpoint_base_url": endpoint.base_url if endpoint else None,
+                        "endpoint_enabled": endpoint.enabled if endpoint else None,
+                        "endpoint_circuit_state": endpoint.circuit_state if endpoint else None,
+                        "upstream_row_id": upstream.id if upstream else None,
+                        "upstream_enabled": upstream.enabled if upstream else None,
+                        "route_target_id": target.id if target else None,
+                        "route_enabled": target.enabled if target else None,
+                        "priority": target.priority if target else None,
+                        "managed_by": target.managed_by if target else None,
+                        "lifecycle_status": target.lifecycle_status if target else None,
+                        "lifecycle_reason": target.lifecycle_reason if target else None,
+                        "lifecycle_updated_at": target.lifecycle_updated_at if target else None,
+                        "state": state,
+                        "is_current": False,
+                        "access": access,
+                    },
+                )
+
+            current_index = next(
+                (index for index, step in enumerate(steps) if step["state"] == "active"),
+                None,
+            )
+            if current_index is not None:
+                steps[current_index]["is_current"] = True
+
+            active_steps = sum(1 for step in steps if step["state"] == "active")
+            probing_steps = sum(1 for step in steps if step["state"] == "probing")
+            demoted_steps = sum(1 for step in steps if step["state"] == "demoted")
+            missing_steps = sum(1 for step in steps if step["state"] == "missing")
+            public = public_by_id.get(role_id)
+            role_enabled = bool(public.enabled) if public is not None else False
+            first_desired_index = next(
+                (index for index, step in enumerate(steps) if step["desired_enabled"]),
+                None,
+            )
+            first_active_index = next(
+                (index for index, step in enumerate(steps) if step["state"] == "active"),
+                None,
+            )
+            if not role_enabled:
+                role_state = "disabled"
+            elif first_active_index is not None and first_active_index == first_desired_index:
+                role_state = "active"
+            elif active_steps > 0:
+                # The role can serve, but only because a lower-priority fallback
+                # step is carrying it.
+                role_state = "degraded"
+            elif probing_steps > 0:
+                role_state = "probing"
+            elif demoted_steps > 0:
+                role_state = "demoted"
+            elif missing_steps > 0:
+                role_state = "missing"
+            else:
+                role_state = "disabled"
+
+            roles.append(
+                {
+                    "id": role_id,
+                    "display_name": public.display_name if public else role_id,
+                    "enabled": role_enabled,
+                    "contract": public.contract if public else None,
+                    "state": role_state,
+                    "total_steps": len(steps),
+                    "active_steps": active_steps,
+                    "probing_steps": probing_steps,
+                    "demoted_steps": demoted_steps,
+                    "steps": steps,
+                },
+            )
+
+        return roles
+
     async def upsert_entry(
         self,
         *,

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Activity, Layers, Server } from 'lucide-react';
 
 import { t } from '@/lib/i18n';
@@ -11,6 +11,7 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { useLogsStore } from '../../../stores/logs';
+import { useAiGatewayStore } from '../../../stores/aiGateway';
 import type { ProviderCapability, RequestTrace } from '../../../lib/backend/modules/aiProxy';
 import type { ProxySettings, ProxyStatus } from '../../../types/generated';
 
@@ -46,6 +47,12 @@ export function MonitorOverview({
   onOpenDebugChat,
 }: MonitorOverviewProps) {
   const logs = useLogsStore(state => state.logs);
+  const gateway = useAiGatewayStore(state => state.routingStatus?.gateway ?? null);
+  const fetchRoutingStatus = useAiGatewayStore(state => state.fetchRoutingStatus);
+
+  useEffect(() => {
+    void fetchRoutingStatus();
+  }, [fetchRoutingStatus]);
   const latestLimitLog = useMemo(
     () => logs.find(l => l.source === 'ai_proxy.limits' || l.source === 'ai_proxy.compat'),
     [logs]
@@ -99,8 +106,18 @@ export function MonitorOverview({
       tone?: 'success' | 'muted' | 'warning' | 'danger' | 'info' | 'default';
     }> = [
       {
+        id: 'gateway',
+        label: t('aiHub.proxy.gatewayLabel'),
+        value: gateway === null
+          ? t('aiHub.proxy.gatewayChecking')
+          : gateway.running
+            ? `${t('aiHub.proxy.gatewayEmbedded')} · ${gateway.baseUrl}`
+            : t('aiHub.proxy.stopped'),
+        tone: gateway === null ? 'default' : gateway.running ? 'success' : 'warning',
+      },
+      {
         id: 'status',
-        label: t('aiHub.table.status'),
+        label: t('aiHub.proxy.legacyProxyLabel'),
         value: proxyStatus?.running
           ? isExternallyRunning
             ? `${t('aiHub.proxy.running')} (external)`
@@ -137,7 +154,7 @@ export function MonitorOverview({
     }
 
     return rows;
-  }, [proxyStatus, proxySettings, isExternallyRunning]);
+  }, [proxyStatus, proxySettings, isExternallyRunning, gateway]);
 
   const requestRows = useMemo(
     () => [

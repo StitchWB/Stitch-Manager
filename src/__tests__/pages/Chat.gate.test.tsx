@@ -42,6 +42,7 @@ jest.mock('../../stores/aiProxy', () => ({
 jest.mock('../../lib/backend/modules/aiGateway', () => ({
   __esModule: true,
   listCredentials: jest.fn(),
+  listPublicModels: jest.fn(),
 }));
 
 jest.mock('../../lib/backend/modules/apiKeys', () => {
@@ -132,6 +133,7 @@ describe('Chat provider-setup gate', () => {
     proxy.getDailyStatsSafe.mockResolvedValue(null as any);
     proxy.getCostEstimateSafe.mockResolvedValue(null as any);
     proxy.getLocalChatToken.mockResolvedValue('test-token' as any);
+    gateway.listPublicModels.mockResolvedValue([] as any);
     apiKeys.getGeminiApiKeys.mockResolvedValue([] as any);
     apiKeys.getOpenAIApiKeys.mockResolvedValue([] as any);
     apiKeys.getAntigravityApiKeys.mockResolvedValue([] as any);

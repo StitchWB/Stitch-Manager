@@ -26,6 +26,7 @@ import {
   type ProviderModelMapping,
 } from '@/lib/backend/modules/aiProxy';
 import type { AiProxyAccount, AuthFile, ProxySettings } from '../../types/generated';
+import { isPublicModelFallback } from '../requestFallbackClassification';
 import type { ConnectionStateMap, HistorySummary } from '../../components/ai-proxy/sections/types';
 import { useAiProxyStore, refreshProxyStatus, startProxyStatusPolling, stopProxyStatusPolling } from '../../stores/aiProxy';
 import { startCatalogEvents, stopCatalogEvents } from '../../stores/aiGateway';
@@ -124,9 +125,9 @@ export function useAiProvidersController(page?: AiHubPage) {
       setHistorySummary({
         total: rows.length,
         errors: rows.filter(r => r.status === 'error').length,
-        failovers: rows.filter(r => r.failover_count > 0).length,
+        failovers: rows.filter(isPublicModelFallback).length,
       });
-      setRecentFailovers(rows.filter(r => r.failover_count > 0));
+      setRecentFailovers(rows.filter(isPublicModelFallback));
     } catch {
       // non-blocking
     }

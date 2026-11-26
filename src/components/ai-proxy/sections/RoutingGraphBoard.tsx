@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Server, Route, Power, Shield, CheckCircle2, Minimize2 } from 'lucide-react';
 import { Button, GlassCard, ProviderLogo, StatusBadge } from '@/components/ui';
 import type { ProviderModelMapping } from '@/lib/backend/modules/aiProxy';
 import type { AiProxyAccount, ProxySettings, ProxyStatus } from '@/types/generated';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app';
+import { useAiGatewayStore } from '@/stores/aiGateway';
 
 // ponytail: CSS-only routing graph — no ReactFlow, no deps, just divs
 
@@ -211,8 +212,14 @@ interface RoutingGraphBoardProps {
 
 export function RoutingGraphBoard(props: RoutingGraphBoardProps) {
   const language = useAppStore(state => state.language);
+  const gateway = useAiGatewayStore(state => state.routingStatus?.gateway ?? null);
+  const fetchRoutingStatus = useAiGatewayStore(state => state.fetchRoutingStatus);
   const isRu = language === 'ru';
   const running = Boolean(props.proxyStatus?.running);
+
+  useEffect(() => {
+    void fetchRoutingStatus();
+  }, [fetchRoutingStatus]);
 
   const c = isRu
     ? {
@@ -220,18 +227,18 @@ export function RoutingGraphBoard(props: RoutingGraphBoardProps) {
         rules: 'Правила', rulesSubtitle: 'Приоритет · вес · LRU', failover: 'фейловер ×3', circuit: 'circuit breaker',
         map: 'Маппинги', rot: 'Ротация',
         caveman: 'Caveman', comp: 'Компрессия', off2: 'Выкл', cfg: 'Настр.',
-        proxy: 'AI Proxy', run: 'Работает', stop: 'Остановлен', set: 'Настр.', start: 'Старт', stop2: 'Стоп',
+        proxy: 'Legacy proxy', run: 'Работает', stop: 'Остановлен', set: 'Настр.', start: 'Старт', stop2: 'Стоп',
         holone: 'Holone', block: 'Блок', mon: 'Монитор', dis: 'Выкл', rules2: 'правил', find: 'находок', sec: 'Безоп.',
-        resp: 'Ответ', done: 'Готово',
+        resp: 'Ответ', done: 'Готово', gateway: 'AI Gateway', checking: 'проверка…', legacyPrefix: 'Legacy: ',
       }
     : {
         sources: 'Sources', avail: 'avail', manage: 'Open',
         rules: 'Rules', rulesSubtitle: 'Priority · weight · LRU', failover: 'failover ×3', circuit: 'circuit breaker',
         map: 'Mappings', rot: 'Rotation',
         caveman: 'Caveman', comp: 'Compress', off2: 'Off', cfg: 'Config',
-        proxy: 'AI Proxy', run: 'Running', stop: 'Stopped', set: 'Config', start: 'Start', stop2: 'Stop',
+        proxy: 'Legacy proxy', run: 'Running', stop: 'Stopped', set: 'Config', start: 'Start', stop2: 'Stop',
         holone: 'Holone', block: 'Block', mon: 'Monitor', dis: 'Off', rules2: 'rules', find: 'finds', sec: 'Security',
-        resp: 'Response', done: 'Done',
+        resp: 'Response', done: 'Done', gateway: 'AI Gateway', checking: 'checking…', legacyPrefix: 'Legacy: ',
       };
 
   const sourceSummary = useMemo(() => {
@@ -307,9 +314,17 @@ export function RoutingGraphBoard(props: RoutingGraphBoardProps) {
             {isRu ? 'Маршрутизация' : 'Routing'}
           </h2>
         </div>
-        <StatusBadge status={running ? 'active' : 'inactive'} size="sm" withDot>
-          {running ? c.run : c.stop}
-        </StatusBadge>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="rounded-md border border-indigo-400/20 bg-indigo-500/[0.08] px-2 py-1 text-right">
+            <div className="text-[9px] uppercase tracking-wide text-indigo-200">{c.gateway}</div>
+            <div className="font-mono text-[10px] text-slate-300">
+              {gateway === null ? c.checking : gateway.running ? gateway.baseUrl : c.stop}
+            </div>
+          </div>
+          <StatusBadge status={running ? 'active' : 'inactive'} size="sm" withDot>
+            {c.legacyPrefix}{running ? c.run : c.stop}
+          </StatusBadge>
+        </div>
       </div>
 
       {/* Graph — zigzag 2×3 */}

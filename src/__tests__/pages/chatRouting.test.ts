@@ -128,4 +128,14 @@ describe('chat routing', () => {
       'http://127.0.0.1:25584/v1/chat/completions'
     );
   });
+  it('routes rb/* roles to the embedded gateway and prefers them automatically', () => {
+    const model = { id: 'rb/lead', provider: 'AI Gateway', ownedBy: 'gateway' };
+    expect(resolveChatCompletionsUrl(model, 5580)).toBe('/v1/chat/completions');
+    expect(selectPreferredChatModel([
+      { id: 'gemini-3.7-flash', provider: 'google', ownedBy: 'google' },
+      model,
+    ], false)).toBe('rb/lead');
+    expect(selectPreferredChatModel([model], false)).toBe('rb/lead');
+  });
+
 });

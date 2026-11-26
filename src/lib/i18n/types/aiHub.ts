@@ -428,6 +428,13 @@ export interface AiHubTranslations {
       baseUrl: string;
       clientApiKey: string;
       error: string;
+      gatewayLabel: string;
+      gatewayEmbedded: string;
+      gatewayChecking: string;
+      legacyProxyLabel: string;
+      legacyBaseUrl: string;
+      legacyClientApiKey: string;
+      legacyOnly: string;
       errors: {
         emptyManagementKey: string;
         invalidPort: string;
@@ -853,7 +860,52 @@ export interface AiHubTranslations {
       providers: string;
       routing: string;
       throughput: string;
+      traffic: string;
       analytics: string;
+    }
+    roleChains: {
+      title: string;
+      subtitle: string;
+      refresh: string;
+      loading: string;
+      emptyTitle: string;
+      emptyDescription: string;
+      gatewayTitle: string;
+      gatewayRunning: string;
+      gatewayStopped: string;
+      desiredOrder: string;
+      currentStep: string;
+      activeOfTotal: string;
+      probesAvailable: string;
+      probesDenied: string;
+      probesTemporary: string;
+      probesUnknown: string;
+      priority: string;
+      lastVerified: string;
+      nextProbe: string;
+      never: string;
+      manualOverride: string;
+      managedByCatalog: string;
+      missingEndpoint: string;
+      missingUpstream: string;
+      missingRoute: string;
+      circuit: string;
+      roleState: {
+        active: string;
+        degraded: string;
+        probing: string;
+        demoted: string;
+        disabled: string;
+        missing: string;
+      };
+      stepState: {
+        active: string;
+        probing: string;
+        demoted: string;
+        disabled: string;
+        missing: string;
+        manual: string;
+      };
     }
     throughput: {
       title: string;

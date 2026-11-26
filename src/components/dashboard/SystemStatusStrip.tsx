@@ -8,6 +8,7 @@ import {
   Repeat,
   Server,
   Shield,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -34,6 +35,7 @@ import {
   stopSchedulerStatusPolling,
 } from '../../stores/scheduler';
 import { useSettingsStore } from '../../stores/settings';
+import { useAiGatewayStore } from '../../stores/aiGateway';
 
 function formatNextRun(unixSeconds: number | null): string {
   if (!unixSeconds) return t('dashboard.systemStrip.scheduler.noNextRun');
@@ -100,6 +102,8 @@ function StatusCell({
 export function SystemStatusStrip() {
   const proxyStatus = useAiProxyStore(state => state.status);
   const setProxyStatus = useAiProxyStore(state => state.setStatus);
+  const gatewayStatus = useAiGatewayStore(state => state.routingStatus?.gateway ?? null);
+  const fetchRoutingStatus = useAiGatewayStore(state => state.fetchRoutingStatus);
 
   // Read from settings store instead of fetching
   const settings = useSettingsStore(state => state.settings);
@@ -119,6 +123,8 @@ export function SystemStatusStrip() {
 
   const proxyRunning = proxyStatus?.running ?? false;
   const proxyPort = proxyStatus?.port ?? null;
+  const gatewayRunning = gatewayStatus?.running ?? false;
+  const gatewayPort = gatewayStatus?.port ?? null;
   const bridgeOnline = true; // Python backend always available
 
   // Derive nextRun from store tasks (polled centrally) instead of fetching.
@@ -135,12 +141,15 @@ export function SystemStatusStrip() {
     startProxyStatusPolling();
     startSchedulerStatusPolling();
     startTaskPolling();
+    void fetchRoutingStatus();
+    const gatewayTimer = window.setInterval(() => void fetchRoutingStatus(), 30_000);
     return () => {
       stopProxyStatusPolling();
       stopSchedulerStatusPolling();
       stopTaskPolling();
+      window.clearInterval(gatewayTimer);
     };
-  }, []);
+  }, [fetchRoutingStatus]);
 
   const handleToggleProxy = useCallback(async () => {
     setProxyBusy(true);
@@ -205,6 +214,16 @@ export function SystemStatusStrip() {
     }
   }, [isRunning, startScheduler, stopScheduler]);
 
+  const gatewayValue = useMemo(() => {
+    if (!gatewayStatus) return t('dashboard.systemStrip.gateway.checking');
+    if (gatewayRunning) {
+      return gatewayPort
+        ? t('dashboard.systemStrip.gateway.runningAt', { port: gatewayPort })
+        : t('dashboard.systemStrip.stateOn');
+    }
+    return t('dashboard.systemStrip.gateway.stopped');
+  }, [gatewayStatus, gatewayRunning, gatewayPort]);
+
   const proxyValue = useMemo(() => {
     if (proxyBusy) return t('common.loading');
     if (proxyRunning) {
@@ -232,6 +251,17 @@ export function SystemStatusStrip() {
       aria-label={t('dashboard.systemStrip.ariaLabel')}
       className="shrink-0 flex items-center gap-1.5 h-10 px-1 rounded-lg bg-white/[0.02] border border-white/[0.06] overflow-x-auto"
     >
+      <div className="flex-1 min-w-[170px] h-8">
+        <StatusCell
+          icon={<Zap size={12} />}
+          label={t('dashboard.systemStrip.gateway.label')}
+          value={gatewayValue}
+          active={gatewayRunning}
+          warning={gatewayStatus !== null && !gatewayRunning}
+          tooltip={t('dashboard.systemStrip.gateway.tooltip')}
+        />
+      </div>
+
       <div className="flex-1 min-w-[170px] h-8">
         <StatusCell
           icon={<Server size={12} />}

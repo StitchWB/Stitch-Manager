@@ -127,6 +127,13 @@ export interface DashboardTranslations {
       ariaLabel: string;
       stateOn: string;
       stateOff: string;
+      gateway: {
+        label: string;
+        runningAt: string;
+        stopped: string;
+        checking: string;
+        tooltip: string;
+      }
       proxy: {
         label: string;
         running: string;

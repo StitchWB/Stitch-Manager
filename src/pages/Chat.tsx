@@ -36,7 +36,7 @@ import {
   getLocalChatToken,
 } from '@/lib/backend/modules/aiProxy';
 import { fetchProxyStatusNow } from '@/stores/aiProxy';
-import { listCredentials } from '@/lib/backend/modules/aiGateway';
+import { listCredentials, listPublicModels } from '@/lib/backend/modules/aiGateway';
 import { Button, ButtonBase, Checkbox, EmptyState, Input, LoadingSpinner, Select, StatusBadge, Textarea, Tooltip } from '@/components/ui';
 
 interface ChatModelInfo extends ModelInfo {
@@ -175,10 +175,11 @@ export default function Chat() {
         getProxySettings(),
       ]);
 
-      const [credentials, capabilities, mappings] = await Promise.all([
+      const [credentials, capabilities, mappings, publicModels] = await Promise.all([
         listCredentials(),
         getProviderCapabilities(),
         getProviderModelMappings(),
+        listPublicModels().catch(() => []),
       ]);
 
       const availableModels = await getAiProxyAvailableModels();
@@ -210,16 +211,29 @@ export default function Chat() {
         mappingCount: mappings.length,
       });
 
-      setAiProxyModels(
-        availableModels.map(m => ({
+      const legacyCatalogModels = availableModels.map(m => ({
+        id: m.id,
+        name: m.provider === 'velly' ? (m.name || m.id) : m.id.startsWith('kiro-') ? `[kiro] ${m.id.replace('kiro-', '')}` : m.id,
+        provider: m.id.startsWith('kiro-') ? 'kiro' : (m.provider || m.ownedBy || 'Unknown'),
+        ownedBy: m.ownedBy || m.provider || 'Unknown',
+        source: (m.source as 'aiProxy' | 'freemodel') || 'aiProxy',
+        protocol: m.protocol,
+      }));
+      const knownIds = new Set(legacyCatalogModels.map(m => m.id));
+      const roleModels = publicModels
+        .filter(m => m.enabled && m.id.startsWith('rb/') && !knownIds.has(m.id))
+        .map(m => ({
           id: m.id,
-          name: m.provider === 'velly' ? (m.name || m.id) : m.id.startsWith('kiro-') ? `[kiro] ${m.id.replace('kiro-', '')}` : m.id,
-          provider: m.id.startsWith('kiro-') ? 'kiro' : (m.provider || m.ownedBy || 'Unknown'),
-          ownedBy: m.ownedBy || m.provider || 'Unknown',
-          source: (m.source as 'aiProxy' | 'freemodel') || 'aiProxy',
-          protocol: m.protocol,
-        }))
-      );
+          name: m.displayName || m.id,
+          provider: 'AI Gateway',
+          ownedBy: 'gateway',
+          source: 'aiGateway',
+          protocol: undefined,
+        }));
+      // rb/* roles are the primary product surface. Put them first so the
+      // unpinned default never lands on a dead legacy-proxy model when a
+      // gateway-native route exists.
+      setAiProxyModels([...roleModels, ...legacyCatalogModels]);
 
       if (availableModels.length === 0 && (proxyStatus?.running ?? false) && hasAnyConfiguredKey) {
         setSetupError(

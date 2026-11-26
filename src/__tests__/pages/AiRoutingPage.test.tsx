@@ -57,6 +57,11 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
   listPublicModels: jest.fn(async () => []),
   listCredentialModelAccess: jest.fn(async () => []),
   listRouteTargetsForPublicModel: jest.fn(async () => []),
+  getAiGatewayRoutingStatus: jest.fn(async () => ({
+    gateway: { running: true, baseUrl: 'http://127.0.0.1:25584/v1', port: 25584 },
+    roles: [],
+    generatedAt: '2026-01-01T00:00:00Z',
+  })),
   discoverModelsForEndpoint: jest.fn(async () => ({ models_count: 0 })),
   migrateLegacyData: jest.fn(async () => ({ endpoints_created: 0, credentials_created: 0 })),
   importOpencodeProviders: jest.fn(async () => ({
@@ -256,4 +261,36 @@ describe('AiRoutingPage', () => {
       expect(navigatedSearch).toBe('?tab=proxy');
     });
   });
+  it('canonicalizes retired granular routing tabs into the traffic tab', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing?tab=rotation']}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(navigatedSearch).toBe('?tab=traffic');
+    });
+  });
+
+  it('does not expose the retired granular tabs in the routing tab strip', async () => {
+    render(
+      <MemoryRouter initialEntries={['/ai/routing']}>
+        <Routes>
+          <Route path="/ai/routing" element={<AiRoutingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Request path');
+    const strip = within(screen.getByTestId('routing-tab-strip'));
+    expect(strip.getByRole('button', { name: 'Traffic processing' })).toBeTruthy();
+    expect(strip.queryByRole('button', { name: 'Rotation' })).toBeNull();
+    expect(strip.queryByRole('button', { name: 'Compression' })).toBeNull();
+    expect(strip.queryByRole('button', { name: 'HoloNe Security' })).toBeNull();
+  });
+
 });
