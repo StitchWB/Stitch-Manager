@@ -34,7 +34,11 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from stitch_backend.core.event_bus import event_bus
 from stitch_backend.database import run_in_read_session, run_in_session
-from stitch_backend.domains.ai_gateway.adapters.base import ModelMetadata, get_adapter
+from stitch_backend.domains.ai_gateway.adapters.base import (
+    ModelListError,
+    ModelMetadata,
+    get_adapter,
+)
 from stitch_backend.domains.ai_gateway.model_catalog_service import (
     VERIFICATION_TTL,
     _as_utc,
@@ -75,6 +79,15 @@ VERIFICATION_MAX_TOKENS = 1
 NOT_RETURNED_BY_UPSTREAM = "not_returned_by_upstream"
 
 REFORMBOSS_BASE_URL = "https://api.reformboss.com/v1"
+
+_DISCOVERY_FAILURE_TEXT = {
+    "auth_failed": "authentication failed",
+    "quota_exhausted": "quota exhausted",
+    "rate_limited": "rate limited",
+    "server_error": "upstream server error",
+    "transport_error": "transport error",
+    "model_access_denied": "model access denied",
+}
 
 
 def _normalize_base_url(url: Any) -> str:
@@ -389,7 +402,10 @@ class DiscoveryWorker:
                     _exc,
                 )
                 label = cred_info["label"] or cred_info["credential_id"][:8]
-                failures.append(f"{label}: {_exc}")
+                detail = await cls._describe_cred_failure(
+                    db, probe, cred_info, _exc,
+                )
+                failures.append(f"{label}: {detail}")
                 continue
             per_cred.append((cred_info, models))
         if not per_cred:
@@ -415,6 +431,55 @@ class DiscoveryWorker:
                 if metadata.id not in ordered:
                     ordered.append(metadata.id)
         return {"models": ordered, "checked": len(usable), "failed": len(failures)}
+
+    @classmethod
+    async def _describe_cred_failure(
+        cls,
+        db: AsyncSession,
+        probe: dict[str, Any],
+        cred_info: dict[str, Any],
+        exc: Exception,
+    ) -> str:
+        """Human-readable failure text; also applies the credential transition.
+
+        ``ModelListError`` carries the raw probe result, so the vendor's
+        machine-readable code (e.g. ReformBoss's quota-marked 401) reaches
+        ``transition_credential`` instead of degenerating to a bare status.
+        """
+        result = exc.result if isinstance(exc, ModelListError) else None
+        if result is None or result.http_status is None:
+            return str(exc)
+        adapter = get_adapter(probe["adapter_type"])
+        classified = adapter.classify_error(
+            exc,
+            http_status=result.http_status,
+            response_body=result.error_body,
+        )
+        from stitch_backend.domains.ai_gateway.credential_state import (
+            transition_credential,
+        )
+        try:
+            async with db.begin_nested():
+                await transition_credential(
+                    db,
+                    cred_info["credential_id"],
+                    error=classified,
+                    http_status=result.http_status,
+                    source="probe",
+                )
+        except Exception as _state_exc:  # noqa: BLE001
+            logger.debug(
+                "DiscoveryWorker: credential transition failed for %s: %s",
+                cred_info["credential_id"],
+                _state_exc,
+            )
+        base = _DISCOVERY_FAILURE_TEXT.get(classified.category)
+        if base is None:
+            return str(exc)
+        text = f"{base} ({classified.error_code})" if classified.error_code else base
+        if classified.retry_at is not None:
+            text += f", resets at {classified.retry_at.strftime('%H:%M')}"
+        return text
 
     @classmethod
     async def _load_endpoints_for_discovery(cls) -> list[dict[str, Any]]:

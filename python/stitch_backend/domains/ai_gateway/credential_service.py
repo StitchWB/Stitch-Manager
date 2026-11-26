@@ -145,6 +145,8 @@ class CredentialService(BaseRepository[Credential]):
         )
         credential.runtime_status = "unknown"
         credential.status_reason = None
+        credential.next_retry_at = None
+        credential.quota_reset_at = None
         credential.updated_at = _utcnow()
 
         await self._db.flush()

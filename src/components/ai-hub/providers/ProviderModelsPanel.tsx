@@ -531,6 +531,17 @@ export function ProviderModelsPanel(props: ProviderModelsPanelProps): JSX.Elemen
             icon={Radio}
             title={t('aiHub.providersPage.liveEmpty')}
             description={t('aiHub.providersPage.liveEmptyHint')}
+            action={
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                className="text-xs"
+                onClick={() => setSegment('all')}
+              >
+                {t('aiHub.providersPage.liveEmptyShowAll', { count: allTotal })}
+              </Button>
+            }
           />
         );
       }

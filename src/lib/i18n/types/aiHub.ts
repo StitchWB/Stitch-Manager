@@ -686,6 +686,7 @@ export interface AiHubTranslations {
       discoveryFailed: string;
       discoveryFailedHint: string;
       discoverySomeFailed: string;
+      discoveredCount: string;
       endpointModelsHint: string;
       edit: string;
       deleteEndpoint: string;
@@ -718,6 +719,7 @@ export interface AiHubTranslations {
       modelsFilteredEmptyHint: string;
       liveEmpty: string;
       liveEmptyHint: string;
+      liveEmptyShowAll: string;
       segmentLive: string;
       segmentAll: string;
       segmentLiveHint: string;

@@ -31,6 +31,7 @@ from stitch_backend.core.exceptions import StitchError
 from stitch_backend.domains.ai_gateway.adapters.base import (
     AdapterCapabilities,
     ClassifiedError,
+    ModelListError,
     ModelMetadata,
     ProbeResult,
     register_adapter,
@@ -293,7 +294,7 @@ class ConfigurableAdapter:
             base_url=base_url, secret=secret, default_headers=default_headers,
         )
         if not result.success:
-            raise RuntimeError(result.error or f"HTTP {result.http_status}")
+            raise ModelListError(result)
         return result.model_metadata or []
 
     async def probe_quota(
