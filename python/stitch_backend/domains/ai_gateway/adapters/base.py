@@ -58,6 +58,15 @@ class ProbeResult:
     the vendor's machine-readable error code instead of the bare status."""
 
 
+class ModelListError(RuntimeError):
+    """``list_models_detailed`` failure carrying the raw :class:`ProbeResult`
+    so callers can classify instead of re-parsing a message string."""
+
+    def __init__(self, result: ProbeResult) -> None:
+        super().__init__(result.error or f"HTTP {result.http_status}")
+        self.result = result
+
+
 @dataclass
 class ClassifiedError:
     """Normalized classification of a failure raised during a provider call.

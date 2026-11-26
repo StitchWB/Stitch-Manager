@@ -688,6 +688,7 @@ export const aiHub: AiHubTranslations = {
       discoveryFailed: "Model discovery failed",
       discoveryFailedHint: "Listing models failed — the connection may still work for chat. Add model IDs manually or retry.",
       discoverySomeFailed: "Tested {ok} of {total} keys: some were rejected",
+      discoveredCount: "Models found: {count}",
       endpointModelsHint: "Models are discovered automatically once credentials are added.",
       edit: "Edit",
       deleteEndpoint: "Delete provider",

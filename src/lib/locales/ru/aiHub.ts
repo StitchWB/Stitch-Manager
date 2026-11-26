@@ -688,6 +688,7 @@ export const aiHub: AiHubTranslations = {
       discoveryFailed: "Не удалось получить модели",
       discoveryFailedHint: "Список моделей не получен — соединение может работать для чата. Добавьте id моделей вручную или повторите.",
       discoverySomeFailed: "Проверено {ok} из {total} ключей: есть отклонённые",
+      discoveredCount: "Найдено моделей: {count}",
       endpointModelsHint: "Модели будут найдены автоматически после добавления ключей.",
       edit: "Изменить",
       deleteEndpoint: "Удалить провайдера",

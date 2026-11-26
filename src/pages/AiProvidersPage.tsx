@@ -350,7 +350,7 @@ export default function AiProvidersPage() {
           t('aiHub.providersPage.discoverySomeFailed', { ok: checked - failed, total: checked })
         );
       } else {
-        toast.success(t('aiHub.providersPage.discover'));
+        toast.success(t('aiHub.providersPage.discoveredCount', { count: outcome.models_count }));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
