@@ -129,14 +129,21 @@ export const dashboard: DashboardTranslations = {
       ariaLabel: "Статус системы",
       stateOn: "ВКЛ",
       stateOff: "ВЫКЛ",
+      gateway: {
+        label: "Gateway",
+        runningAt: "Встроен · :{port}",
+        stopped: "Недоступен",
+        checking: "Проверка…",
+        tooltip: "Основной встроенный AI gateway для ролей rb/* и новых OpenAI-совместимых клиентов",
+      },
       proxy: {
-        label: "AI Прокси",
+        label: "Legacy Proxy",
         running: "Работает",
         runningAt: "Работает на :{port}",
         stopped: "Остановлен",
-        tooltipStart: "Запустить AI Прокси",
-        tooltipStop: "Остановить AI Прокси",
-        toggleFailed: "Не удалось переключить AI Прокси",
+        tooltipStart: "Запустить legacy AI proxy",
+        tooltipStop: "Остановить legacy AI proxy",
+        toggleFailed: "Не удалось переключить legacy AI proxy",
       },
       replenish: {
         label: "Автопополнение",
@@ -146,7 +153,7 @@ export const dashboard: DashboardTranslations = {
       autoSwitch: {
         label: "Авто-переключение",
         tooltip: "Менять активный AI-аккаунт, когда кончаются кредиты",
-        tooltipDisabled: "Запустите AI Прокси, чтобы включить авто-переключение",
+        tooltipDisabled: "Запустите legacy AI proxy, чтобы включить авто-переключение",
         toggleFailed: "Не удалось переключить авто-переключение",
       },
       scheduler: {

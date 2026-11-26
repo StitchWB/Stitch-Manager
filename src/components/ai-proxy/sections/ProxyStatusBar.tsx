@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, Copy, Power, RefreshCw, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -6,6 +6,7 @@ import { t } from '@/lib/i18n';
 import { Button, IconButton, Tooltip } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { ProxyStatus, ProxySettings } from '../../../types/generated';
+import { useAiGatewayStore } from '../../../stores/aiGateway';
 
 export interface ProxyStatusBarProps {
   proxyStatus: ProxyStatus | null;
@@ -34,7 +35,8 @@ function InlineCopyField({
   onCopy: (label: string, value: string, requireConfirm?: boolean) => void;
 }) {
   return (
-    <span className="flex min-w-0 items-center gap-0.5 rounded-md border border-white/[0.06] bg-black/30 px-2 py-1">
+    <span className="flex min-w-0 items-center gap-1 rounded-md border border-white/[0.06] bg-black/30 px-2 py-1">
+      <span className="shrink-0 text-[9px] uppercase tracking-wide text-slate-500">{label}</span>
       <span className="max-w-[180px] truncate font-mono text-[11px] text-slate-300" title={value}>
         {value}
       </span>
@@ -67,6 +69,12 @@ export function ProxyStatusBar({
 }: ProxyStatusBarProps) {
   const navigate = useNavigate();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const gateway = useAiGatewayStore(state => state.routingStatus?.gateway ?? null);
+  const fetchRoutingStatus = useAiGatewayStore(state => state.fetchRoutingStatus);
+
+  useEffect(() => {
+    void fetchRoutingStatus();
+  }, [fetchRoutingStatus]);
   const running = Boolean(proxyStatus?.running);
   const unreachable = running && Boolean(proxyStatus && !proxyStatus.networkReachable);
 
@@ -92,6 +100,24 @@ export function ProxyStatusBar({
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
       )}
       <span className={cn('relative h-2 w-2 rounded-full', dotTone)} />
+    </span>
+  );
+
+  const gatewayLabel = (
+    <span className="flex min-w-0 items-center gap-1.5 rounded-md border border-indigo-400/20 bg-indigo-500/[0.08] px-2 py-1">
+      <span className={cn('h-2 w-2 rounded-full', gateway === null ? 'bg-slate-500' : gateway.running ? 'bg-emerald-400' : 'bg-amber-400')} />
+      <span className="shrink-0 text-[10px] uppercase tracking-wider text-indigo-200">
+        {t('aiHub.proxy.gatewayLabel')}
+      </span>
+      <span className="truncate font-mono text-[11px] text-slate-300">
+        {gateway === null ? t('aiHub.proxy.gatewayChecking') : gateway.running ? gateway.baseUrl : t('aiHub.proxy.stopped')}
+      </span>
+    </span>
+  );
+
+  const legacyLabel = (
+    <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500">
+      {t('aiHub.proxy.legacyProxyLabel')}
     </span>
   );
 
@@ -161,6 +187,9 @@ export function ProxyStatusBar({
         className={cn('rounded-lg border px-3 py-1.5', tint)}
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {gatewayLabel}
+          <span className="hidden h-4 w-px bg-white/10 sm:block" />
+          {legacyLabel}
           {statusDot}
           {statusLabel}
           {proxyStatus?.port ? (
@@ -183,9 +212,9 @@ export function ProxyStatusBar({
         </div>
         {detailsOpen && (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-white/[0.06] pt-1.5">
-            <InlineCopyField label={t('aiHub.proxy.baseUrl')} value={baseUrl} onCopy={onCopy} />
+            <InlineCopyField label={t('aiHub.proxy.legacyBaseUrl')} value={baseUrl} onCopy={onCopy} />
             <InlineCopyField
-              label={t('aiHub.proxy.clientApiKey')}
+              label={t('aiHub.proxy.legacyClientApiKey')}
               value={clientApiKey}
               onCopy={onCopy}
             />
@@ -205,6 +234,9 @@ export function ProxyStatusBar({
       role="status"
       className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-1.5', tint)}
     >
+      {gatewayLabel}
+      <span className="hidden h-4 w-px bg-white/10 sm:block" />
+      {legacyLabel}
       {statusDot}
       {statusLabel}
       {secondaryLine && (
@@ -213,9 +245,9 @@ export function ProxyStatusBar({
         </span>
       )}
 
-      <InlineCopyField label={t('aiHub.proxy.baseUrl')} value={baseUrl} onCopy={onCopy} />
+      <InlineCopyField label={t('aiHub.proxy.legacyBaseUrl')} value={baseUrl} onCopy={onCopy} />
       <InlineCopyField
-        label={t('aiHub.proxy.clientApiKey')}
+        label={t('aiHub.proxy.legacyClientApiKey')}
         value={clientApiKey}
         onCopy={onCopy}
       />

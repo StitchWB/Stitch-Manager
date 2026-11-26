@@ -90,6 +90,13 @@ from stitch_backend.domains.ai_gateway.schemas.route_targets import (
     RouteTargetResponse,
     RouteTargetUpdateRequest,
 )
+from stitch_backend.domains.ai_gateway.schemas.routing_status import (
+    AiGatewayRoutingStatusResponse,
+    GatewayRuntimeStatusResponse,
+    RoleChainAccessSummaryResponse,
+    RoleChainStepStatusResponse,
+    RoleRoutingStatusResponse,
+)
 from stitch_backend.domains.ai_gateway.schemas.upstream_models import (
     ListUpstreamModelsRequest,
     UpstreamModelCreateRequest,
@@ -101,6 +108,7 @@ from stitch_backend.domains.ai_gateway.schemas.upstream_models import (
 
 __all__ = [
     "AdapterCapabilitiesResponse",
+    "AiGatewayRoutingStatusResponse",
     "CredentialCreateRequest",
     "CredentialIdRequest",
     "CredentialModelAccessIdRequest",
@@ -109,6 +117,7 @@ __all__ = [
     "CredentialResponse",
     "CredentialUpdateRequest",
     "GatewayClaimLegacyRequest",
+    "GatewayRuntimeStatusResponse",
     "GatewaySetInstanceSharedRequest",
     "ListCredentialModelAccessRequest",
     "ListCredentialsRequest",
@@ -137,8 +146,11 @@ __all__ = [
     "PublicModelRouteTarget",
     "PublicModelUpdateRequest",
     "RefreshEndpointModelsRequest",
+    "RoleChainAccessSummaryResponse",
     "RoleChainEntryIdRequest",
     "RoleChainEntryResponse",
+    "RoleChainStepStatusResponse",
+    "RoleRoutingStatusResponse",
     "RotateCredentialSecretRequest",
     "RouteTargetCreateRequest",
     "RouteTargetIdRequest",

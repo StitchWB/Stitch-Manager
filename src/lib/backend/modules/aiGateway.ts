@@ -134,6 +134,83 @@ export interface RoleChainEntry {
   updatedAt?: string | null;
 }
 
+export type RoleChainStepState =
+  | 'active'
+  | 'probing'
+  | 'demoted'
+  | 'disabled'
+  | 'missing'
+  | 'manual';
+
+export type RoleRoutingState =
+  | 'active'
+  | 'degraded'
+  | 'probing'
+  | 'demoted'
+  | 'disabled'
+  | 'missing';
+
+export interface GatewayRuntimeStatus {
+  running: boolean;
+  baseUrl: string;
+  port: number;
+}
+
+export interface RoleChainAccessSummary {
+  available: number;
+  denied: number;
+  temporarilyUnavailable: number;
+  unknown: number;
+  nextProbeAt?: string | null;
+  lastVerifiedAt?: string | null;
+}
+
+export interface RoleChainStepStatus {
+  entryId?: string | null;
+  ordinal: number;
+  desiredEnabled: boolean;
+  source: string;
+  endpointSelector: string;
+  upstreamModelKey: string;
+  family?: string | null;
+  endpointId?: string | null;
+  endpointName?: string | null;
+  endpointBaseUrl?: string | null;
+  endpointEnabled?: boolean | null;
+  endpointCircuitState?: string | null;
+  upstreamRowId?: string | null;
+  upstreamEnabled?: boolean | null;
+  routeTargetId?: number | null;
+  routeEnabled?: boolean | null;
+  priority?: number | null;
+  managedBy?: string | null;
+  lifecycleStatus?: string | null;
+  lifecycleReason?: string | null;
+  lifecycleUpdatedAt?: string | null;
+  state: RoleChainStepState;
+  isCurrent: boolean;
+  access: RoleChainAccessSummary;
+}
+
+export interface RoleRoutingStatus {
+  id: string;
+  displayName?: string | null;
+  enabled: boolean;
+  contract?: Record<string, unknown> | null;
+  state: RoleRoutingState;
+  totalSteps: number;
+  activeSteps: number;
+  probingSteps: number;
+  demotedSteps: number;
+  steps: RoleChainStepStatus[];
+}
+
+export interface AiGatewayRoutingStatus {
+  gateway: GatewayRuntimeStatus;
+  roles: RoleRoutingStatus[];
+  generatedAt: string;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ProviderEndpoint API
 // ═══════════════════════════════════════════════════════════════════════════
@@ -429,6 +506,10 @@ export async function listRoleChainEntries(params?: {
   endpointSelector?: string;
 }): Promise<RoleChainEntry[]> {
   return safeInvoke('list_role_chain_entries', params ?? {});
+}
+
+export async function getAiGatewayRoutingStatus(): Promise<AiGatewayRoutingStatus> {
+  return safeInvoke('get_ai_gateway_routing_status', {}, { noCache: true });
 }
 
 export async function upsertRoleChainEntry(params: {

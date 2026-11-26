@@ -400,6 +400,13 @@ export interface RequestTrace {
   failover_count: number;
   status: string;
   timestamp: number;
+  requested_model?: string | null;
+  served_public_model?: string | null;
+  upstream_model?: string | null;
+  endpoint_id?: string | null;
+  lifecycle_status?: string | null;
+  sticky_hit?: boolean;
+  failover_reasons?: string[];
 }
 
 export async function getRequestHistory(

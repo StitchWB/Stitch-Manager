@@ -35,6 +35,7 @@ import type {
 } from '../types/generated';
 import { t } from '../lib/i18n';
 import { formatDateTime } from '../lib/utils';
+import { isPublicModelFallback } from './requestFallbackClassification';
 
 type StatusKind = 'success' | 'client' | 'server' | 'unknown';
 
@@ -311,7 +312,7 @@ export default function AiAnalytics() {
                             ) : null}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            {req.failover_count > 0 ? (
+                            {isPublicModelFallback(req) ? (
                               <StatusBadge size="sm" status="warning">
                                 {t('aiHub.failover.badge', { count: req.failover_count })}
                               </StatusBadge>

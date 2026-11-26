@@ -91,6 +91,9 @@ from stitch_backend.domains.ai_gateway.commands.route_targets import (
     cmd_list_route_targets_for_public_model,
     cmd_update_route_target,
 )
+from stitch_backend.domains.ai_gateway.commands.routing_status import (
+    cmd_get_ai_gateway_routing_status,
+)
 from stitch_backend.domains.ai_gateway.commands.save_connection import (
     cmd_get_adapter_capabilities,
     cmd_save_connection,
@@ -120,6 +123,7 @@ __all__ = [
     "cmd_gateway_claim_legacy",
     "cmd_gateway_set_instance_shared",
     "cmd_get_adapter_capabilities",
+    "cmd_get_ai_gateway_routing_status",
     "cmd_get_credential",
     "cmd_get_provider_endpoint",
     "cmd_get_public_model",

@@ -514,3 +514,132 @@ async def test_note_upstream_outcome_ignores_non_model_errors_and_legacy_targets
     await db_session.refresh(target)
     assert target.enabled is True
     assert target.lifecycle_status == "active"
+
+
+async def test_role_routing_status_joins_desired_chain_with_runtime_and_probe_counts(db_session) -> None:
+    endpoint = await _add_endpoint(db_session)
+    credential = await _add_credential(db_session, endpoint)
+    await RoleCatalogService(db_session).reconcile_all()
+
+    roles = await RoleCatalogService(db_session).role_routing_status()
+    assert [role["id"] for role in roles] == list(DEFAULT_ROLE_CHAIN_SPECS)
+    lead = next(role for role in roles if role["id"] == "rb/lead")
+    assert [step["upstream_model_key"] for step in lead["steps"]] == [
+        "gemini-4-carbon", "deepseek-v4-pro", "glm-5.3",
+    ]
+    assert [step["ordinal"] for step in lead["steps"]] == [0, 1, 2]
+    assert all(step["state"] == "probing" for step in lead["steps"])
+    assert all(step["endpoint_id"] == endpoint.id for step in lead["steps"])
+    assert all(step["route_target_id"] is not None for step in lead["steps"])
+    assert lead["state"] == "probing"
+    assert lead["active_steps"] == 0
+
+    upstream = await db_session.scalar(
+        select(UpstreamModel).where(
+            UpstreamModel.provider_endpoint_id == endpoint.id,
+            UpstreamModel.upstream_model_id == "gemini-4-carbon",
+        ),
+    )
+    assert upstream is not None
+    target = await db_session.scalar(
+        select(RouteTarget).where(
+            RouteTarget.public_model_id == "rb/lead",
+            RouteTarget.upstream_model_id == upstream.id,
+        ),
+    )
+    assert target is not None
+    verified_at = datetime.now(UTC)
+    target.enabled = True
+    target.lifecycle_status = "active"
+    target.lifecycle_reason = "positive_exact_model_probe"
+    db_session.add(
+        CredentialModelAccess(
+            credential_id=credential.id,
+            upstream_model_id=upstream.id,
+            status="available",
+            last_verified_at=verified_at,
+            next_probe_at=verified_at + timedelta(minutes=30),
+        ),
+    )
+    await db_session.flush()
+
+    roles = await RoleCatalogService(db_session).role_routing_status()
+    lead = next(role for role in roles if role["id"] == "rb/lead")
+    first = lead["steps"][0]
+    assert first["state"] == "active"
+    assert first["is_current"] is True
+    assert first["access"]["available"] == 1
+    assert first["access"]["denied"] == 0
+    assert first["access"]["last_verified_at"] is not None
+    assert lead["state"] == "active"  # first desired step carries the role; later probes do not degrade it
+    assert lead["active_steps"] == 1
+    assert lead["probing_steps"] == 2
+
+    second_upstream = await db_session.scalar(
+        select(UpstreamModel).where(
+            UpstreamModel.provider_endpoint_id == endpoint.id,
+            UpstreamModel.upstream_model_id == "deepseek-v4-pro",
+        ),
+    )
+    assert second_upstream is not None
+    second_target = await db_session.scalar(
+        select(RouteTarget).where(
+            RouteTarget.public_model_id == "rb/lead",
+            RouteTarget.upstream_model_id == second_upstream.id,
+        ),
+    )
+    assert second_target is not None
+    target.enabled = False
+    target.lifecycle_status = "demoted"
+    second_target.enabled = True
+    second_target.lifecycle_status = "active"
+    await db_session.flush()
+
+    roles = await RoleCatalogService(db_session).role_routing_status()
+    lead = next(role for role in roles if role["id"] == "rb/lead")
+    assert lead["state"] == "degraded"
+    assert lead["steps"][0]["state"] == "demoted"
+    assert lead["steps"][1]["state"] == "active"
+    assert lead["steps"][1]["is_current"] is True
+
+
+async def test_role_routing_status_preserves_manual_override_and_disabled_entries(db_session) -> None:
+    endpoint = await _add_endpoint(db_session)
+    await RoleCatalogService(db_session).reconcile_all()
+
+    entries = list(
+        (
+            await db_session.execute(
+                select(RoleChainEntry)
+                .where(RoleChainEntry.public_model_id == "rb/small")
+                .order_by(RoleChainEntry.ordinal.asc()),
+            )
+        ).scalars().all(),
+    )
+    entries[1].enabled = False
+    upstream = await db_session.scalar(
+        select(UpstreamModel).where(
+            UpstreamModel.provider_endpoint_id == endpoint.id,
+            UpstreamModel.upstream_model_id == entries[0].upstream_model_key,
+        ),
+    )
+    assert upstream is not None
+    target = await db_session.scalar(
+        select(RouteTarget).where(
+            RouteTarget.public_model_id == "rb/small",
+            RouteTarget.upstream_model_id == upstream.id,
+        ),
+    )
+    assert target is not None
+    target.lifecycle_status = "verified"
+    target.lifecycle_reason = "manual_override"
+    target.managed_by = "manual"
+    target.enabled = False
+    await db_session.flush()
+
+    roles = await RoleCatalogService(db_session).role_routing_status()
+    small = next(role for role in roles if role["id"] == "rb/small")
+    assert small["steps"][0]["state"] == "manual"
+    assert small["steps"][0]["managed_by"] == "manual"
+    assert small["steps"][1]["state"] == "disabled"
+    assert small["steps"][1]["desired_enabled"] is False

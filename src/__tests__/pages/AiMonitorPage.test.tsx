@@ -54,6 +54,11 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
   listCredentials: jest.fn(async () => []),
   listUpstreamModels: jest.fn(async () => []),
   listPublicModels: jest.fn(async () => []),
+  getAiGatewayRoutingStatus: jest.fn(async () => ({
+    gateway: { running: true, baseUrl: 'http://127.0.0.1:25584/v1', port: 25584 },
+    roles: [],
+    generatedAt: '2026-01-01T00:00:00Z',
+  })),
   listCredentialModelAccess: jest.fn(async () => []),
   listRouteTargetsForPublicModel: jest.fn(async () => []),
   discoverModelsForEndpoint: jest.fn(async () => ({ models_count: 0 })),

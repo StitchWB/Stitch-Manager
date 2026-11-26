@@ -6,6 +6,7 @@ import type {
   CredentialModelAccess,
   PublicModel,
   RouteTarget,
+  AiGatewayRoutingStatus,
   SaveConnectionParams,
   SaveConnectionResult,
 } from '@/lib/backend/modules/aiGateway';
@@ -20,6 +21,7 @@ interface AiGatewayState {
   credentialModelAccess: CredentialModelAccess[];
   publicModels: PublicModel[];
   routeTargets: RouteTarget[];
+  routingStatus: AiGatewayRoutingStatus | null;
 
   // Loading states
   loading: {
@@ -29,6 +31,7 @@ interface AiGatewayState {
     credentialModelAccess: boolean;
     publicModels: boolean;
     routeTargets: boolean;
+    routingStatus: boolean;
   };
 
   // Errors
@@ -39,6 +42,7 @@ interface AiGatewayState {
     credentialModelAccess: string | null;
     publicModels: string | null;
     routeTargets: string | null;
+    routingStatus: string | null;
   };
 
   // Actions
@@ -48,6 +52,7 @@ interface AiGatewayState {
   fetchCredentialModelAccess: (credentialId?: string, modelId?: string) => Promise<void>;
   fetchPublicModels: () => Promise<void>;
   fetchRouteTargets: (publicModelId: string) => Promise<void>;
+  fetchRoutingStatus: () => Promise<void>;
 
   createEndpoint: (params: Parameters<typeof api.createProviderEndpoint>[0]) => Promise<ProviderEndpoint>;
   saveConnection: (params: SaveConnectionParams) => Promise<SaveConnectionResult>;
@@ -86,6 +91,7 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
   credentialModelAccess: [],
   publicModels: [],
   routeTargets: [],
+  routingStatus: null,
 
   loading: {
     endpoints: false,
@@ -94,6 +100,7 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
     credentialModelAccess: false,
     publicModels: false,
     routeTargets: false,
+    routingStatus: false,
   },
 
   errors: {
@@ -103,6 +110,7 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
     credentialModelAccess: null,
     publicModels: null,
     routeTargets: null,
+    routingStatus: null,
   },
 
   fetchEndpoints: async () => {
@@ -178,6 +186,18 @@ export const useAiGatewayStore = create<AiGatewayState>((set) => ({
       set(s => ({ errors: { ...s.errors, routeTargets: e instanceof Error ? e.message : String(e) } }));
     } finally {
       set(s => ({ loading: { ...s.loading, routeTargets: false } }));
+    }
+  },
+
+  fetchRoutingStatus: async () => {
+    set(s => ({ loading: { ...s.loading, routingStatus: true }, errors: { ...s.errors, routingStatus: null } }));
+    try {
+      const routingStatus = await api.getAiGatewayRoutingStatus();
+      set({ routingStatus });
+    } catch (e) {
+      set(s => ({ errors: { ...s.errors, routingStatus: e instanceof Error ? e.message : String(e) } }));
+    } finally {
+      set(s => ({ loading: { ...s.loading, routingStatus: false } }));
     }
   },
 
@@ -348,6 +368,7 @@ async function refreshCatalog(): Promise<void> {
     s.fetchCredentials(),
     s.fetchUpstreamModels(),
     s.fetchPublicModels(),
+    s.fetchRoutingStatus(),
   ]);
 }
 

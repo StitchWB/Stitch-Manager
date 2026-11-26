@@ -258,6 +258,11 @@ const COMMAND_PAYLOADS: Record<string, unknown> = {
   get_zai_api_keys: [],
   obs_timeline: [],
   get_python_job_status: null,
+  get_ai_gateway_routing_status: {
+    gateway: { running: true, baseUrl: 'http://127.0.0.1:25584/v1', port: 25584 },
+    roles: [],
+    generatedAt: '2026-01-01T00:00:00Z',
+  },
 };
 
 function payloadFor(cmd: string): unknown {

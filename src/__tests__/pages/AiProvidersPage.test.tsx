@@ -96,6 +96,11 @@ jest.mock('../../lib/backend/modules/aiGateway', () => ({
   updateRouteTarget: jest.fn(),
   deleteRouteTarget: jest.fn(),
   listPublicModels: jest.fn(async () => []),
+  getAiGatewayRoutingStatus: jest.fn(async () => ({
+    gateway: { running: true, baseUrl: 'http://127.0.0.1:25584/v1', port: 25584 },
+    roles: [],
+    generatedAt: '2026-01-01T00:00:00Z',
+  })),
   listRouteTargetsForPublicModel: jest.fn(async () => []),
   listCredentialModelAccess: jest.fn(async () => []),
   migrateLegacyData: jest.fn(async () => ({ endpoints_created: 0, credentials_created: 0 })),

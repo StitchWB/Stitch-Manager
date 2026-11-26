@@ -13,6 +13,7 @@ import { HoloneSection } from '../components/ai-proxy/sections/HoloneSection';
 import { RoutingGraphBoard } from '../components/ai-proxy/sections/RoutingGraphBoard';
 import { MappingsEditor } from '../components/ai-proxy/sections/MappingsEditor';
 import { PublicModelsSection } from '../components/ai-gateway/PublicModelsSection';
+import { RoleChainBoard } from '../components/ai-gateway/RoleChainBoard';
 import { useAiProvidersController, maskKey } from './hooks/useAiProvidersController';
 import { useAiHubCopy } from './hooks/useAiHubCopy';
 import { useRoutingBoardStatus } from './hooks/useRoutingBoardStatus';
@@ -22,17 +23,21 @@ import { ButtonBase, PageHeader } from '@/components/ui';
 import { t } from '../lib/i18n';
 import { useAppStore } from '../stores/app';
 
-const ROUTING_TABS = ['board', 'mappings', 'models', 'proxy', 'rotation', 'compression', 'holone'] as const;
+const ROUTING_TABS = ['board', 'mappings', 'models', 'traffic', 'proxy'] as const;
 type RoutingTab = (typeof ROUTING_TABS)[number];
+
+const LEGACY_TAB_ALIASES: Record<string, RoutingTab> = {
+  rotation: 'traffic',
+  compression: 'traffic',
+  holone: 'traffic',
+};
 
 const ROUTING_TAB_LABELS: Record<RoutingTab, string> = {
   board: 'aiHub.tabs.board',
   mappings: 'aiHub.tabs.mappings',
   models: 'aiHub.tabs.models',
+  traffic: 'aiHub.tabs.traffic',
   proxy: 'aiHub.tabs.proxy',
-  rotation: 'aiHub.tabs.rotation',
-  compression: 'aiHub.tabs.compression',
-  holone: 'aiHub.tabs.holone',
 };
 
 export default function AiRoutingPage() {
@@ -70,16 +75,18 @@ export default function AiRoutingPage() {
   const handleCopy = useAiHubCopy();
 
   const tabParam = searchParams.get('tab');
-  const routingTab: RoutingTab = (ROUTING_TABS as readonly string[]).includes(tabParam ?? '')
-    ? (tabParam as RoutingTab)
-    : 'board';
+  const aliasedTab = tabParam ? LEGACY_TAB_ALIASES[tabParam] : undefined;
+  const routingTab: RoutingTab = aliasedTab
+    ?? ((ROUTING_TABS as readonly string[]).includes(tabParam ?? '')
+      ? (tabParam as RoutingTab)
+      : 'board');
 
   useEffect(() => {
     if (tabParam === null) return;
     if ((ROUTING_TABS as readonly string[]).includes(tabParam)) return;
     setSearchParams(
       prev => {
-        prev.set('tab', 'board');
+        prev.set('tab', LEGACY_TAB_ALIASES[tabParam] ?? 'board');
         return prev;
       },
       { replace: true },
@@ -121,7 +128,7 @@ export default function AiRoutingPage() {
       />
 
       <div className="shrink-0 border-b border-white/[0.06] px-4 md:px-6">
-        <div className="mx-auto flex w-full max-w-[1500px] items-center gap-1 overflow-x-auto py-2">
+        <div data-testid="routing-tab-strip" className="mx-auto flex w-full max-w-[1500px] items-center gap-1 overflow-x-auto py-2">
           {ROUTING_TABS.map(tabId => {
             const active = routingTab === tabId;
             return (
@@ -146,7 +153,7 @@ export default function AiRoutingPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 space-y-3 overflow-auto p-3 md:p-4">
           <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3">
-            {routingTab === 'board' && <VellyConnectionCard />}
+            {routingTab === 'board' && <RoleChainBoard />}
             {routingTab === 'board' && (
               <RoutingGraphBoard
                 accounts={accounts}
@@ -163,15 +170,16 @@ export default function AiRoutingPage() {
                 cavemanEnabled={boardStatus.cavemanEnabled}
                 cavemanLevel={boardStatus.cavemanLevel}
                 compressionEnabled={boardStatus.compressionEnabled}
-                onOpenHolone={() => openRoutingTab('holone')}
+                onOpenHolone={() => openRoutingTab('traffic')}
                 onOpenProviders={() => navigate('/ai/providers')}
                 onOpenMappings={() => openRoutingTab('mappings')}
-                onOpenRotation={() => openRoutingTab('rotation')}
+                onOpenRotation={() => openRoutingTab('traffic')}
                 onOpenProxy={() => openRoutingTab('proxy')}
-                onOpenCompression={() => openRoutingTab('compression')}
+                onOpenCompression={() => openRoutingTab('traffic')}
                 onStartStopProxy={handleStartStopProxy}
               />
             )}
+            {routingTab === 'board' && <VellyConnectionCard />}
 
             {routingTab === 'mappings' && (
               <MappingsEditor
@@ -215,13 +223,13 @@ export default function AiRoutingPage() {
               </>
             )}
 
-            {routingTab === 'rotation' && (
-              <RotationSettingsPanel capabilities={providerCapabilities} visible />
+            {routingTab === 'traffic' && (
+              <>
+                <RotationSettingsPanel capabilities={providerCapabilities} visible />
+                <CompressionSection />
+                <HoloneSection />
+              </>
             )}
-
-            {routingTab === 'compression' && <CompressionSection />}
-
-            {routingTab === 'holone' && <HoloneSection />}
           </div>
         </div>
       </div>

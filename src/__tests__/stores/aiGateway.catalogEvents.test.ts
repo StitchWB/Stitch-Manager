@@ -17,12 +17,18 @@ const mockListProviderEndpoints = jest.fn(async () => []);
 const mockListCredentials = jest.fn(async () => []);
 const mockListUpstreamModels = jest.fn(async () => []);
 const mockListPublicModels = jest.fn(async () => []);
+const mockGetAiGatewayRoutingStatus = jest.fn(async () => ({
+  gateway: { running: true, baseUrl: 'http://127.0.0.1:25584/v1', port: 25584 },
+  roles: [],
+  generatedAt: '2026-01-01T00:00:00Z',
+}));
 
 jest.mock('@/lib/backend/modules/aiGateway', () => ({
   listProviderEndpoints: () => mockListProviderEndpoints(),
   listCredentials: () => mockListCredentials(),
   listUpstreamModels: () => mockListUpstreamModels(),
   listPublicModels: () => mockListPublicModels(),
+  getAiGatewayRoutingStatus: () => mockGetAiGatewayRoutingStatus(),
 }));
 
 import { startCatalogEvents, stopCatalogEvents } from '@/stores/aiGateway';
@@ -48,6 +54,7 @@ describe('aiGateway catalog invalidation', () => {
     expect(mockListCredentials).toHaveBeenCalled();
     expect(mockListUpstreamModels).toHaveBeenCalled();
     expect(mockListPublicModels).toHaveBeenCalled();
+    expect(mockGetAiGatewayRoutingStatus).toHaveBeenCalled();
   });
 
   it('refetches catalog slices when credential.state_changed fires', async () => {
@@ -59,6 +66,7 @@ describe('aiGateway catalog invalidation', () => {
 
     expect(mockListPublicModels).toHaveBeenCalled();
     expect(mockListCredentials).toHaveBeenCalled();
+    expect(mockGetAiGatewayRoutingStatus).toHaveBeenCalled();
   });
 
   it('unsubscribes when the last subscriber stops', async () => {
