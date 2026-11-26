@@ -758,7 +758,11 @@ class ProbeWorker:
 
             def _unknown_evidence_tier(upstream: UpstreamModel) -> bool:
                 caps = upstream.capabilities or {}
-                return "coherence_passed" not in caps and "evidence_tier" not in caps
+                return (
+                    "probed_at" not in caps
+                    and "coherence_passed" not in caps
+                    and "evidence_tier" not in caps
+                )
 
             candidate_rows = sorted(
                 (
