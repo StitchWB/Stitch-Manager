@@ -35,6 +35,7 @@ def _row(**kw):
 def test_reason_group_mapping() -> None:
     assert _reason_group("quota_exhausted") == "balance"
     assert _reason_group("server_error") == "channel"
+    assert _reason_group("upstream_unavailable") == "channel"
     assert _reason_group("auth_failed") == "auth"
     assert _reason_group("model_not_found") == "missing"
     assert _reason_group("transport_error") == "transport"

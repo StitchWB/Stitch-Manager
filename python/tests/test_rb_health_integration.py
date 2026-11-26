@@ -429,7 +429,9 @@ async def test_record_result_demotes_target_when_no_usable_access_remains(db_ses
     reloaded = await RouteTargetService(db_session).get_by_pk(target.id)
     assert reloaded.enabled is False
     assert reloaded.lifecycle_status == "demoted"
-    assert reloaded.lifecycle_reason == "no_channel"
+    # HTTP 5xx dominates model-looking vendor codes: this is upstream
+    # availability evidence, not proof of model-scoped refusal/retirement.
+    assert reloaded.lifecycle_reason == "upstream_unavailable"
     assert re_mod._resolve_cache_generation > gen_before
 
 

@@ -256,6 +256,98 @@ class ChainRefillService:
             )
         return actions
 
+    async def log_rescue_inactivity(
+        self,
+        *,
+        public_model_id: str | None = None,
+        endpoint_selector: str = REFORMBOSS_ENDPOINT_SELECTOR,
+    ) -> None:
+        """Emit compact per-role state when a production refill pass writes nothing.
+
+        The refill writer is deliberately silent in the common healthy case
+        (every role has active/probing desired entries).  That silence made the
+        first live deployment indistinguishable from a dead worker, so this
+        observability path logs one line per evaluated role.  It duplicates the
+        planner's cheap read queries but writes nothing and never changes the
+        rescue decision.
+        """
+        endpoint = await self._endpoint_for_selector(endpoint_selector)
+        if endpoint is None or not endpoint.enabled:
+            logger.info("Chain refill state: endpoint %s unavailable/disabled", endpoint_selector)
+            return
+
+        entry_rows = list(
+            (
+                await self._db.execute(
+                    select(RoleChainEntry).where(
+                        RoleChainEntry.endpoint_selector == endpoint_selector,
+                    ),
+                )
+            ).scalars().all(),
+        )
+        entries_by_role: dict[str, list[RoleChainEntry]] = {}
+        for entry in entry_rows:
+            if public_model_id is not None and entry.public_model_id != public_model_id:
+                continue
+            entries_by_role.setdefault(entry.public_model_id, []).append(entry)
+        if not entries_by_role:
+            logger.info("Chain refill state: no desired entries for %s", endpoint_selector)
+            return
+
+        statuses = {
+            row["id"]: row
+            for row in await RoleCatalogService(self._db).role_routing_status()
+        }
+        public_rows = list(
+            (
+                await self._db.execute(
+                    select(PublicModel).where(PublicModel.id.in_(list(entries_by_role))),
+                )
+            ).scalars().all(),
+        )
+        public_by_id = {row.id: row for row in public_rows}
+        candidates = await self._evidence_backed_candidates(endpoint.id)
+        role_order = list(DEFAULT_ROLE_CHAIN_SPECS)
+        for role in sorted(
+            entries_by_role,
+            key=lambda value: role_order.index(value) if value in role_order else 999,
+        ):
+            entries = entries_by_role[role]
+            status = statuses.get(role)
+            active_probing = 0
+            if status is not None:
+                active_probing = sum(
+                    1
+                    for step in status["steps"]
+                    if step["desired_enabled"]
+                    and step["endpoint_selector"] == endpoint_selector
+                    and step["state"] in ("active", "probing")
+                )
+            public = public_by_id.get(role)
+            contract = (
+                public.contract
+                if public is not None and isinstance(public.contract, dict)
+                else {}
+            )
+            auto_count = sum(1 for entry in entries if entry.source == "auto")
+            deficit = max(0, CHAIN_REFILL_MIN_LIVE_CANDIDATES_PER_ROLE - active_probing)
+            if deficit == 0:
+                reason = "live-candidate floor satisfied"
+            elif contract.get("autoRefill") is False:
+                reason = "autoRefill disabled by contract"
+            elif auto_count >= CHAIN_REFILL_MAX_AUTO_ENTRIES_PER_ROLE:
+                reason = "auto entry budget exhausted"
+            elif not candidates:
+                reason = "no evidence-backed candidates"
+            else:
+                reason = "no unused admissible evidence-backed candidate"
+            logger.info(
+                "Chain refill state: %s no rescue (%s; active/probing=%d)",
+                role,
+                reason,
+                active_probing,
+            )
+
     async def apply_rescue_refill(
         self,
         *,

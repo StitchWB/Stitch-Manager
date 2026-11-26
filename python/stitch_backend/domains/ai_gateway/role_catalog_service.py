@@ -169,6 +169,7 @@ _MODEL_SCOPED_REASONS = frozenset(
         "no_channel_for_model",
         "token_model_not_allowed",
         "provider_forbidden",
+        "upstream_unavailable",
     }
 )
 _DENIED_REASONS = frozenset(
@@ -302,6 +303,7 @@ class RoleCatalogService:
         upstream_model_id: str,
         error: Any,
         credential_id: str | None = None,
+        http_status: int | None = None,
     ) -> None:
         """Re-evaluate role targets after live traffic already updated access rows.
 
@@ -323,6 +325,8 @@ class RoleCatalogService:
         if upstream is None:
             return
         reason = self._error_reason(error)
+        if self._status_is_upstream_transient(http_status):
+            reason = "upstream_unavailable"
         now = _utcnow()
         if reason in _DENIED_REASONS and credential_id is not None:
             access = await self._access_row(credential_id, upstream.id)
@@ -388,6 +392,16 @@ class RoleCatalogService:
             await self._db.flush()
 
         reason = str(probe_row.get("reason") or ("ok" if probe_row.get("ok") else "unknown"))
+        if probe_row.get("ok") is not True:
+            normalized_reason = self._probe_failure_reason(reason, probe_row)
+            if normalized_reason != reason:
+                probe_row = {
+                    **probe_row,
+                    "reason": normalized_reason,
+                    "errorCode": normalized_reason,
+                    "upstreamErrorCode": probe_row.get("errorCode") or probe_row.get("error_code"),
+                }
+                reason = normalized_reason
         if probe_row.get("ok") is True:
             access.status = "available"
             access.last_error = None
@@ -1393,6 +1407,33 @@ class RoleCatalogService:
         exponent = min(max(0, failures - 1), 4)
         backoff = PROBE_BACKOFF_BASE_SECONDS * (2**exponent)
         return int(min(PROBE_BACKOFF_CAP_SECONDS, backoff))
+
+    @staticmethod
+    def _status_is_upstream_transient(status: Any) -> bool:
+        return (
+            isinstance(status, int)
+            and not isinstance(status, bool)
+            and 500 <= status < 600
+        )
+
+    @classmethod
+    def _probe_failure_reason(cls, reason: str, probe_row: Mapping[str, Any]) -> str:
+        """Normalize upstream-availability failures away from terminal refusals.
+
+        ReformBoss can flap a model in and out behind a 503 while still
+        attaching a model-looking error body.  A 5xx is therefore availability
+        evidence, never proof of key/model entitlement refusal: the exact pair
+        gets ordinary temporary backoff and can be re-probed, while explicit
+        4xx/model-scoped refusals retain their terminal ``denied`` semantics.
+        """
+        raw_status = (
+            probe_row.get("httpStatus")
+            or probe_row.get("http_status")
+            or probe_row.get("status")
+        )
+        if cls._status_is_upstream_transient(raw_status):
+            return "upstream_unavailable"
+        return reason
 
     @staticmethod
     def _probe_failure_is_model_scoped(reason: str, probe_row: Mapping[str, Any]) -> bool:

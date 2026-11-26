@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from stitch_backend.database import Base
 from stitch_backend.domains.ai_gateway import probe_worker as pw
 from stitch_backend.domains.ai_gateway import routing_engine as re_mod
+from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialGroupShare,  # noqa: F401
@@ -686,6 +687,35 @@ async def test_reviewer_family_diversity_skips_gracefully_when_unknown(db_sessio
     assert all(action["family"] == "unknown" for action in actions)
 
 
+async def test_production_refill_logs_one_line_per_role_when_no_rescue(
+    db_session, monkeypatch, caplog,
+) -> None:
+    await _seed_catalog(db_session)
+    _patch_worker_db(monkeypatch, db_session)
+
+    with caplog.at_level(logging.INFO):
+        await pw.ProbeWorker._run_chain_refill()
+
+    for role in DEFAULT_ROLE_CHAIN_SPECS:
+        assert f"Chain refill state: {role}" in caplog.text
+    assert "active/probing=" in caplog.text
+
+
+async def test_production_refill_logs_applied_rescue_summary(
+    db_session, monkeypatch, caplog,
+) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    await _demote_all_role_targets(db_session, "rb/lead")
+    _patch_worker_db(monkeypatch, db_session)
+
+    with caplog.at_level(logging.INFO):
+        await pw.ProbeWorker._run_chain_refill()
+
+    assert "deficit-filled with auto entry zminimax-m25" in caplog.text
+    assert "Chain refill: applied 1 refill entries across 1 roles" in caplog.text
+
+
 class _EvidenceAdapter:
     def __init__(self) -> None:
         self.models: list[str] = []
@@ -704,6 +734,81 @@ class _EvidenceAdapter:
 
     def classify_error(self, exc, **_kwargs):
         raise AssertionError("no errors expected")
+
+
+class _Level2Adapter:
+    """Exact-probe adapter with a scripted level-2 answer."""
+
+    def __init__(self, level2_content: str) -> None:
+        self.level2_content = level2_content
+
+    async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
+        prompt = messages[0]["content"]
+        if "third word" in prompt:
+            content = self.level2_content
+        else:
+            content = prompt.split('"')[1]
+        return {
+            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 18, "completion_tokens": 2, "total_tokens": 20},
+        }
+
+    def classify_error(self, exc, **_kwargs):
+        raise AssertionError("no errors expected")
+
+
+def _exact_probe_target(endpoint, cred, upstream, *, evidence_probe: bool = True) -> dict[str, Any]:
+    return {
+        "credential_id": cred.id,
+        "endpoint_id": endpoint.id,
+        "adapter_type": endpoint.adapter_type,
+        "base_url": endpoint.base_url,
+        "default_headers": endpoint.default_headers,
+        "secret": "sk-test",
+        "upstream_row_id": upstream.id,
+        "upstream_model_id": upstream.upstream_model_id,
+        "evidence_probe": evidence_probe,
+    }
+
+
+@pytest.mark.parametrize(
+    "level2_content",
+    [
+        "gammagamma",
+        "  GAMMA gamma!  ",
+        "\"Gamma, gamma.\"",
+        "gamma and gamma",
+    ],
+)
+async def test_level2_canary_accepts_instruction_noise(
+    db_session, monkeypatch, level2_content: str,
+) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    upstream = await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: _Level2Adapter(level2_content))
+
+    result = await pw.ProbeWorker._probe_exact_model(
+        _exact_probe_target(endpoint, cred, upstream),
+    )
+
+    assert result["outcome"] == "ok"
+    assert result["level2_passed"] is True
+
+
+@pytest.mark.parametrize("level2_content", ["deltadelta", "the model is unavailable", ""])
+async def test_level2_canary_rejects_wrong_or_empty_content(
+    db_session, monkeypatch, level2_content: str,
+) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    upstream = await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: _Level2Adapter(level2_content))
+
+    result = await pw.ProbeWorker._probe_exact_model(
+        _exact_probe_target(endpoint, cred, upstream),
+    )
+
+    assert result["outcome"] == "ok"
+    assert result["level2_passed"] is False
 
 
 def _patch_worker_db(monkeypatch, session) -> None:
@@ -750,6 +855,117 @@ async def test_trickle_candidate_probe_is_lowest_priority_and_writes_evidence(
     assert caps["probe_latency_ms"] >= 0
     assert caps["evidence_tier"] in {"strong", "mid", "fast", "emergency_tail"}
     assert caps["probed_at"]
+
+
+async def test_evidence_probe_success_log_does_not_claim_promotion(db_session, monkeypatch, caplog) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    upstream = await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: _Level2Adapter("gammagamma"))
+    result = await pw.ProbeWorker._probe_exact_model(
+        _exact_probe_target(endpoint, cred, upstream),
+    )
+    assert result["evidence_probe"] is True
+
+    with caplog.at_level(logging.INFO):
+        await pw.ProbeWorker._apply_exact_probe_result(
+            db_session,
+            RoleCatalogService(db_session),
+            result,
+        )
+
+    assert "evidence trickle" in caplog.text
+    assert "promotion path" not in caplog.text
+
+
+async def test_exact_probe_503_denial_shape_is_carried_as_transient_upstream_failure(
+    db_session, monkeypatch,
+) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    upstream = await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+
+    class Upstream503Error(RuntimeError):
+        status_code = 503
+        classified = ClassifiedError(
+            category="model_access_denied",
+            is_endpoint_wide=False,
+            is_model_specific=True,
+            scope="key",
+            error_code="token_model_not_allowed",
+        )
+
+    class FailingAdapter:
+        async def invoke(self, **_kwargs):
+            raise Upstream503Error("upstream returned 503")
+
+        def classify_error(self, exc, **_kwargs):
+            return exc.classified
+
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: FailingAdapter())
+    result = await pw.ProbeWorker._probe_exact_model(
+        _exact_probe_target(endpoint, cred, upstream),
+    )
+
+    assert result["outcome"] == "error"
+    assert result["http_status"] == 503
+    await pw.ProbeWorker._apply_exact_probe_result(
+        db_session,
+        RoleCatalogService(db_session),
+        result,
+    )
+
+    access = (
+        await db_session.execute(
+            select(CredentialModelAccess).where(
+                CredentialModelAccess.credential_id == cred.id,
+                CredentialModelAccess.upstream_model_id == upstream.id,
+            ),
+        )
+    ).scalar_one()
+    assert access.status == "temporarily_unavailable"
+    assert access.last_error == "upstream_unavailable"
+    assert access.next_probe_at is not None
+
+
+async def test_exact_probe_endpoint_wide_5xx_arms_endpoint_backoff_without_model_blame(
+    db_session,
+) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    upstream = await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    result = {
+        "outcome": "error",
+        "credential_id": cred.id,
+        "endpoint_id": endpoint.id,
+        "upstream_row_id": upstream.id,
+        "upstream_model_id": upstream.upstream_model_id,
+        "latency_ms": 25,
+        "usage_sane": None,
+        "usage_reason": None,
+        "level2_passed": None,
+        "http_status": 503,
+        "classified": ClassifiedError(
+            category="server_error",
+            is_endpoint_wide=True,
+            is_model_specific=False,
+            scope="key",
+        ),
+    }
+
+    await pw.ProbeWorker._apply_exact_probe_result(
+        db_session,
+        RoleCatalogService(db_session),
+        result,
+    )
+
+    assert pw.ProbeWorker._endpoint_probe_backoff_active(endpoint.id, datetime.now(UTC))
+    access_rows = (
+        await db_session.execute(
+            select(CredentialModelAccess).where(
+                CredentialModelAccess.credential_id == cred.id,
+                CredentialModelAccess.upstream_model_id == upstream.id,
+            ),
+        )
+    ).scalars().all()
+    assert access_rows == []
 
 
 async def test_candidate_probe_writes_fabricated_usage_evidence(db_session, monkeypatch) -> None:

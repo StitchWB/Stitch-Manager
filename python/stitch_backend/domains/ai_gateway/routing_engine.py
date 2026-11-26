@@ -920,7 +920,12 @@ class RoutingEngine:
                     # says otherwise; inventory/transient model failures remain
                     # temporary.  ``token_model_not_allowed`` can arrive either
                     # as the normalized category or as the vendor error code.
-                    denied = (
+                    upstream_transient = (
+                        isinstance(http_status, int)
+                        and not isinstance(http_status, bool)
+                        and 500 <= http_status < 600
+                    )
+                    denied = not upstream_transient and (
                         error.category == "model_access_denied"
                         or error.error_code in {"token_model_not_allowed", "provider_forbidden"}
                     )
@@ -929,7 +934,11 @@ class RoutingEngine:
                     # rewriting the same mark must not churn routing.
                     transitioned = row.status != next_status
                     row.status = next_status
-                    row.last_error = error.error_code or error.category
+                    row.last_error = (
+                        "upstream_unavailable"
+                        if upstream_transient
+                        else error.error_code or error.category
+                    )
                     row.last_verified_at = _utcnow()
                     await session.flush()
                     if transitioned:
@@ -975,6 +984,7 @@ class RoutingEngine:
                     upstream_model_id=upstream_model_id,
                     error=error,
                     credential_id=credential_id,
+                    http_status=http_status,
                 )
             except Exception:
                 logger.warning(
