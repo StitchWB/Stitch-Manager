@@ -523,14 +523,29 @@ async def test_role_public_models_seed_latency_contracts(db_session) -> None:
 
     rows = (await db_session.execute(select(PublicModel))).scalars().all()
     contracts = {row.id: row.contract for row in rows if row.id.startswith("rb/")}
+    # Regression: seeded values must match the production-informed latency
+    # constants per role (ReformBoss TTFT reality: slow-but-alive upstreams
+    # routinely need 15-25s before first byte).
     assert contracts["rb/small"]["latency"] == {
-        "maxTtftMs": 8000,
-        "stallTimeoutMs": 16000,
+        "maxTtftMs": 25000,
+        "stallTimeoutMs": 50000,
     }
-    assert contracts["rb/builder-fast"]["latency"]["maxTtftMs"] == 12000
-    assert contracts["rb/verifier"]["latency"]["maxTtftMs"] == 15000
-    assert contracts["rb/builder"]["latency"]["maxTtftMs"] == 20000
-    assert contracts["rb/lead"]["latency"]["maxTtftMs"] == 25000
+    assert contracts["rb/builder-fast"]["latency"] == {
+        "maxTtftMs": 30000,
+        "stallTimeoutMs": 60000,
+    }
+    assert contracts["rb/verifier"]["latency"] == {
+        "maxTtftMs": 30000,
+        "stallTimeoutMs": 60000,
+    }
+    assert contracts["rb/builder"]["latency"] == {
+        "maxTtftMs": 40000,
+        "stallTimeoutMs": 80000,
+    }
+    assert contracts["rb/lead"]["latency"] == {
+        "maxTtftMs": 45000,
+        "stallTimeoutMs": 90000,
+    }
     for role in (
         "rb/planner",
         "rb/reviewer-correctness",
@@ -538,8 +553,8 @@ async def test_role_public_models_seed_latency_contracts(db_session) -> None:
         "rb/researcher",
     ):
         assert contracts[role]["latency"] == {
-            "maxTtftMs": 30000,
-            "stallTimeoutMs": 60000,
+            "maxTtftMs": 50000,
+            "stallTimeoutMs": 100000,
         }
 
 
@@ -558,7 +573,7 @@ async def test_role_contract_reconcile_patches_only_absent_latency_keys(db_sessi
 
     assert stats["public_models_updated"] == 1
     assert public.contract == {
-        "latency": {"maxTtftMs": 1111, "stallTimeoutMs": 16000},
+        "latency": {"maxTtftMs": 1111, "stallTimeoutMs": 50000},
         "operator": {"keep": True},
     }
 
@@ -1364,8 +1379,8 @@ async def test_active_rb_role_route_carries_seeded_latency_contract(db_session) 
     assert results[0].upstream_model.upstream_model_id == "deepseek-v4-pro"
     assert results[0].public_model_contract is not None
     assert results[0].public_model_contract["latency"] == {
-        "maxTtftMs": 20000,
-        "stallTimeoutMs": 40000,
+        "maxTtftMs": 40000,
+        "stallTimeoutMs": 80000,
     }
 
 

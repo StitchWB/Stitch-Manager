@@ -128,22 +128,30 @@ DEFAULT_ROLE_CHAIN_SPECS: dict[str, tuple[RoleChainStep, ...]] = {
     ),
 }
 
-# Per-role latency contracts from the rb routing design notes.  ``stall`` is
-# deliberately 2x TTFT: once a stream has started, brief upstream pauses are
-# still tolerable for reasoning models, while a totally silent stream beyond
-# roughly two TTFT budgets is treated as wedged.  These are seeded operational
-# defaults, not hidden constants: operators may tune them on the PublicModel
-# contract, and reconciliation only fills absent keys.
+# Per-role latency contracts informed by ReformBoss production reality.
+# These thresholds are watchdog tripwires against *wedged* upstreams, not UX
+# latency targets: failover ordering and latency-aware target selection
+# already prefer fast models, so the watchdog's only job is to bound the
+# worst case.  ReformBoss upstreams routinely show 15-25s TTFT during
+# degraded/peak periods while still answering (measured live: glm-5.3 first
+# token at 20.6s while healthy); the original 8-30s seeds aborted every
+# attempt before first byte exactly when the upstream was slow-but-alive.
+# ``stall`` is deliberately 2x TTFT: once a stream has started, brief
+# upstream pauses are still tolerable for reasoning models, while a totally
+# silent stream beyond roughly two TTFT budgets is treated as wedged.
+# These are seeded operational defaults, not hidden constants: operators may
+# tune them on the PublicModel contract, and reconciliation only fills
+# absent keys.
 DEFAULT_ROLE_LATENCY_MS: dict[str, tuple[int, int]] = {
-    "rb/small": (8_000, 16_000),
-    "rb/builder-fast": (12_000, 24_000),
-    "rb/verifier": (15_000, 30_000),
-    "rb/builder": (20_000, 40_000),
-    "rb/lead": (25_000, 50_000),
-    "rb/planner": (30_000, 60_000),
-    "rb/reviewer-correctness": (30_000, 60_000),
-    "rb/reviewer-adversarial": (30_000, 60_000),
-    "rb/researcher": (30_000, 60_000),
+    "rb/small": (25_000, 50_000),
+    "rb/builder-fast": (30_000, 60_000),
+    "rb/verifier": (30_000, 60_000),
+    "rb/builder": (40_000, 80_000),
+    "rb/lead": (45_000, 90_000),
+    "rb/planner": (50_000, 100_000),
+    "rb/reviewer-correctness": (50_000, 100_000),
+    "rb/reviewer-adversarial": (50_000, 100_000),
+    "rb/researcher": (50_000, 100_000),
 }
 
 
