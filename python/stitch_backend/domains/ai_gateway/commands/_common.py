@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from sqlalchemy import or_
 
+from stitch_backend.domains.ai_gateway.ownership import owner_uid_for_create
+
 
 def _caller_uid(params: dict) -> int | None:
     """Extract the caller's user ID (None when auth disabled / desktop)."""
     return params.get("_caller_user_id")
+
+
+def _owner_uid_for_create(params: dict) -> int | None:
+    """Owner to stamp on a newly created gateway row (see ownership module)."""
+    return owner_uid_for_create(_caller_uid(params))
 
 
 def _owner_filter(model, uid: int | None):

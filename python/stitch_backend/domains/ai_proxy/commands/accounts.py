@@ -13,7 +13,10 @@ from typing import TYPE_CHECKING, cast
 from stitch_backend.core.command_decorator import command
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
-from stitch_backend.domains.ai_proxy.commands._common import _alias_owner_id
+from stitch_backend.domains.ai_proxy.commands._common import (
+    _alias_owner_id,
+    _alias_owner_id_for_create,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +45,7 @@ async def cmd_create_ai_proxy_account(db: AsyncSession, params: dict) -> int:
     """Create an AI-proxy account entry."""
     from stitch_backend.domains.ai_proxy.legacy_accounts_api import create_account
     account = params.get("account", params)
-    owner_id = _alias_owner_id(params)
+    owner_id = _alias_owner_id_for_create(params)
 
     return await create_account(db, account, owner_id=owner_id)
 

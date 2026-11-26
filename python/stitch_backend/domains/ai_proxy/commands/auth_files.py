@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from stitch_backend.core.command_registry import register_command
 from stitch_backend.database import run_in_session
-from stitch_backend.domains.ai_proxy.commands._common import _alias_owner_id
+from stitch_backend.domains.ai_proxy.commands._common import (
+    _alias_owner_id_for_create,
+)
 
 
 @register_command("scan_auth_files")
@@ -34,7 +36,7 @@ async def cmd_auto_import_ai_proxy_auth_files(params: dict) -> dict:
     await ensure_permission(params, "action.export_accounts")
 
     files = AuthFileScanner.scan_all()
-    owner_id = _alias_owner_id(params)
+    owner_id = _alias_owner_id_for_create(params)
 
     async def _op(session):
         imported = 0

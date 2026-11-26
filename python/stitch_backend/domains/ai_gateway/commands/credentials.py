@@ -13,6 +13,7 @@ from stitch_backend.database import run_in_session
 from stitch_backend.domains.ai_gateway.commands._common import (
     _caller_uid,
     _owner_filter,
+    _owner_uid_for_create,
 )
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 @command("create_credential")
 async def cmd_create_credential(db: AsyncSession, params: dict) -> Any:
     req = CredentialCreateRequest.model_validate(params)
-    owner_id = _caller_uid(params)
+    owner_id = _owner_uid_for_create(params)
 
     ep_result = await db.execute(
         select(ProviderEndpoint).where(
