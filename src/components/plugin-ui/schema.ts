@@ -4,7 +4,7 @@
  *
  * BOUNDARY RULE (v2 scope):
  *   The declarative renderer supports a FIXED dictionary of node kinds:
- *   heading, section, field (text/select/toggle), table, button,
+ *   heading, section, field (text/select/toggle/textarea/secret), table, button,
  *   card_grid, markdown, job.
  *   Pages that require capabilities OUTSIDE this dictionary — polling /
  *   realtime updates, arbitrary HTML rendering (the markdown node renders
@@ -23,7 +23,9 @@
  *   the renderer tolerates unknown kinds. Applied so far: `rowActions`
  *   on the table node (row-scoped actions, see `RowAction`), and the
  *   `card_grid` + `markdown` node kinds (additive revision — existing
- *   manifests render unchanged).
+ *   manifests render unchanged). v2.3: `textarea` and `secret` field
+ *   types (multiline input, e.g. credential blobs; `secret` renders
+ *   masked with a show/hide toggle) plus the field-level `rows` hint.
  */
 
 /** A single option in a select field. */
@@ -200,12 +202,18 @@ export type UiNode =
   | { kind: 'section'; title?: string; nodes: UiNode[]; collapsible?: boolean; defaultOpen?: boolean }
   | {
       kind: 'field';
-      field: 'text' | 'select' | 'toggle';
+      field: 'text' | 'select' | 'toggle' | 'textarea' | 'secret';
       id: string;
       label: string;
       value?: string | boolean;
       options?: SelectOption[];
       readonly?: boolean;
+      /**
+       * Visible row count of a `textarea` field (additive v2.3 revision).
+       * Default 5; the renderer clamps it into a sane 2–20 range.
+       * Ignored by other field types.
+       */
+      rows?: number;
       /**
        * Optional placeholder hint shown while the field is empty (text and
        * select). Resolved like `label`: a string containing a dot is

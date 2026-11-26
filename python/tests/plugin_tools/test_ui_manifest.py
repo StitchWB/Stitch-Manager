@@ -108,6 +108,38 @@ def test_unknown_node_kind_fails() -> None:
     assert any("unknown node kind" in e for e in errors)
 
 
+def test_unknown_field_type_fails() -> None:
+    contributions = _contributions()
+    contributions["ui"]["page"]["nodes"][2] = {
+        "kind": "field",
+        "field": "colorpicker",
+        "id": "name",
+        "label": "demo.name",
+    }
+    errors = _errors(contributions)
+    assert any("unknown field type" in e for e in errors)
+
+
+def test_v23_textarea_and_secret_field_types_pass() -> None:
+    contributions = _contributions()
+    contributions["ui"]["page"]["nodes"][2] = {
+        "kind": "field",
+        "field": "textarea",
+        "id": "name",
+        "label": "demo.name",
+        "rows": 8,
+    }
+    contributions["ui"]["page"]["nodes"].append(
+        {
+            "kind": "field",
+            "field": "secret",
+            "id": "token",
+            "label": "demo.name",
+        }
+    )
+    assert _errors(contributions) == []
+
+
 def test_undeclared_command_fails() -> None:
     contributions = _contributions()
     contributions["ui"]["page"]["nodes"][3]["command"] = "remove_item"

@@ -8,7 +8,7 @@ Errors (block dev-install / publish / CI):
 
   1. A declarative page node uses a kind outside the frozen v2 vocabulary
      (heading, section, field, table, button, card_grid, markdown, job) or a
-     ``field`` type outside (text, select, toggle).
+     ``field`` type outside (text, select, toggle, textarea, secret).
   2. A referenced command (button.command, source.command,
      rowActions[].command, card.action.command, toggle field source.command,
      toggle field action.command, job start/status/cancel commands)
@@ -47,7 +47,7 @@ from typing import Any
 NODE_KINDS = frozenset(
     {"heading", "section", "field", "table", "button", "card_grid", "markdown", "job"}
 )
-FIELD_KINDS = frozenset({"text", "select", "toggle"})
+FIELD_KINDS = frozenset({"text", "select", "toggle", "textarea", "secret"})
 UI_KINDS = frozenset({"declarative", "core_page"})
 LOCALES = ("ru", "en")
 
