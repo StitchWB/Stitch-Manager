@@ -198,6 +198,14 @@ export interface RoleRoutingStatus {
   enabled: boolean;
   contract?: Record<string, unknown> | null;
   state: RoleRoutingState;
+  rotationDetected?: boolean;
+  rotation?: {
+    signal?: string;
+    detectedAt?: string;
+    message?: string;
+    active?: boolean;
+    [key: string]: unknown;
+  } | null;
   totalSteps: number;
   activeSteps: number;
   probingSteps: number;

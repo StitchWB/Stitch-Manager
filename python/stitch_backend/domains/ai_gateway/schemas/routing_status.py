@@ -76,6 +76,8 @@ class RoleRoutingStatusResponse(BaseModel):
     enabled: bool
     contract: dict[str, Any] | None = None
     state: str
+    rotation_detected: bool = Field(False, alias="rotationDetected")
+    rotation: dict[str, Any] | None = None
     total_steps: int = Field(alias="totalSteps")
     active_steps: int = Field(alias="activeSteps")
     probing_steps: int = Field(alias="probingSteps")

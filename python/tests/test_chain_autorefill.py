@@ -1,4 +1,4 @@
-"""Regression tests for chain auto-refill phases 0-2."""
+"""Regression tests for chain auto-refill phases 0-3."""
 
 from __future__ import annotations
 
@@ -146,6 +146,107 @@ async def _demote_all_role_targets(session, role: str = "rb/lead") -> None:
     await session.flush()
 
 
+async def _activate_role_targets(session, role: str = "rb/lead") -> list[RouteTarget]:
+    rows = list(
+        (
+            await session.execute(
+                select(RouteTarget).where(RouteTarget.public_model_id == role),
+            )
+        ).scalars().all(),
+    )
+    assert rows
+    for target in rows:
+        target.enabled = True
+        target.lifecycle_status = "active"
+        target.lifecycle_reason = "probe_success"
+        target.lifecycle_updated_at = _utcnow()
+    await session.flush()
+    return rows
+
+
+async def _demote_upstream_everywhere(
+    session,
+    endpoint: ProviderEndpoint,
+    upstream_model_key: str,
+    *,
+    reason: str = "model_not_found",
+) -> None:
+    upstream = (
+        await session.execute(
+            select(UpstreamModel).where(
+                UpstreamModel.provider_endpoint_id == endpoint.id,
+                UpstreamModel.upstream_model_id == upstream_model_key,
+            ),
+        )
+    ).scalar_one()
+    rows = list(
+        (
+            await session.execute(
+                select(RouteTarget).where(RouteTarget.upstream_model_id == upstream.id),
+            )
+        ).scalars().all(),
+    )
+    assert rows
+    for target in rows:
+        target.enabled = False
+        target.lifecycle_status = "demoted"
+        target.lifecycle_reason = reason
+        target.lifecycle_updated_at = _utcnow()
+    await session.flush()
+
+
+async def _add_unknown_upstream(
+    session,
+    endpoint: ProviderEndpoint,
+    model_id: str,
+) -> UpstreamModel:
+    row = UpstreamModel(
+        provider_endpoint_id=endpoint.id,
+        upstream_model_id=model_id,
+        display_name=model_id,
+        enabled=True,
+        discovery_source="probe",
+        canonical_model_key=model_id,
+        capabilities={},
+        last_seen_at=_utcnow(),
+        created_at=_utcnow(),
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
+async def _force_mass_model_rotation(
+    session,
+    endpoint: ProviderEndpoint,
+    *,
+    reasons: tuple[str, str] = ("model_not_found", "token_model_not_allowed"),
+) -> None:
+    targets = await _activate_role_targets(session, "rb/lead")
+    assert len(targets) >= 3
+    # Populate the durable previously-active baseline before killing models:
+    # Signal A is explicitly about previously-active models, not first-probe
+    # failures of never-active quarantined seeds.
+    await _chain_service(session).detect_rotation()
+    upstream_rows = list(
+        (
+            await session.execute(
+                select(UpstreamModel).where(
+                    UpstreamModel.id.in_([target.upstream_model_id for target in targets[:2]]),
+                ),
+            )
+        ).scalars().all(),
+    )
+    assert len(upstream_rows) == 2
+    for upstream, reason in zip(upstream_rows, reasons, strict=True):
+        await _demote_upstream_everywhere(
+            session,
+            endpoint,
+            upstream.upstream_model_id,
+            reason=reason,
+        )
+
+
 def _chain_service(session):
     from stitch_backend.domains.ai_gateway.chain_refill_service import ChainRefillService
 
@@ -209,7 +310,7 @@ async def test_rescue_triggers_only_at_zero_active_plus_probing(db_session) -> N
     assert actions[0]["upstream_model_key"] == "zminimax-m25"
 
 
-async def test_no_rescue_when_even_one_entry_is_probing(db_session) -> None:
+async def test_one_probing_entry_counts_live_but_leaves_deficit(db_session) -> None:
     endpoint, _cred = await _seed_catalog(db_session)
     await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
     await _demote_all_role_targets(db_session)
@@ -221,6 +322,40 @@ async def test_no_rescue_when_even_one_entry_is_probing(db_session) -> None:
     assert first is not None
     first.lifecycle_status = "quarantined"
     await db_session.flush()
+
+    actions = await _chain_service(db_session).plan_rescue_refill(public_model_id="rb/lead")
+    assert len(actions) == 1
+    assert actions[0]["upstream_model_key"] == "zminimax-m25"
+
+
+async def test_zero_live_deficit_adds_at_most_two_per_pass(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    for index in range(4):
+        await _add_evidence_upstream(db_session, endpoint, f"evidence-candidate-{index}")
+    await _demote_all_role_targets(db_session)
+
+    actions = await _chain_service(db_session).plan_rescue_refill(public_model_id="rb/lead")
+    assert len(actions) == 2
+
+
+async def test_deficit_refill_respects_four_auto_entries_per_role_total_cap(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    for index in range(4):
+        db_session.add(
+            RoleChainEntry(
+                public_model_id="rb/lead",
+                endpoint_selector="reformboss",
+                upstream_model_key=f"old-auto-{index}",
+                family="unknown",
+                ordinal=20 + index,
+                enabled=True,
+                source="auto",
+                created_at=_utcnow(),
+            ),
+        )
+    await db_session.flush()
+    await _demote_all_role_targets(db_session)
 
     assert await _chain_service(db_session).plan_rescue_refill(public_model_id="rb/lead") == []
 
@@ -303,6 +438,252 @@ async def test_shadow_mode_logs_without_writing(db_session, caplog) -> None:
     assert await RoleCatalogService(db_session)._entry_by_key(
         "rb/lead", "reformboss", "zminimax-m25",
     ) is None
+
+
+async def test_deficit_refill_triggers_at_one_live_candidate(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    targets = await _activate_role_targets(db_session, "rb/lead")
+    for target in targets[1:]:
+        target.enabled = False
+        target.lifecycle_status = "demoted"
+        target.lifecycle_reason = "model_not_found"
+        target.lifecycle_updated_at = _utcnow()
+    await db_session.flush()
+
+    actions = await _chain_service(db_session).plan_rescue_refill(public_model_id="rb/lead")
+    assert len(actions) == 1
+    assert actions[0]["upstream_model_key"] == "zminimax-m25"
+
+
+async def test_deficit_refill_does_not_trigger_at_two_live_candidates(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    targets = await _activate_role_targets(db_session, "rb/lead")
+    targets[1].enabled = False
+    targets[1].lifecycle_status = "quarantined"
+    targets[1].lifecycle_reason = "probe_pending"
+    targets[1].lifecycle_updated_at = _utcnow()
+    for target in targets[2:]:
+        target.enabled = False
+        target.lifecycle_status = "demoted"
+        target.lifecycle_reason = "model_not_found"
+        target.lifecycle_updated_at = _utcnow()
+    await db_session.flush()
+
+    assert await _chain_service(db_session).plan_rescue_refill(public_model_id="rb/lead") == []
+
+
+async def test_rotation_signal_a_fires_on_mass_model_scoped_demotions(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _force_mass_model_rotation(db_session, endpoint)
+
+    event = await _chain_service(db_session).detect_rotation()
+
+    assert event is not None
+    assert event["signal"] == "health"
+    assert event["demoted_count"] >= 2
+    await db_session.refresh(endpoint)
+    policy = endpoint.health_policy or {}
+    assert policy["chainRotation"]["signal"] == "health"
+    roles = await RoleCatalogService(db_session).role_routing_status()
+    lead = next(row for row in roles if row["id"] == "rb/lead")
+    assert lead["rotation_detected"] is True
+    assert lead["rotation"]["signal"] == "health"
+    from stitch_backend.domains.ai_gateway.schemas import RoleRoutingStatusResponse
+
+    assert RoleRoutingStatusResponse.model_validate(lead).rotation_detected is True
+
+
+async def test_rotation_signal_a_ignores_key_scoped_failures(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _force_mass_model_rotation(
+        db_session,
+        endpoint,
+        reasons=("quota_exceeded", "auth_failed"),
+    )
+
+    assert await _chain_service(db_session).detect_rotation() is None
+    await db_session.refresh(endpoint)
+    assert "chainRotation" not in (endpoint.health_policy or {})
+
+
+async def test_rotation_hysteresis_single_flap_does_not_trigger(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    targets = await _activate_role_targets(db_session, "rb/lead")
+    await _chain_service(db_session).detect_rotation()
+    first_upstream = (
+        await db_session.execute(
+            select(UpstreamModel).where(UpstreamModel.id == targets[0].upstream_model_id),
+        )
+    ).scalar_one()
+    await _demote_upstream_everywhere(
+        db_session,
+        endpoint,
+        first_upstream.upstream_model_id,
+        reason="model_not_found",
+    )
+
+    assert await _chain_service(db_session).detect_rotation() is None
+    await db_session.refresh(endpoint)
+    assert "chainRotation" not in (endpoint.health_policy or {})
+
+
+async def test_rotation_signal_a_ignores_never_active_seed_demotions(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    first_two = [step[0] for step in DEFAULT_ROLE_CHAIN_SPECS["rb/lead"][:2]]
+    for upstream_key in first_two:
+        await _demote_upstream_everywhere(
+            db_session,
+            endpoint,
+            upstream_key,
+            reason="model_not_found",
+        )
+
+    assert await _chain_service(db_session).detect_rotation() is None
+    await db_session.refresh(endpoint)
+    assert "chainRotation" not in (endpoint.health_policy or {})
+
+
+async def test_rotation_signal_b_catalog_mass_diff_requires_new_models(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    rows = list(
+        (
+            await db_session.execute(
+                select(UpstreamModel).where(UpstreamModel.provider_endpoint_id == endpoint.id),
+            )
+        ).scalars().all(),
+    )
+    assert len(rows) >= 4
+    stale_at = _utcnow() - timedelta(hours=3)
+    for row in rows[:4]:
+        row.created_at = stale_at - timedelta(hours=1)
+        row.last_seen_at = stale_at
+    await _add_unknown_upstream(db_session, endpoint, "rotation-newcomer")
+    await db_session.flush()
+
+    event = await _chain_service(db_session).detect_rotation()
+
+    assert event is not None
+    assert event["signal"] == "catalog"
+    assert event["missing_count"] >= 2
+    assert event["new_count"] >= 1
+
+
+async def test_rotation_signal_b_mass_absence_without_new_models_does_not_trigger(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    rows = list(
+        (
+            await db_session.execute(
+                select(UpstreamModel).where(UpstreamModel.provider_endpoint_id == endpoint.id),
+            )
+        ).scalars().all(),
+    )
+    stale_at = _utcnow() - timedelta(hours=3)
+    for row in rows[:4]:
+        row.created_at = stale_at - timedelta(hours=1)
+        row.last_seen_at = stale_at
+    await db_session.flush()
+
+    assert await _chain_service(db_session).detect_rotation() is None
+
+
+async def test_rotation_burst_raises_candidate_probe_budget(db_session, monkeypatch) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _force_mass_model_rotation(db_session, endpoint)
+    for index in range(5):
+        await _add_unknown_upstream(db_session, endpoint, f"rotation-candidate-{index}")
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+
+    await pw.ProbeWorker._run_chain_refill()
+    picked = await pw.ProbeWorker._load_role_probe_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+
+    candidate_picks = [row for row in picked if row["probe_kind"] == "candidate_evidence"]
+    assert len(candidate_picks) == 5
+
+
+async def test_rotation_burst_expires_after_bounded_window(db_session, monkeypatch) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _force_mass_model_rotation(db_session, endpoint)
+    for index in range(5):
+        await _add_unknown_upstream(db_session, endpoint, f"rotation-candidate-{index}")
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+
+    await pw.ProbeWorker._run_chain_refill()
+    await db_session.refresh(endpoint)
+    policy = dict(endpoint.health_policy or {})
+    rotation = dict(policy["chainRotation"])
+    rotation["detectedAt"] = (_utcnow() - timedelta(seconds=901)).isoformat()
+    policy["chainRotation"] = rotation
+    endpoint.health_policy = policy
+    await db_session.flush()
+
+    picked = await pw.ProbeWorker._load_role_probe_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+    candidate_picks = [row for row in picked if row["probe_kind"] == "candidate_evidence"]
+    assert len(candidate_picks) == 1
+
+
+async def test_rotation_burst_never_overrides_endpoint_backoff(db_session, monkeypatch) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _force_mass_model_rotation(db_session, endpoint)
+    for index in range(5):
+        await _add_unknown_upstream(db_session, endpoint, f"rotation-candidate-{index}")
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+    pw._reset_role_probe_backoff()
+
+    await pw.ProbeWorker._run_chain_refill()
+    pw.ProbeWorker._arm_endpoint_probe_backoff(endpoint.id)
+    picked = await pw.ProbeWorker._load_role_probe_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+
+    assert not [row for row in picked if row["probe_kind"] == "candidate_evidence"]
+    pw._reset_role_probe_backoff()
+
+
+async def test_reviewer_family_diversity_is_best_effort(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _add_evidence_upstream(db_session, endpoint, "deepseek-rotation-a", latency=500)
+    await _add_evidence_upstream(db_session, endpoint, "deepseek-rotation-b", latency=600)
+    await _add_evidence_upstream(db_session, endpoint, "qwen-rotation-a", latency=700)
+    await _demote_all_role_targets(db_session, "rb/reviewer-correctness")
+
+    actions = await _chain_service(db_session).plan_rescue_refill(
+        public_model_id="rb/reviewer-correctness",
+    )
+
+    assert [action["upstream_model_key"] for action in actions] == [
+        "deepseek-rotation-a",
+        "qwen-rotation-a",
+    ]
+    assert [action["family"] for action in actions] == ["deepseek", "qwen"]
+
+
+async def test_reviewer_family_diversity_skips_gracefully_when_unknown(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    await _add_evidence_upstream(db_session, endpoint, "kestrel-a", latency=500)
+    await _add_evidence_upstream(db_session, endpoint, "zminimax-m25", latency=600)
+    await _demote_all_role_targets(db_session, "rb/reviewer-correctness")
+
+    actions = await _chain_service(db_session).plan_rescue_refill(
+        public_model_id="rb/reviewer-correctness",
+    )
+
+    assert [action["upstream_model_key"] for action in actions] == [
+        "kestrel-a",
+        "zminimax-m25",
+    ]
+    assert all(action["family"] == "unknown" for action in actions)
 
 
 class _EvidenceAdapter:
@@ -514,3 +895,103 @@ async def test_full_rotation_refill_probe_activation_then_chain_serves(db_sessio
     )
     assert results
     assert results[0].upstream_model.upstream_model_id == "zminimax-m25"
+
+
+async def test_degraded_chain_two_of_three_dead_is_replenished_from_evidence(db_session) -> None:
+    endpoint, _cred = await _seed_catalog(db_session)
+    rescue = await _add_evidence_upstream(db_session, endpoint, "zminimax-m25")
+    targets = await _activate_role_targets(db_session, "rb/lead")
+    assert len(targets) >= 3
+    for target in targets[1:]:
+        target.enabled = False
+        target.lifecycle_status = "demoted"
+        target.lifecycle_reason = "model_not_found"
+        target.lifecycle_updated_at = _utcnow()
+    await db_session.flush()
+
+    actions = await _chain_service(db_session).apply_rescue_refill(public_model_id="rb/lead")
+
+    assert len(actions) == 1
+    assert actions[0]["upstream_model_key"] == "zminimax-m25"
+    entry = await RoleCatalogService(db_session)._entry_by_key(
+        "rb/lead", "reformboss", "zminimax-m25",
+    )
+    assert entry is not None
+    assert entry.source == "auto"
+    target = (
+        await db_session.execute(
+            select(RouteTarget).where(
+                RouteTarget.public_model_id == "rb/lead",
+                RouteTarget.upstream_model_id == rescue.id,
+            ),
+        )
+    ).scalar_one()
+    assert target.lifecycle_status == "quarantined"
+    assert target.enabled is False
+
+
+async def test_full_rotation_burst_evidence_refill_then_recovery_path(db_session, monkeypatch) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    targets = await _activate_role_targets(db_session, "rb/lead")
+    await _chain_service(db_session).detect_rotation()
+    upstream_rows = list(
+        (
+            await db_session.execute(
+                select(UpstreamModel).where(
+                    UpstreamModel.id.in_([target.upstream_model_id for target in targets]),
+                ),
+            )
+        ).scalars().all(),
+    )
+    assert len(upstream_rows) >= 3
+    for upstream in upstream_rows:
+        await _demote_upstream_everywhere(
+            db_session,
+            endpoint,
+            upstream.upstream_model_id,
+            reason="model_not_found",
+        )
+    unknown_rows = [
+        await _add_unknown_upstream(db_session, endpoint, f"rotation-candidate-{index}")
+        for index in range(5)
+    ]
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+    pw._reset_role_probe_backoff()
+    adapter = _EvidenceAdapter()
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: adapter)
+
+    await pw.ProbeWorker._run_chain_refill()
+    await db_session.refresh(endpoint)
+    assert (endpoint.health_policy or {}).get("chainRotation", {}).get("signal") == "health"
+
+    await pw.ProbeWorker._probe_role_model_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+    await db_session.commit()
+    probed = [row for row in unknown_rows if (row.capabilities or {}).get("coherence_passed") is True]
+    assert len(probed) == 5, "rotation mode must re-arm the bounded candidate-evidence burst"
+
+    actions = await _chain_service(db_session).apply_rescue_refill(public_model_id="rb/lead")
+    assert len(actions) == 2
+    rescue_key = actions[0]["upstream_model_key"]
+    entry = await RoleCatalogService(db_session)._entry_by_key(
+        "rb/lead", "reformboss", rescue_key,
+    )
+    assert entry is not None
+    assert entry.source == "auto"
+
+    await RoleCatalogService(db_session).apply_model_probe_result(
+        credential_id=cred.id,
+        upstream_model_id=rescue_key,
+        probe_row={"ok": True, "reason": "ok", "latencyMs": 100},
+    )
+    await db_session.commit()
+    results = await RoutingEngine().route(
+        db_session,
+        re_mod.GatewayRequest(model="rb/lead", messages=[{"role": "user", "content": "hi"}]),
+    )
+    assert results
+    assert results[0].upstream_model.upstream_model_id == rescue_key
+    pw._reset_role_probe_backoff()
