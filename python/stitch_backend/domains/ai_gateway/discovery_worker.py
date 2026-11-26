@@ -696,19 +696,6 @@ class DiscoveryWorker:
                                     upstream.capabilities = caps
                             upstream_rows[metadata.id] = upstream
 
-                    for cred, models in item["credentials"]:
-                        returned = {m.id for m in models}
-                        for mid, upstream in upstream_rows.items():
-                            access_status_changed = (
-                                await cls._reconcile_access(
-                                    access_svc,
-                                    cred["credential_id"],
-                                    upstream,
-                                    present=mid in returned,
-                                )
-                                or access_status_changed
-                            )
-
                     policy = probe.get("health_policy")
                     role_catalog_endpoint = (
                         _normalize_base_url(probe.get("base_url")) == REFORMBOSS_BASE_URL
@@ -717,6 +704,25 @@ class DiscoveryWorker:
                             and policy.get("roleCatalog") == REFORMBOSS_ENDPOINT_SELECTOR
                         )
                     )
+
+                    for cred, models in item["credentials"]:
+                        returned = {m.id for m in models}
+                        for mid, upstream in upstream_rows.items():
+                            probe_managed = (
+                                role_catalog_endpoint
+                                and mid in desired_role_upstream_keys
+                            )
+                            access_status_changed = (
+                                await cls._reconcile_access(
+                                    access_svc,
+                                    cred["credential_id"],
+                                    upstream,
+                                    present=mid in returned,
+                                    probe_managed=probe_managed,
+                                )
+                                or access_status_changed
+                            )
+
                     for mid, upstream in upstream_rows.items():
                         if mid in {m.id for _c, models in item["credentials"] for m in models}:
                             continue
@@ -806,6 +812,7 @@ class DiscoveryWorker:
         upstream: Any,
         *,
         present: bool,
+        probe_managed: bool = False,
     ) -> bool:
         """Reconcile one (credential, model) access row.
 
@@ -813,8 +820,14 @@ class DiscoveryWorker:
         A runtime ``temporarily_unavailable`` mark is *not* probe evidence:
         when the model reappears in the catalog the mark must survive until
         ProbeWorker/invocation evidence expires or clears it.  Catalog absence
-        is a different state, however, so an absent model still reconciles to
-        soft ``unavailable`` with ``not_returned_by_upstream``.
+        is normally still negative evidence and reconciles to soft
+        ``unavailable`` with ``not_returned_by_upstream``.
+
+        Probe-managed role-catalog upstreams are the exception: ReformBoss
+        catalog presence is not invocability ground truth, so catalog absence
+        must neither create nor overwrite negative access-row evidence.  Exact
+        probes (or live model-scoped failures) own that lifecycle and can still
+        demote the pair when the model is truly gone.
 
         Returns True only when the routing-visible status transitioned.
         """
@@ -828,13 +841,15 @@ class DiscoveryWorker:
                 await access_svc.upsert_access(
                     credential_id, upstream.id, status="available", last_error=None,
                 )
-            else:
+            elif not probe_managed:
                 await access_svc.upsert_access(
                     credential_id,
                     upstream.id,
                     status="unavailable",
                     last_error=NOT_RETURNED_BY_UPSTREAM,
                 )
+            else:
+                return False
             return True
         if existing.status == "denied":
             return False
@@ -853,6 +868,8 @@ class DiscoveryWorker:
                 credential_id, upstream.id, status="available", last_error=None,
             )
             return existing.status != "available"
+        if probe_managed:
+            return False
         new_status = "unavailable"
         transitioned = existing.status != new_status
         if not transitioned and existing.last_error == NOT_RETURNED_BY_UPSTREAM:
