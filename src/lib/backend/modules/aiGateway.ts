@@ -576,7 +576,11 @@ export async function importOpencodeProviders(params?: {
 
 export async function discoverModelsForEndpoint(
   id: string
-): Promise<{ models_count: number }> {
+): Promise<{
+  models_count: number;
+  credentials_checked?: number;
+  credentials_failed?: number;
+}> {
   return safeInvoke('discover_models_for_endpoint', { id });
 }
 

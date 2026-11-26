@@ -341,9 +341,17 @@ export default function AiProvidersPage() {
     setDiscovering(true);
     setDiscoveryError(null);
     try {
-      await discoverModelsForEndpoint(selectedEndpoint.id);
+      const outcome = await discoverModelsForEndpoint(selectedEndpoint.id);
       await fetchUpstreamModels(selectedEndpoint.id);
-      toast.success(t('aiHub.providersPage.discover'));
+      const checked = outcome.credentials_checked ?? 0;
+      const failed = outcome.credentials_failed ?? 0;
+      if (failed > 0 && checked > 0) {
+        toast.error(
+          t('aiHub.providersPage.discoverySomeFailed', { ok: checked - failed, total: checked })
+        );
+      } else {
+        toast.success(t('aiHub.providersPage.discover'));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setDiscoveryError(message);
