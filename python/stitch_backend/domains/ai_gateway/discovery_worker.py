@@ -320,15 +320,19 @@ class DiscoveryWorker:
         logger.info("DiscoveryWorker: pass complete in %.1fs", elapsed)
 
     @classmethod
-    async def _discover_endpoint(cls, db: AsyncSession, endpoint: ProviderEndpoint) -> list[str]:
+    async def _discover_endpoint(
+        cls, db: AsyncSession, endpoint: ProviderEndpoint,
+    ) -> dict[str, Any]:
         """On-demand discovery for one endpoint via the caller's session.
 
         Used by the manual discover command: the request session already owns
         the single write connection, so reads and the persist MUST go through
         it — spawning ``run_in_session`` here deadlocks on the pool. The
         adapter HTTP call sits between the read and the persist, same as the
-        background loop. Adapter errors propagate to the caller (the command
-        surfaces them to the UI); a missing credential or secret yields ``[]``.
+        background loop. Per-credential failures are tolerated like the
+        background loop: dead keys are logged and skipped, the error is raised
+        only when EVERY usable credential fails. A missing credential or
+        secret yields an empty result dict.
         """
         cred_svc = CredentialService(db)
         credentials = await cred_svc.list_all_credentials(
@@ -347,6 +351,7 @@ class DiscoveryWorker:
                 continue
             usable.append({
                 "credential_id": cred.id,
+                "label": cred.label,
                 "secret": secret,
                 "runtime_status": cred.runtime_status,
             })
@@ -355,7 +360,7 @@ class DiscoveryWorker:
                 "DiscoveryWorker: no usable credential for endpoint %s",
                 endpoint.id,
             )
-            return []
+            return {"models": [], "checked": 0, "failed": 0}
 
         usable.sort(key=lambda c: 0 if c["runtime_status"] == "active" else 1)
         model_svc = UpstreamModelService(db)
@@ -372,9 +377,23 @@ class DiscoveryWorker:
         }
 
         per_cred: list[tuple[dict[str, Any], list[ModelMetadata]]] = []
+        failures: list[str] = []
         for cred_info in usable:
-            models = await cls._discover_models(probe, cred_info)
+            try:
+                models = await cls._discover_models(probe, cred_info)
+            except Exception as _exc:
+                logger.warning(
+                    "DiscoveryWorker: manual discovery failed for credential %s on endpoint %s: %s",
+                    cred_info["credential_id"],
+                    endpoint.id,
+                    _exc,
+                )
+                label = cred_info["label"] or cred_info["credential_id"][:8]
+                failures.append(f"{label}: {_exc}")
+                continue
             per_cred.append((cred_info, models))
+        if not per_cred:
+            raise RuntimeError(failures[0])
 
         verification = await cls._verify_new_models(probe, per_cred)
         pricing = await cls._load_pricing(probe)
@@ -395,7 +414,7 @@ class DiscoveryWorker:
             for metadata in models:
                 if metadata.id not in ordered:
                     ordered.append(metadata.id)
-        return ordered
+        return {"models": ordered, "checked": len(usable), "failed": len(failures)}
 
     @classmethod
     async def _load_endpoints_for_discovery(cls) -> list[dict[str, Any]]:

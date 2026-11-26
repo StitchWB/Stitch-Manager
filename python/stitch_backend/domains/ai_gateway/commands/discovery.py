@@ -108,10 +108,14 @@ async def cmd_discover_models_for_endpoint(db: AsyncSession, params: dict) -> di
     endpoint = result.scalar_one_or_none()
     if endpoint is None:
         return {"models_count": 0}
-    await DiscoveryWorker._discover_endpoint(db, endpoint)
+    outcome = await DiscoveryWorker._discover_endpoint(db, endpoint)
     model_svc = UpstreamModelService(db)
     models = await model_svc.list_models(req.id)
-    return {"models_count": len(models)}
+    return {
+        "models_count": len(models),
+        "credentials_checked": outcome["checked"],
+        "credentials_failed": outcome["failed"],
+    }
 
 
 @command("test_credential_connection")
