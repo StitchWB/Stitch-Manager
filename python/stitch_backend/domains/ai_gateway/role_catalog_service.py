@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
+from stitch_backend.domains.ai_gateway.model_evidence import derive_evidence_tier
 from stitch_backend.domains.ai_gateway.model_identity import (
     canonical_model_key,
     humanize_model_id,
@@ -969,7 +970,10 @@ class RoleCatalogService:
                     )
                     stats["role_entries_created"] += 1
                     continue
-                if row.source == "manual":
+                if row.source in ("manual", "auto"):
+                    # Manual rows are operator-owned; auto rows belong to the
+                    # refill writer.  Factory seeds must neither rewrite nor
+                    # resurrect either writer's rows.
                     continue
                 changed = False
                 if row.family != family:
@@ -990,7 +994,7 @@ class RoleCatalogService:
         # remain operator-owned and are never rewritten here.
         for row in existing_rows:
             key = (row.public_model_id, row.endpoint_selector, row.upstream_model_key)
-            if row.source == "manual" or key in valid_keys:
+            if row.source in ("manual", "auto") or key in valid_keys:
                 continue
             if row.public_model_id in conflicts:
                 continue
@@ -1172,8 +1176,9 @@ class RoleCatalogService:
         policy = endpoint.health_policy if isinstance(endpoint.health_policy, dict) else {}
         return policy.get("roleCatalog") == REFORMBOSS_ENDPOINT_SELECTOR
 
-    def _endpoint_matches(self, endpoint: ProviderEndpoint) -> bool:
-        return self._endpoint_is_tagged(endpoint) or (
+    @staticmethod
+    def _endpoint_matches(endpoint: ProviderEndpoint) -> bool:
+        return RoleCatalogService._endpoint_is_tagged(endpoint) or (
             _normalized_base_url(endpoint.base_url) == REFORMBOSS_BASE_URL
         )
 
@@ -1380,15 +1385,57 @@ class RoleCatalogService:
         caps = dict(upstream.capabilities or {})
         caps["source"] = "probe"
         caps["verified_at"] = _utc_iso(now)
+        caps["probed_at"] = _utc_iso(now)
+        caps.pop("probe_timed_out", None)
+        reason = str(probe_row.get("reason") or "")
+        error_code = str(probe_row.get("errorCode") or probe_row.get("error_code") or "")
         if success:
             caps["verification_status"] = "working"
+            caps.pop("verification_reason", None)
+            caps.pop("verification_error_code", None)
+            caps["coherence_passed"] = True
+            # A fresh coherent probe clears model-death stickiness.  Key-scoped
+            # entitlement failures never write that marker in the first place.
+            caps.pop("last_model_failure_at", None)
         elif model_level_failure:
             caps["verification_status"] = "failed"
+            if reason:
+                caps["verification_reason"] = reason
+            if error_code:
+                caps["verification_error_code"] = error_code
+            if reason not in _DENIED_REASONS and error_code not in _DENIED_REASONS:
+                caps["last_model_failure_at"] = _utc_iso(now)
         # A pair-scoped failure while sibling credentials still serve is not
         # upstream-model evidence: preserve any prior verification status.
+        if not success and {reason, error_code} & {"empty_completion", "canary_mismatch"}:
+            # These are negative semantic evidence, unlike access/transport
+            # failures.  They erase tier eligibility until a future coherent
+            # probe re-establishes it.
+            caps["coherence_passed"] = False
+            caps.pop("evidence_tier", None)
+            caps["emergency_tail"] = False
         latency = probe_row.get("latencyMs")
         if isinstance(latency, int) and not isinstance(latency, bool):
             caps["probe_latency_ms"] = latency
+        usage_sane = probe_row.get("usageSane")
+        if isinstance(usage_sane, bool):
+            caps["usage_sane"] = usage_sane
+        usage_reason = probe_row.get("usageReason")
+        if isinstance(usage_reason, str) and usage_reason:
+            caps["usage_reason"] = usage_reason
+        level2_passed = probe_row.get("level2Passed")
+        if isinstance(level2_passed, bool):
+            caps["level2_passed"] = level2_passed
+        coherence = caps.get("coherence_passed") is True
+        tier = derive_evidence_tier(
+            coherence_passed=coherence,
+            level2_passed=caps.get("level2_passed") if isinstance(caps.get("level2_passed"), bool) else None,
+            latency_ms=caps.get("probe_latency_ms") if isinstance(caps.get("probe_latency_ms"), int) else None,
+            usage_sane=caps.get("usage_sane") if isinstance(caps.get("usage_sane"), bool) else None,
+        )
+        if coherence and tier is not None:
+            caps["evidence_tier"] = tier
+            caps["emergency_tail"] = tier == "emergency_tail"
         upstream.capabilities = caps
         upstream.updated_at = now
 
