@@ -145,11 +145,14 @@ def _as_utc(dt: datetime) -> datetime:
 def _lease_matches(current: ProbeLease | None, lease: ProbeLease | None) -> bool:
     """Whether *lease* is the active lease.
 
-    ``lease=None`` is accepted for backwards-compatible internal callers and
-    direct breaker tests.  Production routing always carries the concrete
-    token, which prevents a timed-out older probe from resolving a newer one.
+    Half-open resolution requires the concrete token: ``lease=None`` never
+    matches.  Traffic that started before the circuit opened carries no lease;
+    if its outcome arrives while half-open it must not resolve the probe the
+    slot belongs to.  (The executor threads leases through every admission
+    path — including cache-hit re-checks — so production callers always hold
+    the token.)
     """
-    return lease is None or (current is not None and lease.token == current.token)
+    return lease is not None and current is not None and lease.token == current.token
 
 
 def _pop_lease_if_matches(endpoint_id: str, lease: ProbeLease | None) -> None:

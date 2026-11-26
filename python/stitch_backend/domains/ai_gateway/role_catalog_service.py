@@ -153,6 +153,7 @@ class RoleCatalogService:
 
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
+        self._routing_transitioned = False
 
     # ── Reconciliation ──────────────────────────────────────────────────────
 
@@ -170,6 +171,7 @@ class RoleCatalogService:
             stats["endpoints_matched"] = 1
             await self._materialize_endpoint(endpoint, conflicts, stats)
         await self._db.flush()
+        self._invalidate_resolve_caches_if_transitioned()
         return stats
 
     async def reconcile_endpoint(self, endpoint: ProviderEndpoint) -> dict[str, int]:
@@ -182,6 +184,7 @@ class RoleCatalogService:
         conflicts = await self._seed_catalog(stats)
         await self._materialize_endpoint(endpoint, conflicts, stats)
         await self._db.flush()
+        self._invalidate_resolve_caches_if_transitioned()
         return stats
 
     async def reconcile_health(self) -> dict[str, int]:
@@ -212,10 +215,10 @@ class RoleCatalogService:
                 continue
             if await self._has_usable_access(upstream.id):
                 continue
-            target.enabled = False
-            self._set_lifecycle(target, "demoted", "no_usable_access")
+            self._disable_target(target, "demoted", "no_usable_access")
             stats["route_targets_updated"] += 1
         await self._db.flush()
+        self._invalidate_resolve_caches_if_transitioned()
         return stats
 
     # ── Health evidence (implemented here; wired to workers/routing in Phase 3) ──
@@ -226,6 +229,7 @@ class RoleCatalogService:
         endpoint_id: str,
         upstream_model_id: str,
         error: Any,
+        credential_id: str | None = None,
     ) -> None:
         """Re-evaluate role targets after live traffic already updated access rows.
 
@@ -234,6 +238,12 @@ class RoleCatalogService:
         model-scoped failures matter.  Demotion happens only when no usable
         ``available`` access row remains, preventing one bad key from flapping
         a model that other keys can still serve.
+
+        Key-entitlement failures (``model_access_denied`` /
+        ``token_model_not_allowed`` / ``provider_forbidden``) additionally
+        escalate the failing pair's access row to terminal ``denied`` — the
+        key simply has no entitlement to the model, so automation stops
+        probing it (only manual revalidation may clear the mark).
         """
         if error is None or not self._error_is_model_scoped(error):
             return
@@ -241,6 +251,15 @@ class RoleCatalogService:
         if upstream is None:
             return
         reason = self._error_reason(error)
+        now = _utcnow()
+        if reason in _DENIED_REASONS and credential_id is not None:
+            access = await self._access_row(credential_id, upstream.id)
+            if access is not None and access.status != "denied":
+                access.status = "denied"
+                access.last_error = reason
+                access.last_verified_at = now
+                access.updated_at = now
+                await self._db.flush()
         if await self._has_usable_access(upstream.id):
             return
         targets = await self._role_targets_for_upstream(upstream.id)
@@ -256,9 +275,9 @@ class RoleCatalogService:
                 or target.lifecycle_status != "demoted"
                 or target.lifecycle_reason != reason
             ):
-                target.enabled = False
-                self._set_lifecycle(target, "demoted", reason)
+                self._disable_target(target, "demoted", reason)
         await self._db.flush()
+        self._invalidate_resolve_caches_if_transitioned()
 
     async def apply_model_probe_result(
         self,
@@ -307,6 +326,7 @@ class RoleCatalogService:
             self._merge_probe_capabilities(upstream, probe_row, now, success=True)
             await self._activate_targets_after_probe(upstream, now)
             await self._db.flush()
+            self._invalidate_resolve_caches_if_transitioned()
             return
 
         if not self._probe_failure_is_model_scoped(reason, probe_row):
@@ -322,10 +342,16 @@ class RoleCatalogService:
         access.updated_at = now
         self._merge_probe_capabilities(upstream, probe_row, now, success=False)
 
+        # The probe evidences one exact (credential, model) pair.  A target
+        # that is actively served through OTHER usable keys must not flap on
+        # this single failure; quarantined/demoted targets simply stay down.
+        has_usable = await self._has_usable_access(upstream.id)
         for target in await self._role_targets_for_upstream(upstream.id):
-            target.enabled = False
-            self._set_lifecycle(target, "demoted", reason)
+            if target.enabled and target.lifecycle_status == "active" and has_usable:
+                continue
+            self._disable_target(target, "demoted", reason)
         await self._db.flush()
+        self._invalidate_resolve_caches_if_transitioned()
 
     # ── Operator-facing desired-entry helpers ───────────────────────────────
 
@@ -456,10 +482,13 @@ class RoleCatalogService:
             entry.enabled = False
             entry.source = "manual"
             entry.updated_at = _utcnow()
+        if target.enabled:
+            self._routing_transitioned = True
         target.enabled = False
         target.lifecycle_reason = reason
         target.lifecycle_updated_at = _utcnow()
         await self._db.flush()
+        self._invalidate_resolve_caches_if_transitioned()
 
     # ── Catalog seeding ─────────────────────────────────────────────────────
 
@@ -665,19 +694,17 @@ class RoleCatalogService:
             target.priority = priority
             changed = True
         if target.lifecycle_status in (None, "discovered"):
-            target.enabled = False
-            self._set_lifecycle(target, "quarantined", "desired_unverified")
+            self._disable_target(target, "quarantined", "desired_unverified")
             changed = True
         elif target.lifecycle_status == "verified":
-            target.enabled = True
-            self._set_lifecycle(target, "active", "desired_reenabled")
+            self._enable_target(target, "active", "desired_reenabled", now)
             changed = True
         elif target.lifecycle_status == "active":
             if not target.enabled:
-                target.enabled = True
+                self._enable_target(target, "active", target.lifecycle_reason or "active", now)
                 changed = True
         elif target.enabled:
-            target.enabled = False
+            self._disable_target(target, target.lifecycle_status or "quarantined", target.lifecycle_reason or "desired_unverified")
             changed = True
         if changed:
             target.updated_at = now
@@ -700,6 +727,7 @@ class RoleCatalogService:
         changed = False
         if target.enabled:
             target.enabled = False
+            self._routing_transitioned = True
             changed = True
         if target.lifecycle_status in ("active", "verified"):
             if (
@@ -855,6 +883,38 @@ class RoleCatalogService:
 
     # ── Probe/lifecycle helpers ─────────────────────────────────────────────
 
+    def _disable_target(self, target: RouteTarget, status: str, reason: str) -> None:
+        """Disable *target* and set its lifecycle, tracking routing-visible flips."""
+        if target.enabled:
+            target.enabled = False
+            self._routing_transitioned = True
+        self._set_lifecycle(target, status, reason)
+
+    def _enable_target(self, target: RouteTarget, status: str, reason: str, now: datetime) -> None:
+        """Enable *target* and set its lifecycle, tracking routing-visible flips."""
+        if not target.enabled:
+            target.enabled = True
+            self._routing_transitioned = True
+        self._set_lifecycle(target, status, reason)
+        target.updated_at = now
+
+    def _invalidate_resolve_caches_if_transitioned(self) -> None:
+        """Drop route-resolution caches when a target enabled flag flipped.
+
+        ``RouteTarget.enabled`` is authoritative routing input, but the
+        generic cache-invalidation events do not cover target mutations, so
+        role-catalog lifecycle transitions must invalidate explicitly.
+        Lazy import avoids the ``routing_engine → service → role_catalog``
+        module cycle.
+        """
+        if not self._routing_transitioned:
+            return
+        self._routing_transitioned = False
+        from stitch_backend.domains.ai_gateway.routing_engine import (
+            invalidate_resolve_caches,
+        )
+        invalidate_resolve_caches()
+
     async def _activate_targets_after_probe(self, upstream: UpstreamModel, now: datetime) -> None:
         for target in await self._role_targets_for_upstream(upstream.id):
             entry = await self._entry_for_upstream(
@@ -867,12 +927,9 @@ class RoleCatalogService:
                 # resurrect.
                 continue
             if not entry.enabled:
-                target.enabled = False
-                self._set_lifecycle(target, "verified", "desired_disabled")
+                self._disable_target(target, "verified", "desired_disabled")
                 continue
-            target.enabled = True
-            self._set_lifecycle(target, "active", "probe_success")
-            target.updated_at = now
+            self._enable_target(target, "active", "probe_success", now)
 
     @staticmethod
     def _set_lifecycle(target: RouteTarget, status: str, reason: str) -> None:

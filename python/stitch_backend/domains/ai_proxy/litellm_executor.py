@@ -320,7 +320,7 @@ class LiteLLMExecutor:
         self,
         endpoint_id: str,
         probe_lease: circuit_breaker.ProbeLease | None = None,
-    ) -> bool:
+    ) -> tuple[bool, circuit_breaker.ProbeLease | None]:
         """Re-check the circuit breaker for an endpoint before invoking.
 
         Routing checked availability once per candidate, but a failure on
@@ -328,12 +328,17 @@ class LiteLLMExecutor:
         N+1 shares.  Half-open probes carry their lease token into this
         re-check so the same logical request is admitted exactly once while
         concurrent callers stay outside the circuit.
+
+        Returns ``(available, lease)``.  Cache-hit resolutions bypass routing's
+        breaker check entirely, so this re-check may itself win the
+        open→half_open CAS; the won lease is returned (never discarded) so the
+        caller can thread it into outcome recording — otherwise the half-open
+        slot would wedge until the lost-probe timeout.
         """
         async def _check(session):
-            available, _lease = await circuit_breaker.check_endpoint_availability(
+            return await circuit_breaker.check_endpoint_availability(
                 session, endpoint_id, lease=probe_lease,
             )
-            return available
         return await run_in_session(_check)
 
     async def _release_inconclusive_probe(self, routing_result: Any) -> None:
@@ -341,10 +346,26 @@ class LiteLLMExecutor:
         lease = getattr(routing_result, "probe_lease", None)
         if lease is None:
             return
+        await self._release_probe_lease(routing_result.endpoint.id, lease)
+
+    async def _release_probe_lease(
+        self,
+        endpoint_id: str,
+        lease: circuit_breaker.ProbeLease | None,
+    ) -> None:
+        """Best-effort inconclusive resolve of one half-open lease.
+
+        A no-op when the probe outcome was already recorded (the breaker is no
+        longer half-open) or when a newer probe replaced this lease (the token
+        no longer matches), so it is safe to call for every lease seen during
+        the failover walk on every exit path.
+        """
+        if lease is None:
+            return
 
         async def _release(session):
             await circuit_breaker.resolve_endpoint_probe_inconclusive(
-                session, routing_result.endpoint.id, lease=lease,
+                session, endpoint_id, lease=lease,
             )
 
         try:
@@ -629,177 +650,215 @@ class LiteLLMExecutor:
         served_model = requested_model
         budget_expired = False
 
-        while True:
-            round_no += 1
-            round_invocations = 0
-            round_hint = 0.0
-            stop_round = False
-            blocked_groups: set[str] = set()
+        probe_leases: dict[str, circuit_breaker.ProbeLease] = {}
+        try:
+            while True:
+                round_no += 1
+                round_invocations = 0
+                round_hint = 0.0
+                stop_round = False
+                blocked_groups: set[str] = set()
 
-            for model_index, model in enumerate(model_chain):
-                route_payload = (
-                    payload
-                    if model == requested_model
-                    else payload.model_copy(update={"model": model})
-                )
-                try:
-                    routing_results = await self._try_ai_gateway_route(route_payload, pool=pool)
-                except (QuotaExceededError, ContextLengthExceededError):
-                    raise
-                except RoutingError as exc:
-                    last_routing_error = exc
-                    continue
-                if routing_results is None:
-                    continue
-
-                for routing_result in routing_results:
-                    group = getattr(routing_result.credential, "account_group", None)
-                    if group is not None and group in blocked_groups:
-                        continue
-                    if invocations >= _MAX_UPSTREAM_INVOCATIONS:
-                        stop_round = True
-                        break
-                    if parking_enabled and invocations > 0 and time.time() >= deadline:
-                        budget_expired = True
-                        stop_round = True
-                        break
-                    if not await self._is_endpoint_available(
-                        routing_result.endpoint.id,
-                        getattr(routing_result, "probe_lease", None),
-                    ):
-                        logger.debug(
-                            "Skipping candidate on endpoint %s — circuit open",
-                            routing_result.endpoint.id,
-                        )
-                        continue
-                    if await self._skip_insufficient_balance(payload, routing_result, model):
-                        await self._release_inconclusive_probe(routing_result)
-                        continue
-                    credential_id = routing_result.credential.id
-                    upstream_model_id = getattr(
-                        getattr(routing_result, "upstream_model", None), "upstream_model_id", None,
+                for model_index, model in enumerate(model_chain):
+                    route_payload = (
+                        payload
+                        if model == requested_model
+                        else payload.model_copy(update={"model": model})
                     )
-                    distinct_cap = _distinct_model_cap(routing_result.endpoint)
-                    if not key_inflight.try_acquire(
-                        credential_id,
-                        upstream_model_id,
-                        distinct_model_cap=distinct_cap,
-                    ):
-                        logger.debug(
-                            "Skipping candidate on credential %s - at in-flight cap",
-                            credential_id[:8],
-                        )
-                        await self._release_inconclusive_probe(routing_result)
-                        continue
                     try:
-                        last_attempted = routing_result
-                        invocations += 1
-                        round_invocations += 1
-                        result = await invoke(routing_result)
-                    except HTTPException as e:
-                        if _is_client_error(e):
-                            raise
-                        failed_attempts += 1
-                        last_classified = _classify_invoke_failure(
-                            routing_result.adapter,
-                            e,
-                            http_status=e.status_code,
-                        )
-                        logger.warning(
-                            "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
-                            model, routing_result.credential.id[:8],
-                            _sanitize_error(e, secret=routing_result.secret),
-                        )
-                    except Exception as e:
-                        failed_attempts += 1
-                        last_classified = _classify_invoke_failure(routing_result.adapter, e)
-                        logger.warning(
-                            "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
-                            model, routing_result.credential.id[:8],
-                            _sanitize_error(e, secret=routing_result.secret),
-                        )
-                    else:
-                        served_model = model
-                        outcome.failover_count = failed_attempts
-                        self._record_request_trace(
-                            model=model,
-                            routing_result=routing_result,
-                            latency_ms=(time.time() - start_time) * 1000.0,
-                            failover_count=failed_attempts,
-                            status="success",
-                        )
-                        await self._emit_failover_event(
-                            requested=requested_model,
-                            served=served_model,
-                            routing_result=routing_result,
-                            failover_count=failed_attempts,
-                            used_fallback=model_index > 0,
-                        )
-                        return result
-                    finally:
-                        key_inflight.release(credential_id, upstream_model_id)
-                        # The lease belongs to this one logical probe and must
-                        # resolve for every outcome.  Normal health recording
-                        # has already closed/reopened the breaker (making this
-                        # a no-op); if that recording itself failed, this still
-                        # prevents the half-open slot from wedging until the
-                        # lost-probe timeout.
-                        await self._release_inconclusive_probe(routing_result)
+                        routing_results = await self._try_ai_gateway_route(route_payload, pool=pool)
+                    except (QuotaExceededError, ContextLengthExceededError):
+                        raise
+                    except RoutingError as exc:
+                        last_routing_error = exc
+                        continue
+                    if routing_results is None:
+                        continue
 
-                    round_hint = _hint_seconds(last_classified)
-                    if last_classified.scope == "global":
-                        stop_round = True
+                    # Register every lease carried by this resolution up front:
+                    # candidates skipped by later filtering or never reached at
+                    # all must still have their half-open slot released.
+                    for rr in routing_results:
+                        rr_lease = getattr(rr, "probe_lease", None)
+                        if rr_lease is not None:
+                            probe_leases.setdefault(rr.endpoint.id, rr_lease)
+
+                    for routing_result in routing_results:
+                        group = getattr(routing_result.credential, "account_group", None)
+                        if group is not None and group in blocked_groups:
+                            continue
+                        if invocations >= _MAX_UPSTREAM_INVOCATIONS:
+                            stop_round = True
+                            break
+                        if parking_enabled and invocations > 0 and time.time() >= deadline:
+                            budget_expired = True
+                            stop_round = True
+                            break
+                        endpoint_id = routing_result.endpoint.id
+                        carried_lease = (
+                            getattr(routing_result, "probe_lease", None)
+                            or probe_leases.get(endpoint_id)
+                        )
+                        available, won_lease = await self._is_endpoint_available(
+                            endpoint_id,
+                            carried_lease,
+                        )
+                        if won_lease is not None:
+                            probe_leases[endpoint_id] = won_lease
+                            if getattr(routing_result, "probe_lease", None) is None:
+                                # Cache-hit resolutions bypass routing's breaker
+                                # check, so this re-check may be the first (and only)
+                                # probe admission.  Thread the won lease onto the
+                                # candidate so outcome recording resolves the probe
+                                # instead of wedging the half-open slot.
+                                try:
+                                    routing_result.probe_lease = won_lease
+                                except (AttributeError, TypeError):
+                                    pass
+                        if not available:
+                            logger.debug(
+                                "Skipping candidate on endpoint %s — circuit open",
+                                endpoint_id,
+                            )
+                            continue
+                        if await self._skip_insufficient_balance(payload, routing_result, model):
+                            # No early lease release here: the lease is shared by
+                            # all same-endpoint candidates of this logical request,
+                            # and a sibling may still serve as the probe.  The
+                            # outer finally releases it on every exit path.
+                            continue
+                        credential_id = routing_result.credential.id
+                        upstream_model_id = getattr(
+                            getattr(routing_result, "upstream_model", None), "upstream_model_id", None,
+                        )
+                        distinct_cap = _distinct_model_cap(routing_result.endpoint)
+                        if not key_inflight.try_acquire(
+                            credential_id,
+                            upstream_model_id,
+                            distinct_model_cap=distinct_cap,
+                        ):
+                            logger.debug(
+                                "Skipping candidate on credential %s - at in-flight cap",
+                                credential_id[:8],
+                            )
+                            # Lease release deferred to the outer finally — see above.
+                            continue
+                        try:
+                            last_attempted = routing_result
+                            invocations += 1
+                            round_invocations += 1
+                            result = await invoke(routing_result)
+                        except HTTPException as e:
+                            if _is_client_error(e):
+                                raise
+                            failed_attempts += 1
+                            last_classified = _classify_invoke_failure(
+                                routing_result.adapter,
+                                e,
+                                http_status=e.status_code,
+                            )
+                            logger.warning(
+                                "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
+                                model, routing_result.credential.id[:8],
+                                _sanitize_error(e, secret=routing_result.secret),
+                            )
+                        except Exception as e:
+                            failed_attempts += 1
+                            last_classified = _classify_invoke_failure(routing_result.adapter, e)
+                            logger.warning(
+                                "AI Gateway invoke failed for %s (credential=%s): %s — trying next candidate",
+                                model, routing_result.credential.id[:8],
+                                _sanitize_error(e, secret=routing_result.secret),
+                            )
+                        else:
+                            served_model = model
+                            outcome.failover_count = failed_attempts
+                            self._record_request_trace(
+                                model=model,
+                                routing_result=routing_result,
+                                latency_ms=(time.time() - start_time) * 1000.0,
+                                failover_count=failed_attempts,
+                                status="success",
+                            )
+                            await self._emit_failover_event(
+                                requested=requested_model,
+                                served=served_model,
+                                routing_result=routing_result,
+                                failover_count=failed_attempts,
+                                used_fallback=model_index > 0,
+                            )
+                            return result
+                        finally:
+                            key_inflight.release(credential_id, upstream_model_id)
+                            # The lease belongs to this one logical probe and must
+                            # resolve for every outcome.  Normal health recording
+                            # has already closed/reopened the breaker (making this
+                            # a no-op); if that recording itself failed, this still
+                            # prevents the half-open slot from wedging until the
+                            # lost-probe timeout.
+                            await self._release_inconclusive_probe(routing_result)
+
+                        round_hint = _hint_seconds(last_classified)
+                        if last_classified.scope == "global":
+                            stop_round = True
+                            break
+                        if last_classified.scope == "account" and group is not None:
+                            blocked_groups.add(group)
+
+                    if stop_round:
                         break
-                    if last_classified.scope == "account" and group is not None:
-                        blocked_groups.add(group)
 
-                if stop_round:
+                if round_invocations == 0:
+                    recovery = await _earliest_recovery_seconds(requested_model)
+                    remaining = deadline - time.time()
+                    if (
+                        parking_enabled
+                        and recovery is not None
+                        and 0 < recovery <= remaining
+                    ):
+                        await asyncio.sleep(recovery)
+                        if time.time() >= deadline:
+                            budget_expired = True
+                            break
+                        continue
+                    budget_expired = parking_enabled
                     break
 
-            if round_invocations == 0:
-                recovery = await _earliest_recovery_seconds(requested_model)
-                remaining = deadline - time.time()
-                if (
-                    parking_enabled
-                    and recovery is not None
-                    and 0 < recovery <= remaining
-                ):
-                    await asyncio.sleep(recovery)
-                    if time.time() >= deadline:
-                        budget_expired = True
-                        break
-                    continue
-                budget_expired = parking_enabled
-                break
+                if stop_round and invocations >= _MAX_UPSTREAM_INVOCATIONS:
+                    budget_expired = True
+                    break
+                if not parking_enabled:
+                    break
+                if stop_round and budget_expired:
+                    break
 
-            if stop_round and invocations >= _MAX_UPSTREAM_INVOCATIONS:
-                budget_expired = True
-                break
-            if not parking_enabled:
-                break
-            if stop_round and budget_expired:
-                break
+                delay = _backoff_seconds(round_no, round_hint)
+                if time.time() + delay > deadline:
+                    budget_expired = True
+                    break
+                await asyncio.sleep(delay)
 
-            delay = _backoff_seconds(round_no, round_hint)
-            if time.time() + delay > deadline:
-                budget_expired = True
-                break
-            await asyncio.sleep(delay)
-
-        outcome.failover_count = failed_attempts
-        if outcome.routing_result is None:
-            outcome.routing_result = last_attempted
-        self._record_request_trace(
-            model=served_model,
-            routing_result=last_attempted,
-            latency_ms=(time.time() - start_time) * 1000.0,
-            failover_count=failed_attempts,
-            status="error",
-        )
-        retry_after = await self._final_retry_after(requested_model, budget_expired)
-        raise self._final_error(
-            requested_model, last_classified, last_routing_error, retry_after=retry_after,
-        )
+            outcome.failover_count = failed_attempts
+            if outcome.routing_result is None:
+                outcome.routing_result = last_attempted
+            self._record_request_trace(
+                model=served_model,
+                routing_result=last_attempted,
+                latency_ms=(time.time() - start_time) * 1000.0,
+                failover_count=failed_attempts,
+                status="error",
+            )
+            retry_after = await self._final_retry_after(requested_model, budget_expired)
+            raise self._final_error(
+                requested_model, last_classified, last_routing_error, retry_after=retry_after,
+            )
+        finally:
+            # Lease-carrying candidates that were never attempted (early success,
+            # client-error raise, budget break) still hold the half-open slot.
+            # Release every lease seen on any routing result on every exit path;
+            # the resolve is a no-op when outcome recording already settled it.
+            for endpoint_id, lease in probe_leases.items():
+                await self._release_probe_lease(endpoint_id, lease)
 
     async def _persist_outcome(self, outcome: _RequestOutcome) -> None:
         if outcome.persisted:

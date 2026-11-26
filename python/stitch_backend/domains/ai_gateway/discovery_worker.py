@@ -710,6 +710,31 @@ class DiscoveryWorker:
                     _exc,
                 )
 
+        # Role catalog reconciliation: an endpoint added (or first discovered)
+        # after startup must still materialize its role targets without a
+        # restart.  Best-effort — a reconcile failure must never break
+        # discovery persistence.  Non-matching endpoints no-op inside the
+        # service, so this stays cheap for ordinary providers.
+        try:
+            from stitch_backend.domains.ai_gateway.role_catalog_service import (
+                RoleCatalogService,
+            )
+
+            ep_svc = ProviderEndpointService(session)
+            role_service = RoleCatalogService(session)
+            for endpoint_id in {item["probe"]["endpoint_id"] for item in results}:
+                try:
+                    endpoint = await ep_svc.get_by_pk(endpoint_id)
+                    if endpoint is not None:
+                        await role_service.reconcile_endpoint(endpoint)
+                except Exception as _exc:
+                    logger.warning(
+                        "DiscoveryWorker: role catalog reconcile failed for %s: %s",
+                        endpoint_id, _exc,
+                    )
+        except Exception as _exc:
+            logger.warning("DiscoveryWorker: role catalog reconcile failed: %s", _exc)
+
         try:
             await ModelIdentityService(session).auto_group()
         except Exception as _exc:

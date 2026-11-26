@@ -367,6 +367,23 @@ def _cached_tokens(response: Any) -> int:
     return 0
 
 
+async def _resolve_latency_policy(
+    routing_result: Any,
+    model: str | None,
+    run_in_session: Callable[..., Awaitable[Any]],
+) -> LatencyPolicy | None:
+    """Latency policy for one invoke, preferring routing-carried contract data.
+
+    ``RoutingResult.public_model_contract`` is authoritative and avoids the
+    redundant database re-read.  Candidates built outside routing (contract
+    attribute absent or None) fall back to the TTL-cache loader.
+    """
+    contract = getattr(routing_result, "public_model_contract", None)
+    if contract is not None:
+        return parse_latency_policy(contract)
+    return await load_latency_policy(model, run_in_session)
+
+
 async def _record_ledger_usage(
     run_in_session: Callable[..., Awaitable[Any]],
     routing_result: Any,
@@ -518,7 +535,7 @@ async def invoke_via_gateway(
 
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
-    latency_policy = await load_latency_policy(payload.model, run_in_session)
+    latency_policy = await _resolve_latency_policy(routing_result, payload.model, run_in_session)
     ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
     stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
@@ -719,7 +736,7 @@ async def invoke_via_gateway_messages(
 
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
-    latency_policy = await load_latency_policy(payload.model, run_in_session)
+    latency_policy = await _resolve_latency_policy(routing_result, payload.model, run_in_session)
     ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
     stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
@@ -930,7 +947,7 @@ async def invoke_via_gateway_responses(
 
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
-    latency_policy = await load_latency_policy(payload.model, run_in_session)
+    latency_policy = await _resolve_latency_policy(routing_result, payload.model, run_in_session)
     ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
     stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 

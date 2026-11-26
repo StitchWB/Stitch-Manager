@@ -23,6 +23,9 @@ from stitch_backend.domains.ai_gateway.role_catalog_service import (
     ROLE_MANAGED_BY,
     RoleCatalogService,
 )
+from stitch_backend.domains.ai_gateway.routing_engine import (
+    invalidate_resolve_caches,
+)
 from stitch_backend.domains.ai_gateway.schemas import (
     ListRouteTargetsForPublicModelRequest,
     RouteTargetCreateRequest,
@@ -85,6 +88,9 @@ async def cmd_create_route_target(db: AsyncSession, params: dict) -> Any:
         weight=req.weight,
         cost_modifier=req.cost_modifier,
     )
+    # RouteTarget rows are authoritative routing input; the resolve cache has
+    # no TTL, so every mutation must drop cached resolutions explicitly.
+    invalidate_resolve_caches()
     return RouteTargetResponse.from_orm_model(target)
 
 
@@ -132,6 +138,7 @@ async def cmd_update_route_target(db: AsyncSession, params: dict) -> Any:
         await RoleCatalogService(db).mark_target_manual_override(target, updates)
     svc = RouteTargetService(db)
     updated = await svc.update_by_pk(req.id, **updates)
+    invalidate_resolve_caches()
     return RouteTargetResponse.from_orm_model(updated) if updated else None
 
 
@@ -166,4 +173,6 @@ async def cmd_delete_route_target(params: dict) -> dict:
         return await svc.delete_by_pk(req.id)
 
     deleted = await run_in_session(_op)
+    if deleted:
+        invalidate_resolve_caches()
     return {"success": deleted}
