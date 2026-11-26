@@ -1,0 +1,28 @@
+import asyncio
+import os
+import subprocess
+
+import pexpect
+
+subprocess.run(["python", "worker.py"], check=True)
+subprocess.Popen(['python3', 'worker.py'])
+subprocess.run(["python3.exe", "worker.py"], check=True)
+subprocess.run("python worker.py", shell=True)
+os.spawnlp(os.P_WAIT, "python", "python", "worker.py")
+os.spawnv(os.P_WAIT, "python3", ["python3", "worker.py"])
+pexpect.spawn("python", ["worker.py"])
+asyncio.create_subprocess_exec(
+    "python", "worker.py",
+    stdout=asyncio.subprocess.PIPE,
+    stderr=asyncio.subprocess.PIPE,
+)
+asyncio.create_subprocess_shell("python3 worker.py")
+
+async def typed_default(python_binary: str = "python"):
+    pass
+
+def untyped_default(python_binary="python"):
+    pass
+
+python_binary = params.get("pythonBinary", "python")
+start(python_binary="python")

@@ -1,0 +1,18 @@
+import asyncio
+import os
+import subprocess
+import sys
+
+subprocess.run([sys.executable, "worker.py"], check=True)
+subprocess.Popen([sys.executable, "worker.py"])
+subprocess.run(["pythonlike", "worker.py"], check=True)
+os.spawnl(os.P_WAIT, sys.executable, "python", "worker.py")
+asyncio.create_subprocess_exec(sys.executable, "worker.py")
+asyncio.create_subprocess_shell("echo python worker.py")
+
+async def typed_default(python_binary: str = sys.executable):
+    pass
+
+python_binary = params.get("pythonBinary") or sys.executable
+start(python_binary=sys.executable)
+source = "python"  # event-source label, not an interpreter spawn

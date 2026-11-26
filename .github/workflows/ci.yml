@@ -27,6 +27,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Python spawn gate fixtures (ast-grep)
+        run: npm run test:python-spawn-gate
+
+      - name: Python spawn gate (ast-grep)
+        run: npm run gate:python-spawn
+
       - name: TypeScript check
         run: npx tsc --noEmit
 
@@ -58,8 +64,14 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
+      - name: Zone coverage check (public -> hub mirror)
+        run: python scripts/check_zone_coverage.py --repo-root ..
+
       - name: Zone boundary check (leak guard)
         run: python scripts/check_zone_boundary.py
+
+      - name: Mechanical gate regression tests
+        run: python -m pytest tests/test_check_zone_coverage.py tests/test_python_spawn_defaults.py -q
 
       - name: Ruff check
         run: ruff check .
