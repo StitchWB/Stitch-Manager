@@ -51,27 +51,53 @@ PROBE_BACKOFF_CAP_SECONDS = 3600
 # product input, not discovered inventory: absence from the live ReformBoss
 # catalog must not remove the desired entry.
 RoleChainStep = tuple[str, str]
+# Live inventory truth, probed directly against ReformBoss upstream on
+# 2026-11-26.  ``RETIRED_UPSTREAM_MODELS`` return ``model_not_found`` at the
+# gateway — they are gone for every key class, so desired entries only cost
+# probe budget and are kept out of the chains.  ``PROVEN_LIVE_MODELS`` answered
+# exact probes with real completions; every chain must end with one of them so
+# no role can go fully unroutable when upstream retires frontier models.
+# Access-denied models (``token_model_not_allowed`` for the probing key class:
+# gemini-4-carbon, qwen3.8-max, claude-fable-5-2) are per-key entitlement, not
+# upstream death — they stay in chains backed by live tails, because other
+# users' keys may be entitled, and exact-probe gating means they never activate
+# (therefore never cost routing budget) for keys that are not.
+RETIRED_UPSTREAM_MODELS = frozenset(
+    {
+        "kimi-k3",
+        "glm-5.4",
+        "gemini-4-argon",
+        "deepseek-v4.1-flash-1017",
+    }
+)
+PROVEN_LIVE_MODELS = frozenset(
+    {
+        "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
+        "gpt-6-luna",
+        "glm-5.3",
+    }
+)
+
 DEFAULT_ROLE_CHAIN_SPECS: dict[str, tuple[RoleChainStep, ...]] = {
     "rb/lead": (
-        ("kimi-k3", "moonshot"),
-        ("glm-5.4", "zhipu"),
         ("gemini-4-carbon", "google"),
         ("deepseek-v4-pro", "deepseek"),
+        ("glm-5.3", "zhipu"),
     ),
     "rb/planner": (
         ("gemini-4-carbon", "google"),
         ("deepseek-v4-pro", "deepseek"),
-        ("kimi-k3", "moonshot"),
         ("gpt-6-luna", "openai"),
     ),
     "rb/researcher": (
-        ("gemini-4-argon", "google"),
+        ("deepseek-v4-pro", "deepseek"),
         ("qwen3.8-max", "qwen"),
-        ("kimi-k3", "moonshot"),
+        ("glm-5.3", "zhipu"),
+        ("gpt-6-luna", "openai"),
     ),
     "rb/builder": (
-        ("glm-5.4", "zhipu"),
-        ("kimi-k3", "moonshot"),
+        ("glm-5.3", "zhipu"),
         ("deepseek-v4-pro", "deepseek"),
         ("deepseek-v4.1-flash", "deepseek"),
     ),
@@ -84,11 +110,12 @@ DEFAULT_ROLE_CHAIN_SPECS: dict[str, tuple[RoleChainStep, ...]] = {
         ("gemini-4-carbon", "google"),
         ("claude-fable-5-2", "anthropic"),
         ("deepseek-v4-pro", "deepseek"),
+        ("gpt-6-luna", "openai"),
     ),
     "rb/reviewer-adversarial": (
         ("gpt-6-luna", "openai"),
-        ("gemini-4-argon", "google"),
-        ("glm-5.4", "zhipu"),
+        ("deepseek-v4-pro", "deepseek"),
+        ("glm-5.3", "zhipu"),
     ),
     "rb/verifier": (
         ("deepseek-v4.1-flash", "deepseek"),
@@ -96,7 +123,6 @@ DEFAULT_ROLE_CHAIN_SPECS: dict[str, tuple[RoleChainStep, ...]] = {
         ("glm-5.3", "zhipu"),
     ),
     "rb/small": (
-        ("deepseek-v4.1-flash-1017", "deepseek"),
         ("deepseek-v4.1-flash", "deepseek"),
         ("glm-5.3", "zhipu"),
     ),
