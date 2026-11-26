@@ -718,6 +718,7 @@ export interface AiHubTranslations {
       modelsFilteredEmptyHint: string;
       liveEmpty: string;
       liveEmptyHint: string;
+      liveEmptyShowAll: string;
       segmentLive: string;
       segmentAll: string;
       segmentLiveHint: string;
