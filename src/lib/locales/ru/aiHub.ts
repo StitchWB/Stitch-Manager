@@ -720,6 +720,7 @@ export const aiHub: AiHubTranslations = {
       modelsFilteredEmptyHint: "Ослабьте фильтры класса, вендора или статуса.",
       liveEmpty: "Нет живых моделей",
       liveEmptyHint: "За последние 2 часа ничего не появлялось. Переключитесь на «Все известные» или запустите поиск.",
+      liveEmptyShowAll: "Показать все известные ({count})",
       segmentLive: "Живые",
       segmentAll: "Все известные",
       segmentLiveHint: "Модели, замеченные за последние 2 часа",

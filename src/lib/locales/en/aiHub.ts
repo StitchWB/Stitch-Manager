@@ -720,6 +720,7 @@ export const aiHub: AiHubTranslations = {
       modelsFilteredEmptyHint: "Loosen the class, vendor or status filters.",
       liveEmpty: "No live models",
       liveEmptyHint: "Nothing was seen in the last 2 hours. Switch to All known or run discovery.",
+      liveEmptyShowAll: "Show all known ({count})",
       segmentLive: "Live",
       segmentAll: "All known",
       segmentLiveHint: "Models seen within the last 2 hours",
