@@ -1008,9 +1008,20 @@ class ProbeWorker:
                     endpoint,
                     upstream,
                 )
+            # Active serving members form a strict priority class inside the
+            # evidence trickle: evidence about what user traffic is using is
+            # more operationally important than evidence about never-used
+            # inventory.  This only reorders the existing per-endpoint budget —
+            # it does not increase probe rate.  Priority-first is sound because
+            # successful/model-scoped probes write evidence and drain the class
+            # (positive evidence permanently, negative evidence until the normal
+            # readmission window); backed-off active rows fail pair selection and
+            # therefore cannot block inventory.  Last-attempt ordering remains
+            # the round-robin cursor within each class.
             candidate_rows = sorted(
                 candidate_source_rows,
                 key=lambda item: (
+                    0 if item[0].id in active_upstreams else 1,
                     rotation_last_attempts[item[0].id],
                     _name_queue_prior(item[0].upstream_model_id),
                     item[0].upstream_model_id,
