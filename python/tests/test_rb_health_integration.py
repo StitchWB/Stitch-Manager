@@ -1220,13 +1220,18 @@ async def test_exact_probe_retirement_still_demotes_after_catalog_flap(db_sessio
     _target, upstream = await _target_for(db_session, "rb/builder", "deepseek-v4-pro")
 
     await _persist_catalog_snapshot(db_session, endpoint, cred, [])
+    # Strong, unambiguous model-death evidence: ``model_not_found`` as the
+    # machine code.  (A ``no_channel`` code is endpoint-ambiguous — during an
+    # upstream incident every model answers that way — so the round-3
+    # incident protection defers it for the last active chain member; that
+    # protection is exercised in test_chain_demote_protection.py.)
     await service.apply_model_probe_result(
         credential_id=cred.id,
         upstream_model_id="deepseek-v4-pro",
         probe_row={
             "ok": False,
             "reason": "model_not_found",
-            "errorCode": "no_channel",
+            "errorCode": "model_not_found",
         },
     )
     await db_session.commit()

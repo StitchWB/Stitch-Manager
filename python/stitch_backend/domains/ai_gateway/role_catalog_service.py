@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, select
 
 from stitch_backend.domains.ai_gateway.chain_refill_policy import (
+    parse_iso_utc,
     rotation_state,
     rotation_state_active,
 )
@@ -183,6 +184,26 @@ _DENIED_REASONS = frozenset(
         "provider_forbidden",
     }
 )
+
+# Model-scoped in shape but endpoint-ambiguous in meaning: during a single
+# upstream incident every model on the endpoint answers with these shapes, so
+# demoting on them without corroboration strips chains wholesale.  Strong
+# model evidence (explicit entitlement refusals, empty/canary-mismatch
+# completions, hard model_not_found) is deliberately NOT in this set.
+_ENDPOINT_AMBIGUOUS_REASONS = frozenset(
+    {
+        "upstream_unavailable",
+        "no_channel",
+        "no_channel_for_model",
+    }
+)
+
+# How long a sibling model's endpoint-ambiguous failure corroborates the
+# endpoint-incident reading.  Sized well above the pair probe backoff cap so
+# corroboration coverage survives the slow re-probe cadence of a degraded
+# endpoint; a genuinely dead single model never has failing siblings, so the
+# window length costs nothing on a healthy endpoint.
+ENDPOINT_CORROBORATION_WINDOW_SECONDS = 3 * 3600
 
 
 def _empty_stats() -> dict[str, int]:
@@ -422,6 +443,59 @@ class RoleCatalogService:
         if not self._probe_failure_is_model_scoped(reason, probe_row):
             await self._db.flush()
             return
+
+        # ── Endpoint-incident protection ────────────────────────────────────
+        # ``upstream_unavailable`` (5xx-normalized) and ``no_channel*`` are
+        # model-scoped in shape but endpoint-ambiguous in meaning: during one
+        # upstream incident EVERY model on the endpoint answers this way, and
+        # treating each answer as model evidence strips whole chains through
+        # the ordinary evidence trickle (single-credential installs hit this
+        # hardest).  Two protections apply ONLY to these ambiguous shapes —
+        # strong model evidence (explicit refusals, empty/canary-mismatch
+        # completions) keeps the hard path even on a sick endpoint:
+        #
+        #   1. cross-model corroboration: when sibling models on the same
+        #      endpoint failed recently, this failure is endpoint evidence,
+        #      not model evidence — the demotion is deferred;
+        #   2. chain floor: the last active member of a chain is never
+        #      evidence-demoted on an ambiguous shape.
+        #
+        # In both cases the pair still accumulates ordinary probe backoff (so
+        # re-probing continues and recovery is detected) but neither the pair
+        # nor the target is blamed: a downgraded access row would feed the
+        # passive ``no_usable_access`` sweep and re-open the strip-to-zero
+        # backdoor this protection exists to close.
+        error_code = str(probe_row.get("errorCode") or probe_row.get("error_code") or "")
+        endpoint_ambiguous = bool({reason, error_code} & _ENDPOINT_AMBIGUOUS_REASONS)
+        if endpoint_ambiguous:
+            self._note_endpoint_ambiguous_failure(upstream, now)
+            soft = await self._endpoint_failure_corroborated(upstream, now)
+            if not soft:
+                for target in await self._role_targets_for_upstream(upstream.id):
+                    if (
+                        target.enabled
+                        and target.lifecycle_status == "active"
+                        and await self._chain_active_count(
+                            target.public_model_id, exclude_target_id=target.id,
+                        )
+                        == 0
+                    ):
+                        soft = True
+                        break
+            if soft:
+                failures = int(access.probe_failures or 0) + 1
+                access.probe_failures = failures
+                access.next_probe_at = now + timedelta(
+                    seconds=self._probe_backoff_seconds(failures),
+                )
+                access.last_error = reason
+                access.updated_at = now
+                await self._db.flush()
+                logger.info(
+                    "endpoint-ambiguous probe failure on %s deferred (corroborated or chain floor) — no demotion",
+                    upstream.upstream_model_id,
+                )
+                return
 
         access.status = "denied" if reason in _DENIED_REASONS else "temporarily_unavailable"
         access.last_error = reason
@@ -1432,6 +1506,61 @@ class RoleCatalogService:
         )
         return result.scalar_one_or_none()
 
+    @staticmethod
+    def _note_endpoint_ambiguous_failure(upstream: UpstreamModel, now: datetime) -> None:
+        """Record a lightweight corroboration timestamp for an ambiguous failure.
+
+        Unlike ``last_model_failure_at`` this marker carries no model-death
+        semantics (it does not feed chain-refill stickiness): it exists only so
+        sibling models on the same endpoint can recognize an endpoint-shaped
+        failure window.  Written for hard and soft outcomes alike.
+        """
+        caps = dict(upstream.capabilities or {})
+        caps["last_endpoint_ambiguous_failure_at"] = _utc_iso(now)
+        upstream.capabilities = caps
+        upstream.updated_at = now
+
+    async def _endpoint_failure_corroborated(self, upstream: UpstreamModel, now: datetime) -> bool:
+        """True when sibling models on the same endpoint also failed recently.
+
+        Corroboration evidence is either the lightweight ambiguous-failure
+        marker or the stronger model-death stickiness timestamp — both say
+        "another model on this endpoint was erroring in this window", which
+        makes the present failure endpoint-shaped rather than model-shaped.
+        """
+        rows = (
+            await self._db.execute(
+                select(UpstreamModel).where(
+                    UpstreamModel.provider_endpoint_id == upstream.provider_endpoint_id,
+                    UpstreamModel.id != upstream.id,
+                ),
+            )
+        ).scalars().all()
+        for row in rows:
+            caps = row.capabilities or {}
+            for key in ("last_endpoint_ambiguous_failure_at", "last_model_failure_at"):
+                failed_at = parse_iso_utc(caps.get(key))
+                if failed_at is None:
+                    continue
+                if 0 <= (now - failed_at).total_seconds() <= ENDPOINT_CORROBORATION_WINDOW_SECONDS:
+                    return True
+        return False
+
+    async def _chain_active_count(self, public_model_id: str, *, exclude_target_id: int) -> int:
+        """Active, enabled role-managed targets in one chain, excluding one target."""
+        result = await self._db.execute(
+            select(func.count())
+            .select_from(RouteTarget)
+            .where(
+                RouteTarget.public_model_id == public_model_id,
+                RouteTarget.managed_by == ROLE_MANAGED_BY,
+                RouteTarget.lifecycle_status == "active",
+                RouteTarget.enabled.is_(True),
+                RouteTarget.id != exclude_target_id,
+            ),
+        )
+        return int(result.scalar_one())
+
     async def _has_usable_access(self, upstream_row_id: str) -> bool:
         result = await self._db.execute(
             select(func.count())
@@ -1569,6 +1698,7 @@ class RoleCatalogService:
         caps["verified_at"] = _utc_iso(now)
         caps["probed_at"] = _utc_iso(now)
         caps.pop("probe_timed_out", None)
+        caps.pop("last_probe_timeout_at", None)
         reason = str(probe_row.get("reason") or "")
         error_code = str(probe_row.get("errorCode") or probe_row.get("error_code") or "")
         if success:
@@ -1579,6 +1709,7 @@ class RoleCatalogService:
             # A fresh coherent probe clears model-death stickiness.  Key-scoped
             # entitlement failures never write that marker in the first place.
             caps.pop("last_model_failure_at", None)
+            caps.pop("last_endpoint_ambiguous_failure_at", None)
         elif model_level_failure:
             caps["verification_status"] = "failed"
             if reason:

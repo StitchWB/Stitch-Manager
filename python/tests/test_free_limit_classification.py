@@ -61,3 +61,42 @@ def test_unrelated_errors_are_not_captured() -> None:
         _status_error(418, '{"error": {"code": "teapot", "message": "I am a teapot"}}'),
     )
     assert classified.category == "unknown"
+
+
+def test_negated_free_limit_is_not_captured() -> None:
+    """'There is no free limit' must never park an account group."""
+    body = '{"error": {"message": "there is no free limit on this account"}}'
+    classified = _adapter().classify_error(_status_error(403, body))
+    assert classified.category != "quota_exhausted"
+
+
+def test_free_limit_outside_error_message_is_not_captured() -> None:
+    """Marker text outside the error envelope code/message must not match."""
+    body = (
+        '{"error": {"code": "teapot", "message": "I am a teapot"}, '
+        '"warning": "free_limit policy does not apply here"}'
+    )
+    classified = _adapter().classify_error(_status_error(418, body))
+    assert classified.category != "quota_exhausted"
+
+
+def test_free_limitation_is_not_captured() -> None:
+    """'free limitation' is not the free-tier-limit marker."""
+    body = '{"error": {"message": "free limitation of liability applies"}}'
+    classified = _adapter().classify_error(_status_error(403, body))
+    assert classified.category != "quota_exhausted"
+
+
+def test_carefree_limit_is_not_captured() -> None:
+    """The marker must be a standalone token, not a substring of another word."""
+    classified = _adapter().classify_error(
+        _status_error(500, '{"error": {"message": "carefree limit reached internally"}}'),
+    )
+    assert classified.category != "quota_exhausted"
+
+
+def test_free_limit_marker_in_plain_text_body_still_matches() -> None:
+    """Non-JSON bodies keep the raw scan (ReformBoss observed shapes are JSON, but
+    gateways sometimes answer plain text) — with the tightened token shape."""
+    classified = _adapter().classify_error(_status_error(429, "free_limit exceeded for today"))
+    assert classified.category == "quota_exhausted"
