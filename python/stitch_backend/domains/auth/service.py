@@ -32,6 +32,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
 from stitch_backend.core.exceptions import StitchError
+from stitch_backend.database import commit_session_shielded
 
 from . import roles
 from .models import Session, User
@@ -225,7 +226,7 @@ async def resolve_session_with_preview(
     if expires_at - datetime.now(UTC) < SESSION_REFRESH_THRESHOLD:
         try:
             session.expires_at = datetime.now(UTC) + SESSION_TTL
-            await db.commit()
+            await commit_session_shielded(db)
         except Exception:  # noqa: BLE001 — never break a valid session
             await db.rollback()
     user_stmt = select(User).where(User.id == session.user_id)

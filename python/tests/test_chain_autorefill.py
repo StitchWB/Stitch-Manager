@@ -29,6 +29,7 @@ from stitch_backend.domains.ai_gateway.models import (
 from stitch_backend.domains.ai_gateway.role_catalog_service import (
     DEFAULT_ROLE_CHAIN_SPECS,
     REFORMBOSS_BASE_URL,
+    REFORMBOSS_ENDPOINT_SELECTOR,
     RoleCatalogService,
 )
 from stitch_backend.domains.ai_gateway.routing_engine import RoutingEngine
@@ -279,6 +280,56 @@ async def _seed_active_vs_inventory_priority_scenario(
         inventory_rows.append(row)
     await session.commit()
     return endpoint, credential, active_rows, inventory_rows
+
+
+async def _add_active_untested_chain_member(
+    session,
+    endpoint: ProviderEndpoint,
+    credential: Credential,
+    model_id: str,
+    *,
+    ordinal: int,
+    access_at: datetime,
+) -> UpstreamModel:
+    """Add one serving chain member whose access came from catalog presence only."""
+    upstream = await _add_unknown_upstream(session, endpoint, model_id)
+    upstream.created_at = access_at
+    session.add(
+        RoleChainEntry(
+            public_model_id="rb/lead",
+            endpoint_selector=REFORMBOSS_ENDPOINT_SELECTOR,
+            upstream_model_key=model_id,
+            family="test",
+            ordinal=ordinal,
+            enabled=True,
+            source="auto",
+        ),
+    )
+    session.add(
+        RouteTarget(
+            public_model_id="rb/lead",
+            upstream_model_id=upstream.id,
+            enabled=True,
+            priority=10 * (ordinal + 1),
+            managed_by="role_catalog",
+            lifecycle_status="active",
+            lifecycle_reason="probe_success",
+            lifecycle_updated_at=access_at,
+            created_at=access_at,
+        ),
+    )
+    session.add(
+        CredentialModelAccess(
+            credential_id=credential.id,
+            upstream_model_id=upstream.id,
+            status="available",
+            last_verified_at=access_at,
+            created_at=access_at,
+            updated_at=access_at,
+        ),
+    )
+    await session.flush()
+    return upstream
 
 
 async def _force_mass_model_rotation(
@@ -1572,6 +1623,142 @@ async def test_active_priority_backoff_does_not_starve_inventory(
     assert len(set(active_probes)) == len(active_keys)
     inventory_keys = {row.upstream_model_id for row in inventory_rows}
     assert adapter.models[len(active_keys)] in inventory_keys
+
+
+async def test_active_priority_steady_state_timeouts_still_reserve_inventory(
+    db_session, monkeypatch,
+) -> None:
+    """Steady-state liveness: inventory is selected at least once every four passes.
+
+    Twelve active members time out forever while the clock advances at the
+    production 300s cadence, so their pair backoffs expire naturally.  Strict
+    active-first ordering without a liveness escape never reaches inventory in
+    this state, even though it does reach inventory in an instant-pass test.
+    """
+    endpoint, credential, active_rows, inventory_rows = (
+        await _seed_active_vs_inventory_priority_scenario(db_session, inventory_count=12)
+    )
+    access_at = _utcnow()
+    for index in range(9):
+        active_rows.append(
+            await _add_active_untested_chain_member(
+                db_session,
+                endpoint,
+                credential,
+                f"active-timeout-{index:02d}",
+                ordinal=10 + index,
+                access_at=access_at,
+            ),
+        )
+    assert len(active_rows) == 12
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+    adapter = _TimeoutAdapter()
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: adapter)
+    clock = {"now": _utcnow()}
+    monkeypatch.setattr(pw, "_utcnow", lambda: clock["now"])
+
+    inventory_keys = {row.upstream_model_id for row in inventory_rows}
+    active_keys = {row.upstream_model_id for row in active_rows}
+    inventory_probes: list[tuple[int, str]] = []
+    active_probe_count = 0
+    for pass_index in range(16):
+        before = len(adapter.models)
+        await pw.ProbeWorker._probe_role_model_candidates(
+            recovery_budget=0,
+            cold_start_budget=None,
+        )
+        await db_session.flush()
+        for model in adapter.models[before:]:
+            if model in inventory_keys:
+                inventory_probes.append((pass_index, model))
+            elif model in active_keys:
+                active_probe_count += 1
+        clock["now"] += timedelta(seconds=300)
+
+    assert active_probe_count >= 12, "the common active-priority class still makes progress"
+    assert inventory_probes, "inventory evidence probing starved under chronic active timeouts"
+    first_pass = inventory_probes[0][0]
+    assert first_pass < 4
+    gaps = [
+        later_pass - earlier_pass
+        for (earlier_pass, _), (later_pass, _) in zip(inventory_probes, inventory_probes[1:], strict=False)
+    ]
+    assert all(gap <= 4 for gap in gaps)
+    assert 15 - inventory_probes[-1][0] < 4, "the tail of the simulation must not starve"
+
+
+class _KeyScopedFailureAdapter:
+    """Exact-probe adapter failing before any model-specific evidence exists."""
+
+    def __init__(self) -> None:
+        self.models: list[str] = []
+
+    async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
+        self.models.append(model)
+        raise RuntimeError("key rejected by upstream")
+
+    def classify_error(self, exc, **_kwargs):
+        return ClassifiedError(
+            category="auth_failed",
+            is_endpoint_wide=False,
+            is_model_specific=False,
+            scope="key",
+            error_code="invalid_api_key",
+        )
+
+
+async def test_key_scoped_candidate_failure_leaves_rotation_attempt_marker(
+    db_session, monkeypatch,
+) -> None:
+    """Key/account-scoped failure is not model evidence but must rotate the queue.
+
+    The credential state machine owns key health; this test's negative controls
+    are that no upstream ``probed_at``/coherence evidence and no pair health
+    blame are written.  The write is only candidate-ordering bookkeeping.
+    """
+    endpoint, credential, active_rows, _inventory_rows = (
+        await _seed_active_vs_inventory_priority_scenario(db_session)
+    )
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+    adapter = _KeyScopedFailureAdapter()
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: adapter)
+    initial_runtime_status = credential.runtime_status
+
+    for _pass_index in range(2):
+        await pw.ProbeWorker._probe_role_model_candidates(
+            recovery_budget=0,
+            cold_start_budget=None,
+        )
+        await db_session.flush()
+
+    active_keys = {row.upstream_model_id for row in active_rows}
+    candidate_probes = [model for model in adapter.models if model in active_keys]
+    assert len(candidate_probes) >= 2
+    assert candidate_probes[0] in active_keys
+    assert candidate_probes[1] != candidate_probes[0]
+
+    first_upstream = next(row for row in active_rows if row.upstream_model_id == candidate_probes[0])
+    access = (
+        await db_session.execute(
+            select(CredentialModelAccess).where(
+                CredentialModelAccess.credential_id == credential.id,
+                CredentialModelAccess.upstream_model_id == first_upstream.id,
+            ),
+        )
+    ).scalar_one()
+    assert access.status == "available"
+    assert access.last_error is None
+    assert access.probe_failures == 1
+    assert access.updated_at is not None
+    assert access.next_probe_at is not None
+    await db_session.refresh(first_upstream)
+    caps = first_upstream.capabilities or {}
+    assert "probed_at" not in caps
+    assert "coherence_passed" not in caps
+    await db_session.refresh(credential)
+    assert credential.runtime_status == initial_runtime_status
 
 
 class _MalformedCatalogAdapter:

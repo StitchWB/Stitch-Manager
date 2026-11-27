@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
+from stitch_backend.database import commit_session_shielded
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -287,7 +289,7 @@ async def ensure_tables(db: AsyncSession) -> None:
             "sched": _serialize_schedule(schedule),
             "now": now,
         })
-    await db.commit()
+    await commit_session_shielded(db)
 
 
 # ── Task CRUD ─────────────────────────────────────────────────────────────────

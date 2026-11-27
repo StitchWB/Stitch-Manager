@@ -14,10 +14,12 @@ SQLAlchemy's greenlet bridge:
 
 The fix under test has two halves: session commit/rollback/close run in
 tracked, never-cancelled tasks (``close_session_shielded`` and its lifecycle
-chain), and SQLAlchemy >=2.0.58 carries upstream pool fix #13772 so a
-cancellation that still lands inside invalidation/terminate force-closes and
-discards the connection without losing the pool slot.  Engine disposal drains
-those tasks before pooled connections are torn down.
+chain), and the fixed SQLAlchemy 2.0.x pool discards a connection whose
+invalidation/terminate is cancelled without losing the pool slot.  The
+substantive upstream pool fixes are #12710/#13622/#13673 in 2.0.55, with
+AsyncConnection.close() cancellation fixed by #13699 in 2.0.56; #13772 in
+2.0.58 only downgrades successful-termination cancellation logging to DEBUG.
+Engine disposal drains those tasks before pooled connections are torn down.
 """
 
 from __future__ import annotations
@@ -463,9 +465,11 @@ async def test_anyio_cancel_during_write_does_not_exhaust_pool(
     ``run_in_session`` reaches its shielded commit/close boundary), SQLAlchemy
     invalidates the connection immediately and pool termination still happens
     on the repeatedly-cancelled task. SQLAlchemy 2.0.52 loses the pool slot in
-    exactly that window; the fixed 2.0.x pool (upstream #13772) force-closes and
-    discards the connection but returns the slot, so subsequent writes do not serialize into
-    pool timeouts.
+    exactly that window; the fixed 2.0.x pool force-closes and discards the
+    connection but returns the slot, so subsequent writes do not serialize into
+    pool timeouts.  The substantive upstream fixes are #12710/#13622/#13673 in
+    2.0.55 plus AsyncConnection.close() cancellation #13699 in 2.0.56; #13772
+    only downgrades successful-termination cancellation logging to DEBUG.
     """
     db_path = tmp_path / "cancel-cascade.db"
     loop = asyncio.get_running_loop()
