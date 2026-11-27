@@ -470,6 +470,35 @@ async def _resolve_latency_policy(
     return await load_latency_policy(model, run_in_session)
 
 
+def _effective_ttft_budget(
+    latency_policy: LatencyPolicy | None,
+    routing_result: Any,
+) -> float | None:
+    """TTFT budget for this attempt, honoring terminal-candidate exemption.
+
+    The executor recomputes ``ttft_watchdog_exempt`` immediately before each
+    invocation.  The exemption removes only the time-to-first-token guard; it
+    is not a cancellation shield and does not relax post-first-frame stream
+    stall enforcement.
+    """
+    if latency_policy is None:
+        return None
+    if getattr(routing_result, "ttft_watchdog_exempt", False):
+        upstream = getattr(routing_result, "upstream_model", None)
+        credential = getattr(routing_result, "credential", None)
+        logger.info(
+            "terminal candidate exempt from pre-first-token latency abort: %s (credential=%s)",
+            getattr(upstream, "upstream_model_id", "?"),
+            (getattr(credential, "id", "") or "")[:8],
+        )
+        return None
+    return latency_policy.ttft_seconds()
+
+
+def _ttft_exempt(routing_result: Any) -> bool:
+    return bool(getattr(routing_result, "ttft_watchdog_exempt", False))
+
+
 async def _record_ledger_usage(
     run_in_session: Callable[..., Awaitable[Any]],
     routing_result: Any,
@@ -701,7 +730,7 @@ async def invoke_via_gateway(
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
     latency_policy = await _resolve_latency_policy(routing_result, payload.model, run_in_session)
-    ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
+    ttft_budget = _effective_ttft_budget(latency_policy, routing_result)
     stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
     try:
@@ -734,7 +763,12 @@ async def invoke_via_gateway(
                 else None
             )
             result = await executor._stream_response(
-                executor._guard_stream(response, routing_result, stall_timeout=stall_budget),
+                executor._guard_stream(
+                    response,
+                    routing_result,
+                    stall_timeout=stall_budget,
+                    ttft_exempt=_ttft_exempt(routing_result),
+                ),
                 client_has_tools=client_has_tools,
                 on_complete=_stream_usage_callback(
                     executor,
@@ -926,7 +960,7 @@ async def invoke_via_gateway_messages(
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
     latency_policy = await _resolve_latency_policy(routing_result, payload.model, run_in_session)
-    ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
+    ttft_budget = _effective_ttft_budget(latency_policy, routing_result)
     stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
     try:
@@ -960,7 +994,12 @@ async def invoke_via_gateway_messages(
                 else None
             )
             result = await executor._stream_anthropic_response(
-                executor._guard_stream(response, routing_result, stall_timeout=stall_budget),
+                executor._guard_stream(
+                    response,
+                    routing_result,
+                    stall_timeout=stall_budget,
+                    ttft_exempt=_ttft_exempt(routing_result),
+                ),
                 client_has_tools=client_has_tools,
                 on_complete=_stream_usage_callback(
                     executor,
@@ -1161,7 +1200,7 @@ async def invoke_via_gateway_responses(
     client_has_tools = bool(payload.tools or getattr(payload, "tool_choice", None))
     start_time = time.time()
     latency_policy = await _resolve_latency_policy(routing_result, payload.model, run_in_session)
-    ttft_budget = latency_policy.ttft_seconds() if latency_policy is not None else None
+    ttft_budget = _effective_ttft_budget(latency_policy, routing_result)
     stall_budget = latency_policy.stall_seconds() if latency_policy is not None else None
 
     try:
@@ -1194,7 +1233,12 @@ async def invoke_via_gateway_responses(
                 else None
             )
             result = await executor._stream_response(
-                executor._guard_stream(response, routing_result, stall_timeout=stall_budget),
+                executor._guard_stream(
+                    response,
+                    routing_result,
+                    stall_timeout=stall_budget,
+                    ttft_exempt=_ttft_exempt(routing_result),
+                ),
                 client_has_tools=client_has_tools,
                 on_complete=_stream_usage_callback(
                     executor,

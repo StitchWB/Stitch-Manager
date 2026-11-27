@@ -84,6 +84,36 @@ def test_no_cap_means_no_distinct_restriction() -> None:
     assert key_inflight.try_acquire("cred", "m-3")
 
 
+def test_would_acquire_after_release_ignores_current_total_slot() -> None:
+    assert key_inflight.try_acquire("cred", "m-1", cap=1)
+    assert not key_inflight.would_acquire_after_release("cred", "m-1", cap=1)
+    assert key_inflight.would_acquire_after_release(
+        "cred", "m-1", cap=1, released_slot=("cred", "m-1"),
+    )
+    # Non-mutating: the real slot is still occupied.
+    assert key_inflight.in_flight("cred") == 1
+
+
+def test_would_acquire_after_release_adjusts_distinct_model_state() -> None:
+    assert key_inflight.try_acquire("cred", "m-1", distinct_model_cap=1)
+    assert key_inflight.would_acquire_after_release(
+        "cred",
+        "m-2",
+        distinct_model_cap=1,
+        released_slot=("cred", "m-1"),
+    )
+
+    # A second concurrent m-1 means releasing this one slot does not free the
+    # distinct-model slot for m-2.
+    assert key_inflight.try_acquire("cred", "m-1", distinct_model_cap=1)
+    assert not key_inflight.would_acquire_after_release(
+        "cred",
+        "m-2",
+        distinct_model_cap=1,
+        released_slot=("cred", "m-1"),
+    )
+
+
 # ── Executor integration ────────────────────────────────────────────────────
 
 

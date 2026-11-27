@@ -202,6 +202,39 @@ def _distinct_model_cap(endpoint: Any) -> int | None:
     return value
 
 
+def _candidate_control_plane_eligible(routing_result: Any) -> bool:
+    """Cheap defensive eligibility projection for failover lookahead.
+
+    Routing already applies these gates when a resolution is produced.  The
+    executor re-checks the snapshot here because access rows/lifecycle state
+    can be demoted while a request is walking an older resolution.  Missing
+    attributes are treated as eligible for narrow unit-test doubles and older
+    synthetic candidates; explicit false/unavailable values are not.
+    """
+    endpoint = getattr(routing_result, "endpoint", None)
+    if getattr(endpoint, "enabled", True) is False:
+        return False
+    upstream = getattr(routing_result, "upstream_model", None)
+    if getattr(upstream, "enabled", True) is False:
+        return False
+    credential = getattr(routing_result, "credential", None)
+    if getattr(credential, "enabled", True) is False:
+        return False
+    runtime_status = getattr(credential, "runtime_status", "unknown")
+    if runtime_status not in (None, "active", "unknown"):
+        return False
+    if getattr(routing_result, "access_status", "available") != "available":
+        return False
+    next_retry_at = getattr(credential, "next_retry_at", None)
+    if isinstance(next_retry_at, datetime):
+        retry_at = next_retry_at
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        if retry_at > datetime.now(UTC):
+            return False
+    return True
+
+
 def _hint_seconds(error: ClassifiedError | None) -> float:
     if error is None:
         return 0.0
@@ -413,7 +446,7 @@ class LiteLLMExecutor:
             logger.debug("Failed to release inconclusive half-open probe", exc_info=True)
 
     async def _skip_insufficient_balance(
-        self, payload: Any, routing_result: Any, model: str,
+        self, payload: Any, routing_result: Any, model: str, *, log: bool = True,
     ) -> bool:
         credential = routing_result.credential
         remaining = getattr(credential, "remaining_usd", None)
@@ -445,14 +478,64 @@ class LiteLLMExecutor:
         )
         if estimate <= float(remaining) - _COST_RESERVE_USD:
             return False
-        logger.debug(
-            "Skipping candidate %s - estimated $%.6f exceeds remaining $%.2f minus $%.2f reserve",
-            credential.id[:8],
-            estimate,
-            float(remaining),
-            _COST_RESERVE_USD,
-        )
+        if log:
+            logger.debug(
+                "Skipping candidate %s - estimated $%.6f exceeds remaining $%.2f minus $%.2f reserve",
+                credential.id[:8],
+                estimate,
+                float(remaining),
+                _COST_RESERVE_USD,
+            )
         return True
+
+    async def _has_later_eligible_candidate(
+        self,
+        payload: GatewayRequest,
+        routing_results: list[Any],
+        *,
+        start_index: int,
+        model: str,
+        blocked_groups: set[str],
+        circuit_open_endpoints: set[str],
+        current_credential_id: str,
+        current_upstream_model_id: str | None,
+    ) -> bool:
+        """Whether this resolution still has a usable failover candidate.
+
+        This is a point-in-time lookahead, re-evaluated immediately before
+        every invocation.  It intentionally uses non-mutating checks only:
+        circuit-breaker probes and in-flight slots must never be acquired for
+        a candidate merely to decide whether the current one is terminal.
+        Unknown future breaker state is treated conservatively as usable;
+        explicit control-plane demotions, blocked account groups, insufficient
+        balance, known-open endpoints, and currently saturated in-flight caps
+        are not.
+        """
+        for candidate in routing_results[start_index:]:
+            if not _candidate_control_plane_eligible(candidate):
+                continue
+            group = getattr(candidate.credential, "account_group", None)
+            if group is not None and group in blocked_groups:
+                continue
+            endpoint_id = candidate.endpoint.id
+            if endpoint_id in circuit_open_endpoints:
+                continue
+            candidate_credential_id = candidate.credential.id
+            candidate_upstream_model_id = getattr(
+                getattr(candidate, "upstream_model", None), "upstream_model_id", None,
+            )
+            distinct_cap = _distinct_model_cap(candidate.endpoint)
+            if not key_inflight.would_acquire_after_release(
+                candidate_credential_id,
+                candidate_upstream_model_id,
+                distinct_model_cap=distinct_cap,
+                released_slot=(current_credential_id, current_upstream_model_id),
+            ):
+                continue
+            if await self._skip_insufficient_balance(payload, candidate, model, log=False):
+                continue
+            return True
+        return False
 
     def _record_request_trace(
         self,
@@ -740,7 +823,18 @@ class LiteLLMExecutor:
                         if rr_lease is not None:
                             probe_leases.setdefault(rr.endpoint.id, rr_lease)
 
-                    for routing_result in routing_results:
+                    # Breaker knowledge accumulated while walking this one
+                    # resolution.  It is deliberately reset for a fresh
+                    # resolution/round: open endpoints may become half-open
+                    # again inside a parked request budget.
+                    circuit_open_endpoints: set[str] = set()
+                    for candidate_index, routing_result in enumerate(routing_results):
+                        if not _candidate_control_plane_eligible(routing_result):
+                            _append_attempt_reason(
+                                outcome.attempt_reasons,
+                                "control_plane_ineligible",
+                            )
+                            continue
                         group = getattr(routing_result.credential, "account_group", None)
                         if group is not None and group in blocked_groups:
                             continue
@@ -781,6 +875,7 @@ class LiteLLMExecutor:
                                 except (AttributeError, TypeError):
                                     pass
                         if not available:
+                            circuit_open_endpoints.add(endpoint_id)
                             _append_attempt_reason(outcome.attempt_reasons, "circuit_open")
                             logger.debug(
                                 "Skipping candidate on endpoint %s — circuit open",
@@ -811,6 +906,49 @@ class LiteLLMExecutor:
                             )
                             # Lease release deferred to the outer finally — see above.
                             continue
+
+                        # Terminality is attempt-time state, not a positional
+                        # property fixed when the chain was first resolved.
+                        # Re-evaluate the remaining snapshot immediately before
+                        # invoking.  A later public-model fallback is treated
+                        # as potentially usable without pre-resolving it: such
+                        # pre-resolution would mutate routing caches and can
+                        # lease half-open probes, so the conservative choice is
+                        # to keep TTFT failover enabled in that legacy shape.
+                        try:
+                            has_later_candidate = await self._has_later_eligible_candidate(
+                                payload,
+                                routing_results,
+                                start_index=candidate_index + 1,
+                                model=model,
+                                blocked_groups=blocked_groups,
+                                circuit_open_endpoints=circuit_open_endpoints,
+                                current_credential_id=credential_id,
+                                current_upstream_model_id=upstream_model_id,
+                            )
+                        except Exception:
+                            # Terminality must never become a new failure mode.
+                            # If lookahead itself cannot be evaluated, preserve
+                            # the pre-exemption behavior (watchdog enabled).
+                            has_later_candidate = True
+                            logger.debug(
+                                "Terminal-candidate lookahead failed; keeping TTFT watchdog",
+                                exc_info=True,
+                            )
+                        terminal_candidate = (
+                            (
+                                model_index + 1 >= len(model_chain)
+                                and not has_later_candidate
+                            )
+                            # The invocation cap is also terminality: once this
+                            # attempt consumes the final upstream invocation,
+                            # a TTFT abort cannot possibly fail over anywhere.
+                            or invocations + 1 >= _MAX_UPSTREAM_INVOCATIONS
+                        )
+                        try:
+                            routing_result.ttft_watchdog_exempt = terminal_candidate
+                        except (AttributeError, TypeError):
+                            pass
 
                         slot_released = False
 
@@ -1201,6 +1339,7 @@ class LiteLLMExecutor:
         routing_result: Any,
         *,
         stall_timeout: float | None = None,
+        ttft_exempt: bool = False,
     ) -> Any:
         """Wrap an upstream SSE iterator: on mid-stream failure, mark the
         credential/endpoint, then abort the client stream.
@@ -1211,20 +1350,25 @@ class LiteLLMExecutor:
         first line is left to the invoke pipeline, which can still fail
         over to the next candidate.
 
-        When ``stall_timeout`` is given, every frame pull is budgeted:
-        silence longer than the budget raises :class:`StreamStallError`.
-        Before the first frame the error escapes unrecorded (the pipeline
-        treats it like the TTFT watchdog — slowness, failover-safe); after
-        the first frame the stall is recorded as a *model-level* failure —
-        a reliability signal for this one upstream model, never endpoint
-        or credential blame.
+        When ``stall_timeout`` is given, frame pulls are budgeted: silence
+        longer than the budget raises :class:`StreamStallError`.  Before the
+        first frame the error escapes unrecorded (the pipeline treats it like
+        the TTFT watchdog — slowness, failover-safe); after the first frame
+        the stall is recorded as a *model-level* failure — a reliability
+        signal for this one upstream model, never endpoint or credential
+        blame.
+
+        ``ttft_exempt`` disables only the pre-first-frame use of that budget:
+        while a terminal candidate is still in its time-to-first-token phase
+        there is no failover candidate to protect.  As soon as the upstream
+        stream starts, normal mid-stream stall enforcement resumes unchanged.
         """
         started = False
         iterator = stream.__aiter__()
         try:
             while True:
                 try:
-                    if stall_timeout is not None:
+                    if stall_timeout is not None and (started or not ttft_exempt):
                         try:
                             line = await asyncio.wait_for(
                                 iterator.__anext__(), stall_timeout,
