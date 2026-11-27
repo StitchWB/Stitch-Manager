@@ -295,8 +295,12 @@ async def close_session_shielded(session: AsyncSession) -> None:
     await _await_lifecycle_task(task)
 
 
-async def _commit_session_shielded(session: AsyncSession) -> None:
-    """Commit through the same uncancellable, per-session lifecycle chain."""
+async def commit_session_shielded(session: AsyncSession) -> None:
+    """Commit through the same uncancellable, per-session lifecycle chain.
+
+    Public for service-owned sessions whose lifecycle cannot use
+    ``run_in_session``/``get_db`` directly.
+    """
     task = _schedule_lifecycle_step(session, session.commit, "commit")
     await _await_lifecycle_task(task)
 
@@ -342,7 +346,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     try:
         try:
             yield session
-            await _commit_session_shielded(session)
+            await commit_session_shielded(session)
         except Exception:
             await _rollback_session_shielded(session)
             raise
@@ -382,7 +386,7 @@ async def run_in_session(
         try:
             try:
                 result = await fn(session)
-                await _commit_session_shielded(session)
+                await commit_session_shielded(session)
 
                 # Monitoring: log slow operations (throttled to once per 60s)
                 elapsed = _time.monotonic() - start

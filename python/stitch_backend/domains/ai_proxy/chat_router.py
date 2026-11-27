@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from stitch_backend.database import get_db
+from stitch_backend.database import close_session_shielded, get_db
 from stitch_backend.domains.ai_proxy.account_selection import select_available_account
 from stitch_backend.domains.ai_proxy.qoder_chat_gateway import (
     QoderAdapter,
@@ -282,7 +282,7 @@ async def _handle_web_gemini_chat(
     # pool_size=1, and a yield-dependency session stays checked out until the
     # StreamingResponse is exhausted. Holding it would stall every other app
     # write — and the adapter's own cooldown marking — for the whole stream.
-    await session.close()
+    await close_session_shielded(session)
     request_payload: dict[str, object] = {
         "model": chat_request.model,
         "messages": chat_request.raw_messages or [],
@@ -333,7 +333,7 @@ async def _handle_web_deepseek_chat(
     adapter = await _build_web_deepseek_adapter(session)
     # Release the write-DB connection before streaming (pool_size=1) — same
     # discipline as web-gemini.
-    await session.close()
+    await close_session_shielded(session)
     request_payload: dict[str, object] = {
         "model": chat_request.model,
         "messages": chat_request.raw_messages or [],
@@ -378,7 +378,7 @@ async def _handle_web_qwen_chat(
     # D5: ALL DB reads happen in the builder BEFORE the response streams.
     adapter = await _build_web_qwen_adapter(session)
     # Release the write-DB connection before streaming (pool_size=1).
-    await session.close()
+    await close_session_shielded(session)
     request_payload: dict[str, object] = {
         "model": chat_request.model,
         "messages": chat_request.raw_messages or [],

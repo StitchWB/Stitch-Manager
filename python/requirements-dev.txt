@@ -588,7 +588,7 @@ sortedcontainers==2.4.0
     # via hypothesis
 soundfile==0.14.0
     # via litellm
-sqlalchemy==2.0.52
+sqlalchemy==2.0.58
     # via
     #   stitch-backend (python/pyproject.toml)
     #   alembic
