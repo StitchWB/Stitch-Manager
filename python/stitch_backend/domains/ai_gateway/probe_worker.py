@@ -221,11 +221,16 @@ def _exception_http_status(exc: BaseException) -> int | None:
 # answers endpoint-scoped failure to an exact probe.  Blaming the model for
 # that would be wrong; hammering the endpoint would be worse.
 _role_probe_endpoint_backoff: dict[str, tuple[datetime, int]] = {}
+# Credential-catalog probes need a separate endpoint gate: malformed HTTP 200
+# catalog bodies are endpoint evidence, not key blame, but leaving ``unknown``
+# credentials due every pass would multiply upstream load.
+_catalog_probe_endpoint_backoff: dict[str, tuple[datetime, int]] = {}
 
 
 def _reset_role_probe_backoff() -> None:
     """Clear in-memory endpoint probe backoff. Intended for tests."""
     _role_probe_endpoint_backoff.clear()
+    _catalog_probe_endpoint_backoff.clear()
 
 
 class ProbeWorker:
@@ -318,6 +323,12 @@ class ProbeWorker:
             # 2. Probe each credential OUTSIDE any DB session (HTTP I/O).
             results: list[dict[str, Any]] = []
             for target in targets:
+                # Targets were loaded before this pass began.  A malformed-catalog
+                # result on one credential is endpoint-wide evidence, so stop the
+                # rest of that endpoint's batch immediately instead of probing every
+                # sibling key into the same degradation.
+                if cls._catalog_probe_backoff_active(target["endpoint_id"], _utcnow()):
+                    continue
                 try:
                     result = await cls._probe_target(target)
                     results.append(result)
@@ -657,6 +668,7 @@ class ProbeWorker:
 
             cred_svc = CredentialService(session)
             credentials_cache: dict[str, list[Credential]] = {}
+            invocation_secret_cache: dict[str, str | None] = {}
 
             async def _credentials_for(endpoint: ProviderEndpoint) -> list[Credential]:
                 if endpoint.id not in credentials_cache:
@@ -739,7 +751,9 @@ class ProbeWorker:
                 endpoint: ProviderEndpoint,
                 upstream: UpstreamModel,
             ) -> dict[str, Any] | None:
-                secret = await cred_svc.resolve_invocation_secret(cred)
+                if cred.id not in invocation_secret_cache:
+                    invocation_secret_cache[cred.id] = await cred_svc.resolve_invocation_secret(cred)
+                secret = invocation_secret_cache[cred.id]
                 if secret is None:
                     return None
                 return {
@@ -753,13 +767,19 @@ class ProbeWorker:
                     "upstream_model_id": upstream.upstream_model_id,
                 }
 
-            async def _choose_pair(
+            async def _select_pair(
                 endpoint: ProviderEndpoint,
                 upstream: UpstreamModel,
                 *,
                 sibling: bool,
-            ) -> dict[str, Any] | None:
-                fallback: dict[str, Any] | None = None
+            ) -> tuple[dict[str, Any], CredentialModelAccess | None] | None:
+                """Select the exact pair using one deterministic, shared rule.
+
+                Rotation ordering consumes the same selection result as the probe
+                picker.  Keeping this in one helper is what prevents multi-credential
+                ordering from drifting away from the pair that will actually be probed.
+                """
+                fallback: tuple[dict[str, Any], CredentialModelAccess | None] | None = None
                 for cred in await _credentials_for(endpoint):
                     if not cred.enabled:
                         continue
@@ -777,15 +797,25 @@ class ProbeWorker:
                     candidate = await _candidate_for(cred, endpoint, upstream)
                     if candidate is None:
                         continue
+                    selected = (candidate, access)
                     if sibling or access is None or access.status == "unknown":
-                        return candidate
+                        return selected
                     # Recovery preserves legacy behavior as fallback: when no
                     # never-probed pair exists, re-probe the first due pair
                     # (including an available row) because exact success is the
                     # activation authority for quarantined/demoted targets.
                     if fallback is None:
-                        fallback = candidate
+                        fallback = selected
                 return None if sibling else fallback
+
+            async def _choose_pair(
+                endpoint: ProviderEndpoint,
+                upstream: UpstreamModel,
+                *,
+                sibling: bool,
+            ) -> dict[str, Any] | None:
+                selected = await _select_pair(endpoint, upstream, sibling=sibling)
+                return selected[0] if selected is not None else None
 
             picked: list[dict[str, Any]] = []
             probed_upstreams: set[str] = set()
@@ -871,28 +901,37 @@ class ProbeWorker:
                     and "evidence_tier" not in caps
                 )
 
-            async def _rotation_failure_count(
+            def _aware_or_min(value: datetime | None) -> datetime:
+                if value is None:
+                    return datetime.min.replace(tzinfo=UTC)
+                if value.tzinfo is None:
+                    return value.replace(tzinfo=UTC)
+                return value
+
+            async def _rotation_last_attempt_at(
                 endpoint: ProviderEndpoint,
                 upstream: UpstreamModel,
-            ) -> int:
-                """Weak attempt count used only to keep the evidence queue rotating.
+            ) -> datetime:
+                """Attempt-time ordering key for the exact pair that would probe now.
 
-                Endpoint-scoped probe failures increment ``probe_failures`` as an
-                anti-starvation timestamp/count, but they are not model evidence.
-                The lowest count therefore means "least often poisoned/attempted",
-                not "healthiest"; terminal routing semantics remain in ``status``.
+                ``probe_failures`` is backoff state, not a rotation cursor: using it
+                for ordering both collapsed multi-credential queues to zero (an
+                unprobed sibling credential) and gave every newly discovered row a
+                permanent newcomer advantage.  Instead use the last-attempt time of
+                the same deterministic pair ``_choose_pair`` would select.  A pair
+                with no access row uses the upstream discovery time as its virtual
+                attempt time, so newcomer priority ages naturally as the catalog
+                rotates; it is neither perpetual nor a hard jump to the front.
                 """
-                counts: list[int] = []
-                for cred in await _credentials_for(endpoint):
-                    if not cred.enabled:
-                        continue
-                    if cred.runtime_status not in ("active", "unknown"):
-                        continue
-                    access = await _access_for(cred.id, upstream.id)
-                    if access is not None and access.status == "denied":
-                        continue
-                    counts.append(int(access.probe_failures or 0) if access is not None else 0)
-                return min(counts, default=0)
+                selected = await _select_pair(endpoint, upstream, sibling=False)
+                if selected is None:
+                    return _aware_or_min(upstream.created_at)
+                _candidate, access = selected
+                if access is None:
+                    return _aware_or_min(upstream.created_at)
+                return _aware_or_min(
+                    access.updated_at or access.last_verified_at or access.created_at,
+                )
 
             candidate_source_rows = [
                 (upstream, endpoint)
@@ -909,16 +948,16 @@ class ProbeWorker:
             for endpoint_id, endpoint_upstreams in upstreams_by_endpoint.items():
                 await _warm_access_cache(endpoints_by_id[endpoint_id], endpoint_upstreams)
 
-            rotation_failure_counts: dict[str, int] = {}
+            rotation_last_attempts: dict[str, datetime] = {}
             for upstream, endpoint in candidate_source_rows:
-                rotation_failure_counts[upstream.id] = await _rotation_failure_count(
+                rotation_last_attempts[upstream.id] = await _rotation_last_attempt_at(
                     endpoint,
                     upstream,
                 )
             candidate_rows = sorted(
                 candidate_source_rows,
                 key=lambda item: (
-                    rotation_failure_counts[item[0].id],
+                    rotation_last_attempts[item[0].id],
                     _name_queue_prior(item[0].upstream_model_id),
                     item[0].upstream_model_id,
                 ),
@@ -973,6 +1012,31 @@ class ProbeWorker:
             ROLE_PROBE_BACKOFF_BASE_SECONDS * (2**exponent),
         )
         _role_probe_endpoint_backoff[endpoint_id] = (
+            now + timedelta(seconds=delay),
+            failures,
+        )
+
+    @staticmethod
+    def _catalog_probe_backoff_active(endpoint_id: str, now: datetime) -> bool:
+        entry = _catalog_probe_endpoint_backoff.get(endpoint_id)
+        if entry is None:
+            return False
+        until, _failures = entry
+        return until > now
+
+    @staticmethod
+    def _arm_catalog_probe_backoff(endpoint_id: str) -> None:
+        now = _utcnow()
+        _until, failures = _catalog_probe_endpoint_backoff.get(
+            endpoint_id, (now, 0),
+        )
+        failures += 1
+        exponent = min(max(0, failures - 1), 4)
+        delay = min(
+            ROLE_PROBE_BACKOFF_CAP_SECONDS,
+            ROLE_PROBE_BACKOFF_BASE_SECONDS * (2**exponent),
+        )
+        _catalog_probe_endpoint_backoff[endpoint_id] = (
             now + timedelta(seconds=delay),
             failures,
         )
@@ -1410,6 +1474,8 @@ class ProbeWorker:
                         cred.provider_endpoint_id, cred.id,
                     )
                     continue
+                if cls._catalog_probe_backoff_active(endpoint.id, now):
+                    continue
 
                 secret = await cred_svc.resolve_invocation_secret(cred)
                 if secret is None:
@@ -1463,6 +1529,24 @@ class ProbeWorker:
                 http_status=probe.http_status,
                 response_body=probe.error_body,
             )
+            if probe.http_status == 200 and classified.category == "unknown":
+                # ConfigurableAdapter deliberately treats a parseless/empty HTTP 200
+                # catalog body as a fetch failure so it cannot reconcile every model
+                # away.  Bare-status classification calls that shape ``unknown`` and
+                # the credential state machine correctly makes no key-scoped
+                # transition — but then every NULL-retry unknown credential is probed
+                # again on each pass.  Reclassify only the unclassified shape as
+                # endpoint-wide server evidence and arm endpoint backoff.  Recognized
+                # auth/quota/envelope signals in a 200 body keep their key/account
+                # classification instead of being masked as endpoint failure.
+                classified = ClassifiedError(
+                    category="server_error",
+                    is_endpoint_wide=True,
+                    is_model_specific=False,
+                    scope="endpoint",
+                    error_code="malformed_model_catalog",
+                )
+                cls._arm_catalog_probe_backoff(target["endpoint_id"])
         else:
             # Transport error (no HTTP status)
             classified = ClassifiedError(

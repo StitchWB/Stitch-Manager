@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from stitch_backend.database import Base
 from stitch_backend.domains.ai_gateway import probe_worker as pw
 from stitch_backend.domains.ai_gateway import routing_engine as re_mod
-from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError
+from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError, ProbeResult
 from stitch_backend.domains.ai_gateway.models import (
     Credential,
     CredentialGroupShare,  # noqa: F401
@@ -1209,6 +1209,133 @@ async def test_endpoint_scoped_candidate_failure_rotates_trickle_queue(
         "zminimax-m2-c",
         "zminimax-m2-a",
     ]
+
+
+async def test_candidate_rotation_uses_selected_pair_attempt_state_with_multiple_credentials(
+    db_session, monkeypatch,
+) -> None:
+    """A never-probed sibling credential must not flatten every model's rotation key.
+
+    The exact-pair picker is deterministic rather than round-robin.  Ordering by
+    the minimum count across credentials therefore keeps a poisoned model at
+    zero forever whenever another enabled credential has no access row yet.
+    """
+    endpoint, first_cred = await _seed_catalog(db_session)
+    await CredentialService(db_session).create_credential(
+        endpoint.id, "key-2", "api_key", "sk-test-2",
+    )
+    now = _utcnow()
+    poisoned = await _add_unknown_upstream(db_session, endpoint, "aaa-multicred-candidate")
+    unattempted = await _add_unknown_upstream(db_session, endpoint, "bbb-multicred-candidate")
+    poisoned.created_at = now - timedelta(minutes=10)
+    unattempted.created_at = now - timedelta(minutes=10)
+    db_session.add(
+        CredentialModelAccess(
+            credential_id=first_cred.id,
+            upstream_model_id=poisoned.id,
+            status="unknown",
+            probe_failures=1,
+            next_probe_at=now - timedelta(seconds=1),
+            created_at=now - timedelta(minutes=9),
+            updated_at=now - timedelta(minutes=1),
+        ),
+    )
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+
+    picked = await pw.ProbeWorker._load_role_probe_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+
+    candidate_picks = [row for row in picked if row["probe_kind"] == "candidate_evidence"]
+    assert candidate_picks
+    assert candidate_picks[0]["upstream_model_id"] == "bbb-multicred-candidate"
+
+
+async def test_candidate_rotation_newcomer_advantage_ages(
+    db_session, monkeypatch,
+) -> None:
+    """A newly discovered zero-evidence row must not perpetually outrank older attempts.
+
+    The newcomer's virtual attempt time is its discovery time.  Once an older
+    candidate's last attempt is older than that discovery instant, the older
+    candidate gets its turn even though the newcomer still has no failure row.
+    """
+    endpoint, cred = await _seed_catalog(db_session)
+    now = _utcnow()
+    poisoned = await _add_unknown_upstream(db_session, endpoint, "aaa-poisoned-candidate")
+    newcomer = await _add_unknown_upstream(db_session, endpoint, "zzz-newcomer-candidate")
+    poisoned.created_at = now - timedelta(hours=1)
+    newcomer.created_at = now - timedelta(minutes=5)
+    db_session.add(
+        CredentialModelAccess(
+            credential_id=cred.id,
+            upstream_model_id=poisoned.id,
+            status="unknown",
+            probe_failures=3,
+            next_probe_at=now - timedelta(seconds=1),
+            created_at=now - timedelta(minutes=50),
+            updated_at=now - timedelta(minutes=10),
+        ),
+    )
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+
+    picked = await pw.ProbeWorker._load_role_probe_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+
+    candidate_picks = [row for row in picked if row["probe_kind"] == "candidate_evidence"]
+    assert candidate_picks
+    assert candidate_picks[0]["upstream_model_id"] == "aaa-poisoned-candidate"
+
+
+class _MalformedCatalogAdapter:
+    async def probe_credential(self, **_kwargs) -> ProbeResult:
+        return ProbeResult(
+            success=False,
+            latency_ms=3.0,
+            http_status=200,
+            error="HTTP 200 but the body held no parseable model entries",
+            error_body="<html>Gateway error</html>",
+        )
+
+    def classify_error(self, exc, **_kwargs) -> ClassifiedError:
+        # Mirrors ConfigurableAdapter's bare-status fallback for a malformed 200.
+        return ClassifiedError(category="unknown", is_endpoint_wide=False, scope="key")
+
+
+async def test_malformed_catalog_200_arms_endpoint_backoff_without_terminal_key_blame(
+    db_session, monkeypatch,
+) -> None:
+    """Malformed catalog 200 is endpoint evidence backed off at endpoint scope.
+
+    It must neither remain an unclassified no-op (retried every worker pass)
+    nor become terminal credential/model denial evidence.
+    """
+    endpoint, cred = await _seed_catalog(db_session)
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: _MalformedCatalogAdapter())
+
+    targets = await pw.ProbeWorker._load_probe_targets()
+    assert [target["credential_id"] for target in targets] == [cred.id]
+
+    result = await pw.ProbeWorker._probe_target(targets[0])
+    classified = result["classified"]
+    assert classified is not None
+    assert classified.category == "server_error"
+    assert classified.is_endpoint_wide is True
+    assert classified.scope == "endpoint"
+
+    await pw.ProbeWorker._persist_probe_results([result])
+    await db_session.refresh(cred)
+    assert cred.runtime_status == "unknown"
+    assert cred.next_retry_at is None
+
+    assert await pw.ProbeWorker._load_probe_targets() == []
 
 
 async def test_candidate_probe_writes_fabricated_usage_evidence(db_session, monkeypatch) -> None:
