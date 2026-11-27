@@ -144,6 +144,7 @@ PUBLIC_ONLY_FILES = {
     "python/tests/test_check_zone_coverage.py": "public-only regression test for a public CI gate",
     "python/tests/test_chain_autorefill.py": "public-only regression test",
     "python/tests/test_db_cancellation.py": "public-only regression test",
+    "python/tests/test_discovery_persist_ordering.py": "public-only regression test",
     "python/tests/test_discovery_verification_gate.py": "public-only regression test",
     "python/tests/test_gateway_integration_phase2.py": "public-only regression test",
     "python/tests/test_gateway_owner_isolation.py": "public-only regression test",

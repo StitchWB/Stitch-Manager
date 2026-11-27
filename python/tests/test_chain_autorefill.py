@@ -668,6 +668,63 @@ async def test_rotation_no_refire_without_fresh_evidence(db_session) -> None:
     assert event is not None and event["signal"] == "catalog"
 
 
+async def test_rotation_signal_a_fire_does_not_refire_via_catalog(db_session) -> None:
+    """Signal-A-owned rotation must not duplicate-fire via the catalog signal.
+
+    Regression: the health signal fires first while the persisted catalog
+    snapshot still describes the PRE-rotation lineup.  Discovery is hourly
+    while the burst window is minutes, so the first post-rotation fetch
+    typically lands after the window expires — diffing the stale pre-rotation
+    baseline against the post-rotation lineup is the SAME rotation's
+    aftermath and must not fire a second event restarting the burst.
+    """
+    endpoint, _cred = await _seed_catalog(db_session)
+    now = _utcnow()
+    t0 = now - timedelta(minutes=70)
+
+    # Pre-rotation catalog: every seed key plus filler, consumed as the baseline.
+    existing_keys = [
+        row.upstream_model_id
+        for row in (
+            await db_session.execute(
+                select(UpstreamModel).where(UpstreamModel.provider_endpoint_id == endpoint.id),
+            )
+        ).scalars().all()
+    ]
+    lineup_a = sorted(set(existing_keys) | {f"m-{i}" for i in range(1, 11)})
+    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=t0)
+    assert await _chain_service(db_session).detect_rotation() is None
+
+    # Signal A owns the rotation event.
+    await _force_mass_model_rotation(db_session, endpoint)
+    event = await _chain_service(db_session).detect_rotation()
+    assert event is not None and event["signal"] == "health"
+
+    # Discovery is hourly; the first post-rotation fetch lands after the
+    # burst window has expired.
+    await db_session.refresh(endpoint)
+    policy = dict(endpoint.health_policy or {})
+    state = dict(policy["chainRotation"])
+    state["detectedAt"] = (now - timedelta(minutes=20)).astimezone(UTC).isoformat()
+    policy["chainRotation"] = state
+    endpoint.health_policy = policy
+    await db_session.flush()
+
+    lineup_b = [f"post-{i}" for i in range(1, 11)]
+    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=now - timedelta(minutes=2))
+
+    # Pre-rotation baseline diffed against the post-rotation lineup is the
+    # same rotation's aftermath — no duplicate event, no burst restart.
+    assert await _chain_service(db_session).detect_rotation() is None
+
+    # Once the baseline has been consumed past the fire, a genuine second
+    # rotation is still detected normally.
+    lineup_c = [f"third-{i}" for i in range(1, 11)]
+    await _simulate_fetch_pass(db_session, endpoint, lineup_c, pass_time=now - timedelta(minutes=1))
+    event = await _chain_service(db_session).detect_rotation()
+    assert event is not None and event["signal"] == "catalog"
+
+
 async def test_rotation_first_snapshot_never_fires(db_session) -> None:
     """Conservative escape: with no prior snapshot there is nothing to diff."""
     endpoint, _cred = await _seed_catalog(db_session)
