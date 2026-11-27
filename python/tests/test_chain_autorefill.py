@@ -217,6 +217,70 @@ async def _add_unknown_upstream(
     return row
 
 
+async def _activate_lead_with_catalog_available_access(
+    session,
+    credential: Credential,
+    *,
+    access_at: datetime,
+) -> list[UpstreamModel]:
+    """Activate rb/lead while mirroring catalog admission without exact evidence.
+
+    Catalog discovery can mark the exact pair ``available`` without writing any
+    upstream probe evidence.  That state is the live prioritization gap: the
+    member is serving, but the evidence trickle treats it like inventory.
+    """
+    targets = await _activate_role_targets(session, "rb/lead")
+    upstream_rows = list(
+        (
+            await session.execute(
+                select(UpstreamModel).where(
+                    UpstreamModel.id.in_([target.upstream_model_id for target in targets]),
+                ),
+            )
+        ).scalars().all(),
+    )
+    assert len(upstream_rows) == len(targets)
+    for upstream in upstream_rows:
+        session.add(
+            CredentialModelAccess(
+                credential_id=credential.id,
+                upstream_model_id=upstream.id,
+                status="available",
+                last_verified_at=access_at,
+                created_at=access_at,
+                updated_at=access_at,
+            ),
+        )
+    await session.flush()
+    return upstream_rows
+
+
+async def _seed_active_vs_inventory_priority_scenario(
+    session,
+    *,
+    inventory_count: int = 12,
+) -> tuple[ProviderEndpoint, Credential, list[UpstreamModel], list[UpstreamModel]]:
+    """One active chain with catalog-only access plus older untested inventory."""
+    endpoint, credential = await _seed_catalog(session)
+    now = _utcnow()
+    active_rows = await _activate_lead_with_catalog_available_access(
+        session,
+        credential,
+        access_at=now,
+    )
+    inventory_rows: list[UpstreamModel] = []
+    for index in range(inventory_count):
+        row = await _add_unknown_upstream(
+            session,
+            endpoint,
+            f"inventory-candidate-{index:02d}",
+        )
+        row.created_at = now - timedelta(days=2, minutes=index)
+        inventory_rows.append(row)
+    await session.commit()
+    return endpoint, credential, active_rows, inventory_rows
+
+
 async def _force_mass_model_rotation(
     session,
     endpoint: ProviderEndpoint,
@@ -946,6 +1010,20 @@ class _EvidenceAdapter:
         raise AssertionError("no errors expected")
 
 
+class _TimeoutAdapter:
+    """Exact-probe adapter whose first-level call always times out."""
+
+    def __init__(self) -> None:
+        self.models: list[str] = []
+
+    async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
+        self.models.append(model)
+        raise TimeoutError("probe budget elapsed")
+
+    def classify_error(self, exc, **_kwargs):
+        raise AssertionError("timeout is handled before error classification")
+
+
 class _EndpointFailureAdapter:
     """Exact-probe adapter whose every call fails at endpoint scope."""
 
@@ -1393,6 +1471,107 @@ async def test_candidate_rotation_newcomer_advantage_ages(
     candidate_picks = [row for row in picked if row["probe_kind"] == "candidate_evidence"]
     assert candidate_picks
     assert candidate_picks[0]["upstream_model_id"] == "aaa-poisoned-candidate"
+
+
+async def test_active_untested_chain_member_jumps_deep_inventory_queue(
+    db_session, monkeypatch,
+) -> None:
+    """Serving members with no exact evidence outrank never-used inventory.
+
+    The inventory rows are deliberately older by discovery time, which is the
+    live ordering trap: without an active-member priority class they occupy the
+    front of the one-per-pass trickle for hours.
+    """
+    _endpoint, _cred, active_rows, inventory_rows = (
+        await _seed_active_vs_inventory_priority_scenario(db_session)
+    )
+    _patch_worker_db(monkeypatch, db_session)
+
+    picked = await pw.ProbeWorker._load_role_probe_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+
+    candidate_picks = [row for row in picked if row["probe_kind"] == "candidate_evidence"]
+    assert candidate_picks
+    active_keys = {row.upstream_model_id for row in active_rows}
+    inventory_keys = {row.upstream_model_id for row in inventory_rows}
+    assert candidate_picks[0]["upstream_model_id"] in active_keys
+    assert candidate_picks[0]["upstream_model_id"] not in inventory_keys
+
+
+async def test_active_priority_class_drains_then_inventory_progresses(
+    db_session, monkeypatch,
+) -> None:
+    """Successful evidence probes drain the priority class; inventory resumes."""
+    _endpoint, _cred, active_rows, inventory_rows = (
+        await _seed_active_vs_inventory_priority_scenario(db_session, inventory_count=3)
+    )
+    _patch_worker_db(monkeypatch, db_session)
+
+    class SingleRecordEvidenceAdapter(_EvidenceAdapter):
+        def __init__(self) -> None:
+            super().__init__()
+            self.probe_models: list[str] = []
+
+        async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
+            if "third word" not in messages[0]["content"]:
+                self.probe_models.append(model)
+            return await super().invoke(
+                base_url=base_url, secret=secret, model=model, messages=messages,
+                stream=stream, default_headers=default_headers, **kwargs,
+            )
+
+    adapter = SingleRecordEvidenceAdapter()
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: adapter)
+
+    active_keys = {row.upstream_model_id for row in active_rows}
+    for _pass_index in range(len(active_keys)):
+        await pw.ProbeWorker._probe_role_model_candidates(
+            recovery_budget=0,
+            cold_start_budget=None,
+        )
+        await db_session.flush()
+
+    active_probes = adapter.probe_models[: len(active_keys)]
+    assert len(active_probes) == len(active_keys)
+    assert set(active_probes) == active_keys
+    assert len(set(active_probes)) == len(active_keys)  # no starvation loop inside the class
+
+    await pw.ProbeWorker._probe_role_model_candidates(
+        recovery_budget=0,
+        cold_start_budget=None,
+    )
+    await db_session.flush()
+
+    inventory_keys = {row.upstream_model_id for row in inventory_rows}
+    assert adapter.probe_models[len(active_keys)] in inventory_keys
+
+
+async def test_active_priority_backoff_does_not_starve_inventory(
+    db_session, monkeypatch,
+) -> None:
+    """Non-draining timeout attempts rotate active members, then inventory probes."""
+    _endpoint, _cred, active_rows, inventory_rows = (
+        await _seed_active_vs_inventory_priority_scenario(db_session, inventory_count=3)
+    )
+    _patch_worker_db(monkeypatch, db_session)
+    adapter = _TimeoutAdapter()
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: adapter)
+
+    active_keys = {row.upstream_model_id for row in active_rows}
+    for _pass_index in range(len(active_keys) + 1):
+        await pw.ProbeWorker._probe_role_model_candidates(
+            recovery_budget=0,
+            cold_start_budget=None,
+        )
+        await db_session.flush()
+
+    active_probes = adapter.models[: len(active_keys)]
+    assert set(active_probes) == active_keys
+    assert len(set(active_probes)) == len(active_keys)
+    inventory_keys = {row.upstream_model_id for row in inventory_rows}
+    assert adapter.models[len(active_keys)] in inventory_keys
 
 
 class _MalformedCatalogAdapter:
