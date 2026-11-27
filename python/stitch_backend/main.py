@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -30,10 +31,11 @@ from stitch_backend import startup, workers
 from stitch_backend.api.middleware import install_middleware
 from stitch_backend.api.router import api_router
 from stitch_backend.app_setup import install_local_middleware, register_meta_routes
-from stitch_backend.config import get_settings
+from stitch_backend.config import Settings, get_settings
 from stitch_backend.database import create_all_tables, dispose_engine
 from stitch_backend.domains.ai_proxy.litellm_gateway import create_litellm_gateway_router
 from stitch_backend.domains.plugin_distribution import distribution_proxy
+from stitch_backend.instance_lock import acquire_instance_lock
 from stitch_backend.logging_config import configure_logging
 
 if TYPE_CHECKING:
@@ -50,6 +52,71 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging(settings.log_level)
     await startup.log_startup_banner(settings)
 
+    # Single-instance guard: exactly one live backend may write a given
+    # SQLite file.  Must run BEFORE the first DB write (create_all_tables and
+    # every migration below).  Raises InstanceLockHeldError — aborting startup
+    # — when another live process owns this database; instances on different
+    # ports otherwise share stitch.db silently (sqlite multi-writer hazard).
+    # Payload port is diagnostic: run_gui binds STITCH_API_PORT while the
+    # console-script entry uses settings.port — prefer the actual bind port.
+    instance_lock = acquire_instance_lock(
+        settings.database_url,
+        int(os.environ.get("STITCH_API_PORT", str(settings.port))),
+    )
+
+    try:
+        flush_tasks = await _startup_migrations_and_workers(settings)
+    except BaseException:
+        # Startup aborted after the lock was acquired (uvicorn normally exits
+        # the process here, but embedded/test runners may not) — release so a
+        # retry in the same process is not blocked by our own stale handle.
+        if instance_lock is not None:
+            instance_lock.release()
+        raise
+
+    (
+        proxy_key_flush_task,
+        group_usage_flush_task,
+        request_log_prune_task,
+        sandbox_idle_task,
+    ) = flush_tasks
+
+    yield
+
+    logger.info("Stitch Backend shutting down …")
+    await startup.stop_replenishment_service()
+    await startup.stop_plugin_hosts_and_sidecars()
+    await startup.stop_scheduler_worker()
+    await startup.stop_gateway_workers()
+
+    from stitch_backend.domains.key_health.probe_worker import KeyHealthProbeWorker
+
+    await KeyHealthProbeWorker.stop()
+
+    await workers.stop_task(proxy_key_flush_task)
+    await workers.stop_task(group_usage_flush_task)
+    await workers.stop_task(request_log_prune_task)
+    await workers.stop_task(sandbox_idle_task)
+    await startup.emit_app_stopping()
+    await dispose_engine()
+    if instance_lock is not None:
+        instance_lock.release()
+
+
+_FlushTasks = tuple[
+    "asyncio.Task[None]",
+    "asyncio.Task[None]",
+    "asyncio.Task[None]",
+    "asyncio.Task[None]",
+]
+
+
+async def _startup_migrations_and_workers(settings: Settings) -> _FlushTasks:
+    """DB migrations, seeding, and worker startup.  Step order is load-bearing.
+
+    Split out of the lifespan so the single-instance lock can be released on
+    a mid-startup failure without re-indenting this sequence.
+    """
     # Dev convenience; production uses Alembic.
     await create_all_tables()
 
@@ -89,24 +156,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await startup.emit_app_started(settings)
 
-    yield
-
-    logger.info("Stitch Backend shutting down …")
-    await startup.stop_replenishment_service()
-    await startup.stop_plugin_hosts_and_sidecars()
-    await startup.stop_scheduler_worker()
-    await startup.stop_gateway_workers()
-
-    from stitch_backend.domains.key_health.probe_worker import KeyHealthProbeWorker
-
-    await KeyHealthProbeWorker.stop()
-
-    await workers.stop_task(proxy_key_flush_task)
-    await workers.stop_task(group_usage_flush_task)
-    await workers.stop_task(request_log_prune_task)
-    await workers.stop_task(sandbox_idle_task)
-    await startup.emit_app_stopping()
-    await dispose_engine()
+    return (
+        proxy_key_flush_task,
+        group_usage_flush_task,
+        request_log_prune_task,
+        sandbox_idle_task,
+    )
 
 
 def create_app() -> FastAPI:
