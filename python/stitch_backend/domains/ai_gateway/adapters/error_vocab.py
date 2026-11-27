@@ -169,7 +169,19 @@ def classify_envelope(envelope: Envelope | None) -> Verdict | None:
         if code.startswith(prefix):
             return _with_code(prefixed, code)
 
+    if _has_free_limit_marker(code):
+        # ReformBoss / New API free-tier daily allowance spent.  The exact code
+        # spelling is not pinned down upstream, so match the explicit marker
+        # conservatively; like the other daily quotas it resets at local midnight.
+        return Verdict("quota_exhausted", "account", until_local_reset=True, code=code)
+
     return None
+
+
+def _has_free_limit_marker(text: str) -> bool:
+    """True when *text* carries an explicit free-tier-limit marker."""
+    lowered = text.lower()
+    return "free_limit" in lowered or "free limit" in lowered
 
 
 def _with_code(verdict: Verdict, code: str) -> Verdict:
