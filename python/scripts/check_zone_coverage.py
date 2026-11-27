@@ -176,6 +176,7 @@ PUBLIC_ONLY_FILES = {
     "python/tests/test_refresh_endpoint_models.py": "public-only regression test",
     "python/tests/test_role_catalog_service.py": "public-only regression test",
     "python/tests/test_ttft_watchdog.py": "public-only regression test",
+    "python/tests/test_worker_session_cancellation.py": "public-only regression test",
     "resources/branding/stitch-ide-logo.png": "branding asset outside resources/icons mirror surface",
     "scripts/dev-test-instance.ps1": "local development helper, not hub runtime source",
     "scripts/start-dev.ps1": "local development helper, not hub runtime source",
