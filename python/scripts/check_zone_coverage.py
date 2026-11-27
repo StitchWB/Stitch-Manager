@@ -89,6 +89,7 @@ ZONE_FILES = frozenset(
         "python/tests/test_startup_command_registry.py",
         "python/tests/test_check_browser_smoke.py",
         "python/tests/test_rb_health_integration.py",
+        "python/tests/test_free_limit_classification.py",
         "python/tests/test_run_gui_launch.py",
         "python/tests/test_instance_lock.py",
         "python/tests/test_worker_session_cancellation.py",
