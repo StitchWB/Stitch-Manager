@@ -39,6 +39,7 @@ from stitch_backend.domains.ai_gateway.adapters.base import (
 )
 from stitch_backend.domains.ai_gateway.adapters.error_vocab import (
     Envelope,
+    _has_free_limit_marker,
     classify_envelope,
     next_local_midnight,
     parse_envelope,
@@ -527,6 +528,23 @@ class ConfigurableAdapter:
                 "unclassified upstream error code %r (request_id=%s) — status fallback",
                 envelope.code,
                 envelope.request_id,
+            )
+
+        if _has_free_limit_marker(body_text):
+            # ReformBoss free-tier daily allowance spent, reported under a
+            # status/envelope shape the vocabulary does not pin down (observed
+            # live as "unclassified … status fallback" noise).  The explicit
+            # marker is unambiguous: this is a transient quota suspension that
+            # resets at local midnight, never an auth or unknown failure.
+            return ClassifiedError(
+                category="quota_exhausted",
+                retry_after_seconds=retry_after,
+                is_endpoint_wide=False,
+                retry_at=next_local_midnight(),
+                scope="account",
+                outcome_confirmed=_outcome_confirmed(envelope),
+                error_code=envelope.code if envelope else None,
+                gateway_attempts=envelope.attempts if envelope else None,
             )
 
         if status is None:

@@ -960,6 +960,73 @@ async def test_endpoint_addition_cold_budget_is_per_endpoint_not_global(
     assert counts[second_endpoint.id] == pw.ROLE_PROBE_COLD_START_MAX_PER_ENDPOINT_PER_PASS
 
 
+async def test_active_chain_member_without_evidence_is_evidence_probed(
+    db_session, monkeypatch,
+) -> None:
+    """An active chain member with no exact-probe evidence must enter the
+    candidate evidence trickle.
+
+    Live observation (deploy5, 2026-11-27): every ACTIVE chain step showed
+    ``trustState=untested`` because manually/seed-activated chain members never
+    passed through probe activation, and once active nothing re-probes them —
+    recovery covers only quarantined/demoted targets, sibling coverage skips
+    pairs already marked ``available`` by catalog presence, and the candidate
+    evidence trickle excluded desired chain keys entirely.
+    """
+    endpoint, cred = await _seed_role_catalog(db_session)
+    selected = "deepseek-v4-pro"
+
+    from sqlalchemy import select
+
+    # Restrict desired state to one upstream so no quarantined recovery work
+    # competes for the pass.
+    entries = (await db_session.execute(select(RoleChainEntry))).scalars().all()
+    for entry in entries:
+        if entry.upstream_model_key != selected:
+            entry.enabled = False
+    await db_session.commit()
+
+    # Simulate the manual/seed activation path: every target of this upstream
+    # is active without any exact-probe evidence ever having been written, so
+    # no quarantined recovery work remains for it either.
+    target_rows = await _targets_for_upstream_key(db_session, selected)
+    assert target_rows
+    upstream = target_rows[0][1]
+    for target, _row in target_rows:
+        target.enabled = True
+        target.lifecycle_status = "active"
+    caps = dict(upstream.capabilities or {})
+    for key in ("probed_at", "coherence_passed", "evidence_tier"):
+        caps.pop(key, None)
+    upstream.capabilities = caps
+
+    # Catalog presence marks the pair available without any exact probe — the
+    # discovery path does this for every cataloged model.
+    access = (
+        await CredentialModelAccessService(db_session).list_access(
+            credential_id=cred.id, upstream_model_id=upstream.id,
+        )
+    )
+    if access:
+        access[0].status = "available"
+    else:
+        db_session.add(CredentialModelAccess(
+            credential_id=cred.id,
+            upstream_model_id=upstream.id,
+            status="available",
+            created_at=datetime.now(UTC),
+        ))
+    await db_session.commit()
+
+    adapter = _ExactProbeAdapter("ok")
+    _patch_worker_db(monkeypatch, db_session)
+    with patch.object(pw, "get_adapter", return_value=adapter):
+        await pw.ProbeWorker._probe_role_model_candidates()
+
+    probed_models = [call["model"] for call in adapter.calls]
+    assert selected in probed_models
+
+
 async def test_sibling_probe_activates_second_key_and_prevents_single_key_demotion(
     db_session, monkeypatch,
 ) -> None:
