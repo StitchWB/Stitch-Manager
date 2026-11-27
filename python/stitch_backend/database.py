@@ -138,7 +138,7 @@ def get_read_session_factory() -> async_sessionmaker[AsyncSession]:
     return _read_session_factory
 
 
-# ── Cancellation-safe session close ──────────────────────────────────────────
+# ── Cancellation-safe session lifecycle ──────────────────────────────────────
 #
 # Root cause this guards against: starlette's BaseHTTPMiddleware tears down
 # streaming requests by cancelling the endpoint task when the client
@@ -153,20 +153,129 @@ def get_read_session_factory() -> async_sessionmaker[AsyncSession]:
 # no cancellation-safe teardown path), so the application must never let
 # request cancellation reach connection checkin/termination.
 #
-# The close therefore runs in a fresh asyncio task that nothing cancels.
+# Commit and rollback are part of the same hazard: SQLAlchemy's transaction
+# close returns/autoclose the connection before the ``await`` resolves.  They
+# therefore use the same uncancellable-task pattern as close.  A per-session
+# chain additionally guarantees that close cannot overlap an earlier commit
+# or rollback whose SQL phase finished but whose pool checkin is still in
+# flight when the request task is cancelled.
+#
+# Each lifecycle step runs in a fresh asyncio task that nothing cancels.
 # Callers that are NOT being cancelled await it inline (identical ordering
 # to the previous ``async with`` semantics); callers that ARE cancelled stop
-# waiting immediately, while the close itself — including pool reset and any
+# waiting immediately, while the step itself — including pool reset and any
 # connection termination — always runs to completion.
 
 _close_tasks: set[asyncio.Task[None]] = set()
+_lifecycle_tasks: set[asyncio.Task[None]] = set()
+_session_tails: dict[object, asyncio.Task[None]] = {}
+
+
+async def _run_lifecycle_step(
+    previous: asyncio.Task[None] | None,
+    step: Callable[[], Coroutine[Any, Any, None]],
+) -> None:
+    """Run *step* after the previous lifecycle step for the same session.
+
+    A failed commit/rollback must not prevent the following close from
+    releasing whatever state the session still owns, hence ``gather`` with
+    ``return_exceptions`` rather than a plain ``await`` of the predecessor.
+    The predecessor's own awaiter (or detached-task logging below) remains
+    responsible for observing that original failure.
+    """
+    if previous is not None:
+        await asyncio.gather(previous, return_exceptions=True)
+    await step()
+
+
+def _log_detached_failure(task: asyncio.Task[None]) -> None:
+    """Log a failure no caller can observe, exactly once."""
+    if task.cancelled() or not getattr(task, "_stitch_detached", False):
+        return
+    if getattr(task, "_stitch_failure_logged", False):
+        return
+    exc = task.exception()
+    if exc is None:
+        return
+    task._stitch_failure_logged = True  # type: ignore[attr-defined]
+    operation = getattr(task, "_stitch_operation", "lifecycle step")
+    logger.warning(
+        "Detached database session %s failed: %s",
+        operation,
+        exc,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+
+
+def _lifecycle_task_done(session: AsyncSession, task: asyncio.Task[None]) -> None:
+    """Untrack a finished lifecycle task and consume otherwise-hidden failures."""
+    _lifecycle_tasks.discard(task)
+    _close_tasks.discard(task)
+    if _session_tails.get(session) is task:
+        del _session_tails[session]
+
+    if task.cancelled():
+        return
+    # Retrieve in every case — even when an inline caller is about to raise the
+    # same exception — so the loop never emits "exception was never retrieved".
+    task.exception()
+    _log_detached_failure(task)
+
+
+def _schedule_lifecycle_step(
+    session: AsyncSession,
+    step: Callable[[], Coroutine[Any, Any, None]],
+    operation: str,
+) -> asyncio.Task[None]:
+    """Schedule *step* as the next uncancellable lifecycle step for *session*."""
+    previous = _session_tails.get(session)
+    task = asyncio.create_task(
+        _run_lifecycle_step(previous, step),
+        name=f"stitch-db-session-{operation}",
+    )
+    task._stitch_detached = False  # type: ignore[attr-defined]
+    task._stitch_failure_logged = False  # type: ignore[attr-defined]
+    task._stitch_operation = operation  # type: ignore[attr-defined]
+    _session_tails[session] = task
+    _lifecycle_tasks.add(task)
+    if operation == "close":
+        _close_tasks.add(task)
+
+    def _on_done(done: asyncio.Task[None]) -> None:
+        _lifecycle_task_done(session, done)
+
+    task.add_done_callback(_on_done)
+    return task
+
+
+async def _await_lifecycle_task(task: asyncio.Task[None]) -> None:
+    """Await a lifecycle task without letting caller cancellation reach it."""
+    current = asyncio.current_task()
+    if current is not None and current.cancelling() > 0:
+        # Cancellation was already delivered earlier in this task (for example
+        # inside commit) and cleanup is now running from ``finally``.  Do not
+        # make the dying caller wait a second time: detach immediately while
+        # the just-scheduled lifecycle step finishes in the background.
+        task._stitch_detached = True  # type: ignore[attr-defined]
+        if task.done():
+            _log_detached_failure(task)
+        raise asyncio.CancelledError
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # The caller is going away.  Mark the still-running task so its
+        # otherwise-unobserved failure is logged (and retrieved) when it ends.
+        task._stitch_detached = True  # type: ignore[attr-defined]
+        if task.done():
+            _log_detached_failure(task)
+        raise
 
 
 async def _close_session_impl(session: AsyncSession) -> None:
-    try:
-        await session.close()
-    except Exception:  # noqa: BLE001 — close must never kill the cleanup task
-        logger.warning("Error closing session", exc_info=True)
+    # No broad catch here: callers that are still alive must learn that pool
+    # checkin/reset failed.  Detached callers get done-callback logging in
+    # ``_lifecycle_task_done`` instead.
+    await session.close()
 
 
 async def close_session_shielded(session: AsyncSession) -> None:
@@ -176,22 +285,46 @@ async def close_session_shielded(session: AsyncSession) -> None:
     caller is already inside a cancelled scope) and then awaited through
     ``asyncio.shield``.  If cancellation arrives while waiting, it is
     re-raised — the close continues in the tracked background task instead
-    of being torn down mid-flight inside SQLAlchemy's greenlet bridge.
+    of being torn down mid-flight inside SQLAlchemy's greenlet bridge.  The
+    close is also chained behind any shielded commit/rollback already running
+    for this session, so connection checkin cannot overlap itself.
     """
-    task = asyncio.create_task(
-        _close_session_impl(session), name="stitch-db-session-close"
+    task = _schedule_lifecycle_step(
+        session, lambda: _close_session_impl(session), "close"
     )
-    _close_tasks.add(task)
-    task.add_done_callback(_close_tasks.discard)
-    try:
-        await asyncio.shield(task)
-    except asyncio.CancelledError:
-        raise
+    await _await_lifecycle_task(task)
+
+
+async def _commit_session_shielded(session: AsyncSession) -> None:
+    """Commit through the same uncancellable, per-session lifecycle chain."""
+    task = _schedule_lifecycle_step(session, session.commit, "commit")
+    await _await_lifecycle_task(task)
+
+
+async def _rollback_session_shielded(session: AsyncSession) -> None:
+    """Rollback through the same uncancellable, per-session lifecycle chain."""
+    task = _schedule_lifecycle_step(session, session.rollback, "rollback")
+    await _await_lifecycle_task(task)
 
 
 def pending_close_tasks() -> frozenset[asyncio.Task[None]]:
     """Snapshot of in-flight shielded closes (tests/diagnostics)."""
     return frozenset(_close_tasks)
+
+
+async def drain_session_lifecycle_tasks() -> None:
+    """Wait for all tracked session lifecycle tasks, including late arrivals.
+
+    Shutdown can itself cancel request/owner tasks; those cancellations spawn
+    shielded closes while an earlier drain iteration is already waiting.  Loop
+    until the tracking set is empty instead of draining only one snapshot.
+    """
+    while _lifecycle_tasks:
+        tasks = tuple(_lifecycle_tasks)
+        await asyncio.gather(*tasks, return_exceptions=True)
+        # Done callbacks are scheduled separately; give them one loop turn to
+        # untrack completed tasks before deciding whether another wave exists.
+        await asyncio.sleep(0)
 
 
 # ── FastAPI dependency ────────────────────────────────────────────────────────
@@ -209,9 +342,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     try:
         try:
             yield session
-            await session.commit()
+            await _commit_session_shielded(session)
         except Exception:
-            await session.rollback()
+            await _rollback_session_shielded(session)
             raise
     finally:
         await close_session_shielded(session)
@@ -249,7 +382,7 @@ async def run_in_session(
         try:
             try:
                 result = await fn(session)
-                await session.commit()
+                await _commit_session_shielded(session)
 
                 # Monitoring: log slow operations (throttled to once per 60s)
                 elapsed = _time.monotonic() - start
@@ -541,14 +674,26 @@ def _constant_default_sql(column: Any) -> str | None:
 # ── Teardown ──────────────────────────────────────────────────────────────────
 
 async def dispose_engine() -> None:
-    """Dispose the write/read engines and close all pooled connections."""
+    """Drain checked-out session cleanup, then dispose the write/read engines.
+
+    ``AsyncEngine.dispose()`` closes only idle pooled connections; it does not
+    own connections still checked out by shielded lifecycle tasks.  Those
+    tasks must finish first, or a background checkin can race disposal and be
+    cancelled/GC'd when the loop tears down.
+    """
     global _write_engine, _read_engine  # noqa: PLW0603
     global _write_session_factory, _read_session_factory  # noqa: PLW0603
+    await drain_session_lifecycle_tasks()
     if _write_engine is not None:
         await _write_engine.dispose()
         _write_engine = None
         _write_session_factory = None
+        # Disposal awaits pool work and can yield; cancellation of an owner in
+        # that window may have spawned another shielded close.  Never let the
+        # next engine (or the return from lifespan teardown) race it.
+        await drain_session_lifecycle_tasks()
     if _read_engine is not None:
         await _read_engine.dispose()
         _read_engine = None
         _read_session_factory = None
+        await drain_session_lifecycle_tasks()
