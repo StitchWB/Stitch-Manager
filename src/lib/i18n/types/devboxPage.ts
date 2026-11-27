@@ -13,8 +13,6 @@ export interface DevboxPageTranslations {
     toastCockpitOpen: string;
     projectAddOption: string;
     projectManageOption: string;
-    switchProfileConfirmTitle: string;
-    switchProfileConfirmMessage: string;
     dangerZone: string;
     stackOk: string;
     stackDegraded: string;

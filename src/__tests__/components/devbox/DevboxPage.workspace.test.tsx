@@ -323,14 +323,14 @@ describe('Devbox page header control bar', () => {
     });
   });
 
-  it('has no separate switch button — the select itself is confirm-gated', async () => {
+  it('has no separate switch button — the select itself switches', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
 
     expect(screen.queryByTestId('devbox-profile-switch')).toBeNull();
   });
 
-  it('select change asks for confirmation and fires profile_use on accept', async () => {
+  it('select change fires profile_use without a confirmation dialog', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
@@ -338,17 +338,17 @@ describe('Devbox page header control bar', () => {
 
     fireEvent.change(select, { target: { value: 'example-simple' } });
 
-    await waitFor(() => {
-      expect(askConfirmMock).toHaveBeenCalledTimes(1);
-    });
-    expect(askConfirmMock.mock.calls[0][0].title).toContain('example-simple');
     await waitFor(() => {
       expect(devboxCallArgs(invokeMock, 'profile_use')).toEqual([{ name: 'example-simple' }]);
     });
+    expect(askConfirmMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(select.value).toBe('example-simple');
+    });
   });
 
-  it('select change reverts without firing profile_use on cancel', async () => {
-    askConfirmMock.mockResolvedValueOnce(false);
+  it('select change reverts to the active profile when profile_use is rejected', async () => {
+    mockRoutes({ profile_use: { accepted: false, reason: 'profile busy' } });
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     const select = screen.getByTestId('devbox-profile-select') as HTMLSelectElement;
@@ -357,15 +357,14 @@ describe('Devbox page header control bar', () => {
     fireEvent.change(select, { target: { value: 'example-simple' } });
 
     await waitFor(() => {
-      expect(askConfirmMock).toHaveBeenCalledTimes(1);
+      expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(1);
     });
     await waitFor(() => {
       expect(select.value).toBe('midsai');
     });
-    expect(devboxCalls(invokeMock, 'profile_use')).toHaveLength(0);
   });
 
-  it('selecting the already active profile does not ask for confirmation', async () => {
+  it('selecting the already active profile is a no-op', async () => {
     render(<DevboxPage />);
     await screen.findByTestId('devbox-stack-badge');
     await profileOptionsLoaded(

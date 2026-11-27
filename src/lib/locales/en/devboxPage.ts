@@ -15,8 +15,6 @@ export const devboxPage: DevboxPageTranslations = {
     toastCockpitOpen: "Open",
     projectAddOption: "+ New project",
     projectManageOption: "Project settings",
-    switchProfileConfirmTitle: "Switch project to {name}?",
-    switchProfileConfirmMessage: "The stack will use this project's folder and agent permissions.",
     dangerZone: "Danger zone",
     stackOk: "Stack: OK",
     stackDegraded: "Stack: degraded",
