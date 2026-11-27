@@ -132,7 +132,7 @@ export function DevboxPage() {
   const onAction = useCallback(
     (action: Promise<DevboxAccepted>) => {
       setPending(true);
-      void runDevboxAction(action, () => {
+      return runDevboxAction(action, () => {
         reloadProfiles();
         reloadPoll();
         setPromptTick(x => x + 1);
@@ -225,7 +225,7 @@ export function DevboxPage() {
   const [mounted, setMounted] = useState<Record<DevboxTab, boolean>>(INITIAL_MOUNTED);
   const [addSignal, setAddSignal] = useState(0);
   const [seedSignal, setSeedSignal] = useState(0);
-  const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
+  const [pendingProfile, setPendingProfile] = useState<string | null>(null);
 
   const openTab = useCallback((next: DevboxTab) => {
     setTab(next);
@@ -274,24 +274,37 @@ export function DevboxPage() {
 
   const onProfileSelect = useCallback(
     (value: string) => {
-      if (value === activeProfile) {
-        setSelectedProfile(null);
-        return;
-      }
-      setSelectedProfile(value);
-      void askConfirm({
-        title: t('devboxPage.switchProfileConfirmTitle', { name: value }),
-        message: t('devboxPage.switchProfileConfirmMessage'),
-        confirmText: t('common.confirm'),
-        cancelText: t('common.cancel'),
-        variant: 'warning',
-      }).then(confirmed => {
-        setSelectedProfile(null);
-        if (confirmed) onAction(devboxProfileUse(value));
+      if (value === activeProfile) return;
+      // селект показывает цель сразу — иначе «откат» читается как «не сменилось»
+      setPendingProfile(value);
+      void onAction(devboxProfileUse(value)).then(accepted => {
+        if (!accepted) setPendingProfile(null);
       });
     },
     [activeProfile, onAction],
   );
+
+  useEffect(() => {
+    if (pendingProfile !== null && activeProfile === pendingProfile) {
+      setPendingProfile(null);
+    }
+  }, [activeProfile, pendingProfile]);
+
+  const lastProfileUseId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const rows = status?.recent ?? [];
+    const done = [...rows]
+      .reverse()
+      .find(row => row.cmd === 'profile_use' && devboxActionFinished(row));
+    if (!done) return;
+    if (lastProfileUseId.current === undefined) {
+      lastProfileUseId.current = done.id;
+      return;
+    }
+    if (lastProfileUseId.current === done.id) return;
+    lastProfileUseId.current = done.id;
+    if (done.exit !== 0) setPendingProfile(null);
+  }, [status]);
 
   const openProjects = useCallback(() => {
     setAddSignal(0);
@@ -337,7 +350,7 @@ export function DevboxPage() {
         containerClassName="w-24 sm:w-56"
         options={projectOptions}
         placeholder={activeProfile ? undefined : t('devboxPage.profileSelectEmpty')}
-        value={selectedProfile ?? activeProfile}
+        value={pendingProfile ?? activeProfile}
         data-testid="devbox-profile-select"
         onValueChange={onProjectSelect}
       />

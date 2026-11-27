@@ -10,7 +10,6 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { IconButton } from '@/components/ui/IconButton';
 import { KeyValueList, type KeyValueRow } from '@/components/ui/KeyValueList';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { askConfirm } from '@/components/ui/ConfirmDialogHost';
 import { appToast } from '@/lib/observability/toast';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -336,17 +335,7 @@ export function DevboxProjects({
                     disabled={busy || row.active}
                     data-testid={`devbox-profile-use-${row.name}`}
                     title={t('devboxPage.tipUse')}
-                    onClick={() =>
-                      void askConfirm({
-                        title: t('devboxPage.switchProfileConfirmTitle', { name: row.name }),
-                        message: t('devboxPage.switchProfileConfirmMessage'),
-                        confirmText: t('common.confirm'),
-                        cancelText: t('common.cancel'),
-                        variant: 'warning',
-                      }).then(confirmed => {
-                        if (confirmed) onAction(devboxProfileUse(row.name));
-                      })
-                    }
+                    onClick={() => onAction(devboxProfileUse(row.name))}
                   >
                     {t('devboxPage.controlUse')}
                   </Button>
