@@ -13,7 +13,7 @@ import sys
 from typing import Any
 
 from stitch_backend.core.event_bus import event_bus
-from stitch_backend.database import get_session_factory, run_in_session
+from stitch_backend.database import get_db, run_in_session
 from stitch_backend.domains.scheduler.service import (
     ScheduledTask,
     complete_execution,
@@ -106,8 +106,9 @@ class SchedulerWorker:
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     async def _tick(self) -> None:
-        factory = get_session_factory()
-        async with factory() as session:
+        # Shielded lifecycle: the worker task is cancelled on shutdown, so the
+        # session must never see cancellation reach checkin/termination.
+        async with get_db() as session:
             pending = await get_pending_tasks(session)
 
         results: list[tuple[ScheduledTask, str | None, str | None]] = []

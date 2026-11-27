@@ -60,10 +60,10 @@ async def get_status() -> StatusResponse:
             enforce_login=True,
             tg_auth_mode=settings.tg_auth_mode,
         )
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
 
-    factory = get_session_factory()
-    async with factory() as db:
+    # Shielded lifecycle (read-only; the exit commit is a no-op).
+    async with get_db() as db:
         count = await auth_service.count_users(db)
         enforce_login = await auth_service.get_enforce_login(db)
     has_users = count > 0

@@ -52,11 +52,11 @@ async def bootstrap(*, log_to_stderr: bool = False) -> None:
     await create_all_tables()
 
     # Scheduler tables (raw SQL, not ORM models)
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
     from stitch_backend.domains.scheduler.service import ensure_tables as _sched_tables
 
-    factory = get_session_factory()
-    async with factory() as _db:
+    # Startup-only, but uniform shielded lifecycle (ensure_tables commits internally).
+    async with get_db() as _db:
         await _sched_tables(_db)
 
     # ── SPI built-ins ────────────────────────────────────────────────────────
@@ -92,15 +92,15 @@ async def bootstrap(*, log_to_stderr: bool = False) -> None:
 
     # ── iCloud pool ──────────────────────────────────────────────────────────
     try:
-        from stitch_backend.database import get_session_factory as _gsf
+        from stitch_backend.database import get_db as _get_db
         from stitch_backend.domains.icloud_email_pool.service import get_icloud_pool_service
 
         icloud_svc = get_icloud_pool_service()
         icloud_svc.register_bridge()
 
         async def _load_icloud_settings() -> None:
-            factory = _gsf()
-            async with factory() as _db:
+            # Startup-only read, but uniform shielded lifecycle (exit commit is a no-op).
+            async with _get_db() as _db:
                 from stitch_backend.domains.settings.service import SettingsService
 
                 _settings = await SettingsService(_db).get_all()

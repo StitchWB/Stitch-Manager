@@ -107,7 +107,7 @@ def cmd_create_admin(
     import os
 
     from stitch_backend.config import get_settings
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
     from stitch_backend.domains.auth.service import create_user
 
     settings = get_settings()
@@ -121,11 +121,12 @@ def cmd_create_admin(
         raise typer.Exit(1)
 
     async def _create() -> None:
-        factory = get_session_factory()
-        async with factory() as db:
+        # Shielded lifecycle: get_db auto-commits on success; the success line
+        # prints only after the commit has landed.
+        async with get_db() as db:
             user = await create_user(db, username=username, password=resolved_password, role="admin")
-            await db.commit()
-            print(json.dumps({"id": user.id, "username": user.username, "role": user.role}))
+            created = {"id": user.id, "username": user.username, "role": user.role}
+        print(json.dumps(created))
 
     try:
         asyncio.run(_create())

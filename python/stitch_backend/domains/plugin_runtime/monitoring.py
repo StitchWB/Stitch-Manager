@@ -109,11 +109,11 @@ async def _notify_crash_loop(plugin_id: str, restarts: int) -> None:
     try:
         from sqlalchemy import select
 
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.auth.models import User
 
-        factory = get_session_factory()
-        async with factory() as db:
+        # Shielded lifecycle (read-only lookup; the exit commit is a no-op).
+        async with get_db() as db:
             result = await db.execute(
                 select(User.telegram_id).where(
                     User.role == "admin",

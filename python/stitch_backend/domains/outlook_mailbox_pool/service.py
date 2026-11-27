@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from sqlalchemy import select, update
 
-from stitch_backend.database import get_session_factory
+from stitch_backend.database import run_in_session
 from stitch_backend.domains.accounts.models import Account
 
 if TYPE_CHECKING:
@@ -112,49 +112,48 @@ class OutlookMailboxPoolService:
             return None
 
     async def _claim_next_async(self) -> dict[str, Any] | None:
-        factory = get_session_factory()
-        async with factory() as session:
-            try:
-                candidates = await session.execute(
-                    select(Account.id, Account.tags)
-                    .where(Account.provider == PROVIDER_ID, Account.status == "active")
-                    .order_by(Account.created_at.asc())
-                    .limit(_CANDIDATE_LIMIT)
-                )
-                target_id = next(
-                    (row.id for row in candidates if CONSUMED_TAG not in (row.tags or [])),
-                    None,
-                )
-                if target_id is None:
-                    return None
+        # Shielded lifecycle: commit/rollback/close run through run_in_session's
+        # cancellation-safe chain (no raw session.commit/rollback here).
+        async def _op(session):
+            candidates = await session.execute(
+                select(Account.id, Account.tags)
+                .where(Account.provider == PROVIDER_ID, Account.status == "active")
+                .order_by(Account.created_at.asc())
+                .limit(_CANDIDATE_LIMIT)
+            )
+            target_id = next(
+                (row.id for row in candidates if CONSUMED_TAG not in (row.tags or [])),
+                None,
+            )
+            if target_id is None:
+                return None
 
-                result = await session.execute(
-                    select(Account).where(Account.id == target_id).with_for_update(skip_locked=True)
-                )
-                account = result.scalar_one_or_none()
-                if account is None or CONSUMED_TAG in (account.tags or []):
-                    return None
+            result = await session.execute(
+                select(Account).where(Account.id == target_id).with_for_update(skip_locked=True)
+            )
+            account = result.scalar_one_or_none()
+            if account is None or CONSUMED_TAG in (account.tags or []):
+                return None
 
-                account.tags = [*(account.tags or []), CONSUMED_TAG]
-                await session.commit()
+            account.tags = [*(account.tags or []), CONSUMED_TAG]
 
-                return {
-                    "id": account.id,
-                    "email": account.email,
-                    "password": account.password,
-                    "refresh_token": (account.token or account.api_key or account.refresh_token),
-                    "token_data": account.provider_metadata or {},
-                }
-            except Exception:
-                await session.rollback()
-                raise
+            return {
+                "id": account.id,
+                "email": account.email,
+                "password": account.password,
+                "refresh_token": (account.token or account.api_key or account.refresh_token),
+                "token_data": account.provider_metadata or {},
+            }
+
+        return await run_in_session(_op)
 
     async def mark_unusable_async(self, account_id: str, error: str) -> None:
-        factory = get_session_factory()
-        async with factory() as session:
+        # Shielded lifecycle — see _claim_next_async.
+        async def _op(session):
             await session.execute(
                 update(Account)
                 .where(Account.id == account_id)
                 .values(status="expired", last_error=error[:500])
             )
-            await session.commit()
+
+        await run_in_session(_op)

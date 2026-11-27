@@ -13,7 +13,7 @@ running) is not touched — this is a separate ephemeral Bot instance
 sharing the same token.
 
 P2.15 rationale — separate-session: ``notify_group_invite`` opens its
-own short-lived DB session via ``get_session_factory()`` rather than
+own short-lived DB session via ``get_db()`` rather than
 accepting a session parameter.  This is deliberate: the caller (group
 invite command) is already inside a ``run_in_session`` write session
 (pool_size=1, max_overflow=0).  Passing that session in would either
@@ -47,11 +47,11 @@ async def notify_group_invite(
     try:
         from sqlalchemy import select
 
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.auth.models import User
 
-        factory = get_session_factory()
-        async with factory() as db:
+        # Shielded lifecycle (read-only lookup; the exit commit is a no-op).
+        async with get_db() as db:
             result = await db.execute(
                 select(User).where(User.username == invitee_username)
             )

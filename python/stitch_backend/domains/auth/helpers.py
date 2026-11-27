@@ -112,10 +112,12 @@ async def _current_user_optional(
     if not raw_token:
         return None, None, ""
 
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
 
-    factory = get_session_factory()
-    async with factory() as db:
+    # Shielded lifecycle: request-path session — get_db auto-commits the
+    # preview-role clear (when any) and closes through the cancellation-safe
+    # chain, so client disconnects can never reach checkin/termination.
+    async with get_db() as db:
         user, preview_role = await auth_service.resolve_session_with_preview(
             db, raw_token
         )
@@ -126,7 +128,6 @@ async def _current_user_optional(
             and user.role != "admin"
         ):
             await auth_service.set_session_preview_role(db, raw_token, None)
-            await db.commit()
             preview_role = None
         # Detach so the caller can read attributes after the session closes.
         if user is not None:

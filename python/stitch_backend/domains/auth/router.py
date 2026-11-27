@@ -109,10 +109,10 @@ async def _login_required_by_policy() -> bool:
     ``has_users AND enforce_login`` — a device with users can opt out of
     mandatory login when an admin has set ``enforce_login=False``.
     """
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
 
-    factory = get_session_factory()
-    async with factory() as db:
+    # Shielded lifecycle (read-only; the exit commit is a no-op).
+    async with get_db() as db:
         count = await auth_service.count_users(db)
         enforce_login = await auth_service.get_enforce_login(db)
     return count > 0 and enforce_login
