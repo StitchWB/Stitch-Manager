@@ -133,6 +133,14 @@ _PROBE_WORKER_STARTED_AT = _utcnow()
 ROLE_PROBE_BUDGET_SECONDS = 8.0
 ROLE_PROBE_BACKOFF_BASE_SECONDS = 300
 ROLE_PROBE_BACKOFF_CAP_SECONDS = 3600
+# Active serving members are the priority class, but strict priority is not a
+# liveness proof.  After this many consecutive active-priority evidence picks
+# while inventory is also pending, one trickle slot is reserved for inventory.
+# With the normal one-candidate steady-state budget this makes the invariant
+# concrete: inventory evidence probing is selected at least once every four
+# candidate-issuing passes regardless of active-class occupancy, while the
+# common case (a small active class that drains or backs off) remains active-first.
+ROLE_PROBE_ACTIVE_PRIORITY_MAX_CONSECUTIVE = 3
 # 64 tokens, not fewer: reasoning models burn tokens before the final answer
 # and truncate with EMPTY content at tiny budgets (observed failure mode:
 # finish_reason=length with empty content at max_tokens=10), which would
@@ -270,12 +278,18 @@ _role_probe_endpoint_backoff: dict[str, tuple[datetime, int]] = {}
 # catalog bodies are endpoint evidence, not key blame, but leaving ``unknown``
 # credentials due every pass would multiply upstream load.
 _catalog_probe_endpoint_backoff: dict[str, tuple[datetime, int]] = {}
+# Per-endpoint count of consecutive active-priority candidate-evidence picks
+# while inventory was also pending.  This is worker-local liveness bookkeeping
+# only: it never affects routing, health, or evidence, and it resets as soon
+# as inventory receives a trickle slot.
+_role_probe_active_priority_streaks: dict[str, int] = {}
 
 
 def _reset_role_probe_backoff() -> None:
-    """Clear in-memory endpoint probe backoff. Intended for tests."""
+    """Clear in-memory probe backoff/liveness state. Intended for tests."""
     _role_probe_endpoint_backoff.clear()
     _catalog_probe_endpoint_backoff.clear()
+    _role_probe_active_priority_streaks.clear()
 
 
 class ProbeWorker:
@@ -1008,20 +1022,74 @@ class ProbeWorker:
                     endpoint,
                     upstream,
                 )
-            # Active serving members form a strict priority class inside the
+            # Active serving members form the priority class inside the
             # evidence trickle: evidence about what user traffic is using is
             # more operationally important than evidence about never-used
             # inventory.  This only reorders the existing per-endpoint budget —
-            # it does not increase probe rate.  Priority-first is sound because
-            # successful/model-scoped probes write evidence and drain the class
-            # (positive evidence permanently, negative evidence until the normal
-            # readmission window); backed-off active rows fail pair selection and
-            # therefore cannot block inventory.  Last-attempt ordering remains
-            # the round-robin cursor within each class.
+            # it does not increase probe rate.  Priority-first is sound for the
+            # common case because successful/model-scoped probes write evidence
+            # and drain the class, while backed-off active rows fail pair
+            # selection.  Pathological occupancy is different: a large active
+            # class whose members keep timing out can re-enter exactly as their
+            # backoffs expire.  Cap consecutive active-priority picks and
+            # reserve every fourth steady-state trickle slot for pending
+            # inventory, preserving active-first ordering in the common case
+            # while guaranteeing inventory progress under chronic active-class
+            # failure.  Last-attempt ordering remains the round-robin cursor
+            # within each class.
+            active_pending_by_endpoint: dict[str, bool] = {}
+            inventory_pending_by_endpoint: dict[str, bool] = {}
+            for upstream, endpoint in candidate_source_rows:
+                if upstream.id in active_upstreams:
+                    active_pending_by_endpoint[endpoint.id] = True
+                else:
+                    inventory_pending_by_endpoint[endpoint.id] = True
+
+            def _inventory_reserved(endpoint_id: str) -> bool:
+                return (
+                    active_pending_by_endpoint.get(endpoint_id, False)
+                    and inventory_pending_by_endpoint.get(endpoint_id, False)
+                    and _role_probe_active_priority_streaks.get(endpoint_id, 0)
+                    >= ROLE_PROBE_ACTIVE_PRIORITY_MAX_CONSECUTIVE
+                )
+
+            def _rotation_order_key(upstream: UpstreamModel) -> tuple[datetime, int, str]:
+                return (
+                    rotation_last_attempts[upstream.id],
+                    _name_queue_prior(upstream.upstream_model_id),
+                    upstream.upstream_model_id,
+                )
+
+            # In a rotation burst the reservation is still one slot, not a
+            # burst-wide inversion: only the first due inventory row jumps the
+            # active class; the rest of inventory remains behind active members.
+            reserved_inventory_ids: set[str] = set()
+            endpoint_items: dict[str, list[tuple[UpstreamModel, ProviderEndpoint]]] = {}
+            for item in candidate_source_rows:
+                endpoint_items.setdefault(item[1].id, []).append(item)
+            for endpoint_id, items in endpoint_items.items():
+                if not _inventory_reserved(endpoint_id):
+                    continue
+                inventory_items = [
+                    item for item in items if item[0].id not in active_upstreams
+                ]
+                if inventory_items:
+                    reserved_inventory_ids.add(
+                        min(inventory_items, key=lambda item: _rotation_order_key(item[0]))[0].id,
+                    )
+
+            def _priority_class(item: tuple[UpstreamModel, ProviderEndpoint]) -> int:
+                is_active = item[0].id in active_upstreams
+                if _inventory_reserved(item[1].id):
+                    if not is_active and item[0].id in reserved_inventory_ids:
+                        return 0
+                    return 1 if is_active else 2
+                return 0 if is_active else 1
+
             candidate_rows = sorted(
                 candidate_source_rows,
                 key=lambda item: (
-                    0 if item[0].id in active_upstreams else 1,
+                    _priority_class(item),
                     rotation_last_attempts[item[0].id],
                     _name_queue_prior(item[0].upstream_model_id),
                     item[0].upstream_model_id,
@@ -1049,6 +1117,16 @@ class ProbeWorker:
                     continue
                 chosen["probe_kind"] = "candidate_evidence"
                 chosen["evidence_probe"] = True
+                if upstream.id in active_upstreams:
+                    # The starvation clock starts only when both classes are
+                    # present.  Active-only probing does not burn the inventory
+                    # guarantee for a catalog row that does not exist yet.
+                    if inventory_pending_by_endpoint.get(endpoint.id, False):
+                        _role_probe_active_priority_streaks[endpoint.id] = (
+                            _role_probe_active_priority_streaks.get(endpoint.id, 0) + 1
+                        )
+                else:
+                    _role_probe_active_priority_streaks[endpoint.id] = 0
                 candidate_counts[endpoint.id] = candidate_counts.get(endpoint.id, 0) + 1
                 probed_upstreams.add(upstream.id)
                 picked.append(chosen)
@@ -1432,7 +1510,12 @@ class ProbeWorker:
             classified, "is_model_specific", False,
         ):
             # Key/account evidence is the credential state machine's business,
-            # not the model's.  Nothing is written for the pair.
+            # not the model's: no upstream evidence, access status, or error
+            # blame is written here.  The exact pair still needs weak attempt
+            # bookkeeping (updated_at plus the ordinary non-terminal probe
+            # backoff) so one persistently misclassified member cannot re-enter
+            # at the front of the deterministic evidence queue every pass.
+            await cls._backoff_pair(session, result, record_timeout_evidence=False)
             return
 
         await service.apply_model_probe_result(
@@ -1461,9 +1544,9 @@ class ProbeWorker:
         """Increment probe backoff for one exact pair without health blame.
 
         Timeout probes additionally leave latency/timeout observations on the
-        upstream.  Endpoint-scoped failures set ``record_timeout_evidence`` to
-        false: their pair backoff is queue-rotation state only and must not
-        masquerade as model evidence.
+        upstream.  Endpoint- and key/account-scoped failures set
+        ``record_timeout_evidence`` to false: their pair backoff is
+        queue-rotation state only and must not masquerade as model evidence.
         """
         now = _utcnow()
         access = (
