@@ -12,11 +12,12 @@ SQLAlchemy's greenlet bridge:
 * ``Task was destroyed but it is pending`` for the orphaned
   ``_terminate_graceful_close`` coroutine.
 
-The fix under test: session commit/rollback/close run in tracked,
-never-cancelled tasks (``close_session_shielded`` and its lifecycle chain), so
-connection checkin/termination always runs to completion even when the
-request task is cancelled mid-stream.  Engine disposal drains those tasks
-before pooled connections are torn down.
+The fix under test has two halves: session commit/rollback/close run in
+tracked, never-cancelled tasks (``close_session_shielded`` and its lifecycle
+chain), and SQLAlchemy >=2.0.58 carries upstream pool fix #13772 so a
+cancellation that still lands inside invalidation/terminate force-closes and
+discards the connection without losing the pool slot.  Engine disposal drains
+those tasks before pooled connections are torn down.
 """
 
 from __future__ import annotations
@@ -24,7 +25,11 @@ from __future__ import annotations
 import asyncio
 import gc
 import logging
+import time
+from types import SimpleNamespace
 
+import aiosqlite
+import anyio
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -443,6 +448,181 @@ async def test_streaming_disconnect_simulation(db_factory, caplog):
     assert not _db_noise(caplog), f"cancellation noise in logs: {_db_noise(caplog)}"
     leaked = len(asyncio.all_tasks()) - baseline_tasks
     assert leaked <= 0, f"leaked asyncio tasks after disconnect: {leaked}"
+
+# -- Regression: cancellation before the shielded lifecycle boundary ----------
+
+
+async def test_anyio_cancel_during_write_does_not_exhaust_pool(
+    tmp_path, monkeypatch, caplog
+):
+    """The live cascade shape, compressed from 30s pool timeouts to 0.2s.
+
+    Starlette/uvicorn run streaming responses inside AnyIO cancel scopes. AnyIO
+    re-delivers cancellation at every checkpoint until the cancelled task leaves
+    the scope. When that cancellation lands inside the write itself (before
+    ``run_in_session`` reaches its shielded commit/close boundary), SQLAlchemy
+    invalidates the connection immediately and pool termination still happens
+    on the repeatedly-cancelled task. SQLAlchemy 2.0.52 loses the pool slot in
+    exactly that window; the fixed 2.0.x pool (upstream #13772) force-closes and
+    discards the connection but returns the slot, so subsequent writes do not serialize into
+    pool timeouts.
+    """
+    db_path = tmp_path / "cancel-cascade.db"
+    loop = asyncio.get_running_loop()
+    execute_started = asyncio.Event()
+
+    def stitch_sleep(seconds: float) -> float:
+        # SQLite UDFs run on aiosqlite's worker thread. Blocking there keeps
+        # the driver's graceful close queued long enough for AnyIO's repeated
+        # cancellation to hit pool termination deterministically.
+        loop.call_soon_threadsafe(execute_started.set)
+        time.sleep(seconds)
+        return seconds
+
+    async def connect() -> aiosqlite.Connection:
+        connection = aiosqlite.connect(str(db_path), check_same_thread=False)
+        # SQLAlchemy daemonizes the worker thread only for its own default
+        # creator; with async_creator that ownership remains with the creator.
+        worker_thread = getattr(connection, "_thread", connection)
+        worker_thread.daemon = True
+        await connection
+        await connection.create_function("stitch_sleep", 1, stitch_sleep)
+        return connection
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_path.as_posix()}",
+        async_creator=connect,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=0.2,
+        pool_pre_ping=True,
+    )
+    factory = async_sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
+    monkeypatch.setattr(database, "get_session_factory", lambda: factory)
+
+    async with engine.begin() as conn:
+        await conn.exec_driver_sql("CREATE TABLE items (id INTEGER PRIMARY KEY, v TEXT)")
+
+    async def victim_write(session):
+        await session.execute(
+            text("INSERT INTO items (v) SELECT CAST(stitch_sleep(0.25) AS TEXT)")
+        )
+
+    with caplog.at_level(logging.DEBUG):
+        async with anyio.create_task_group() as task_group:
+            task_group.start_soon(run_in_session, victim_write)
+            await asyncio.wait_for(execute_started.wait(), timeout=1)
+            task_group.cancel_scope.cancel()
+
+        await database.drain_session_lifecycle_tasks()
+        await asyncio.sleep(0.05)
+
+        errors: list[Exception] = []
+        for index in range(6):
+            async def probe_write(session, index=index):
+                await session.execute(
+                    text("INSERT INTO items (v) VALUES (:v)"), {"v": str(index)}
+                )
+
+            try:
+                await run_in_session(probe_write)
+            except Exception as exc:
+                errors.append(exc)
+
+    try:
+        assert engine.pool.checkedout() == 0, (
+            "cancelled connection termination must not remain counted as checked out"
+        )
+        assert not errors, (
+            "six post-cancellation writes serialized into pool timeouts: "
+            + "; ".join(f"{type(exc).__name__}: {exc}" for exc in errors)
+        )
+        assert not _db_noise(caplog), f"cancellation noise in logs: {_db_noise(caplog)}"
+    finally:
+        await engine.dispose()
+
+
+# -- Regression: streaming web handlers must not bypass the shield ------------
+
+
+@pytest.mark.parametrize(
+    ("handler_name", "builder_name"),
+    [
+        ("_handle_web_gemini_chat", "_build_web_gemini_adapter"),
+        ("_handle_web_deepseek_chat", "_build_web_deepseek_adapter"),
+        ("_handle_web_qwen_chat", "_build_web_qwen_adapter"),
+    ],
+)
+async def test_web_streaming_session_close_survives_cancellation(
+    monkeypatch, handler_name, builder_name
+):
+    """Direct ``await session.close()`` in these handlers used to expose pool
+    checkin/termination to request cancellation. The handler may die, but the
+    close it started must still finish in the tracked shielded task.
+    """
+    from stitch_backend.domains.ai_proxy import chat_router
+
+    class _Adapter:
+        async def stream_chat_completion(self, _request):
+            yield "data: unused\n\n"
+
+    async def _builder(_session):
+        return _Adapter()
+
+    monkeypatch.setattr(chat_router, builder_name, _builder)
+    session = _FakeSession()
+    handler = getattr(chat_router, handler_name)
+    chat_request = SimpleNamespace(model="test-model", raw_messages=[], tools=None)
+
+    task = asyncio.create_task(handler(session, chat_request))
+    await session.close_started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not session.closed, "caller cancellation must not tear down the close itself"
+    session.close_release.set()
+    await database.drain_session_lifecycle_tasks()
+    assert session.closed
+
+
+class _CommitThenCloseSession:
+    def __init__(self) -> None:
+        self.commit_started = asyncio.Event()
+        self.release_commit = asyncio.Event()
+        self.commit_completed = False
+        self.closed = False
+
+    async def commit(self) -> None:
+        self.commit_started.set()
+        await self.release_commit.wait()
+        self.commit_completed = True
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+async def test_kiro_gateway_service_shutdown_uses_shielded_lifecycle():
+    from stitch_backend.domains.kiro_gateway.service import KiroGatewayService
+
+    session = _CommitThenCloseSession()
+    service = KiroGatewayService(session, object())
+    task = asyncio.create_task(service.shutdown(commit=True))
+    await session.commit_started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not session.commit_completed, (
+        "caller cancellation must not interrupt the commit/checkin tail"
+    )
+    session.release_commit.set()
+    await database.drain_session_lifecycle_tasks()
+    assert session.commit_completed
+    assert session.closed
+
 
 
 # ── Normal-path behavior unchanged ────────────────────────────────────────────

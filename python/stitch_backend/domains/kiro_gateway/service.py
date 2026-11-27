@@ -11,6 +11,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from stitch_backend.database import close_session_shielded, commit_session_shielded
 from stitch_backend.domains.accounts.models import Account
 from stitch_backend.domains.accounts.service import AccountService
 from stitch_backend.domains.kiro_gateway.pool import AccountPool, AccountSnapshot
@@ -120,9 +121,9 @@ class KiroGatewayService:
         """
         try:
             if commit:
-                await self._db.commit()
+                await commit_session_shielded(self._db)
         finally:
-            await self._db.close()
+            await close_session_shielded(self._db)
 
     # ── Persist state ─────────────────────────────────────────────────────
 
