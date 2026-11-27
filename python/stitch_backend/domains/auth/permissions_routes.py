@@ -55,10 +55,10 @@ async def my_permissions(request: Request) -> dict[str, list[str]]:
 )
 async def get_permissions_matrix() -> dict:
     """Return the full permission matrix (admin only)."""
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
 
-    factory = get_session_factory()
-    async with factory() as db:
+    # Shielded lifecycle (read-only; the exit commit is a no-op).
+    async with get_db() as db:
         matrix = await get_matrix(db)
     return {
         "roles": list(SELECTABLE_ROLES),

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import func, select, update
 
-from stitch_backend.database import get_session_factory
+from stitch_backend.database import run_in_session
 from stitch_backend.domains.icloud_email_pool.models import ICloudEmailPoolEntry
 from stitch_backend.domains.icloud_email_pool.schemas import ICloudPoolStatsResponse
 
@@ -380,33 +380,31 @@ class ICloudPoolService:
 
     async def _claim_next_async(self) -> dict[str, Any] | None:
         """Async implementation of claim_next."""
-        factory = get_session_factory()
-        async with factory() as session:
-            try:
-                result = await session.execute(
-                    select(ICloudEmailPoolEntry)
-                    .where(ICloudEmailPoolEntry.status == "available")
-                    .order_by(ICloudEmailPoolEntry.created_at.asc())
-                    .limit(1)
-                    .with_for_update(skip_locked=True)
-                )
-                entry = result.scalar_one_or_none()
-                if entry is None:
-                    return None
+        # Shielded lifecycle: commit/rollback/close run through run_in_session's
+        # cancellation-safe chain (no raw session.commit/rollback here).
+        async def _op(session):
+            result = await session.execute(
+                select(ICloudEmailPoolEntry)
+                .where(ICloudEmailPoolEntry.status == "available")
+                .order_by(ICloudEmailPoolEntry.created_at.asc())
+                .limit(1)
+                .with_for_update(skip_locked=True)
+            )
+            entry = result.scalar_one_or_none()
+            if entry is None:
+                return None
 
-                now = datetime.now(UTC)
-                entry.status = "reserved"
-                entry.reserved_at = now
-                await session.commit()
+            now = datetime.now(UTC)
+            entry.status = "reserved"
+            entry.reserved_at = now
 
-                return {
-                    "id": entry.id,
-                    "email": entry.email,
-                    "label": entry.label or "",
-                }
-            except Exception:
-                await session.rollback()
-                raise
+            return {
+                "id": entry.id,
+                "email": entry.email,
+                "label": entry.label or "",
+            }
+
+        return await run_in_session(_op)
 
     # ── Bridge registration ───────────────────────────────────────────────────
 

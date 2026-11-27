@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
 from stitch_backend.config import get_settings
-from stitch_backend.database import get_session_factory
+from stitch_backend.database import run_in_session
 from stitch_backend.domains.auth import service as auth_service
 
 logger = logging.getLogger(__name__)
@@ -100,8 +100,12 @@ async def tg_sync_user(
     if not username:
         raise HTTPException(400, "username must not be empty")
 
-    factory = get_session_factory()
-    async with factory() as db:
+    # Shielded lifecycle: request-path sessions must never let cancellation
+    # reach connection checkin/termination — commit/rollback run through
+    # run_in_session's shielded lifecycle.  ``create_user`` flushes (surfacing
+    # duplicate usernames inside the op); a commit-time race on the update
+    # path surfaces as IntegrityError out of run_in_session and maps to 409.
+    async def _op(db):
         user = await auth_service.get_user_by_telegram_id(db, body.tg_user_id)
 
         if user is None:
@@ -120,26 +124,21 @@ async def tg_sync_user(
             except IntegrityError as exc:  # duplicate username
                 logger.warning("tg-sync-user create failed (duplicate): %s", exc)
                 raise HTTPException(409, f"username already taken: {username}") from exc
-            await db.commit()
             return {"created": True, "username": user.username, "role": user.role}
 
         # Existing bound user — sync username + optional password.
-        changed = False
         if user.username != username:
             # Refuse to steal a username owned by a different telegram account.
             other = await auth_service.get_user_by_username(db, username)
             if other is not None and other.id != user.id:
                 raise HTTPException(409, f"username already taken: {username}")
             user.username = username
-            changed = True
         if body.password is not None:
             user.password_hash = auth_service.hash_password(body.password)
-            changed = True
-        if changed:
-            try:
-                await db.commit()
-            except IntegrityError:
-                await db.rollback()
-                raise HTTPException(409, f"username already taken: {username}") from None
 
         return {"created": False, "username": user.username, "role": user.role}
+
+    try:
+        return await run_in_session(_op)
+    except IntegrityError as exc:
+        raise HTTPException(409, f"username already taken: {username}") from exc

@@ -13,17 +13,19 @@ async def proxy_key_flush_loop() -> None:
     while True:
         await asyncio.sleep(10)
         try:
-            from stitch_backend.database import get_session_factory
+            from stitch_backend.database import run_in_session
             from stitch_backend.domains.ai_gateway.install_key_service import (
                 flush_install_key_last_used_at,
             )
             from stitch_backend.domains.ai_gateway.service import flush_last_used_at
 
-            factory = get_session_factory()
-            async with factory() as _db:
-                await flush_last_used_at(_db)
-                await flush_install_key_last_used_at(_db)
-                await _db.commit()
+            # Shielded lifecycle: this task is cancelled on shutdown, so the
+            # session must never see cancellation reach checkin/termination.
+            async def _flush(session):
+                await flush_last_used_at(session)
+                await flush_install_key_last_used_at(session)
+
+            await run_in_session(_flush)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -35,13 +37,11 @@ async def group_usage_flush_loop() -> None:
     while True:
         await asyncio.sleep(10)
         try:
-            from stitch_backend.database import get_session_factory
+            from stitch_backend.database import run_in_session
             from stitch_backend.domains.ai_gateway.usage_tracker import flush_group_usage
 
-            factory = get_session_factory()
-            async with factory() as _db:
-                await flush_group_usage(_db)
-                await _db.commit()
+            # Shielded lifecycle — cancelled on shutdown, see proxy_key_flush_loop.
+            await run_in_session(flush_group_usage)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -52,13 +52,11 @@ async def request_log_prune_loop() -> None:
     while True:
         await asyncio.sleep(3600)
         try:
-            from stitch_backend.database import get_session_factory
+            from stitch_backend.database import run_in_session
             from stitch_backend.domains.ai_proxy.request_logs import prune_request_logs
 
-            factory = get_session_factory()
-            async with factory() as _db:
-                await prune_request_logs(_db)
-                await _db.commit()
+            # Shielded lifecycle — cancelled on shutdown, see proxy_key_flush_loop.
+            await run_in_session(prune_request_logs)
         except asyncio.CancelledError:
             raise
         except Exception:

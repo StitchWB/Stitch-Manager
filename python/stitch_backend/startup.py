@@ -29,13 +29,12 @@ async def log_startup_banner(settings: Settings) -> None:
 async def seed_permission_defaults() -> None:
     # Idempotent: also inserts keys added by upgrades so new keys appear automatically.
     try:
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.auth.permissions import seed_defaults
 
-        factory = get_session_factory()
-        async with factory() as _db:
+        # Startup-only, but uniform shielded lifecycle: get_db auto-commits on success.
+        async with get_db() as _db:
             await seed_defaults(_db)
-            await _db.commit()
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Permission seed skipped: %s", _exc)
 
@@ -44,14 +43,14 @@ async def bootstrap_initial_admin(settings: Settings) -> None:
     # No-op when auth is off (desktop single-user mode); password is never logged.
     if settings.auth_enabled and settings.admin_password:
         try:
-            from stitch_backend.database import get_session_factory
+            from stitch_backend.database import get_db
             from stitch_backend.domains.auth.service import bootstrap_admin
 
-            factory = get_session_factory()
-            async with factory() as _db:
+            # Startup-only, but uniform shielded lifecycle: get_db auto-commits
+            # on success; nothing is staged when bootstrap_admin returns None.
+            async with get_db() as _db:
                 created = await bootstrap_admin(_db, settings.admin_password)
                 if created is not None:
-                    await _db.commit()
                     logger.info(
                         "Auth bootstrap: created initial admin user %r",
                         created.username,
@@ -82,16 +81,15 @@ async def run_legacy_auto_migration() -> None:
     continue (boot must never fail).
     """
     try:
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.ai_proxy.legacy_accounts_api import (
             run_final_conversion,
         )
 
-        factory = get_session_factory()
-        async with factory() as _db:
-            counts = await run_final_conversion(_db)
-            if counts["legacy_rows"] > 0:
-                await _db.commit()
+        # Startup-only, but uniform shielded lifecycle: get_db auto-commits on
+        # success; with zero legacy rows nothing is staged, so the commit is a no-op.
+        async with get_db() as _db:
+            await run_final_conversion(_db)
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Legacy auto-migration skipped: %s", _exc)
 
@@ -108,14 +106,14 @@ async def run_ai_gateway_auto_migration() -> None:
     On any exception → warning + continue (boot must never fail).
     """
     try:
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.ai_gateway.migration import (
             migrate_legacy_credentials,
         )
         from stitch_backend.domains.settings.service import SettingsService
 
-        factory = get_session_factory()
-        async with factory() as _db:
+        # Startup-only, but uniform shielded lifecycle: get_db auto-commits on success.
+        async with get_db() as _db:
             settings = await SettingsService(_db).get_all()
             if settings.get("ai_gateway_migration_v1_done"):
                 return
@@ -123,7 +121,6 @@ async def run_ai_gateway_auto_migration() -> None:
             await SettingsService(_db).update(
                 {"ai_gateway_migration_v1_done": True}
             )
-            await _db.commit()
     except Exception as _exc:  # noqa: BLE001
         logger.warning("AI Gateway auto-migration skipped: %s", _exc)
 
@@ -140,14 +137,14 @@ async def backfill_desktop_gateway_instance_shared(settings: Settings) -> None:
     if not settings.desktop_mode:
         return
     try:
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.ai_gateway.ownership import (
             backfill_desktop_instance_shared,
         )
         from stitch_backend.domains.settings.service import SettingsService
 
-        factory = get_session_factory()
-        async with factory() as _db:
+        # Startup-only, but uniform shielded lifecycle: get_db auto-commits on success.
+        async with get_db() as _db:
             settings_service = SettingsService(_db)
             stored = await settings_service.get_all()
             if stored.get("ai_gateway_desktop_shared_backfill_v1_done"):
@@ -156,7 +153,6 @@ async def backfill_desktop_gateway_instance_shared(settings: Settings) -> None:
             await settings_service.update(
                 {"ai_gateway_desktop_shared_backfill_v1_done": True}
             )
-            await _db.commit()
             if any(counts.values()):
                 logger.info(
                     "AI Gateway desktop ownership backfill: %s",
@@ -169,15 +165,14 @@ async def backfill_desktop_gateway_instance_shared(settings: Settings) -> None:
 async def migrate_legacy_group_usage() -> None:
     # Idempotent (INSERT OR IGNORE) copy into group_usage_by_model (model='').
     try:
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.ai_gateway.usage_tracker import (
             migrate_legacy_group_usage,
         )
 
-        factory = get_session_factory()
-        async with factory() as _db:
+        # Startup-only, but uniform shielded lifecycle: get_db auto-commits on success.
+        async with get_db() as _db:
             await migrate_legacy_group_usage(_db)
-            await _db.commit()
     except Exception as _exc:  # noqa: BLE001
         logger.warning("group_usage migration skipped: %s", _exc)
 
@@ -185,14 +180,14 @@ async def migrate_legacy_group_usage() -> None:
 async def convert_legacy_labels() -> None:
     # Runs after the legacy auto-migration so freshly migrated rows get converted too.
     try:
-        from stitch_backend.database import get_session_factory
+        from stitch_backend.database import get_db
         from stitch_backend.domains.ai_proxy.legacy_accounts_api import convert_legacy_labels
 
-        factory = get_session_factory()
-        async with factory() as _db:
+        # Startup-only, but uniform shielded lifecycle: get_db auto-commits on
+        # success; zero converted rows means nothing was staged.
+        async with get_db() as _db:
             converted = await convert_legacy_labels(_db)
             if converted:
-                await _db.commit()
                 logger.info("Legacy label conversion: %d rows migrated", converted)
     except Exception as _exc:  # noqa: BLE001
         logger.warning("Legacy label conversion skipped: %s", _exc)
@@ -249,10 +244,11 @@ async def seed_partner_channels() -> None:
 
 async def ensure_scheduler_tables() -> None:
     # Raw SQL, not ORM models.
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
     from stitch_backend.domains.scheduler.service import ensure_tables as _sched_tables
-    factory = get_session_factory()
-    async with factory() as _db:
+
+    # Startup-only, but uniform shielded lifecycle (ensure_tables commits internally).
+    async with get_db() as _db:
         await _sched_tables(_db)
 
 
@@ -396,14 +392,14 @@ def log_discovered_providers() -> None:
 async def init_icloud_pool() -> None:
     # Registers the bridge, then restores saved credentials for automatic re-authentication.
     try:
-        from stitch_backend.database import get_session_factory as _gsf
+        from stitch_backend.database import get_db as _get_db
         from stitch_backend.domains.icloud_email_pool.service import get_icloud_pool_service
         icloud_svc = get_icloud_pool_service()
         icloud_svc.register_bridge()
 
         async def _load_icloud_settings():
-            factory = _gsf()
-            async with factory() as _db:
+            # Startup-only read, but uniform shielded lifecycle (exit commit is a no-op).
+            async with _get_db() as _db:
                 from stitch_backend.domains.settings.service import SettingsService
                 _settings = await SettingsService(_db).get_all()
             apple_id = _settings.get("icloudAppleId", "")
@@ -433,12 +429,12 @@ async def init_outlook_pool() -> None:
 async def restore_holone_config() -> None:
     # Restores persisted config (enabled/mode) into the singleton.
     try:
-        from stitch_backend.database import get_session_factory as _gsf_holone
+        from stitch_backend.database import get_db as _get_db_holone
         from stitch_backend.domains.ai_proxy.holone_service import get_holone_service
         from stitch_backend.domains.background_manager.store import load_config as _load_bm_config
 
-        _factory = _gsf_holone()
-        async with _factory() as _db:
+        # Startup-only read, but uniform shielded lifecycle (exit commit is a no-op).
+        async with _get_db_holone() as _db:
             _config = await _load_bm_config(_db)
         _svc = get_holone_service()
         _svc.config.enabled = _config.holone_enabled
@@ -450,14 +446,14 @@ async def restore_holone_config() -> None:
 async def restore_compression_config() -> None:
     # Restores persisted config into the cached singleton.
     try:
-        from stitch_backend.database import get_session_factory as _gsf_comp
+        from stitch_backend.database import get_db as _get_db_comp
         from stitch_backend.domains.ai_proxy.compression.service import (
             get_compression_service,
         )
         from stitch_backend.domains.background_manager.store import load_config as _load_bm_config
 
-        _factory = _gsf_comp()
-        async with _factory() as _db:
+        # Startup-only read, but uniform shielded lifecycle (exit commit is a no-op).
+        async with _get_db_comp() as _db:
             _config = await _load_bm_config(_db)
         _csvc = get_compression_service()
         _csvc.config.enabled = _config.compression_enabled

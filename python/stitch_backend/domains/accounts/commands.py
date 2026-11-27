@@ -400,12 +400,12 @@ async def cmd_bulk_refresh_quota(params: dict) -> dict:
 
     from sqlalchemy import or_, select
 
-    from stitch_backend.database import get_session_factory
+    from stitch_backend.database import get_db
     from stitch_backend.domains.accounts.models import Account
 
     caller_uid = params.get("_caller_user_id")
-    factory = get_session_factory()
-    async with factory() as session:
+    # Shielded lifecycle (read-only id fetch; the exit commit is a no-op).
+    async with get_db() as session:
         stmt = (
             select(Account.id)
             .where(Account.token.isnot(None))
