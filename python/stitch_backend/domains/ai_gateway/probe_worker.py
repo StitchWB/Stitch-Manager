@@ -665,18 +665,58 @@ class ProbeWorker:
                     )
                 return credentials_cache[endpoint.id]
 
+            access_cache: dict[tuple[str, str], CredentialModelAccess | None] = {}
+
             async def _access_for(
                 credential_id: str,
                 upstream_row_id: str,
             ) -> CredentialModelAccess | None:
-                return (
+                cache_key = (credential_id, upstream_row_id)
+                if cache_key not in access_cache:
+                    access_cache[cache_key] = (
+                        await session.execute(
+                            select(CredentialModelAccess).where(
+                                CredentialModelAccess.credential_id == credential_id,
+                                CredentialModelAccess.upstream_model_id == upstream_row_id,
+                            ),
+                        )
+                    ).scalar_one_or_none()
+                return access_cache[cache_key]
+
+            async def _warm_access_cache(
+                endpoint: ProviderEndpoint,
+                upstreams: list[UpstreamModel],
+            ) -> None:
+                """Bulk-load pair rows before ordering a potentially large catalog.
+
+                Endpoint-scoped failures intentionally leave models in the unknown
+                evidence tier, so the rotation sort may have to inspect the whole
+                long-tail catalog.  Cache ``None`` misses as well as real rows;
+                one bulk query here avoids an O(models × credentials) query storm
+                on every trickle pass.
+                """
+                credentials = [
+                    cred
+                    for cred in await _credentials_for(endpoint)
+                    if cred.enabled and cred.runtime_status in ("active", "unknown")
+                ]
+                if not credentials or not upstreams:
+                    return
+                credential_ids = [cred.id for cred in credentials]
+                upstream_row_ids = [upstream.id for upstream in upstreams]
+                for credential_id in credential_ids:
+                    for upstream_row_id in upstream_row_ids:
+                        access_cache.setdefault((credential_id, upstream_row_id), None)
+                rows = (
                     await session.execute(
                         select(CredentialModelAccess).where(
-                            CredentialModelAccess.credential_id == credential_id,
-                            CredentialModelAccess.upstream_model_id == upstream_row_id,
+                            CredentialModelAccess.credential_id.in_(credential_ids),
+                            CredentialModelAccess.upstream_model_id.in_(upstream_row_ids),
                         ),
                     )
-                ).scalar_one_or_none()
+                ).scalars().all()
+                for access in rows:
+                    access_cache[(access.credential_id, access.upstream_model_id)] = access
 
             def _pair_backoff_active(access: CredentialModelAccess | None) -> bool:
                 if access is None or access.next_probe_at is None:
@@ -831,15 +871,57 @@ class ProbeWorker:
                     and "evidence_tier" not in caps
                 )
 
+            async def _rotation_failure_count(
+                endpoint: ProviderEndpoint,
+                upstream: UpstreamModel,
+            ) -> int:
+                """Weak attempt count used only to keep the evidence queue rotating.
+
+                Endpoint-scoped probe failures increment ``probe_failures`` as an
+                anti-starvation timestamp/count, but they are not model evidence.
+                The lowest count therefore means "least often poisoned/attempted",
+                not "healthiest"; terminal routing semantics remain in ``status``.
+                """
+                counts: list[int] = []
+                for cred in await _credentials_for(endpoint):
+                    if not cred.enabled:
+                        continue
+                    if cred.runtime_status not in ("active", "unknown"):
+                        continue
+                    access = await _access_for(cred.id, upstream.id)
+                    if access is not None and access.status == "denied":
+                        continue
+                    counts.append(int(access.probe_failures or 0) if access is not None else 0)
+                return min(counts, default=0)
+
+            candidate_source_rows = [
+                (upstream, endpoint)
+                for upstream, endpoint in catalog_rows
+                if upstream.id not in probed_upstreams
+                and upstream.upstream_model_id not in desired_keys
+                and _unknown_evidence_tier(upstream)
+            ]
+            endpoints_by_id: dict[str, ProviderEndpoint] = {}
+            upstreams_by_endpoint: dict[str, list[UpstreamModel]] = {}
+            for upstream, endpoint in candidate_source_rows:
+                endpoints_by_id[endpoint.id] = endpoint
+                upstreams_by_endpoint.setdefault(endpoint.id, []).append(upstream)
+            for endpoint_id, endpoint_upstreams in upstreams_by_endpoint.items():
+                await _warm_access_cache(endpoints_by_id[endpoint_id], endpoint_upstreams)
+
+            rotation_failure_counts: dict[str, int] = {}
+            for upstream, endpoint in candidate_source_rows:
+                rotation_failure_counts[upstream.id] = await _rotation_failure_count(
+                    endpoint,
+                    upstream,
+                )
             candidate_rows = sorted(
-                (
-                    (upstream, endpoint)
-                    for upstream, endpoint in catalog_rows
-                    if upstream.id not in probed_upstreams
-                    and upstream.upstream_model_id not in desired_keys
-                    and _unknown_evidence_tier(upstream)
+                candidate_source_rows,
+                key=lambda item: (
+                    rotation_failure_counts[item[0].id],
+                    _name_queue_prior(item[0].upstream_model_id),
+                    item[0].upstream_model_id,
                 ),
-                key=lambda item: (_name_queue_prior(item[0].upstream_model_id), item[0].upstream_model_id),
             )
             candidate_counts: dict[str, int] = {}
             for upstream, endpoint in candidate_rows:
@@ -1202,10 +1284,19 @@ class ProbeWorker:
             # manually constructed results/tests.
             if not result.get("endpoint_backoff_armed"):
                 cls._arm_endpoint_probe_backoff(result["endpoint_id"])
+            # Endpoint evidence is not model evidence, so the pair must not be
+            # demoted.  It still receives the same non-terminal probe backoff a
+            # timeout receives: enough weak pair-scoped attempt state for the
+            # deterministic evidence queue to rotate past this candidate once
+            # endpoint backoff expires.  Unlike a timeout, no upstream evidence
+            # fields are written — an endpoint failure proves nothing about the
+            # model's coherence, latency, or tier.
+            await cls._backoff_pair(session, result, record_timeout_evidence=False)
             logger.info(
-                "ProbeWorker: endpoint-scoped probe outcome (%s) on %s — endpoint backoff",
+                "ProbeWorker: endpoint-scoped probe outcome (%s) on %s for model %s — endpoint backoff",
                 error_code or classified.category,
                 result["endpoint_id"],
+                result["upstream_model_id"],
             )
             return
         if scope in ("key", "account") and not getattr(
@@ -1235,8 +1326,16 @@ class ProbeWorker:
         cls,
         session: AsyncSession,
         result: dict[str, Any],
+        *,
+        record_timeout_evidence: bool = True,
     ) -> None:
-        """Increment probe backoff for one exact pair without health blame."""
+        """Increment probe backoff for one exact pair without health blame.
+
+        Timeout probes additionally leave latency/timeout observations on the
+        upstream.  Endpoint-scoped failures set ``record_timeout_evidence`` to
+        false: their pair backoff is queue-rotation state only and must not
+        masquerade as model evidence.
+        """
         now = _utcnow()
         access = (
             await session.execute(
@@ -1265,7 +1364,7 @@ class ProbeWorker:
         access.next_probe_at = now + timedelta(seconds=int(backoff))
         access.updated_at = now
         upstream = await session.get(UpstreamModel, result["upstream_row_id"])
-        if upstream is not None:
+        if upstream is not None and record_timeout_evidence:
             # A timeout is not negative coherence evidence, but the latency
             # observation itself is useful evidence: slow candidates remain
             # visible instead of disappearing into probe noise.
