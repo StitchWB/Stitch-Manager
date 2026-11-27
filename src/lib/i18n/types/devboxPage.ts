@@ -410,6 +410,12 @@ export interface DevboxPageTranslations {
     overviewHeroPathAlertText: string;
     overviewHeroPathAlertFallback: string;
     overviewHeroPathAction: string;
+    overviewHeroUnverifiedTitle: string;
+    overviewHeroUnverifiedSub: string;
+    overviewHeroUnverifiedState: string;
+    overviewHeroUnverifiedAlertTitle: string;
+    overviewHeroUnverifiedAlertText: string;
+    overviewHeroUnverifiedAction: string;
     overviewEndpointLabel: string;
     overviewEndpointCopy: string;
     overviewEndpointMissing: string;
@@ -421,6 +427,7 @@ export interface DevboxPageTranslations {
     overviewProbeStale: string;
     overviewToolsLabel: string;
     overviewToolsValue: string;
+    overviewToolsUnchecked: string;
     overviewModeLabel: string;
     overviewModeFallback: string;
     overviewCheck: string;
@@ -475,6 +482,7 @@ export interface DevboxPageTranslations {
     overviewFocusStopped: string;
     overviewFocusOnline: string;
     overviewFocusUnverified: string;
+    overviewFocusUnreachable: string;
     overviewFocusStale: string;
     overviewActionStart: string;
     overviewActionRestart: string;
@@ -546,6 +554,8 @@ export interface DevboxPageTranslations {
     connectSubdomainTip: string;
     connectSubdomainHint: string;
     connectRelayUrlLabel: string;
+    connectSubdomainMismatch: string;
+    connectCheckTimeout: string;
     connectRelayUrlTip: string;
     connectDomainLabel: string;
     connectDomainTip: string;
@@ -716,6 +726,7 @@ export interface DevboxPageTranslations {
     projectsTitle: string;
     projectsOpened: string;
     projectsDetailTitle: string;
+    projectsDetailTimeout: string;
     projectsDetailEmpty: string;
     projectsSummaryFolder: string;
     projectsSummaryMode: string;

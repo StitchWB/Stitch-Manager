@@ -62,6 +62,7 @@ function connectFixture(overrides: Partial<UseDevboxConnectResult> = {}): UseDev
     bridgeState: 'healthy',
     probeOk: true,
     probeStale: false,
+    pathHealth: 'live',
     checking: false,
     connectionStale: false,
     handoffStale: false,
@@ -143,11 +144,13 @@ describe('DevboxServices focus rows', () => {
     expect(onOpenTab).toHaveBeenCalledWith('agent');
   });
 
-  it('shows a stale probe as degraded, never as fresh green', () => {
-    renderServices({ connect: connectFixture({ probeStale: true, probeOk: false }) });
+  it('shows a stale probe as unchecked, never as fresh green or a failure', () => {
+    renderServices({
+      connect: connectFixture({ probeStale: true, probeOk: false, pathHealth: 'unchecked' }),
+    });
 
     const path = screen.getByTestId('devbox-services-focus-path');
-    expect(path.getAttribute('data-state')).toBe('degraded');
+    expect(path.getAttribute('data-state')).toBe('unknown');
     expect(path.textContent).toContain(t('devboxPage.overviewProbeStale'));
   });
 });

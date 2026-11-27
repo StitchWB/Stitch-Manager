@@ -39,7 +39,6 @@ import type { DevboxTab, UseDevboxConnectResult } from './useDevboxConnect';
 import { serializeProfileWrite } from './profileWriteLock';
 
 const LOCKED_GATEWAY_SERVERS = ['stitch-manager', 'lgm', 'ssh', 'playwright'] as const;
-const LOCKED_GATEWAY = new Set<string>(LOCKED_GATEWAY_SERVERS);
 const COCKPIT_PORT = 8793;
 const FOCUS_ICON_CLASS: Record<VitalState, string> = {
   healthy: 'text-emerald-300',
@@ -64,8 +63,8 @@ interface RunnerRow {
   timeout?: number;
 }
 
-function lockedGatewayRows(): GatewayRowState[] {
-  return LOCKED_GATEWAY_SERVERS.map(name => ({
+function lockedGatewayRows(names: Iterable<string> = LOCKED_GATEWAY_SERVERS): GatewayRowState[] {
+  return [...names].map(name => ({
     name,
     enabled: false,
     mode: 'readonly',
@@ -186,11 +185,15 @@ export function DevboxServices({
       ]);
       const model = parseRecord(profilePayload.json);
       const exposed = Array.isArray(model?.exposed_mcps) ? model.exposed_mcps : [];
+      const lockedNames = new Set<string>(LOCKED_GATEWAY_SERVERS);
+      for (const candidate of payload.candidates) {
+        if (candidate.denied === true) lockedNames.add(candidate.name);
+      }
       const current = new Map<string, { mode: 'readonly' | 'full'; allow: string }>();
       for (const item of exposed) {
         if (item === null || typeof item !== 'object') continue;
         const row = item as Record<string, unknown>;
-        if (typeof row.name !== 'string' || row.name === '' || LOCKED_GATEWAY.has(row.name)) continue;
+        if (typeof row.name !== 'string' || row.name === '' || lockedNames.has(row.name)) continue;
         current.set(row.name, {
           mode: row.mode === 'full' ? 'full' : 'readonly',
           allow: Array.isArray(row.tool_allow)
@@ -200,7 +203,7 @@ export function DevboxServices({
       }
       const rows: GatewayRowState[] = [];
       for (const candidate of payload.candidates) {
-        if (LOCKED_GATEWAY.has(candidate.name)) continue;
+        if (lockedNames.has(candidate.name)) continue;
         const selected = current.get(candidate.name);
         rows.push({
           name: candidate.name,
@@ -214,7 +217,7 @@ export function DevboxServices({
         if (rows.some(row => row.name === name)) continue;
         rows.push({ name, enabled: true, mode: selected.mode, allow: selected.allow, locked: false });
       }
-      setGatewayRows([...rows, ...lockedGatewayRows()]);
+      setGatewayRows([...rows, ...lockedGatewayRows(lockedNames)]);
       if (payload.error !== null) setGatewayError(payload.error);
     } catch (err) {
       setGatewayRows(lockedGatewayRows());
@@ -253,13 +256,13 @@ export function DevboxServices({
   const sessionStale = connect.connectionStale || connect.handoffStale;
 
   const pathState: VitalState =
-    connect.resolvedUrl === ''
-      ? 'down'
-      : connect.probeStale
-        ? 'degraded'
-        : connect.probeOk
-          ? 'healthy'
-          : 'degraded';
+    connect.pathHealth === 'live'
+      ? 'healthy'
+      : connect.pathHealth === 'failed'
+        ? 'down'
+        : connect.pathHealth === 'checking'
+          ? 'pending'
+          : 'unknown';
 
   const sessionState: VitalState = sessionStale
     ? 'degraded'

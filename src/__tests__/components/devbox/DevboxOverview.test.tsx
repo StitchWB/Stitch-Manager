@@ -92,6 +92,7 @@ function OverviewHarness({
     activeProfile,
     cards,
     actionStatus,
+    gateway,
     busy,
     onAction: onAction as unknown as (action: Promise<DevboxAccepted>) => void,
     onChanged,
@@ -183,16 +184,16 @@ describe('DevboxOverview hero variants', () => {
     );
   });
 
-  it('shows bridge hero and zero tools when bridge is down', async () => {
+  it('shows bridge hero and unknown tools when bridge is down', async () => {
     mockRoutes({ connection_check: connectionFailFixture });
     await renderOverview({ cards: bridgeDownCardsFixture });
 
     await waitFor(() =>
       expect(screen.getByTestId('devbox-overview-hero-title').textContent).toBe('Code bridge stopped'),
     );
-    expect(screen.getByTestId('devbox-overview-tools').textContent).toContain('0 / 16 tools');
+    expect(screen.getByTestId('devbox-overview-tools').textContent).toContain('no data');
     expect(screen.getByTestId('devbox-overview-pill-bridge').textContent).toContain('stopped');
-    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unverified');
+    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unreachable');
 
     fireEvent.click(screen.getByTestId('devbox-overview-hero-action'));
     await waitFor(() =>
@@ -382,7 +383,7 @@ describe('DevboxOverview status matrix', () => {
     expect(screen.getByTestId('devbox-overview-pill-bridge').textContent).toContain(
       '10 native + 6 control ready',
     );
-    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unverified');
+    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unreachable');
     expect(screen.getByTestId('devbox-overview-hero-alert').textContent).toContain(
       'bridge unreachable',
     );
@@ -415,7 +416,7 @@ describe('DevboxOverview status matrix', () => {
     await waitFor(() =>
       expect(screen.getByTestId('devbox-overview-hero-title').textContent).toBe('Code bridge stopped'),
     );
-    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unverified');
+    expect(screen.getByTestId('devbox-overview-pill-path').textContent).toContain('unreachable');
   });
 
   it('labels the endpoint as the agent address, not a generic public address', async () => {

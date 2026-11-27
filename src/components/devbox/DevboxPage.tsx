@@ -242,6 +242,7 @@ export function DevboxPage() {
     activeProfile,
     cards,
     actionStatus: status,
+    gateway,
     envVersion: poll.data?.env_version,
     busy,
     onAction,

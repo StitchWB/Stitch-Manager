@@ -28,6 +28,8 @@ import { devboxModeLabel } from './labels';
 import { stackVitalState } from './state';
 import type { UseDevboxConnectResult } from './useDevboxConnect';
 
+const DETAIL_TIMEOUT_MS = 20_000;
+
 const ENV_KEYS = [
   'INGRESS_MODE',
   'JOB_TIMEOUT_SECONDS',
@@ -111,9 +113,19 @@ export function DevboxProjects({
   useEffect(() => {
     if (selectedName === '') return;
     let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setDetail({
+        requestKey,
+        json: '',
+        model: null,
+        error: t('devboxPage.projectsDetailTimeout'),
+      });
+    }, DETAIL_TIMEOUT_MS);
     devboxProfileGet(selectedName)
       .then(result => {
         if (cancelled) return;
+        window.clearTimeout(timer);
         setDetail({
           requestKey,
           json: result.json,
@@ -123,6 +135,7 @@ export function DevboxProjects({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        window.clearTimeout(timer);
         setDetail({
           requestKey,
           json: '',
@@ -132,6 +145,7 @@ export function DevboxProjects({
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [selectedName, profiles, requestKey]);
 
