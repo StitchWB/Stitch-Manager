@@ -29,7 +29,7 @@ const config = {
           noEmit: false,
           strict: true,
           paths: {
-            '@/*': ['src/*'],
+            '@/*': ['./src/*'],
           },
         },
         diagnostics: { ignoreCodes: [1343] },
