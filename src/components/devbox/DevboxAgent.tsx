@@ -252,7 +252,7 @@ export function DevboxAgent({
       id: 'probe',
       label: t('devboxPage.agentSessionProbe'),
       value: probeValue,
-      tone: connect.probe === null ? 'muted' : connect.probeStale ? 'warning' : 'success',
+      tone: connect.probe === null || connect.probeStale ? 'muted' : 'success',
     },
   ];
 

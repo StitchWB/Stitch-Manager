@@ -1,5 +1,5 @@
 import { safeInvoke } from '../core';
-import { formatTime } from '@/lib/utils';
+import { formatDateTime, formatTime } from '@/lib/utils';
 
 const NS = 'plugin.stitch-devbox';
 
@@ -42,6 +42,7 @@ export interface DevboxMcpCandidate {
   source: string;
   valid: boolean;
   error: string | null;
+  denied?: boolean;
   command?: string[];
   url?: string;
 }
@@ -479,17 +480,22 @@ export function devboxLogs(params: {
 
 export function devboxTime(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
+  let ms: number | null = null;
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return formatTime(value * 1000);
-  }
-  if (typeof value === 'string') {
+    ms = value * 1000;
+  } else if (typeof value === 'string') {
     const asNumber = Number(value);
     if (value.trim() !== '' && Number.isFinite(asNumber)) {
-      return formatTime(asNumber * 1000);
+      ms = asNumber * 1000;
+    } else {
+      const parsed = Date.parse(value);
+      if (Number.isNaN(parsed)) return formatTime(value);
+      ms = parsed;
     }
-    return formatTime(value);
   }
-  return '—';
+  if (ms === null) return '—';
+  const today = new Date().toDateString();
+  return new Date(ms).toDateString() === today ? formatTime(ms) : formatDateTime(ms);
 }
 
 export function devboxActionFinished(action: DevboxRecentAction): boolean {

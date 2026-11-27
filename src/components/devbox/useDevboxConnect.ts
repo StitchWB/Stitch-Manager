@@ -21,6 +21,7 @@ import {
   type DevboxConnection,
   type DevboxConnectionCheckResult,
   type DevboxEnvEntry,
+  type DevboxOverviewGateway,
   type DevboxVitalCard,
 } from '@/lib/backend/modules/devbox';
 import { cardVitalState, findVitalCard, stackVitalState } from './state';
@@ -31,6 +32,7 @@ export type DevboxIngressMode = 'auto' | 'cloudflare' | 'relay' | 'manual';
 export type DevboxAccessMode = 'readonly' | 'standard' | 'full';
 export type DevboxAccessPreset = DevboxAccessMode | 'custom';
 export type DevboxAgentLocation = 'sandbox' | 'chat';
+export type DevboxPathHealth = 'unchecked' | 'checking' | 'live' | 'failed';
 
 export interface DevboxTokenRow {
   id: string;
@@ -74,6 +76,7 @@ interface ConnectionState {
 }
 
 export const DEVBOX_TOTAL_TOOLS = 16;
+const CHECK_TIMEOUT_MS = 90_000;
 
 const TOKEN_DEFS: ReadonlyArray<TokenDefinition> = [
   {
@@ -197,6 +200,7 @@ export interface UseDevboxConnectParams {
   activeProfile: string;
   cards: DevboxVitalCard[] | null;
   actionStatus: DevboxActionStatus | null;
+  gateway: DevboxOverviewGateway | null;
   envVersion?: number;
   busy: boolean;
   onAction: (action: Promise<DevboxAccepted>) => void;
@@ -207,6 +211,7 @@ export function useDevboxConnect({
   activeProfile,
   cards,
   actionStatus,
+  gateway,
   envVersion,
   busy,
   onAction,
@@ -378,8 +383,17 @@ export function useDevboxConnect({
     setChecking(true);
     const signature = savedSignatureRef.current;
     checkedSignatureRef.current = signature;
+    let timer = 0;
     try {
-      const result = await devboxConnectionCheck();
+      const result = await Promise.race([
+        devboxConnectionCheck(),
+        new Promise<never>((_, reject) => {
+          timer = window.setTimeout(
+            () => reject(new Error(t('devboxPage.connectCheckTimeout'))),
+            CHECK_TIMEOUT_MS,
+          );
+        }),
+      ]);
       setProbe({ result, checkedAt: Date.now(), signature });
     } catch (err) {
       setProbe({
@@ -388,6 +402,7 @@ export function useDevboxConnect({
         signature,
       });
     } finally {
+      window.clearTimeout(timer);
       checkingRef.current = false;
       setChecking(false);
     }
@@ -745,6 +760,20 @@ export function useDevboxConnect({
   const watchdogState = cardVitalState(findVitalCard(cards, 'watchdog'), 'watchdog');
   const watchdogEnabled = watchdogState === 'healthy';
 
+  // устаревшая или отсутствующая проба — не сбой: «не проверено» — отдельный
+  // статус, иначе каждая ротация токенов рисовала живой стек красным
+  const pathHealth: DevboxPathHealth =
+    resolvedUrl === '' || ingressState === 'down'
+      ? 'failed'
+      : checking
+        ? 'checking'
+        : probeOk
+          ? 'live'
+          : probeFresh
+            ? 'failed'
+            : 'unchecked';
+  const gatewayActive = gateway !== null && gateway.exposed_mcps.length > 0;
+
   const blockedReason = useMemo(() => {
     if (resolvedUrl === '') return t('devboxPage.overviewEndpointMissing');
     if (probeOk) return null;
@@ -783,7 +812,7 @@ export function useDevboxConnect({
   const handoffTokens = useMemo(() => parseHandoffTokens(handoffBlock), [handoffBlock]);
   const tokenRows = useMemo<DevboxTokenRow[]>(
     () =>
-      TOKEN_DEFS.map(def => {
+      TOKEN_DEFS.filter(def => gatewayActive || def.id !== 'GATEWAY_TOKEN').map(def => {
         const maskedValue = envValue(entries, def.envKey);
         const parsed = handoffTokens[def.id] ?? '';
         const useParsed = handoffRevealed && parsed !== '';
@@ -798,7 +827,7 @@ export function useDevboxConnect({
           available: value !== '' && value !== '...',
         };
       }),
-    [entries, handoffTokens, handoffRevealed],
+    [entries, handoffTokens, handoffRevealed, gatewayActive],
   );
 
   const accessMode = normalizeAccessMode(profileMode);
@@ -871,6 +900,8 @@ export function useDevboxConnect({
     probeOk,
     probeStale,
     checking,
+    pathHealth,
+    gatewayActive,
     runCheck,
     tools,
     latency,

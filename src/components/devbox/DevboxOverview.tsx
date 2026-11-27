@@ -23,7 +23,16 @@ import { devboxEventLine } from './eventLine';
 import { devboxIngressModeLabel } from './labels';
 import { DEVBOX_TOTAL_TOOLS, type DevboxTab, type UseDevboxConnectResult } from './useDevboxConnect';
 
-type HeroVariant = 'ok' | 'plugin' | 'stack' | 'bridge' | 'blocked' | 'fallback' | 'session' | 'path';
+type HeroVariant =
+  | 'ok'
+  | 'plugin'
+  | 'stack'
+  | 'bridge'
+  | 'blocked'
+  | 'fallback'
+  | 'session'
+  | 'path'
+  | 'unverified';
 
 interface HeroCopy {
   titleKey: string;
@@ -117,6 +126,16 @@ const HERO_COPY: Record<HeroVariant, HeroCopy> = {
     badgeVariant: 'warning',
     alertVariant: 'warning',
   },
+  unverified: {
+    titleKey: 'devboxPage.overviewHeroUnverifiedTitle',
+    subKey: 'devboxPage.overviewHeroUnverifiedSub',
+    stateKey: 'devboxPage.overviewHeroUnverifiedState',
+    alertTitleKey: 'devboxPage.overviewHeroUnverifiedAlertTitle',
+    alertTextKey: 'devboxPage.overviewHeroUnverifiedAlertText',
+    actionKey: 'devboxPage.overviewHeroUnverifiedAction',
+    badgeVariant: 'slate',
+    alertVariant: 'info',
+  },
 };
 
 function Metric({ label, value, testId }: { label: string; value: string; testId: string }) {
@@ -158,20 +177,19 @@ export function DevboxOverview({
     if (connect.resolvedUrl === '') return 'blocked';
     if (connect.stackState === 'down' || connect.stackState === 'unknown') return 'stack';
     if (connect.bridgeState !== 'healthy') return 'bridge';
-    if (connect.ingressState !== 'healthy') return 'path';
     if (connect.handoffStale || connect.connectionStale) return 'session';
     if (connect.fallbackActive) return 'fallback';
-    if (connect.probeOk) return 'ok';
-    return 'path';
+    if (connect.pathHealth === 'live') return 'ok';
+    if (connect.pathHealth === 'failed') return 'path';
+    return 'unverified';
   }, [
     connect.resolvedUrl,
     connect.stackState,
     connect.bridgeState,
-    connect.ingressState,
     connect.handoffStale,
     connect.connectionStale,
     connect.fallbackActive,
-    connect.probeOk,
+    connect.pathHealth,
     pollError,
   ]);
 
@@ -217,7 +235,7 @@ export function DevboxOverview({
   };
 
   const onHeroAction = () => {
-    if (heroVariant === 'ok') {
+    if (heroVariant === 'ok' || heroVariant === 'unverified') {
       void connect.runCheck();
       return;
     }
@@ -268,7 +286,7 @@ export function DevboxOverview({
             </Badge>
             <Button
               size="sm"
-              variant={heroVariant === 'ok' ? 'secondary' : 'primary'}
+              variant={heroVariant === 'ok' || heroVariant === 'unverified' ? 'secondary' : 'primary'}
               disabled={busy || (heroVariant === 'stack' || heroVariant === 'bridge' ? startDisabled : false)}
               data-testid="devbox-overview-hero-action"
               onClick={onHeroAction}
@@ -326,7 +344,14 @@ export function DevboxOverview({
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <Metric
                 label={t('devboxPage.overviewToolsLabel')}
-                value={t('devboxPage.overviewToolsValue', { count: connect.tools, total: DEVBOX_TOTAL_TOOLS })}
+                value={
+                  connect.pathHealth === 'live'
+                    ? t('devboxPage.overviewToolsValue', {
+                        count: connect.tools,
+                        total: DEVBOX_TOTAL_TOOLS,
+                      })
+                    : t('devboxPage.overviewToolsUnchecked')
+                }
                 testId="devbox-overview-tools"
               />
               <Metric
@@ -438,20 +463,22 @@ export function DevboxOverview({
               </Badge>
               <Badge
                 variant={
-                  connect.ingressState !== 'healthy'
+                  connect.ingressState === 'down' || connect.pathHealth === 'failed'
                     ? 'danger'
-                    : connect.probeOk
+                    : connect.pathHealth === 'live'
                       ? 'success'
-                      : 'warning'
+                      : 'slate'
                 }
                 data-testid="devbox-overview-pill-path"
               >
                 {t('devboxPage.overviewPillPath')} ·{' '}
-                {connect.ingressState !== 'healthy'
+                {connect.ingressState === 'down'
                   ? t('devboxPage.overviewFocusStopped')
-                  : connect.probeOk
+                  : connect.pathHealth === 'live'
                     ? t('devboxPage.overviewFocusOnline')
-                    : t('devboxPage.overviewFocusUnverified')}
+                    : connect.pathHealth === 'failed'
+                      ? t('devboxPage.overviewFocusUnreachable')
+                      : t('devboxPage.overviewFocusUnverified')}
               </Badge>
               <Badge
                 variant={connect.handoffStale ? 'warning' : 'success'}

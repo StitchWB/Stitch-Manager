@@ -140,6 +140,14 @@ export function DevboxConnect({ connect, busy }: DevboxConnectProps) {
 
   const modeCopy = MODE_COPY[connect.draftMode];
   const relayUrl = connect.draft.RELAY_URL ?? connect.savedRelayUrl;
+  const requestedSubdomain = (connect.draft.RELAY_SUBDOMAIN ?? '').trim().toLowerCase();
+  const issuedHost = relayUrl
+    .replace(/^https?:\/\//i, '')
+    .split('/')[0]
+    .split(':')[0]
+    .toLowerCase();
+  const subdomainMismatch =
+    requestedSubdomain !== '' && issuedHost !== '' && issuedHost !== `${requestedSubdomain}.loca.lt`;
   const cloudflareIncomplete =
     connect.draftMode === 'cloudflare' &&
     ((connect.draft.PUBLIC_URL ?? '').trim() === '' ||
@@ -250,7 +258,7 @@ export function DevboxConnect({ connect, busy }: DevboxConnectProps) {
 
   const statusAlert = () => {
     if (connect.checking) return <Alert variant="info" message={t('devboxPage.overviewChecking')} />;
-    if (connect.probeStale) return <Alert variant="warning" message={t('devboxPage.overviewProbeStale')} />;
+    if (connect.probeStale) return <Alert variant="info" message={t('devboxPage.overviewProbeStale')} />;
     if (connect.probeResult === null) return <Alert variant="info" message={t('devboxPage.overviewProbeNone')} />;
     if (connect.probeResult.ok) {
       const statusText = (code: number | undefined) =>
@@ -579,6 +587,17 @@ export function DevboxConnect({ connect, busy }: DevboxConnectProps) {
                             <span className="text-slate-500">{t('devboxPage.connectRelayUrlLabel')}:</span>{' '}
                             <span className="font-mono">{relayUrl}</span>
                           </div>
+                        )}
+                        {subdomainMismatch && (
+                          <p
+                            className="px-0.5 text-2xs text-amber-300"
+                            data-testid="devbox-connect-subdomain-mismatch"
+                          >
+                            {t('devboxPage.connectSubdomainMismatch', {
+                              requested: requestedSubdomain,
+                              actual: issuedHost,
+                            })}
+                          </p>
                         )}
                       </div>
                     ) : connect.draftMode === 'cloudflare' ? (
