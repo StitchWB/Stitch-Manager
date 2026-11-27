@@ -427,10 +427,7 @@ class ChainRefillService:
         now = _utcnow()
 
         existing = rotation_state(endpoint.health_policy)
-        if existing is not None and rotation_state_active(endpoint.health_policy, now):
-            # Detection time anchors the bounded burst.  Re-detection inside the
-            # window must not extend it or repeatedly spam the operator log.
-            return existing
+        state_active = existing is not None and rotation_state_active(endpoint.health_policy, now)
 
         event = await self._detect_health_rotation(
             endpoint,
@@ -438,8 +435,21 @@ class ChainRefillService:
             now,
             window_seconds=max(1, probe_pass_seconds) * 2,
         )
+        # The catalog evaluation runs on EVERY pass, including passes where
+        # Signal A owns the event and passes inside an active burst window:
+        # consuming fresh fetch evidence is what keeps the snapshot trailing
+        # the real lineup.  Skipping consumption leaves a pre-rotation
+        # baseline in place, and the first post-window evaluation then diffs
+        # it against the post-rotation lineup — a mass-replacement signature
+        # that duplicate-fires the same rotation.
+        catalog_event = await self._detect_catalog_rotation(endpoint, now)
         if event is None:
-            event = await self._detect_catalog_rotation(endpoint, now)
+            event = catalog_event
+
+        if state_active:
+            # Detection time anchors the bounded burst.  Re-detection inside the
+            # window must not extend it or repeatedly spam the operator log.
+            return existing
         if event is None:
             return None
 
@@ -683,6 +693,28 @@ class ChainRefillService:
             or new_fraction < CHAIN_ROTATION_CATALOG_NEW_FRACTION
         ):
             return None
+
+        # Aftermath suppression: a baseline fetched BEFORE the last fired
+        # rotation cannot describe the post-rotation world, so a mass-replacement
+        # diff against it is evidence of the rotation that already fired — not
+        # of a new one.  Discovery is hourly while the burst window is minutes,
+        # so the first post-rotation fetch typically lands after the window
+        # expires; without this gate the same rotation duplicate-fires and
+        # restarts the burst.  The snapshot has already advanced above, so the
+        # suppression applies at most once per fire: the cost is that a genuine
+        # second rotation inside the very first post-fire fetch is missed here
+        # (Signal A remains the cover for dead-model errors).
+        state = rotation_state(policy)
+        if state is not None:
+            detected_at = parse_iso_utc(state.get("detectedAt") or state.get("detected_at"))
+            if detected_at is not None and stored[1] <= detected_at:
+                logger.info(
+                    "catalog mass-diff on endpoint %s matches the aftermath of the "
+                    "rotation already fired at %s; consuming baseline without firing",
+                    endpoint.id,
+                    state.get("detectedAt"),
+                )
+                return None
         return {
             "signal": "catalog",
             "missing_count": missing_count,

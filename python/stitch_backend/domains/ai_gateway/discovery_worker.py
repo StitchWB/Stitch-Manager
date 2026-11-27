@@ -26,7 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, select
@@ -430,6 +430,10 @@ class DiscoveryWorker:
         if not per_cred:
             raise RuntimeError(failures[0])
 
+        # The lineup evidence is as-of the listing fetches, not the later
+        # verification sweep or the persist time: stamping the observation
+        # time is what lets the writer order interleaved passes correctly.
+        observed_at = _utcnow()
         verification = await cls._verify_new_models(probe, per_cred)
         pricing = await cls._load_pricing(probe)
         changed = await cls._persist_results(
@@ -439,6 +443,7 @@ class DiscoveryWorker:
                 "credentials": per_cred,
                 "verification": verification,
                 "pricing": pricing,
+                "observed_at": observed_at,
             }],
         )
         if changed:
@@ -585,12 +590,18 @@ class DiscoveryWorker:
                 per_cred.append((cred, models))
             if not per_cred:
                 continue
+            # Stamp the observation time before the verification sweep: the
+            # lineup evidence is as-of the listing fetches, and an older pass
+            # whose HTTP finishes late must persist with its own (older)
+            # timestamp rather than the wall-clock persist time.
+            observed_at = _utcnow()
             verification = await cls._verify_new_models(probe, per_cred)
             results.append({
                 "probe": probe,
                 "credentials": per_cred,
                 "verification": verification,
                 "pricing": pricing,
+                "observed_at": observed_at,
             })
         return results
 
@@ -781,6 +792,18 @@ class DiscoveryWorker:
                         and (seen := _as_utc(row.last_seen_at)) is not None
                     ]
 
+                    # Fetch-observation time of this pass.  Passes probe HTTP
+                    # outside the DB, so an older fetch can finish after a
+                    # newer one; stamping the wall-clock persist time would
+                    # misorder the evidence and let a stale pass overwrite a
+                    # newer pass's membership as "current".  Compare-and-swap
+                    # by observation time: never downgrade a newer sighting.
+                    observed_at = item.get("observed_at")
+                    if not isinstance(observed_at, datetime):
+                        observed_at = now
+                    elif observed_at.tzinfo is None:
+                        observed_at = observed_at.replace(tzinfo=UTC)
+
                     upstream_rows = dict(existing)
                     for _cred, models in item["credentials"]:
                         for metadata in models:
@@ -801,7 +824,13 @@ class DiscoveryWorker:
                                     enrichment,
                                 ),
                             )
-                            upstream.last_seen_at = now
+                            existing_seen = (
+                                _as_utc(upstream.last_seen_at)
+                                if upstream.last_seen_at is not None
+                                else None
+                            )
+                            if existing_seen is None or existing_seen < observed_at:
+                                upstream.last_seen_at = observed_at
                             if not upstream.enabled and upstream.selection_source == "auto":
                                 caps = dict(upstream.capabilities or {})
                                 if caps.pop("retired_auto", None):

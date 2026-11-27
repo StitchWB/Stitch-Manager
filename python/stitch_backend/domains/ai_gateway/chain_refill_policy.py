@@ -61,6 +61,18 @@ CHAIN_ROTATION_DEMOTED_FRACTION = 0.5
 # passes neither gate; a true full-lineup rotation passes both.  Very
 # aggressive rotating subsets with <20% overlap can still false-fire — the
 # documented, deliberate tradeoff of any count-based diff.
+#
+# The asymmetry is deliberate and must stay visible: this signal false-FIRES
+# on aggressive subset flaps, but it also false-MISSES the realistic rolling
+# rotation shape.  An upstream replacing ~50% of its lineup per hour never
+# crosses the 0.8 missing fraction in any single pass, and because the
+# snapshot advances on every evaluation the diff baseline moves with the
+# rotation — detection is lost permanently, not deferred to a later pass.
+# Signal A (model-scoped terminal probe evidence on previously active chain
+# models) is the mitigation: it watches the dead-model errors a rolling
+# rotation actually produces, independent of catalog diffing.  Signal B
+# exists for the complementary shape — a near-total lineup swap whose models
+# were never individually probed.
 CHAIN_ROTATION_CATALOG_PASS_SECONDS = 3600
 CHAIN_ROTATION_CATALOG_PASSES = 2
 CHAIN_ROTATION_CATALOG_MIN_MISSING = 2
