@@ -736,6 +736,26 @@ class _EvidenceAdapter:
         raise AssertionError("no errors expected")
 
 
+class _EndpointFailureAdapter:
+    """Exact-probe adapter whose every call fails at endpoint scope."""
+
+    def __init__(self) -> None:
+        self.models: list[str] = []
+
+    async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
+        self.models.append(model)
+        raise RuntimeError("upstream bad gateway")
+
+    def classify_error(self, exc, **_kwargs):
+        return ClassifiedError(
+            category="server_error",
+            is_endpoint_wide=True,
+            is_model_specific=False,
+            scope="endpoint",
+            error_code="bad_gateway",
+        )
+
+
 class _Level2Adapter:
     """Exact-probe adapter with a scripted level-2 answer."""
 
@@ -965,7 +985,123 @@ async def test_exact_probe_endpoint_wide_5xx_arms_endpoint_backoff_without_model
             ),
         )
     ).scalars().all()
-    assert access_rows == []
+    assert len(access_rows) == 1
+    access = access_rows[0]
+    assert access.status == "unknown"
+    assert access.last_error is None
+    assert access.probe_failures == 1
+    assert access.next_probe_at is not None
+
+
+async def test_endpoint_scoped_probe_log_includes_model_id(db_session, caplog) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    upstream = await _add_unknown_upstream(db_session, endpoint, "zminimax-m25")
+    result = {
+        "outcome": "error",
+        "credential_id": cred.id,
+        "endpoint_id": endpoint.id,
+        "upstream_row_id": upstream.id,
+        "upstream_model_id": upstream.upstream_model_id,
+        "latency_ms": 25,
+        "usage_sane": None,
+        "usage_reason": None,
+        "level2_passed": None,
+        "http_status": 502,
+        "classified": ClassifiedError(
+            category="server_error",
+            is_endpoint_wide=True,
+            is_model_specific=False,
+            scope="endpoint",
+            error_code="bad_gateway",
+        ),
+    }
+
+    with caplog.at_level(logging.INFO):
+        await pw.ProbeWorker._apply_exact_probe_result(
+            db_session,
+            RoleCatalogService(db_session),
+            result,
+        )
+
+    assert "endpoint-scoped probe outcome" in caplog.text
+    assert "zminimax-m25" in caplog.text
+
+
+async def test_endpoint_scoped_candidate_failure_rotates_trickle_queue(
+    db_session, monkeypatch,
+) -> None:
+    endpoint, cred = await _seed_catalog(db_session)
+    model_ids = ["zminimax-m2-a", "zminimax-m2-b", "zminimax-m2-c"]
+    upstreams = [
+        await _add_unknown_upstream(db_session, endpoint, model_id)
+        for model_id in model_ids
+    ]
+    await db_session.commit()
+    _patch_worker_db(monkeypatch, db_session)
+    adapter = _EndpointFailureAdapter()
+    monkeypatch.setattr(pw, "get_adapter", lambda _adapter_type: adapter)
+
+    async def probe_pass() -> None:
+        await pw.ProbeWorker._probe_role_model_candidates(
+            recovery_budget=0,
+            cold_start_budget=None,
+        )
+        await db_session.flush()
+
+    async def expire_endpoint_and_pair_backoffs() -> None:
+        # The endpoint backoff and the first pair backoff start at the same
+        # instant in production.  Regression coverage must therefore expire
+        # both, not merely clear the endpoint gate while the pair gate still
+        # artificially hides the poisoned first candidate.
+        pw._reset_role_probe_backoff()
+        rows = (
+            await db_session.execute(
+                select(CredentialModelAccess).where(
+                    CredentialModelAccess.credential_id == cred.id,
+                    CredentialModelAccess.upstream_model_id.in_([row.id for row in upstreams]),
+                ),
+            )
+        ).scalars().all()
+        for row in rows:
+            row.next_probe_at = datetime.now(UTC) - timedelta(seconds=1)
+        await db_session.commit()
+
+    async def access_for(upstream: UpstreamModel) -> CredentialModelAccess:
+        return (
+            await db_session.execute(
+                select(CredentialModelAccess).where(
+                    CredentialModelAccess.credential_id == cred.id,
+                    CredentialModelAccess.upstream_model_id == upstream.id,
+                ),
+            )
+        ).scalar_one()
+
+    await probe_pass()
+    assert adapter.models == ["zminimax-m2-a"]
+    first_access = await access_for(upstreams[0])
+    assert first_access.status == "unknown"
+    assert first_access.last_error is None
+    assert first_access.probe_failures == 1
+    assert first_access.next_probe_at is not None
+    await db_session.refresh(upstreams[0])
+    assert "probed_at" not in (upstreams[0].capabilities or {})
+
+    await expire_endpoint_and_pair_backoffs()
+    await probe_pass()
+    assert adapter.models == ["zminimax-m2-a", "zminimax-m2-b"]
+
+    await expire_endpoint_and_pair_backoffs()
+    await probe_pass()
+    assert adapter.models == ["zminimax-m2-a", "zminimax-m2-b", "zminimax-m2-c"]
+
+    await expire_endpoint_and_pair_backoffs()
+    await probe_pass()
+    assert adapter.models == [
+        "zminimax-m2-a",
+        "zminimax-m2-b",
+        "zminimax-m2-c",
+        "zminimax-m2-a",
+    ]
 
 
 async def test_candidate_probe_writes_fabricated_usage_evidence(db_session, monkeypatch) -> None:
