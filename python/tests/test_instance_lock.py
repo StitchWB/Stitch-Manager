@@ -25,8 +25,10 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -125,6 +127,70 @@ class TestSecondInstanceRefused:
                 assert second is not None
             finally:
                 second.release()
+        finally:
+            first.release()
+
+    def test_refusal_retries_payload_written_in_acquire_window(self, db_path: Path) -> None:
+        """The winner writes its payload after acquiring the OS lock.  A loser
+        in that tiny window must poll briefly instead of reporting an empty or
+        stale payload as an unreadable/dead holder."""
+        lock_path = lock_path_for_db(db_path)
+        fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+        instance_lock._os_lock(fd)  # holder acquired; payload not written yet
+
+        def delayed_payload() -> None:
+            encoded = json.dumps(
+                {"pid": 424242, "port": 25584, "started_at": "in-flight"}
+            ).encode("utf-8")
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.write(fd, encoded)
+            os.ftruncate(fd, len(encoded))
+
+        writer = threading.Timer(0.03, delayed_payload)
+        writer.start()
+        try:
+            with pytest.raises(InstanceLockHeldError) as excinfo:
+                acquire_instance_lock(_db_url(db_path), port=25599)
+        finally:
+            writer.join(timeout=5)
+            instance_lock._os_unlock(fd)
+            os.close(fd)
+
+        assert excinfo.value.holder is not None
+        assert excinfo.value.holder.pid == 424242
+        assert excinfo.value.holder.port == 25584
+
+
+class TestProbeActiveLock:
+    def test_probe_reports_active_holder_without_taking_over(self, db_path: Path) -> None:
+        first = acquire_instance_lock(_db_url(db_path), port=25584)
+        try:
+            refusal = instance_lock.probe_instance_lock(_db_url(db_path))
+            assert refusal is not None
+            assert refusal.holder is not None
+            assert refusal.holder.pid == os.getpid()
+            assert refusal.holder.port == 25584
+            assert str(os.getpid()) in str(refusal)
+        finally:
+            first.release()
+
+    def test_probe_is_none_when_lock_is_free_or_not_applicable(self, db_path: Path) -> None:
+        assert instance_lock.probe_instance_lock(_db_url(db_path)) is None
+        assert instance_lock.probe_instance_lock("sqlite+aiosqlite:///:memory:") is None
+        # A free probe must not retain the byte range: acquisition still works.
+        lock = acquire_instance_lock(_db_url(db_path), port=1)
+        try:
+            assert lock is not None
+        finally:
+            lock.release()
+
+    def test_probe_honours_multi_instance_override(
+        self, db_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        first = acquire_instance_lock(_db_url(db_path), port=25584)
+        try:
+            monkeypatch.setenv(ALLOW_MULTI_INSTANCE_ENV, "1")
+            assert instance_lock.probe_instance_lock(_db_url(db_path)) is None
         finally:
             first.release()
 
@@ -282,3 +348,92 @@ class TestLifespanOrdering:
 
         source = inspect.getsource(main_module.lifespan)
         assert ".release()" in source, "lifespan never releases the instance lock"
+
+    @pytest.mark.asyncio()
+    async def test_shutdown_step_failure_still_runs_remaining_steps_and_releases(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A broken stop hook must not strand the instance lock in embedded or
+        test runners.  Shutdown is best-effort: later steps still run and the
+        kernel-lock handle is always released."""
+        import stitch_backend.main as main_module
+        from stitch_backend.domains.key_health.probe_worker import KeyHealthProbeWorker
+
+        fake_lock = MagicMock()
+        monkeypatch.setattr(main_module, "configure_logging", MagicMock())
+        monkeypatch.setattr(main_module.startup, "log_startup_banner", AsyncMock())
+        monkeypatch.setattr(
+            main_module, "acquire_instance_lock", MagicMock(return_value=fake_lock)
+        )
+        monkeypatch.setattr(
+            main_module,
+            "_startup_migrations_and_workers",
+            AsyncMock(return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock())),
+        )
+
+        monkeypatch.setattr(
+            main_module.startup,
+            "stop_replenishment_service",
+            AsyncMock(side_effect=RuntimeError("stop boom")),
+        )
+        stop_plugins = AsyncMock()
+        stop_scheduler = AsyncMock()
+        stop_gateway = AsyncMock()
+        emit_stopping = AsyncMock()
+        dispose = AsyncMock()
+        monkeypatch.setattr(main_module.startup, "stop_plugin_hosts_and_sidecars", stop_plugins)
+        monkeypatch.setattr(main_module.startup, "stop_scheduler_worker", stop_scheduler)
+        monkeypatch.setattr(main_module.startup, "stop_gateway_workers", stop_gateway)
+        monkeypatch.setattr(main_module.startup, "emit_app_stopping", emit_stopping)
+        monkeypatch.setattr(main_module, "dispose_engine", dispose)
+        monkeypatch.setattr(main_module.workers, "stop_task", AsyncMock())
+
+        # patch.object restores the original classmethod descriptor exactly;
+        # monkeypatching the class attribute directly would restore the bound
+        # method object instead.
+        with patch.object(KeyHealthProbeWorker, "stop", AsyncMock()):
+            async with main_module.lifespan(MagicMock()):
+                pass
+
+        stop_plugins.assert_awaited_once()
+        stop_scheduler.assert_awaited_once()
+        stop_gateway.assert_awaited_once()
+        emit_stopping.assert_awaited_once()
+        dispose.assert_awaited_once()
+        fake_lock.release.assert_called_once_with()
+
+    @pytest.mark.asyncio()
+    async def test_lock_released_even_when_shutdown_raises_base_exception(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The release is in ``finally``: even an uncaught BaseException from
+        shutdown (cancellation/keyboard-interrupt class failures) cannot
+        strand the handle in an embedded runner."""
+
+        class ShutdownFatal(BaseException):
+            pass
+
+        import stitch_backend.main as main_module
+
+        fake_lock = MagicMock()
+        monkeypatch.setattr(main_module, "configure_logging", MagicMock())
+        monkeypatch.setattr(main_module.startup, "log_startup_banner", AsyncMock())
+        monkeypatch.setattr(
+            main_module, "acquire_instance_lock", MagicMock(return_value=fake_lock)
+        )
+        monkeypatch.setattr(
+            main_module,
+            "_startup_migrations_and_workers",
+            AsyncMock(return_value=(MagicMock(), MagicMock(), MagicMock(), MagicMock())),
+        )
+        monkeypatch.setattr(
+            main_module.startup,
+            "stop_replenishment_service",
+            AsyncMock(side_effect=ShutdownFatal()),
+        )
+
+        with pytest.raises(ShutdownFatal):
+            async with main_module.lifespan(MagicMock()):
+                pass
+
+        fake_lock.release.assert_called_once_with()

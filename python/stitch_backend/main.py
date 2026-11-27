@@ -39,7 +39,7 @@ from stitch_backend.instance_lock import acquire_instance_lock
 from stitch_backend.logging_config import configure_logging
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -74,33 +74,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             instance_lock.release()
         raise
 
-    (
-        proxy_key_flush_task,
-        group_usage_flush_task,
-        request_log_prune_task,
-        sandbox_idle_task,
-    ) = flush_tasks
-
-    yield
-
-    logger.info("Stitch Backend shutting down …")
-    await startup.stop_replenishment_service()
-    await startup.stop_plugin_hosts_and_sidecars()
-    await startup.stop_scheduler_worker()
-    await startup.stop_gateway_workers()
-
-    from stitch_backend.domains.key_health.probe_worker import KeyHealthProbeWorker
-
-    await KeyHealthProbeWorker.stop()
-
-    await workers.stop_task(proxy_key_flush_task)
-    await workers.stop_task(group_usage_flush_task)
-    await workers.stop_task(request_log_prune_task)
-    await workers.stop_task(sandbox_idle_task)
-    await startup.emit_app_stopping()
-    await dispose_engine()
-    if instance_lock is not None:
-        instance_lock.release()
+    try:
+        yield
+    finally:
+        try:
+            logger.info("Stitch Backend shutting down …")
+            await _shutdown_best_effort(flush_tasks)
+        finally:
+            # The OS releases this lock when the real process exits, but
+            # embedded/test runners can keep the process alive.  Release must
+            # therefore be unconditional even when a shutdown step fails.
+            if instance_lock is not None:
+                instance_lock.release()
 
 
 _FlushTasks = tuple[
@@ -109,6 +94,47 @@ _FlushTasks = tuple[
     "asyncio.Task[None]",
     "asyncio.Task[None]",
 ]
+
+
+async def _stop_key_health_probe_worker() -> None:
+    from stitch_backend.domains.key_health.probe_worker import KeyHealthProbeWorker
+
+    await KeyHealthProbeWorker.stop()
+
+
+async def _shutdown_best_effort(flush_tasks: _FlushTasks) -> None:
+    """Run shutdown steps independently; one bad hook must not skip the rest.
+
+    The step order remains the load-bearing order used before, but ordinary
+    step failures are logged and shutdown continues.  BaseException
+    (notably cancellation) is deliberately not swallowed; the lifespan's outer
+    ``finally`` still releases the instance lock in that case.
+    """
+    (
+        proxy_key_flush_task,
+        group_usage_flush_task,
+        request_log_prune_task,
+        sandbox_idle_task,
+    ) = flush_tasks
+
+    steps: list[tuple[str, Callable[[], Awaitable[object]]]] = [
+        ("replenishment service stop", startup.stop_replenishment_service),
+        ("plugin hosts/sidecars stop", startup.stop_plugin_hosts_and_sidecars),
+        ("scheduler worker stop", startup.stop_scheduler_worker),
+        ("gateway workers stop", startup.stop_gateway_workers),
+        ("key-health probe worker stop", _stop_key_health_probe_worker),
+        ("proxy-key flush task stop", lambda: workers.stop_task(proxy_key_flush_task)),
+        ("group-usage flush task stop", lambda: workers.stop_task(group_usage_flush_task)),
+        ("request-log prune task stop", lambda: workers.stop_task(request_log_prune_task)),
+        ("sandbox idle task stop", lambda: workers.stop_task(sandbox_idle_task)),
+        ("app-stopping event", startup.emit_app_stopping),
+        ("database engine dispose", dispose_engine),
+    ]
+    for description, step in steps:
+        try:
+            await step()
+        except Exception:
+            logger.exception("shutdown step failed: %s — continuing best-effort", description)
 
 
 async def _startup_migrations_and_workers(settings: Settings) -> _FlushTasks:
