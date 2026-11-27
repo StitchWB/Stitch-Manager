@@ -64,7 +64,7 @@ async def db_session(tmp_path: Path):
     await engine.dispose()
 
 
-def _result_item(endpoint, cred, model_ids, *, observed_at):
+def _result_item(endpoint, cred, model_ids, *, observed_at, verification=None):
     return {
         "probe": {
             "endpoint_id": endpoint.id,
@@ -82,10 +82,23 @@ def _result_item(endpoint, cred, model_ids, *, observed_at):
                 [ModelMetadata(id=mid) for mid in model_ids],
             ),
         ],
-        "verification": {},
+        "verification": verification or {},
         "pricing": {},
         "observed_at": observed_at,
     }
+
+
+async def _endpoint_and_credential(db_session):
+    svc = ProviderEndpointService(db_session)
+    endpoint = await svc.create_endpoint(
+        name="plain endpoint",
+        adapter_type="openai_compatible",
+        base_url="https://example.com/v1",
+    )
+    cred_svc = CredentialService(db_session)
+    cred = await cred_svc.create_credential(endpoint.id, "key-1", "api_key", "sk-test")
+    await db_session.commit()
+    return endpoint, cred
 
 
 async def test_out_of_order_pass_never_downgrades_last_seen(db_session) -> None:
@@ -137,3 +150,99 @@ async def test_out_of_order_pass_never_downgrades_last_seen(db_session) -> None:
     # ``b`` was observed by both passes; the newer observation must win even
     # though the older pass persisted later.
     assert seen(rows["b"]) == t_new
+
+
+async def test_out_of_order_pass_never_negates_newer_positive_access(db_session) -> None:
+    """Stale absence evidence must not overwrite a newer pass's positive row.
+
+    Realistic ordering: the newer catalog fetch observes ``c`` and persists
+    first; the older fetch (which did not contain ``c``) finishes later.  Its
+    absence reconciliation must be dropped because the access row already
+    carries newer-observed positive evidence.
+    """
+    endpoint, cred = await _endpoint_and_credential(db_session)
+    now = _utcnow()
+    t_base = now - timedelta(minutes=15)
+    t_old = now - timedelta(minutes=10)
+    t_new = now - timedelta(minutes=5)
+
+    # Establish the positive row in an earlier pass first, so the newer pass
+    # below is a no-op status-wise.  Its presence evidence must still advance
+    # the row watermark; otherwise the stale absence pass can slip underneath.
+    await DiscoveryWorker._persist_results(
+        db_session,
+        [_result_item(endpoint, cred, ["c"], observed_at=t_base)],
+    )
+    await DiscoveryWorker._persist_results(
+        db_session,
+        [_result_item(endpoint, cred, ["b", "c"], observed_at=t_new)],
+    )
+    await DiscoveryWorker._persist_results(
+        db_session,
+        [_result_item(endpoint, cred, ["a", "b"], observed_at=t_old)],
+    )
+
+    upstream_c = (
+        await db_session.execute(
+            select(UpstreamModel).where(
+                UpstreamModel.provider_endpoint_id == endpoint.id,
+                UpstreamModel.upstream_model_id == "c",
+            ),
+        )
+    ).scalar_one()
+    access_c = (
+        await db_session.execute(
+            select(CredentialModelAccess).where(
+                CredentialModelAccess.credential_id == cred.id,
+                CredentialModelAccess.upstream_model_id == upstream_c.id,
+            ),
+        )
+    ).scalar_one()
+    assert access_c.status == "available"
+    assert access_c.last_error is None
+    access_verified_at = access_c.last_verified_at
+    if access_verified_at is not None and access_verified_at.tzinfo is None:
+        access_verified_at = access_verified_at.replace(tzinfo=t_new.tzinfo)
+    assert access_verified_at == t_new
+
+
+async def test_out_of_order_pass_never_overwrites_newer_verification(db_session) -> None:
+    """A slow older verification result must not overwrite a newer success."""
+    endpoint, cred = await _endpoint_and_credential(db_session)
+    now = _utcnow()
+    t_old = now - timedelta(minutes=10)
+    t_new = now - timedelta(minutes=5)
+
+    await DiscoveryWorker._persist_results(
+        db_session,
+        [_result_item(
+            endpoint,
+            cred,
+            ["c"],
+            observed_at=t_new,
+            verification={"c": {"ok": True, "latencyMs": 12}},
+        )],
+    )
+    await DiscoveryWorker._persist_results(
+        db_session,
+        [_result_item(
+            endpoint,
+            cred,
+            ["c"],
+            observed_at=t_old,
+            verification={"c": {"ok": False, "latencyMs": 99, "reason": "stale failure"}},
+        )],
+    )
+
+    upstream_c = (
+        await db_session.execute(
+            select(UpstreamModel).where(
+                UpstreamModel.provider_endpoint_id == endpoint.id,
+                UpstreamModel.upstream_model_id == "c",
+            ),
+        )
+    ).scalar_one()
+    caps = upstream_c.capabilities or {}
+    assert caps["verification_status"] == "working"
+    assert caps["verified_at"] == t_new.isoformat()
+    assert caps.get("verification_reason") is None

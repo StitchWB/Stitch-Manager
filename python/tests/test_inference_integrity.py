@@ -286,3 +286,62 @@ async def test_probe_prompt_carries_canary_and_budget(monkeypatch) -> None:
     assert max_tokens >= 32
     assert max_tokens <= 128, "probe cost stays bounded per cycle"
     assert prompt != "ping"
+
+
+async def test_successful_catalog_probe_resets_malformed_backoff(monkeypatch) -> None:
+    """A later well-formed catalog is recovery evidence, not another incident.
+
+    Without resetting the endpoint entry, malformed-catalog incidents months
+    apart keep escalating inside one process lifetime even though the successful
+    fetch proved the endpoint recovered.
+    """
+    from stitch_backend.domains.ai_gateway import probe_worker as pw
+    from stitch_backend.domains.ai_gateway.adapters.base import ClassifiedError, ProbeResult
+
+    class _CatalogAdapter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def probe_credential(self, *, base_url, secret, default_headers=None):
+            self.calls += 1
+            if self.calls == 1:
+                return ProbeResult(
+                    success=False,
+                    latency_ms=5.0,
+                    http_status=200,
+                    error="not json",
+                    error_body="<html>bad gateway</html>",
+                )
+            return ProbeResult(success=True, latency_ms=5.0, models=["model-a"])
+
+        def classify_error(self, exc, **_kwargs):
+            return ClassifiedError(category="unknown")
+
+    adapter = _CatalogAdapter()
+    monkeypatch.setattr(pw, "get_adapter", lambda _type: adapter)
+    pw._reset_role_probe_backoff()
+    try:
+        target = {
+            "credential_id": "cred-1",
+            "endpoint_id": "ep-1",
+            "adapter_type": "openai_compatible",
+            "base_url": "https://api.test/v1",
+            "secret": "sk-test",
+            "default_headers": {},
+        }
+
+        malformed = await pw.ProbeWorker._probe_target(target)
+        assert malformed["classified"] is not None
+        assert malformed["classified"].error_code == "malformed_model_catalog"
+        assert "ep-1" in pw._catalog_probe_endpoint_backoff
+
+        recovered = await pw.ProbeWorker._probe_target(target)
+        assert recovered["success"] is True
+
+        # A new isolated incident after recovery starts at the first backoff
+        # step instead of escalating the pre-recovery count.
+        pw.ProbeWorker._arm_catalog_probe_backoff("ep-1")
+        _until, failures = pw._catalog_probe_endpoint_backoff["ep-1"]
+        assert failures == 1
+    finally:
+        pw._reset_role_probe_backoff()

@@ -113,6 +113,17 @@ def _normalize_base_url(url: Any) -> str:
     return (url or "").strip().lower().rstrip("/") if isinstance(url, str) else ""
 
 
+def _parse_iso_utc(value: object) -> datetime | None:
+    """Parse one persisted ISO timestamp, returning ``None`` for malformed input."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return _as_utc(parsed)
+
+
 def _catalog_verification_disabled(probe: dict[str, Any]) -> bool:
     """True when the catalog-wide verification sweep must be skipped.
 
@@ -822,6 +833,7 @@ class DiscoveryWorker:
                                     metadata.capabilities,
                                     verification.get(metadata.id),
                                     enrichment,
+                                    observed_at=observed_at,
                                 ),
                             )
                             existing_seen = (
@@ -889,6 +901,7 @@ class DiscoveryWorker:
                                     upstream,
                                     present=mid in returned,
                                     probe_managed=probe_managed,
+                                    observed_at=observed_at,
                                 )
                                 or access_status_changed
                             )
@@ -983,6 +996,7 @@ class DiscoveryWorker:
         *,
         present: bool,
         probe_managed: bool = False,
+        observed_at: datetime,
     ) -> bool:
         """Reconcile one (credential, model) access row.
 
@@ -1001,6 +1015,20 @@ class DiscoveryWorker:
 
         Returns True only when the routing-visible status transitioned.
         """
+        async def _upsert_with_observation(*, status: str, last_error: str | None) -> Any:
+            row = await access_svc.upsert_access(
+                credential_id,
+                upstream.id,
+                status=status,
+                last_error=last_error,
+            )
+            # Catalog evidence is ordered by the fetch's observation time, not
+            # by the later wall-clock instant when a possibly slow pass reached
+            # persistence.  ``last_verified_at`` is the per-row evidence
+            # watermark used to reject stale absence reconciliation.
+            row.last_verified_at = observed_at
+            return row
+
         rows = await access_svc.list_access(
             credential_id=credential_id,
             upstream_model_id=upstream.id,
@@ -1008,13 +1036,9 @@ class DiscoveryWorker:
         existing = rows[0] if rows else None
         if existing is None:
             if present:
-                await access_svc.upsert_access(
-                    credential_id, upstream.id, status="available", last_error=None,
-                )
+                await _upsert_with_observation(status="available", last_error=None)
             elif not probe_managed:
-                await access_svc.upsert_access(
-                    credential_id,
-                    upstream.id,
+                await _upsert_with_observation(
                     status="unavailable",
                     last_error=NOT_RETURNED_BY_UPSTREAM,
                 )
@@ -1033,20 +1057,36 @@ class DiscoveryWorker:
             if existing.status == "temporarily_unavailable":
                 return False
             if existing.status == "available" and existing.last_error is None:
+                # Presence in this pass is still newer catalog evidence even
+                # when no routing-visible write is needed.  Advancing the
+                # watermark is what prevents a slower older absence pass from
+                # negating this already-confirmed positive row later.
+                existing_evidence_at = (
+                    _as_utc(existing.last_verified_at)
+                    if existing.last_verified_at is not None
+                    else None
+                )
+                if existing_evidence_at is None or existing_evidence_at < observed_at:
+                    existing.last_verified_at = observed_at
                 return False
-            await access_svc.upsert_access(
-                credential_id, upstream.id, status="available", last_error=None,
-            )
+            await _upsert_with_observation(status="available", last_error=None)
             return existing.status != "available"
         if probe_managed:
+            return False
+        existing_evidence_at = (
+            _as_utc(existing.last_verified_at)
+            if existing.last_verified_at is not None
+            else None
+        )
+        if existing_evidence_at is not None and existing_evidence_at > observed_at:
+            # A newer-observed pass already touched this row.  Absence evidence
+            # from an older fetch that merely persisted later must not negate it.
             return False
         new_status = "unavailable"
         transitioned = existing.status != new_status
         if not transitioned and existing.last_error == NOT_RETURNED_BY_UPSTREAM:
             return False
-        await access_svc.upsert_access(
-            credential_id,
-            upstream.id,
+        await _upsert_with_observation(
             status=new_status,
             last_error=NOT_RETURNED_BY_UPSTREAM,
         )
@@ -1058,6 +1098,8 @@ class DiscoveryWorker:
         metadata_caps: dict[str, Any] | None,
         verification_row: dict[str, Any] | None,
         enrichment: dict[str, Any] | None = None,
+        *,
+        observed_at: datetime | None = None,
     ) -> dict[str, Any] | None:
         """Merge provider metadata, pricing enrichment and probe outcome into the capability bag."""
         caps: dict[str, Any] = dict(prior or {})
@@ -1068,14 +1110,21 @@ class DiscoveryWorker:
         if enrichment:
             caps.update(enrichment)
         if verification_row is not None:
-            caps["verification_status"] = (
-                "working" if verification_row.get("ok") else "failed"
+            verification_observed_at = observed_at or _utcnow()
+            prior_verified_at = _parse_iso_utc(caps.get("verified_at"))
+            verification_is_stale = (
+                prior_verified_at is not None
+                and prior_verified_at > verification_observed_at
             )
-            caps["verified_at"] = _utcnow().isoformat()
-            latency = verification_row.get("latencyMs")
-            if latency is not None:
-                caps["probe_latency_ms"] = int(latency)
-            reason = verification_row.get("reason")
-            if reason and not verification_row.get("ok"):
-                caps["verification_reason"] = reason
+            if not verification_is_stale:
+                caps["verification_status"] = (
+                    "working" if verification_row.get("ok") else "failed"
+                )
+                caps["verified_at"] = verification_observed_at.isoformat()
+                latency = verification_row.get("latencyMs")
+                if latency is not None:
+                    caps["probe_latency_ms"] = int(latency)
+                reason = verification_row.get("reason")
+                if reason and not verification_row.get("ok"):
+                    caps["verification_reason"] = reason
         return caps or None

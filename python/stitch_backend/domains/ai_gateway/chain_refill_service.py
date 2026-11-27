@@ -15,6 +15,7 @@ it never bypasses exact-probe activation or endpoint backoff.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -76,6 +77,19 @@ logger = logging.getLogger(__name__)
 # values live in chain_refill_policy.py so refill, probe budgeting and routing
 # status share one source of truth.
 CHAIN_REFILL_RESCUE_ENTRIES_PER_PASS = CHAIN_REFILL_MAX_ENTRIES_PER_PASS
+
+_PRE_ROTATION_CATALOG_FINGERPRINT_KEY = "pre_rotation_catalog_fingerprint"
+
+
+def _lineup_fingerprint(keys: set[str] | frozenset[str]) -> str:
+    """Compact, ordering-independent fingerprint of one catalog lineup."""
+    digest = hashlib.sha256()
+    for key in sorted(keys):
+        encoded = key.encode("utf-8")
+        digest.update(len(encoded).to_bytes(4, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
+
 
 _ROLE_REQUIRED_TIER = {
     "rb/lead": 3,
@@ -428,6 +442,12 @@ class ChainRefillService:
 
         existing = rotation_state(endpoint.health_policy)
         state_active = existing is not None and rotation_state_active(endpoint.health_policy, now)
+        pre_pass_snapshot = catalog_snapshot(endpoint.health_policy)
+        pre_pass_catalog_fingerprint = (
+            _lineup_fingerprint(pre_pass_snapshot[0])
+            if pre_pass_snapshot is not None
+            else None
+        )
 
         event = await self._detect_health_rotation(
             endpoint,
@@ -459,6 +479,11 @@ class ChainRefillService:
             "message": CHAIN_ROTATION_MESSAGE,
             **{key: value for key, value in event.items() if key != "signal"},
         }
+        if pre_pass_catalog_fingerprint is not None:
+            # This is the lineup the catalog baseline described BEFORE this
+            # firing pass consumed any fresh evidence.  Aftermath suppression
+            # may consume exactly that pre-rotation echo and nothing else.
+            state[_PRE_ROTATION_CATALOG_FINGERPRINT_KEY] = pre_pass_catalog_fingerprint
         policy = dict(endpoint.health_policy or {})
         policy[CHAIN_ROTATION_STATE_KEY] = state
         endpoint.health_policy = policy
@@ -694,20 +719,23 @@ class ChainRefillService:
         ):
             return None
 
-        # Aftermath suppression: a baseline fetched BEFORE the last fired
-        # rotation cannot describe the post-rotation world, so a mass-replacement
-        # diff against it is evidence of the rotation that already fired — not
-        # of a new one.  Discovery is hourly while the burst window is minutes,
-        # so the first post-rotation fetch typically lands after the window
-        # expires; without this gate the same rotation duplicate-fires and
-        # restarts the burst.  The snapshot has already advanced above, so the
-        # suppression applies at most once per fire: the cost is that a genuine
-        # second rotation inside the very first post-fire fetch is missed here
-        # (Signal A remains the cover for dead-model errors).
+        # Aftermath suppression is content-based, not timestamp-based.  The
+        # only diff it may swallow is one computed against the exact lineup the
+        # catalog baseline described before the firing pass — that diff is the
+        # already-fired rotation's own echo.  Once the baseline has advanced
+        # into R1's aftermath, ANY mass replacement against it is definitionally
+        # a new event.  This matters because a catalog-signal firing pass has
+        # already advanced the snapshot before ``detectedAt`` is written, so
+        # the post-R1 baseline's ``fetchedAt`` is normally earlier than the
+        # fire timestamp; a timestamp predicate would consume the first R2
+        # diff whenever no intervening same-lineup fetch happened.
         state = rotation_state(policy)
         if state is not None:
-            detected_at = parse_iso_utc(state.get("detectedAt") or state.get("detected_at"))
-            if detected_at is not None and stored[1] <= detected_at:
+            pre_rotation_fingerprint = state.get(_PRE_ROTATION_CATALOG_FINGERPRINT_KEY)
+            if (
+                isinstance(pre_rotation_fingerprint, str)
+                and _lineup_fingerprint(stored_keys) == pre_rotation_fingerprint
+            ):
                 logger.info(
                     "catalog mass-diff on endpoint %s matches the aftermath of the "
                     "rotation already fired at %s; consuming baseline without firing",

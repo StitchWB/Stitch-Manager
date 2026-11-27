@@ -1511,6 +1511,11 @@ class ProbeWorker:
         )
 
         if probe.success:
+            # A successful well-formed catalog fetch is positive recovery
+            # evidence.  The malformed-catalog backoff is per-endpoint incident
+            # state, not a lifetime counter: without clearing it here, isolated
+            # incidents months apart would keep escalating within one process.
+            _catalog_probe_endpoint_backoff.pop(target["endpoint_id"], None)
             return {
                 "credential_id": target["credential_id"],
                 "endpoint_id": target["endpoint_id"],
