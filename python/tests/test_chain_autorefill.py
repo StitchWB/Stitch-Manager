@@ -627,60 +627,109 @@ async def test_rotation_true_rotation_fires_on_mass_replacement(db_session) -> N
     assert event["new_count"] >= 80
 
 
-async def test_rotation_no_refire_without_fresh_evidence(db_session) -> None:
+def _patched_chain_clock(monkeypatch, start: datetime) -> dict[str, datetime]:
+    """Patch only the chain service clock; the test then advances it forward."""
+    from stitch_backend.domains.ai_gateway import chain_refill_service as chain_mod
+
+    box = {"now": start}
+    monkeypatch.setattr(chain_mod, "_utcnow", lambda: box["now"])
+    return box
+
+
+async def test_rotation_no_refire_without_fresh_evidence(db_session, monkeypatch) -> None:
     """Re-detection is tied to fresh evidence, not a fixed clock.
 
-    After a fire, expiry of the burst window must not re-fire while no new
-    successful fetch has happened; a fresh fetch of the SAME post-rotation
-    lineup must not re-fire either, because that snapshot is already consumed.
-    A second genuine rotation does fire again.
+    The clock moves only forward: a fetch is observed first, then the detector
+    runs moments later.  After a fire, natural expiry of the burst window must
+    not re-fire while no new successful fetch has happened; a fresh fetch of
+    the SAME post-rotation lineup must not re-fire either, because that
+    snapshot is already consumed.  A second genuine rotation does fire again.
     """
     endpoint, _cred = await _seed_catalog(db_session)
-    now = _utcnow()
+    clock = _patched_chain_clock(monkeypatch, _utcnow())
     lineup_a = [f"m-{i}" for i in range(1, 101)]
     lineup_b = [f"m-{i}" for i in range(101, 201)]
     lineup_c = [f"m-{i}" for i in range(201, 301)]
-    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=now - timedelta(minutes=70))
+
+    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
     assert await _chain_service(db_session).detect_rotation() is None
-    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=now - timedelta(minutes=5))
+
+    clock["now"] += timedelta(hours=1)
+    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
     event = await _chain_service(db_session).detect_rotation()
     assert event is not None and event["signal"] == "catalog"
 
-    # Expire the burst window artificially — the fixed clock no longer protects.
-    await db_session.refresh(endpoint)
-    policy = dict(endpoint.health_policy or {})
-    state = dict(policy["chainRotation"])
-    state["detectedAt"] = (now - timedelta(minutes=20)).astimezone(UTC).isoformat()
-    policy["chainRotation"] = state
-    endpoint.health_policy = policy
-    await db_session.flush()
-
-    # No fresh discovery pass since the fire → no byte-identical re-fire.
+    # Let the bounded burst expire naturally.  No fresh discovery pass since
+    # the fire → no byte-identical re-fire.
+    clock["now"] += timedelta(minutes=16)
     assert await _chain_service(db_session).detect_rotation() is None
 
-    # A fresh pass returning the SAME post-rotation lineup → still no re-fire.
-    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=now - timedelta(minutes=1))
+    # The next hourly pass returning the SAME post-rotation lineup → still no
+    # re-fire, because that post-rotation snapshot is already consumed.
+    clock["now"] += timedelta(minutes=44)
+    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
     assert await _chain_service(db_session).detect_rotation() is None
 
-    # A second genuine mass replacement is a new rotation and fires again.
-    await _simulate_fetch_pass(db_session, endpoint, lineup_c, pass_time=now)
+    # A later genuine mass replacement is a new rotation and fires again.
+    clock["now"] += timedelta(hours=1)
+    await _simulate_fetch_pass(db_session, endpoint, lineup_c, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
     event = await _chain_service(db_session).detect_rotation()
     assert event is not None and event["signal"] == "catalog"
 
 
-async def test_rotation_signal_a_fire_does_not_refire_via_catalog(db_session) -> None:
-    """Signal-A-owned rotation must not duplicate-fire via the catalog signal.
+async def test_rotation_second_rotation_without_intervening_fetch_fires(
+    db_session, monkeypatch,
+) -> None:
+    """A post-R1 baseline must never cause the first R2 diff to be swallowed.
 
-    Regression: the health signal fires first while the persisted catalog
-    snapshot still describes the PRE-rotation lineup.  Discovery is hourly
-    while the burst window is minutes, so the first post-rotation fetch
-    typically lands after the window expires — diffing the stale pre-rotation
-    baseline against the post-rotation lineup is the SAME rotation's
-    aftermath and must not fire a second event restarting the burst.
+    Realistic ordering: the post-R1 catalog fetch is observed moments before
+    R1 is written, so its ``fetchedAt`` is earlier than ``detectedAt``.  R2
+    then happens before the next hourly discovery pass — there is no
+    intervening same-lineup fetch to advance the snapshot timestamp.  The first
+    fetch that observes R2 is nevertheless a NEW event because the diff is
+    computed against R1's aftermath, not against the pre-R1 world.
     """
     endpoint, _cred = await _seed_catalog(db_session)
-    now = _utcnow()
-    t0 = now - timedelta(minutes=70)
+    clock = _patched_chain_clock(monkeypatch, _utcnow())
+    lineup_a = [f"m-{i}" for i in range(1, 101)]
+    lineup_b = [f"m-{i}" for i in range(101, 201)]
+    lineup_c = [f"m-{i}" for i in range(201, 301)]
+
+    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
+    assert await _chain_service(db_session).detect_rotation() is None
+
+    clock["now"] += timedelta(hours=1)
+    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
+    event = await _chain_service(db_session).detect_rotation()
+    assert event is not None and event["signal"] == "catalog"
+
+    # The very next hourly fetch is already the post-R2 world.  No intervening
+    # fetch had a chance to advance the post-R1 snapshot beyond detectedAt.
+    clock["now"] += timedelta(hours=1)
+    await _simulate_fetch_pass(db_session, endpoint, lineup_c, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
+    event = await _chain_service(db_session).detect_rotation()
+    assert event is not None and event["signal"] == "catalog"
+
+
+async def test_rotation_signal_a_fire_does_not_refire_via_catalog(db_session, monkeypatch) -> None:
+    """Signal-A-owned rotation must not duplicate-fire via the catalog signal.
+
+    Regression with realistic ordering: the health signal fires first while
+    the persisted catalog snapshot still describes the PRE-rotation lineup.
+    Discovery is hourly while the burst window is minutes, so the first
+    post-rotation fetch lands after the window expires naturally — diffing
+    the stale pre-rotation baseline against the post-rotation lineup is the
+    SAME rotation's echo and must not fire a second event restarting the burst.
+    """
+    endpoint, _cred = await _seed_catalog(db_session)
+    clock = _patched_chain_clock(monkeypatch, _utcnow())
 
     # Pre-rotation catalog: every seed key plus filler, consumed as the baseline.
     existing_keys = [
@@ -692,35 +741,32 @@ async def test_rotation_signal_a_fire_does_not_refire_via_catalog(db_session) ->
         ).scalars().all()
     ]
     lineup_a = sorted(set(existing_keys) | {f"m-{i}" for i in range(1, 11)})
-    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=t0)
+    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
     assert await _chain_service(db_session).detect_rotation() is None
 
-    # Signal A owns the rotation event.
+    # Signal A owns the rotation event before any post-rotation catalog fetch.
     await _force_mass_model_rotation(db_session, endpoint)
     event = await _chain_service(db_session).detect_rotation()
     assert event is not None and event["signal"] == "health"
 
     # Discovery is hourly; the first post-rotation fetch lands after the
-    # burst window has expired.
-    await db_session.refresh(endpoint)
-    policy = dict(endpoint.health_policy or {})
-    state = dict(policy["chainRotation"])
-    state["detectedAt"] = (now - timedelta(minutes=20)).astimezone(UTC).isoformat()
-    policy["chainRotation"] = state
-    endpoint.health_policy = policy
-    await db_session.flush()
-
+    # burst window has expired naturally.
+    clock["now"] += timedelta(hours=1)
     lineup_b = [f"post-{i}" for i in range(1, 11)]
-    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=now - timedelta(minutes=2))
+    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
 
     # Pre-rotation baseline diffed against the post-rotation lineup is the
-    # same rotation's aftermath — no duplicate event, no burst restart.
+    # same rotation's echo — no duplicate event, no burst restart.
     assert await _chain_service(db_session).detect_rotation() is None
 
-    # Once the baseline has been consumed past the fire, a genuine second
-    # rotation is still detected normally.
+    # Once that echo has advanced the baseline into the post-R1 world, a
+    # genuine second rotation on the next hourly pass is still detected.
+    clock["now"] += timedelta(hours=1)
     lineup_c = [f"third-{i}" for i in range(1, 11)]
-    await _simulate_fetch_pass(db_session, endpoint, lineup_c, pass_time=now - timedelta(minutes=1))
+    await _simulate_fetch_pass(db_session, endpoint, lineup_c, pass_time=clock["now"])
+    clock["now"] += timedelta(seconds=1)
     event = await _chain_service(db_session).detect_rotation()
     assert event is not None and event["signal"] == "catalog"
 
