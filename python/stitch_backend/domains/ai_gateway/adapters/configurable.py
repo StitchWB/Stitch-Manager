@@ -530,12 +530,26 @@ class ConfigurableAdapter:
                 envelope.request_id,
             )
 
-        if _has_free_limit_marker(body_text):
-            # ReformBoss free-tier daily allowance spent, reported under a
-            # status/envelope shape the vocabulary does not pin down (observed
-            # live as "unclassified … status fallback" noise).  The explicit
-            # marker is unambiguous: this is a transient quota suspension that
-            # resets at local midnight, never an auth or unknown failure.
+        # ReformBoss free-tier daily allowance spent, reported under a
+        # status/envelope shape the vocabulary does not pin down (observed
+        # live as "unclassified … status fallback" noise).  The explicit
+        # marker is unambiguous: this is a transient quota suspension that
+        # resets at local midnight, never an auth or unknown failure.
+        #
+        # Scoping discipline: when the body parses as an error envelope, only
+        # the machine code and the explicit error message field are scanned —
+        # a raw-body substring scan would capture unrelated payload text
+        # (warnings, nested details, documentation strings) mentioning
+        # "free limit".  Only unparseable (non-envelope) bodies fall back to
+        # the raw scan, and even there the token-shape/negation tightening of
+        # ``_has_free_limit_marker`` applies.
+        if envelope is not None:
+            marker_text = "\n".join(
+                part for part in (envelope.code, envelope.message) if part
+            )
+        else:
+            marker_text = body_text
+        if _has_free_limit_marker(marker_text):
             return ClassifiedError(
                 category="quota_exhausted",
                 retry_after_seconds=retry_after,

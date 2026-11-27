@@ -457,13 +457,21 @@ async def _lead_target_and_access_after_probe(
     credential = await _add_credential(db_session, endpoint)
     svc = RoleCatalogService(db_session)
     await svc.reconcile_all()
-    target = (await db_session.execute(
+    targets = list((await db_session.execute(
         select(RouteTarget).where(RouteTarget.public_model_id == "rb/lead")
         .order_by(RouteTarget.priority.asc())
-    )).scalars().first()
+    )).scalars())
+    target = targets[0]
     assert target is not None
     target.enabled = True
     target.lifecycle_status = "active"
+    # A second active chain member keeps the chain above the incident-protection
+    # floor, so endpoint-ambiguous probe failures still exercise the hard path
+    # these tests assert (pair backoff + demotion).  With a single active member
+    # the floor defers demotion instead — that protection has its own tests in
+    # test_chain_demote_protection.py.
+    targets[1].enabled = True
+    targets[1].lifecycle_status = "active"
     await db_session.flush()
 
     await svc.apply_model_probe_result(

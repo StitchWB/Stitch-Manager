@@ -165,6 +165,51 @@ def _select_canary_word() -> str:
     return random.choice(ROLE_PROBE_CANARY_WORDS)
 
 
+# ── Unknown-tier evidence queue admission ────────────────────────────────────
+# Rows carrying ANY of the excluding markers (``probed_at``/``coherence_passed``/
+# ``evidence_tier``) normally leave the unknown-tier evidence trickle.  But one
+# transient bad completion must not lock a good model out forever: negative or
+# inconclusive evidence decays, and after this readmission window the row
+# re-enters the queue for one bounded re-probe.  Positive evidence (coherence
+# or a derived tier) and terminal key-entitlement verdicts (denied) never
+# readmit — the former is proven, the latter is a sticky terminal verdict.
+UNKNOWN_TIER_READMISSION_SECONDS = 24 * 3600
+
+_UNKNOWN_TIER_EXCLUDING_KEYS = ("probed_at", "coherence_passed", "evidence_tier")
+
+
+def _unknown_evidence_tier(caps: dict[str, Any], now: datetime) -> bool:
+    """Whether capability evidence still leaves the row in the unknown-tier queue."""
+    if not any(key in caps for key in _UNKNOWN_TIER_EXCLUDING_KEYS):
+        return True
+    # Terminal model-scoped verdicts (key-entitlement refusals) are sticky.
+    from stitch_backend.domains.ai_gateway.role_catalog_service import _DENIED_REASONS
+
+    verdicts = {
+        str(caps.get("verification_reason") or ""),
+        str(caps.get("verification_error_code") or ""),
+    }
+    if verdicts & _DENIED_REASONS:
+        return False
+    # Positive semantic evidence is final — the model is proven, not unknown.
+    if caps.get("coherence_passed") is True:
+        return False
+    tier = caps.get("evidence_tier")
+    if isinstance(tier, str) and tier:
+        return False
+    # Negative or inconclusive evidence decays: once the last probe observation
+    # is older than the readmission window the row re-enters the queue, so a
+    # single transient failure cannot degrade a model indefinitely.
+    from stitch_backend.domains.ai_gateway.chain_refill_policy import parse_iso_utc
+
+    probed_at = parse_iso_utc(caps.get("probed_at"))
+    if probed_at is None:
+        # An excluding marker without a usable timestamp cannot prove freshness;
+        # treat it as decayed rather than letting malformed data lock the row out.
+        return True
+    return (now - probed_at).total_seconds() > UNKNOWN_TIER_READMISSION_SECONDS
+
+
 def _canary_probe_prompt(word: str) -> str:
     return f'Reply with exactly one word: "{word}". Do not add anything else.'
 
@@ -904,13 +949,8 @@ class ProbeWorker:
                     return 2
                 return 1
 
-            def _unknown_evidence_tier(upstream: UpstreamModel) -> bool:
-                caps = upstream.capabilities or {}
-                return (
-                    "probed_at" not in caps
-                    and "coherence_passed" not in caps
-                    and "evidence_tier" not in caps
-                )
+            def _unknown_evidence(upstream: UpstreamModel) -> bool:
+                return _unknown_evidence_tier(upstream.capabilities or {}, now)
 
             def _aware_or_min(value: datetime | None) -> datetime:
                 if value is None:
@@ -952,7 +992,7 @@ class ProbeWorker:
                     upstream.upstream_model_id not in desired_keys
                     or upstream.id in active_upstreams
                 )
-                and _unknown_evidence_tier(upstream)
+                and _unknown_evidence(upstream)
             ]
             endpoints_by_id: dict[str, ProviderEndpoint] = {}
             upstreams_by_endpoint: dict[str, list[UpstreamModel]] = {}
@@ -1445,13 +1485,18 @@ class ProbeWorker:
         if upstream is not None and record_timeout_evidence:
             # A timeout is not negative coherence evidence, but the latency
             # observation itself is useful evidence: slow candidates remain
-            # visible instead of disappearing into probe noise.
+            # visible instead of disappearing into probe noise.  Crucially a
+            # timeout-only outcome must NOT write ``probed_at``: that key is a
+            # queue-exit marker for the unknown-tier evidence trickle, and a
+            # timeout proves nothing — the row would leave the queue unproven
+            # and never be tested again.  The timeout is recorded under its
+            # own non-excluding key instead.
             caps = dict(upstream.capabilities or {})
             latency = result.get("latency_ms")
             if isinstance(latency, int) and not isinstance(latency, bool):
                 caps["probe_latency_ms"] = latency
             caps["probe_timed_out"] = True
-            caps["probed_at"] = now.astimezone(UTC).isoformat()
+            caps["last_probe_timeout_at"] = now.astimezone(UTC).isoformat()
             upstream.capabilities = caps
             upstream.updated_at = now
         await session.flush()

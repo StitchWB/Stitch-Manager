@@ -31,6 +31,7 @@ caller's fallback.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta, timezone, tzinfo
 
@@ -46,6 +47,7 @@ class Envelope:
     outcome: str | None = None
     attempts: int | None = None
     request_id: str | None = None
+    message: str | None = None
 
     @property
     def not_executed(self) -> bool:
@@ -76,6 +78,7 @@ def parse_envelope(body_text: str) -> Envelope | None:
         outcome=_str_or_none(meta.get("outcome")),
         attempts=_int_or_none(meta.get("attempts")),
         request_id=_str_or_none(meta.get("request_id")),
+        message=_str_or_none(error.get("message")),
     )
 
 
@@ -178,10 +181,29 @@ def classify_envelope(envelope: Envelope | None) -> Verdict | None:
     return None
 
 
+# The free-tier-limit marker must be a standalone token shape: ``free_limit``
+# or ``free limit`` delimited by non-alphanumerics (underscores are snake_case
+# token separators, so ``free_limit_exceeded`` and ``user_free_limit`` both
+# count, while ``carefree limit`` and ``free limitation`` do not).  Occurrences
+# immediately preceded by a negation ("no free limit", "without free_limit")
+# are not markers at all — they say the opposite.
+_FREE_LIMIT_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])free[ _]limit(?![A-Za-z0-9])", re.IGNORECASE)
+_FREE_LIMIT_NEGATION_RE = re.compile(
+    r"\b(?:no|not|never|without|isn't|isnt|don't|dont|doesn't|doesnt)\s+$",
+    re.IGNORECASE,
+)
+
+
 def _has_free_limit_marker(text: str) -> bool:
-    """True when *text* carries an explicit free-tier-limit marker."""
-    lowered = text.lower()
-    return "free_limit" in lowered or "free limit" in lowered
+    """True when *text* carries an explicit, non-negated free-tier-limit marker."""
+    if not text:
+        return False
+    for match in _FREE_LIMIT_TOKEN_RE.finditer(text):
+        prefix = text[max(0, match.start() - 24):match.start()]
+        if _FREE_LIMIT_NEGATION_RE.search(prefix):
+            continue
+        return True
+    return False
 
 
 def _with_code(verdict: Verdict, code: str) -> Verdict:
