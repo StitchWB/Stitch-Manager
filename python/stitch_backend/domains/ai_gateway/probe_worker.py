@@ -855,6 +855,17 @@ class ProbeWorker:
             # Lowest-priority evidence trickle: at most one never-probed,
             # unknown-tier catalog model per endpoint/pass.  Name hints order
             # this queue only; they never admit a model to a chain or tier.
+            #
+            # Quarantined/demoted chain members stay excluded here — the
+            # recovery class already exact-probes them on the activation path.
+            # ACTIVE chain members are the gap: the sibling-coverage class only
+            # reaches pairs with no access row or explicit unknown state, but
+            # catalog presence marks pairs ``available`` without any exact
+            # probe — so a chain member activated without a probe (manual or
+            # seed path) would otherwise never accumulate coherence evidence at
+            # all.  The unknown-evidence-tier gate still caps this at one
+            # evidence probe per model: once ``probed_at``/``coherence_passed``
+            # is written the row leaves this queue for good.
             desired_key_rows = (
                 await session.execute(
                     select(RoleChainEntry.upstream_model_key).where(
@@ -937,7 +948,10 @@ class ProbeWorker:
                 (upstream, endpoint)
                 for upstream, endpoint in catalog_rows
                 if upstream.id not in probed_upstreams
-                and upstream.upstream_model_id not in desired_keys
+                and (
+                    upstream.upstream_model_id not in desired_keys
+                    or upstream.id in active_upstreams
+                )
                 and _unknown_evidence_tier(upstream)
             ]
             endpoints_by_id: dict[str, ProviderEndpoint] = {}
