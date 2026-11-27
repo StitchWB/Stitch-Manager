@@ -546,47 +546,154 @@ async def test_rotation_signal_a_ignores_never_active_seed_demotions(db_session)
     assert "chainRotation" not in (endpoint.health_policy or {})
 
 
-async def test_rotation_signal_b_catalog_mass_diff_requires_new_models(db_session) -> None:
-    endpoint, _cred = await _seed_catalog(db_session)
+async def _simulate_fetch_pass(session, endpoint, model_ids, *, pass_time) -> None:
+    """Simulate one successful discovery pass returning exactly ``model_ids``.
+
+    Rows present in the pass get ``last_seen_at = pass_time`` (new rows are
+    created with ``created_at = pass_time``); rows absent from the pass keep
+    their older timestamps — exactly what DiscoveryWorker persistence does.
+    """
     rows = list(
         (
-            await db_session.execute(
+            await session.execute(
                 select(UpstreamModel).where(UpstreamModel.provider_endpoint_id == endpoint.id),
             )
         ).scalars().all(),
     )
-    assert len(rows) >= 4
-    stale_at = _utcnow() - timedelta(hours=3)
-    for row in rows[:4]:
-        row.created_at = stale_at - timedelta(hours=1)
-        row.last_seen_at = stale_at
-    await _add_unknown_upstream(db_session, endpoint, "rotation-newcomer")
-    await db_session.flush()
+    by_key = {row.upstream_model_id: row for row in rows}
+    for mid in model_ids:
+        row = by_key.get(mid)
+        if row is None:
+            row = UpstreamModel(
+                provider_endpoint_id=endpoint.id,
+                upstream_model_id=mid,
+                display_name=mid,
+                enabled=True,
+                discovery_source="probe",
+                canonical_model_key=mid,
+                capabilities={},
+                created_at=pass_time,
+                last_seen_at=pass_time,
+            )
+            session.add(row)
+        else:
+            row.last_seen_at = pass_time
+    await session.flush()
 
+
+async def test_rotation_rotating_subset_upstream_does_not_fire(db_session) -> None:
+    """Volatile rotating-subset upstreams must not trip the detector.
+
+    Regression for the production 76.7% false positive: fetch A={m-1..m-100}
+    then fetch B={m-51..m-150} — a half-overlapping subset shift carries no
+    mass-replacement signature and must never fire, even though 50 ids
+    disappeared and 50 new ids appeared.
+    """
+    endpoint, _cred = await _seed_catalog(db_session)
+    now = _utcnow()
+    t0 = now - timedelta(minutes=70)
+    await _simulate_fetch_pass(
+        db_session, endpoint, [f"m-{i}" for i in range(1, 101)], pass_time=t0,
+    )
+    # First-ever evaluation records the baseline snapshot and never fires.
+    assert await _chain_service(db_session).detect_rotation() is None
+
+    await _simulate_fetch_pass(
+        db_session, endpoint, [f"m-{i}" for i in range(51, 151)], pass_time=now,
+    )
+    assert await _chain_service(db_session).detect_rotation() is None
+    await db_session.refresh(endpoint)
+    assert "chainRotation" not in (endpoint.health_policy or {})
+
+
+async def test_rotation_true_rotation_fires_on_mass_replacement(db_session) -> None:
+    """Full lineup replacement (A={1..100} → B={101..200}) is a real rotation."""
+    endpoint, _cred = await _seed_catalog(db_session)
+    now = _utcnow()
+    t0 = now - timedelta(minutes=70)
+    await _simulate_fetch_pass(
+        db_session, endpoint, [f"m-{i}" for i in range(1, 101)], pass_time=t0,
+    )
+    assert await _chain_service(db_session).detect_rotation() is None
+
+    await _simulate_fetch_pass(
+        db_session, endpoint, [f"m-{i}" for i in range(101, 201)], pass_time=now,
+    )
     event = await _chain_service(db_session).detect_rotation()
 
     assert event is not None
     assert event["signal"] == "catalog"
-    assert event["missing_count"] >= 2
-    assert event["new_count"] >= 1
+    assert event["missing_count"] >= 80
+    assert event["new_count"] >= 80
 
 
-async def test_rotation_signal_b_mass_absence_without_new_models_does_not_trigger(db_session) -> None:
+async def test_rotation_no_refire_without_fresh_evidence(db_session) -> None:
+    """Re-detection is tied to fresh evidence, not a fixed clock.
+
+    After a fire, expiry of the burst window must not re-fire while no new
+    successful fetch has happened; a fresh fetch of the SAME post-rotation
+    lineup must not re-fire either, because that snapshot is already consumed.
+    A second genuine rotation does fire again.
+    """
     endpoint, _cred = await _seed_catalog(db_session)
-    rows = list(
-        (
-            await db_session.execute(
-                select(UpstreamModel).where(UpstreamModel.provider_endpoint_id == endpoint.id),
-            )
-        ).scalars().all(),
-    )
-    stale_at = _utcnow() - timedelta(hours=3)
-    for row in rows[:4]:
-        row.created_at = stale_at - timedelta(hours=1)
-        row.last_seen_at = stale_at
+    now = _utcnow()
+    lineup_a = [f"m-{i}" for i in range(1, 101)]
+    lineup_b = [f"m-{i}" for i in range(101, 201)]
+    lineup_c = [f"m-{i}" for i in range(201, 301)]
+    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=now - timedelta(minutes=70))
+    assert await _chain_service(db_session).detect_rotation() is None
+    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=now - timedelta(minutes=5))
+    event = await _chain_service(db_session).detect_rotation()
+    assert event is not None and event["signal"] == "catalog"
+
+    # Expire the burst window artificially — the fixed clock no longer protects.
+    await db_session.refresh(endpoint)
+    policy = dict(endpoint.health_policy or {})
+    state = dict(policy["chainRotation"])
+    state["detectedAt"] = (now - timedelta(minutes=20)).astimezone(UTC).isoformat()
+    policy["chainRotation"] = state
+    endpoint.health_policy = policy
     await db_session.flush()
 
+    # No fresh discovery pass since the fire → no byte-identical re-fire.
     assert await _chain_service(db_session).detect_rotation() is None
+
+    # A fresh pass returning the SAME post-rotation lineup → still no re-fire.
+    await _simulate_fetch_pass(db_session, endpoint, lineup_b, pass_time=now - timedelta(minutes=1))
+    assert await _chain_service(db_session).detect_rotation() is None
+
+    # A second genuine mass replacement is a new rotation and fires again.
+    await _simulate_fetch_pass(db_session, endpoint, lineup_c, pass_time=now)
+    event = await _chain_service(db_session).detect_rotation()
+    assert event is not None and event["signal"] == "catalog"
+
+
+async def test_rotation_first_snapshot_never_fires(db_session) -> None:
+    """Conservative escape: with no prior snapshot there is nothing to diff."""
+    endpoint, _cred = await _seed_catalog(db_session)
+    now = _utcnow()
+    await _simulate_fetch_pass(
+        db_session, endpoint, [f"m-{i}" for i in range(1, 101)], pass_time=now,
+    )
+    assert await _chain_service(db_session).detect_rotation() is None
+    await db_session.refresh(endpoint)
+    assert "chainRotation" not in (endpoint.health_policy or {})
+
+
+async def test_rotation_mass_absence_without_replacement_does_not_trigger(db_session) -> None:
+    """Mass disappearance alone (no substantial NEW ids) is a flap, not rotation."""
+    endpoint, _cred = await _seed_catalog(db_session)
+    now = _utcnow()
+    lineup_a = [f"m-{i}" for i in range(1, 11)]
+    await _simulate_fetch_pass(db_session, endpoint, lineup_a, pass_time=now - timedelta(minutes=70))
+    assert await _chain_service(db_session).detect_rotation() is None
+
+    # 80% of the snapshot vanished but nothing new appeared — degraded fetch
+    # or subset flap, not a lineup rotation.
+    await _simulate_fetch_pass(db_session, endpoint, lineup_a[:2], pass_time=now)
+    assert await _chain_service(db_session).detect_rotation() is None
+    await db_session.refresh(endpoint)
+    assert "chainRotation" not in (endpoint.health_policy or {})
 
 
 async def test_rotation_burst_raises_candidate_probe_budget(db_session, monkeypatch) -> None:

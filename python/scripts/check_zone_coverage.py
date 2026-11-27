@@ -138,6 +138,7 @@ PUBLIC_ONLY_FILES = {
     "python/tests/plugin_distribution/test_release_preview.py": "public-only regression test",
     "python/tests/plugin_tools/__init__.py": "public-only pytest package marker",
     "python/tests/plugin_tools/test_ui_manifest.py": "public-only regression test",
+    "python/tests/test_adapter_garbage_catalog.py": "public-only regression test",
     "python/tests/test_api_middleware.py": "public-only regression test",
     "python/tests/test_check_vendor_drift.py": "public-only regression test",
     "python/tests/test_check_zone_coverage.py": "public-only regression test for a public CI gate",
