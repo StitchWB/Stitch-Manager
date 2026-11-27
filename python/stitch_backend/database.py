@@ -138,6 +138,62 @@ def get_read_session_factory() -> async_sessionmaker[AsyncSession]:
     return _read_session_factory
 
 
+# ── Cancellation-safe session close ──────────────────────────────────────────
+#
+# Root cause this guards against: starlette's BaseHTTPMiddleware tears down
+# streaming requests by cancelling the endpoint task when the client
+# disconnects mid-stream.  Cancellation that lands inside SQLAlchemy's
+# greenlet bridge while a connection is returned to the pool (rollback on
+# reset) or terminated (overflow checkin / invalidate) abandons the driver
+# awaitable mid-flight: the pool logs "Exception terminating connection" /
+# "Exception during reset or similar", the connection is left half-closed
+# ("no active connection") and the shielded ``_terminate_graceful_close``
+# coroutine is orphaned — later GC'd as "Task was destroyed but it is
+# pending".  SQLAlchemy cannot fix this internally (the greenlet bridge has
+# no cancellation-safe teardown path), so the application must never let
+# request cancellation reach connection checkin/termination.
+#
+# The close therefore runs in a fresh asyncio task that nothing cancels.
+# Callers that are NOT being cancelled await it inline (identical ordering
+# to the previous ``async with`` semantics); callers that ARE cancelled stop
+# waiting immediately, while the close itself — including pool reset and any
+# connection termination — always runs to completion.
+
+_close_tasks: set[asyncio.Task[None]] = set()
+
+
+async def _close_session_impl(session: AsyncSession) -> None:
+    try:
+        await session.close()
+    except Exception:  # noqa: BLE001 — close must never kill the cleanup task
+        logger.warning("Error closing session", exc_info=True)
+
+
+async def close_session_shielded(session: AsyncSession) -> None:
+    """Close *session* in a tracked task immune to caller cancellation.
+
+    The close is spawned onto the loop first (so it survives even when the
+    caller is already inside a cancelled scope) and then awaited through
+    ``asyncio.shield``.  If cancellation arrives while waiting, it is
+    re-raised — the close continues in the tracked background task instead
+    of being torn down mid-flight inside SQLAlchemy's greenlet bridge.
+    """
+    task = asyncio.create_task(
+        _close_session_impl(session), name="stitch-db-session-close"
+    )
+    _close_tasks.add(task)
+    task.add_done_callback(_close_tasks.discard)
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        raise
+
+
+def pending_close_tasks() -> frozenset[asyncio.Task[None]]:
+    """Snapshot of in-flight shielded closes (tests/diagnostics)."""
+    return frozenset(_close_tasks)
+
+
 # ── FastAPI dependency ────────────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -149,13 +205,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             ...
     """
     factory = get_session_factory()
-    async with factory() as session:
+    session = factory()
+    try:
         try:
             yield session
             await session.commit()
         except Exception:
             await session.rollback()
             raise
+    finally:
+        await close_session_shielded(session)
 
 
 # ── Standalone command helper ──────────────────────────────────────────────────
@@ -186,8 +245,9 @@ async def run_in_session(
     start = _time.monotonic()
 
     for attempt in range(max_retries):
+        session = factory()
         try:
-            async with factory() as session:
+            try:
                 result = await fn(session)
                 await session.commit()
 
@@ -203,6 +263,11 @@ async def run_in_session(
                     logger.info("DB write succeeded after %d retries (%.2fs)", attempt, elapsed)
 
                 return result
+            finally:
+                # Inner finally: the connection must be released BEFORE the
+                # retry backoff below — pool_size=1 means holding it across
+                # the sleep would deadlock the retry against itself.
+                await close_session_shielded(session)
         except OperationalError as exc:
             if "database is locked" in str(exc).lower() and attempt < max_retries - 1:
                 last_error = exc
@@ -236,8 +301,11 @@ async def run_in_read_session(
         result = await run_in_read_session(lambda s: MyService(s).get_thing())
     """
     factory = get_read_session_factory()
-    async with factory() as session:
+    session = factory()
+    try:
         return await fn(session)
+    finally:
+        await close_session_shielded(session)
 
 
 # ── Table creation (dev / first run) ──────────────────────────────────────────
