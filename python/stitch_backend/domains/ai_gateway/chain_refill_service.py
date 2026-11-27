@@ -26,9 +26,11 @@ from stitch_backend.domains.ai_gateway.chain_refill_policy import (
     CHAIN_REFILL_MAX_ENTRIES_PER_PASS,
     CHAIN_REFILL_MIN_LIVE_CANDIDATES_PER_ROLE,
     CHAIN_REFILL_READD_STICKINESS_SECONDS,
+    CHAIN_ROTATION_CATALOG_FETCH_TOLERANCE_SECONDS,
     CHAIN_ROTATION_CATALOG_MIN_MISSING,
     CHAIN_ROTATION_CATALOG_MIN_NEW_MODELS,
     CHAIN_ROTATION_CATALOG_MISSING_FRACTION,
+    CHAIN_ROTATION_CATALOG_NEW_FRACTION,
     CHAIN_ROTATION_CATALOG_PASS_SECONDS,
     CHAIN_ROTATION_CATALOG_PASSES,
     CHAIN_ROTATION_DEMOTED_FRACTION,
@@ -36,10 +38,12 @@ from stitch_backend.domains.ai_gateway.chain_refill_policy import (
     CHAIN_ROTATION_MESSAGE,
     CHAIN_ROTATION_MIN_DEMOTED_MODELS,
     CHAIN_ROTATION_MODEL_SCOPED_REASONS,
+    CHAIN_ROTATION_SNAPSHOT_KEY,
     CHAIN_ROTATION_STATE_KEY,
     CHAIN_ROTATION_WATCH_KEY,
     CHAIN_ROTATION_WINDOW_SECONDS,
     as_utc,
+    catalog_snapshot,
     infer_model_family,
     parse_iso_utc,
     role_prefers_family_diversity,
@@ -583,6 +587,29 @@ class ChainRefillService:
         endpoint: ProviderEndpoint,
         now: datetime,
     ) -> dict[str, Any] | None:
+        """Diff the latest successful-fetch snapshot against the previous one.
+
+        The baseline is the immediately preceding fetch's id-set (persisted in
+        additive health-policy JSON), never the cumulative ever-seen union:
+        rotating-subset upstreams whipsaw their counts while staying healthy,
+        and a union baseline converges permanently above any missing threshold.
+
+        Detection requires, in order:
+          1. a successful fetch inside the window — stale ``last_seen_at``
+             evidence means discovery has nothing fresh to say, so detection is
+             skipped entirely;
+          2. fetch evidence NEWER than the snapshot last evaluated — frozen
+             discovery data can never re-fire a byte-identical event after the
+             suppression window expires;
+          3. a prior snapshot — the first-ever evaluation only records the
+             baseline and never fires;
+          4. mass disappearance vs the snapshot AND a substantial fraction of
+             NEW ids in the current lineup — the replacement signature that
+             separates true rotations from degraded fetches and subset flaps.
+
+        Every evaluation that reaches fresh evidence consumes it: the stored
+        snapshot advances to the current lineup whether or not the event fires.
+        """
         rows = list(
             (
                 await self._db.execute(
@@ -592,48 +619,79 @@ class ChainRefillService:
         )
         if not rows:
             return None
-        cutoff = now - timedelta(
+        seen_times = [
+            seen
+            for row in rows
+            if (seen := as_utc(row.last_seen_at)) is not None
+        ]
+        if not seen_times:
+            return None
+        latest_seen = max(seen_times)
+        window_start = now - timedelta(
             seconds=CHAIN_ROTATION_CATALOG_PASS_SECONDS * CHAIN_ROTATION_CATALOG_PASSES,
         )
-        baseline_count = 0
-        missing_keys: list[str] = []
-        new_keys: list[str] = []
-        for row in rows:
-            created_at = as_utc(row.created_at)
-            last_seen_at = as_utc(row.last_seen_at)
-            if last_seen_at is None:
-                continue
-            # ``last_seen_at`` is the proof that the model was once present in
-            # the catalog.  A stale timestamp is evidence of absence for two
-            # discovery passes; a recent timestamp only joins the baseline when
-            # the row already existed at the window edge.
-            if (
-                created_at is not None and created_at <= cutoff
-            ) or last_seen_at <= cutoff:
-                baseline_count += 1
-                if last_seen_at <= cutoff:
-                    missing_keys.append(row.upstream_model_id)
-            elif created_at is not None and created_at >= cutoff:
-                new_keys.append(row.upstream_model_id)
+        if latest_seen < window_start:
+            # No successful fetch inside the window — detection is skipped
+            # entirely rather than diffing stale evidence.
+            return None
 
+        tolerance = timedelta(seconds=CHAIN_ROTATION_CATALOG_FETCH_TOLERANCE_SECONDS)
+        current_keys = {
+            row.upstream_model_id
+            for row in rows
+            if (seen := as_utc(row.last_seen_at)) is not None and seen >= latest_seen - tolerance
+        }
+
+        policy = dict(endpoint.health_policy or {})
+        stored = catalog_snapshot(policy)
+        if stored is not None and latest_seen <= stored[1] + tolerance:
+            # No fresh discovery evidence since the last evaluation.  This is
+            # the re-detection guard: suppression expiry on the fixed clock
+            # must not re-fire while discovery has produced nothing new.
+            return None
+
+        # Fresh evidence is consumed in every outcome below: the persisted
+        # snapshot advances to the current lineup.
+        policy[CHAIN_ROTATION_SNAPSHOT_KEY] = {
+            "modelKeys": sorted(current_keys),
+            "fetchedAt": latest_seen.astimezone(UTC).isoformat(),
+        }
+        endpoint.health_policy = policy
+        endpoint.updated_at = now
+        await self._db.flush()
+
+        if stored is None:
+            # Conservative escape: the first-ever evaluation has nothing to
+            # diff against, so it can never fire.
+            return None
+        stored_keys, _stored_at = stored
+        if not stored_keys or not current_keys:
+            return None
+
+        missing_keys = sorted(stored_keys - current_keys)
+        new_keys = sorted(current_keys - stored_keys)
         missing_count = len(missing_keys)
         if (
-            baseline_count == 0
-            or missing_count < CHAIN_ROTATION_CATALOG_MIN_MISSING
+            missing_count < CHAIN_ROTATION_CATALOG_MIN_MISSING
             or len(new_keys) < CHAIN_ROTATION_CATALOG_MIN_NEW_MODELS
         ):
             return None
-        fraction = missing_count / baseline_count
-        if fraction < CHAIN_ROTATION_CATALOG_MISSING_FRACTION:
+        fraction = missing_count / len(stored_keys)
+        new_fraction = len(new_keys) / len(current_keys)
+        if (
+            fraction < CHAIN_ROTATION_CATALOG_MISSING_FRACTION
+            or new_fraction < CHAIN_ROTATION_CATALOG_NEW_FRACTION
+        ):
             return None
         return {
             "signal": "catalog",
             "missing_count": missing_count,
-            "baseline_count": baseline_count,
+            "baseline_count": len(stored_keys),
             "new_count": len(new_keys),
             "fraction": fraction,
-            "missing_model_keys": sorted(missing_keys)[:CHAIN_ROTATION_MAX_EVENT_MODEL_KEYS],
-            "new_model_keys": sorted(new_keys)[:CHAIN_ROTATION_MAX_EVENT_MODEL_KEYS],
+            "new_fraction": new_fraction,
+            "missing_model_keys": missing_keys[:CHAIN_ROTATION_MAX_EVENT_MODEL_KEYS],
+            "new_model_keys": new_keys[:CHAIN_ROTATION_MAX_EVENT_MODEL_KEYS],
         }
 
     async def _endpoint_for_selector(self, selector: str) -> ProviderEndpoint | None:

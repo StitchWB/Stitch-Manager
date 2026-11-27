@@ -247,6 +247,22 @@ class ConfigurableAdapter:
         latency_ms = (time.monotonic() - start) * 1000
         if resp.status_code == 200:
             metadata = _parse_model_metadata(resp)
+            if not metadata:
+                # A 200 whose body yields zero model entries is NOT a valid
+                # empty catalog: degraded upstreams answer 200 with HTML error
+                # pages, empty bodies, or unrelated JSON shapes, and treating
+                # those as "zero models" reconciles every known model as gone.
+                # Count it as a fetch failure so no negative evidence is built.
+                return ProbeResult(
+                    success=False, latency_ms=latency_ms,
+                    http_status=200,
+                    error=(
+                        f"HTTP 200 from GET {self._models_path} but the body held no "
+                        "parseable model entries — treating as a failed fetch, not an "
+                        "empty catalog"
+                    ),
+                    error_body=_safe_response_text(resp),
+                )
             return ProbeResult(
                 success=True, latency_ms=latency_ms,
                 models=[m.id for m in metadata], model_metadata=metadata,
@@ -551,12 +567,24 @@ def _parse_model_metadata(resp: httpx.Response) -> list[ModelMetadata]:
         data = resp.json()
     except ValueError:
         return []
-    items = data.get("data", []) if isinstance(data, dict) else []
+    items: list[Any] = []
+    if isinstance(data, dict):
+        raw_items = data.get("data")
+        if not isinstance(raw_items, list):
+            # Gemini's /v1beta/models answers {"models": [{"name": "models/x"}]}
+            # instead of the OpenAI "data" envelope.
+            raw_items = data.get("models")
+        if isinstance(raw_items, list):
+            items = raw_items
     result: list[ModelMetadata] = []
     for item in items:
         if not isinstance(item, dict):
             continue
         model_id = item.get("id")
+        if not model_id:
+            name = item.get("name")
+            if isinstance(name, str) and name:
+                model_id = name.removeprefix("models/")
         if not model_id:
             continue
         result.append(ModelMetadata(id=model_id, capabilities=_extract_capabilities(item)))

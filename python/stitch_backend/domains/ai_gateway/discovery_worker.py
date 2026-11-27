@@ -78,6 +78,25 @@ VERIFICATION_BUDGET_SECONDS = 30.0
 VERIFICATION_MAX_TOKENS = 1
 NOT_RETURNED_BY_UPSTREAM = "not_returned_by_upstream"
 
+# Negative-reconciliation deferral for drastic single-pass count drops.  A
+# volatile rotating-subset upstream (or a degraded one answering partial
+# garbage-adjacent payloads) can whipsaw its catalog count by more than half
+# between two passes while every fetch is an HTTP 200.  Reconciling absence
+# against such a pass poisons access rows for models that reappear an hour
+# later.  Semantics chosen: when the union of ids returned this pass is less
+# than half the previous pass's union (and the previous pass was non-trivial),
+# ALL absence-based negative reconciliation is deferred for that pass —
+# positive evidence (present ids) is still written, and retirement/last-seen
+# aging is untouched.  The interaction with real rotations is deliberate: a
+# genuine mass deletion also gets one deferred pass, which is acceptable
+# because invoking a truly removed model fails with model-scoped errors —
+# strictly stronger evidence than catalog absence.
+NEGATIVE_RECONCILE_DEFER_DROP_FRACTION = 0.5
+NEGATIVE_RECONCILE_DEFER_MIN_CATALOG = 4
+# One pass writes one shared ``last_seen_at``; only round-trip jitter needs
+# absorbing, so distinct passes never merge into the previous-pass count.
+NEGATIVE_RECONCILE_PASS_TOLERANCE = timedelta(seconds=2)
+
 REFORMBOSS_BASE_URL = "https://api.reformboss.com/v1"
 
 _DISCOVERY_FAILURE_TEXT = {
@@ -752,6 +771,16 @@ class DiscoveryWorker:
                     verification = item.get("verification") or {}
                     pricing = item.get("pricing") or {}
 
+                    # Capture pre-pass fetch evidence BEFORE the upsert loop
+                    # mutates ``last_seen_at`` on these same ORM objects — the
+                    # count-drop deferral below diffs this pass against it.
+                    pre_seen = [
+                        seen
+                        for row in existing.values()
+                        if row.last_seen_at is not None
+                        and (seen := _as_utc(row.last_seen_at)) is not None
+                    ]
+
                     upstream_rows = dict(existing)
                     for _cred, models in item["credentials"]:
                         for metadata in models:
@@ -789,9 +818,37 @@ class DiscoveryWorker:
                         )
                     )
 
+                    # Drastic single-pass count drop (>50% vs the previous
+                    # pass's union) defers all absence-based negative
+                    # reconciliation for this pass — see the module constants
+                    # for the documented semantics.  The previous pass is the
+                    # set of rows sharing the latest pre-pass ``last_seen_at``.
+                    fetched_ids = {
+                        m.id for _c, models in item["credentials"] for m in models
+                    }
+                    defer_negative = False
+                    if pre_seen:
+                        pre_latest = max(pre_seen)
+                        pre_pass_count = sum(
+                            1 for seen in pre_seen
+                            if seen >= pre_latest - NEGATIVE_RECONCILE_PASS_TOLERANCE
+                        )
+                        defer_negative = (
+                            pre_pass_count >= NEGATIVE_RECONCILE_DEFER_MIN_CATALOG
+                            and len(fetched_ids) < pre_pass_count * NEGATIVE_RECONCILE_DEFER_DROP_FRACTION
+                        )
+                        if defer_negative:
+                            logger.warning(
+                                "DiscoveryWorker: catalog count dropped %d -> %d on endpoint %s; "
+                                "deferring absence-based negative reconciliation for this pass",
+                                pre_pass_count, len(fetched_ids), endpoint_id,
+                            )
+
                     for cred, models in item["credentials"]:
                         returned = {m.id for m in models}
                         for mid, upstream in upstream_rows.items():
+                            if defer_negative and mid not in returned:
+                                continue
                             probe_managed = (
                                 role_catalog_endpoint
                                 and mid in desired_role_upstream_keys

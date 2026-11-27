@@ -44,21 +44,49 @@ CHAIN_ROTATION_WINDOW_SECONDS = 2 * 300  # rolling two standard probe passes
 CHAIN_ROTATION_MIN_DEMOTED_MODELS = 2
 CHAIN_ROTATION_DEMOTED_FRACTION = 0.5
 
-# Rotation Signal B: catalog mass-diff.  Discovery normally runs hourly; two
-# consecutive misses therefore mean a last-seen timestamp older than two hours.
-# Requiring at least one never-before-seen row is the conservative anti-flap
-# condition described in the design ("mass diff", not merely catalog flap).
+# Rotation Signal B: catalog mass-diff against the previous successful-fetch
+# snapshot.  Discovery normally runs hourly, so evidence older than two passes
+# means no successful fetch happened inside the window and detection is
+# skipped entirely.  The baseline is the immediately preceding fetch snapshot
+# (persisted per-endpoint in additive health-policy JSON), never the cumulative
+# ever-seen union: for volatile rotating-subset upstreams the union converges
+# permanently above any missing-fraction threshold and false-fires forever.
+#
+# The rotation signature is mass REPLACEMENT, both halves required:
+#   - mass disappearance vs the snapshot (missing fraction >= 0.8), and
+#   - substantial NEW ids (new ids are at least half of the current lineup) —
+#     real rotations arrive with a new lineup; degraded fetches and subset
+#     flaps do not.
+# A half-overlapping rotating subset (missing fraction 0.5, new fraction 0.33)
+# passes neither gate; a true full-lineup rotation passes both.  Very
+# aggressive rotating subsets with <20% overlap can still false-fire — the
+# documented, deliberate tradeoff of any count-based diff.
 CHAIN_ROTATION_CATALOG_PASS_SECONDS = 3600
 CHAIN_ROTATION_CATALOG_PASSES = 2
 CHAIN_ROTATION_CATALOG_MIN_MISSING = 2
-CHAIN_ROTATION_CATALOG_MISSING_FRACTION = 0.5
+CHAIN_ROTATION_CATALOG_MISSING_FRACTION = 0.8
 CHAIN_ROTATION_CATALOG_MIN_NEW_MODELS = 1
+# New ids as a fraction of the CURRENT snapshot: the replacement signature.
+# 0.5 means at least half the current lineup was not in the previous fetch.
+CHAIN_ROTATION_CATALOG_NEW_FRACTION = 0.5
+# Rows written by one discovery pass share ONE ``last_seen_at`` value (a
+# single ``now`` per endpoint per pass), so pass grouping needs only a tiny
+# tolerance for backend datetime round-trip quirks.  A large tolerance would
+# merge distinct passes that happen close together (hourly + manual trigger),
+# inflating the snapshot back towards a cumulative union.
+CHAIN_ROTATION_CATALOG_FETCH_TOLERANCE_SECONDS = 2
 # Event payloads carry a bounded diagnostic sample, not an unbounded catalog
 # dump; counts remain exact even when the key list is truncated.
 CHAIN_ROTATION_MAX_EVENT_MODEL_KEYS = 32
 
 CHAIN_ROTATION_STATE_KEY = "chainRotation"
 CHAIN_ROTATION_WATCH_KEY = "chainRotationWatch"
+# Additive health-policy key holding the last evaluated successful-fetch
+# snapshot: ``{"modelKeys": sorted list, "fetchedAt": iso}``.  Written by the
+# rotation detector itself; re-detection requires fetch evidence NEWER than
+# ``fetchedAt``, so frozen discovery data can never re-fire a byte-identical
+# event after the burst window expires.
+CHAIN_ROTATION_SNAPSHOT_KEY = "chainRotationCatalogSnapshot"
 CHAIN_ROTATION_MESSAGE = "upstream rotation detected, rederiving chains"
 
 _REVIEWER_ROLES = frozenset({"rb/reviewer-correctness", "rb/reviewer-adversarial"})
@@ -111,6 +139,25 @@ def rotation_state(policy: object) -> dict[str, Any] | None:
     if not isinstance(state, dict):
         return None
     return dict(state)
+
+
+def catalog_snapshot(policy: object) -> tuple[frozenset[str], datetime] | None:
+    """Return the persisted successful-fetch snapshot ``(keys, fetchedAt)``.
+
+    ``None`` when the key is absent or malformed — the conservative first-ever
+    escape (no baseline, no detection) is decided by the caller.
+    """
+    if not isinstance(policy, dict):
+        return None
+    raw = policy.get(CHAIN_ROTATION_SNAPSHOT_KEY)
+    if not isinstance(raw, dict):
+        return None
+    keys_raw = raw.get("modelKeys")
+    fetched_at = parse_iso_utc(raw.get("fetchedAt"))
+    if not isinstance(keys_raw, list) or fetched_at is None:
+        return None
+    keys = frozenset(str(key) for key in keys_raw if isinstance(key, str))
+    return keys, fetched_at
 
 
 def rotation_state_active(policy: object, now: datetime) -> bool:
