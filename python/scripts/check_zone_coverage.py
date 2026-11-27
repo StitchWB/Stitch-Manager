@@ -147,6 +147,7 @@ PUBLIC_ONLY_FILES = {
     "python/tests/test_gateway_owner_isolation.py": "public-only regression test",
     "python/tests/test_inference_integrity.py": "public-only regression test",
     "python/tests/test_install_proxy_keys.py": "public-only regression test",
+    "python/tests/test_instance_lock.py": "public-only regression test (hub mirror follow-up pending)",
     "python/tests/test_key_inflight_models.py": "public-only regression test",
     "python/tests/test_logging_unicode_safety.py": "public-only regression test",
     "python/tests/test_mcp_server.py": "public-only regression test",
