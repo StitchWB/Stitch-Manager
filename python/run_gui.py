@@ -24,7 +24,7 @@ import socket
 import sys
 import threading
 import time
-from typing import Any
+from typing import Any, NoReturn
 
 # Make sure the python/ directory is on sys.path so stitch_backend is importable.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -170,6 +170,89 @@ def _icon_path() -> str | None:
     return None
 
 
+def _instance_lock_refusal_message(
+    database_url: str | None = None, *, ignore_own_pid: bool = False
+) -> str | None:
+    """Actionable single-instance refusal text when the DB lock is held.
+
+    Uvicorn reports lifespan startup exceptions only in its own log and then
+    exits the server thread, so the GUI launcher cannot rely on catching
+    ``InstanceLockHeldError`` directly.  The lock file payload is intentionally
+    readable; probing the byte range first avoids mistaking stale payload bytes
+    (the file is never deleted) for a live holder.
+    """
+    try:
+        if database_url is None:
+            from stitch_backend.config import get_settings  # noqa: PLC0415
+
+            database_url = get_settings().database_url
+        from stitch_backend.instance_lock import probe_instance_lock  # noqa: PLC0415
+
+        refusal = probe_instance_lock(database_url)
+    except Exception:  # noqa: BLE001 — startup diagnostics must never be fatal
+        logging.getLogger(__name__).debug("instance-lock probe unavailable", exc_info=True)
+        return None
+    if refusal is None:
+        return None
+    if (
+        ignore_own_pid
+        and refusal.holder is not None
+        and refusal.holder.pid == os.getpid()
+    ):
+        # During a slow embedded startup the launcher's own uvicorn thread is
+        # the lock holder.  That is not a multi-instance refusal; reporting it
+        # as one would send the user hunting for a nonexistent other app.
+        return None
+    return str(refusal)
+
+
+def _show_error_messagebox(message: str) -> None:
+    """Best-effort fatal-error dialog for windowed builds (which have no console)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes  # noqa: PLC0415
+
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                message,
+                "Stitch Account Manager",
+                0x10,  # MB_ICONERROR
+            )
+            return
+        except Exception:  # noqa: BLE001 — fall through to tkinter/print-only
+            pass
+    try:
+        import tkinter  # noqa: PLC0415
+        from tkinter import messagebox  # noqa: PLC0415
+
+        root = None
+        try:
+            root = tkinter.Tk()
+            root.withdraw()
+            messagebox.showerror("Stitch Account Manager", message)
+        finally:
+            if root is not None:
+                root.destroy()
+    except Exception:  # noqa: BLE001 — console output above is the fallback
+        pass
+
+
+def _surface_fatal_error(message: str) -> None:
+    """Surface a startup-fatal error both as text and as a GUI dialog."""
+    print(f"ERROR: {message}", file=sys.stderr, flush=True)
+    _show_error_messagebox(message)
+
+
+def _exit_backend_startup_failed(fallback_message: str | None = None) -> NoReturn:
+    """Exit after backend startup failure, preferring lock-refusal specifics."""
+    refusal = _instance_lock_refusal_message(ignore_own_pid=True) or fallback_message
+    if refusal is not None:
+        _surface_fatal_error(refusal)
+    else:
+        _surface_fatal_error("Backend did not start in time. Aborting.")
+    raise SystemExit(1)
+
+
 def _start_uvicorn() -> None:
     """Run uvicorn in the current thread (blocks)."""
     uvicorn.run(
@@ -180,10 +263,15 @@ def _start_uvicorn() -> None:
     )
 
 
-def _wait_for_server(timeout: float = HEALTH_TIMEOUT) -> bool:
-    """Block until the backend /health endpoint responds or timeout expires."""
+def _wait_for_server(
+    timeout: float = HEALTH_TIMEOUT,
+    server_thread: threading.Thread | None = None,
+) -> bool:
+    """Block until /health responds, the timeout expires, or our backend dies."""
     deadline = time.time() + timeout
     while time.time() < deadline:
+        if server_thread is not None and not server_thread.is_alive():
+            return False
         try:
             resp = requests.get(HEALTH_URL, timeout=2)
             if resp.status_code == 200:
@@ -220,7 +308,12 @@ def _backend_watchdog(
                 file=sys.stderr,
                 flush=True,
             )
-            # Try to restart
+            # Try to restart.  Known limitation: the replacement uvicorn runs
+            # in this same process, so if the wedged lifespan never released
+            # the DB instance lock, the new lifespan may refuse and point at
+            # our own pid.  That case was already unrecoverable here because
+            # the wedged server still owns the API port, so a port rebind was
+            # doomed too — restarting the app is the correct user action.
             new_thread = threading.Thread(target=_start_uvicorn, daemon=True)
             new_thread.start()
             if _wait_for_server(timeout=15):
@@ -309,6 +402,7 @@ def main() -> None:
         parser.error("--force cannot be used with --external-backend")
 
     server_thread: threading.Thread | None = None
+    initial_lock_refusal: str | None = None
 
     if args.external_backend:
         print(f"[run_gui] Using external backend at {HEALTH_URL}", flush=True)
@@ -348,6 +442,14 @@ def main() -> None:
                 time.sleep(1)
 
         if not attach_existing:
+            # A backend on another port may already own this database.  The
+            # port-conflict logic above cannot see that case.  Capture the
+            # actionable holder details before starting; the lock can be gone
+            # again by the time uvicorn gives up, but the backend will still
+            # have died from the original refusal.  Do not fail fast here: a
+            # just-killed zombie may release its kernel lock a moment later,
+            # in which case the embedded backend can legitimately take over.
+            initial_lock_refusal = _instance_lock_refusal_message()
             server_thread = threading.Thread(target=_start_uvicorn, daemon=True)
             server_thread.start()
 
@@ -360,9 +462,8 @@ def main() -> None:
         print(f"[PROD] Webview + API → {target_url}", flush=True)
 
     # 3. Wait for the backend to be ready
-    if not _wait_for_server():
-        print("ERROR: Backend did not start in time. Aborting.", file=sys.stderr, flush=True)
-        sys.exit(1)
+    if not _wait_for_server(server_thread=server_thread):
+        _exit_backend_startup_failed(initial_lock_refusal)
 
     # 4. Launch pywebview
     try:

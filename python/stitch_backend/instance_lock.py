@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,6 +52,13 @@ ALLOW_MULTI_INSTANCE_ENV = "STITCH_ALLOW_MULTI_INSTANCE"
 # whole-file and advisory, so the offset is irrelevant there.
 _LOCK_OFFSET = 4096
 _LOCK_BYTES = 1
+
+# The winner writes the diagnostic payload only after acquiring the OS lock.
+# A loser can therefore observe an empty file or the previous dead holder's
+# payload in that tiny window.  Poll briefly (5 × 50 ms = ~200 ms of sleeps)
+# before accepting whatever was read as the best available diagnostic.
+_HOLDER_PAYLOAD_ATTEMPTS = 5
+_HOLDER_PAYLOAD_RETRY_INTERVAL = 0.05
 
 
 class InstanceLockHeldError(RuntimeError):
@@ -141,6 +149,25 @@ def _read_holder_info(lock_path: Path) -> InstanceLockInfo | None:
     )
 
 
+def _read_holder_info_with_retry(lock_path: Path) -> InstanceLockInfo | None:
+    """Read the payload across the winner's acquire→write window.
+
+    Every refusal pays at most ~200 ms here — irrelevant against process
+    startup, and much better than confidently reporting a stale dead pid or an
+    unreadable payload.  The last readable payload wins: if the file never
+    gets overwritten, the stale payload is still more diagnostic context than
+    none (and the liveness note marks it as unexpected).
+    """
+    latest: InstanceLockInfo | None = None
+    for attempt in range(_HOLDER_PAYLOAD_ATTEMPTS):
+        holder = _read_holder_info(lock_path)
+        if holder is not None:
+            latest = holder
+        if attempt + 1 < _HOLDER_PAYLOAD_ATTEMPTS:
+            time.sleep(_HOLDER_PAYLOAD_RETRY_INTERVAL)
+    return latest
+
+
 class InstanceLock:
     """Held OS-level instance lock.  Release is idempotent."""
 
@@ -202,6 +229,44 @@ def _env_override_active() -> bool:
     }
 
 
+def probe_instance_lock(database_url: str) -> InstanceLockHeldError | None:
+    """Return the refusal a new backend would hit, without taking ownership.
+
+    Diagnostic-only helper for launchers: if the byte range is free, the probe
+    lock is released immediately and ``None`` is returned.  If it is held, the
+    returned error carries the same actionable message/payload diagnostics as
+    the real acquisition failure.  Locking is deliberately probed rather than
+    trusting the payload file: the file is never deleted, so payload bytes
+    alone cannot distinguish a live holder from a stale previous run.
+    """
+    db_path = _sqlite_file_path(database_url)
+    if db_path is None or _env_override_active():
+        return None
+
+    lock_path = lock_path_for_db(db_path)
+    try:
+        fd = os.open(str(lock_path), os.O_RDWR)
+    except OSError:
+        return None
+
+    try:
+        try:
+            _os_lock(fd)
+        except OSError:
+            holder = _read_holder_info_with_retry(lock_path)
+            return _held_error(lock_path, db_path, holder)
+        try:
+            _os_unlock(fd)
+        except OSError:
+            logger.debug("instance lock probe unlock failed", exc_info=True)
+        return None
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            logger.debug("instance lock probe fd close failed", exc_info=True)
+
+
 def acquire_instance_lock(database_url: str, port: int) -> InstanceLock | None:
     """Acquire the single-instance lock for a file-backed SQLite database.
 
@@ -233,7 +298,7 @@ def acquire_instance_lock(database_url: str, port: int) -> InstanceLock | None:
     try:
         _os_lock(fd)
     except OSError:
-        holder = _read_holder_info(lock_path)
+        holder = _read_holder_info_with_retry(lock_path)
         os.close(fd)
         raise _held_error(lock_path, db_path, holder) from None
 
