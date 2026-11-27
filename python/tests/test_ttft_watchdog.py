@@ -46,9 +46,11 @@ class _StreamingAdapter:
     def __init__(self, script: list[tuple[float, str | None]]) -> None:
         # script entries: (delay_before, line) — line None ends the stream.
         self._script = script
+        self.invocations = 0
 
     async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
         assert stream
+        self.invocations += 1
         return self._stream()
 
     async def _stream(self):
@@ -76,6 +78,41 @@ class _NonStreamAdapter:
         return ClassifiedError(category="unknown")
 
 
+class _FailFastAdapter:
+    async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
+        raise RuntimeError("candidate failed before upstream generation")
+
+    def classify_error(self, exc, *, http_status=None, response_headers=None):
+        return ClassifiedError(category="unknown")
+
+
+class _NeverStartsAdapter:
+    """Streaming adapter whose first frame waits long enough to be cancelled."""
+
+    def __init__(self) -> None:
+        self.waiting = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.released = asyncio.Event()
+
+    async def invoke(self, *, base_url, secret, model, messages, stream, default_headers, **kwargs):
+        assert stream
+        return self._stream()
+
+    async def _stream(self):
+        try:
+            self.waiting.set()
+            await asyncio.sleep(5.0)
+            yield _content_line("too-late")
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+        finally:
+            self.released.set()
+
+    def classify_error(self, exc, *, http_status=None, response_headers=None):
+        return ClassifiedError(category="unknown")
+
+
 def _completion_body(text: str) -> dict:
     return {
         "id": "cmpl-1",
@@ -96,7 +133,14 @@ def _content_line(text: str) -> str:
 _ROLE_LINE = 'data: {"id":"1","choices":[{"delta":{"role":"assistant"}}]}'
 
 
-def _route(adapter, *, endpoint_id: str, credential_id: str, upstream_model_id: str = "qwen2.8"):
+def _route(
+    adapter,
+    *,
+    endpoint_id: str,
+    credential_id: str,
+    upstream_model_id: str = "qwen2.8",
+    access_status: str = "available",
+):
     return SimpleNamespace(
         adapter=adapter,
         endpoint=SimpleNamespace(id=endpoint_id, name=endpoint_id, base_url="https://upstream.invalid"),
@@ -105,6 +149,7 @@ def _route(adapter, *, endpoint_id: str, credential_id: str, upstream_model_id: 
         secret="sk-test-secret",
         default_headers={},
         group_id_hit=None,
+        access_status=access_status,
     )
 
 
@@ -146,10 +191,10 @@ def _patch_policy(monkeypatch, policy: litellm_invoke_pipeline.LatencyPolicy | N
     monkeypatch.setattr(litellm_invoke_pipeline, "load_latency_policy", _fake_load)
 
 
-async def _chat(executor, *, stream: bool, model: str = "qwen2.8"):
+async def _chat(executor, *, stream: bool, model: str = "qwen2.8", max_wait_seconds=0):
     payload = GatewayRequest(
         model=model, messages=[{"role": "user", "content": "hi"}],
-        stream=stream, max_wait_seconds=0,
+        stream=stream, max_wait_seconds=max_wait_seconds,
     )
     with patch("stitch_backend.domains.ai_proxy.litellm_executor.run_in_session", _fake_run_in_session):
         return await executor.chat(payload)
@@ -326,6 +371,168 @@ async def test_no_contract_no_watchdog(monkeypatch) -> None:
     assert "slow-but-fine" in body
 
 
+# ── Final-candidate TTFT exemption ───────────────────────────────────────────
+
+
+async def test_streaming_final_candidate_exceeds_ttft_completes(monkeypatch) -> None:
+    """The terminal chain candidate may answer slowly: there is no failover left."""
+    slow_final = _StreamingAdapter([
+        (0.16, _content_line("late but alive")),
+        (0.0, "data: [DONE]"),
+    ])
+    executor, recorded = _executor_with_routes([
+        _route(slow_final, endpoint_id="ep-final", credential_id="cred-final"),
+    ])
+    _patch_policy(monkeypatch, litellm_invoke_pipeline.LatencyPolicy(80.0, None))
+
+    result = await _chat(executor, stream=True)
+
+    body = await _collect(result)
+    assert "late but alive" in body
+    assert slow_final.invocations == 1
+    cred = [r for r in recorded if r.get("credential_id") == "cred-final"]
+    assert any(r.get("error") is None for r in cred)
+
+
+async def test_terminal_exemption_covers_whole_pre_first_token_phase(monkeypatch) -> None:
+    """stallTimeout doubles as a pre-first-byte watchdog in the existing
+    machinery.  For a terminal candidate that phase is still TTFT, so the
+    exemption covers it; post-first-frame stalls remain enforced (covered by
+    the mid-stream tests below).
+    """
+    slow_terminal = _StreamingAdapter([
+        (0.1, _content_line("slow start")),
+        (0.0, "data: [DONE]"),
+    ])
+    executor, _recorded = _executor_with_routes([
+        _route(slow_terminal, endpoint_id="ep-final", credential_id="cred-final"),
+    ])
+    _patch_policy(monkeypatch, litellm_invoke_pipeline.LatencyPolicy(60.0, 30.0))
+
+    result = await _chat(executor, stream=True)
+
+    body = await _collect(result)
+    assert "slow start" in body
+
+
+async def test_terminality_uses_current_eligibility_not_list_position(monkeypatch) -> None:
+    """A later row that is already demoted is not a failover candidate.
+
+    The slow first candidate is therefore terminal even though it is not the
+    last object in the resolved list, and the ineligible row is never invoked.
+    """
+    slow_terminal = _StreamingAdapter([
+        (0.13, _content_line("only usable answer")),
+        (0.0, "data: [DONE]"),
+    ])
+    demoted = _StreamingAdapter([(0.0, _content_line("must-not-run"))])
+    executor, _recorded = _executor_with_routes([
+        _route(slow_terminal, endpoint_id="ep-1", credential_id="cred-1"),
+        _route(
+            demoted,
+            endpoint_id="ep-2",
+            credential_id="cred-2",
+            access_status="temporarily_unavailable",
+        ),
+    ])
+    _patch_policy(monkeypatch, litellm_invoke_pipeline.LatencyPolicy(60.0, None))
+
+    result = await _chat(executor, stream=True)
+
+    body = await _collect(result)
+    assert "only usable answer" in body
+    assert demoted.invocations == 0
+
+
+async def test_inflight_capped_later_candidate_does_not_block_terminality(monkeypatch) -> None:
+    """Transient executor eligibility is part of lookahead too: a fallback
+    whose key cannot accept another in-flight request is not a real failover
+    candidate for this attempt."""
+    slow_terminal = _StreamingAdapter([
+        (0.12, _content_line("terminal despite capped fallback")),
+        (0.0, "data: [DONE]"),
+    ])
+    capped_fallback = _StreamingAdapter([(0.0, _content_line("capped"))])
+    executor, _recorded = _executor_with_routes([
+        _route(slow_terminal, endpoint_id="ep-1", credential_id="cred-1"),
+        _route(capped_fallback, endpoint_id="ep-2", credential_id="cred-2"),
+    ])
+    for _ in range(key_inflight.PER_CREDENTIAL_CAP):
+        assert key_inflight.try_acquire("cred-2", "other-work")
+    _patch_policy(monkeypatch, litellm_invoke_pipeline.LatencyPolicy(60.0, None))
+
+    result = await _chat(executor, stream=True)
+
+    body = await _collect(result)
+    assert "terminal despite capped fallback" in body
+    assert capped_fallback.invocations == 0
+
+
+async def test_midrequest_resolution_demotion_reevaluates_terminality(monkeypatch) -> None:
+    """Terminality is an attempt-time property, not a fixed list-position flag.
+
+    The first resolution still has a third candidate, so the slow middle
+    candidate remains non-terminal and its first attempt is legitimately
+    aborted.  That third candidate is then demoted out of the chain; the next
+    resolution contains only the slow candidate, which must now be exempt.
+    """
+    fail_fast = _FailFastAdapter()
+    slow_final = _StreamingAdapter([
+        (0.14, _content_line("eventually")),
+        (0.0, "data: [DONE]"),
+    ])
+    demoted_fast = _FailFastAdapter()
+    first_resolution = [
+        _route(fail_fast, endpoint_id="ep-1", credential_id="cred-1"),
+        _route(slow_final, endpoint_id="ep-2", credential_id="cred-2"),
+        _route(demoted_fast, endpoint_id="ep-3", credential_id="cred-3"),
+    ]
+    second_resolution = [
+        _route(slow_final, endpoint_id="ep-2", credential_id="cred-2"),
+    ]
+    executor, _recorded = _executor_with_routes([])
+    executor._try_ai_gateway_route = AsyncMock(
+        side_effect=[first_resolution, second_resolution, second_resolution],
+    )
+    monkeypatch.setattr(
+        "stitch_backend.domains.ai_proxy.litellm_executor._backoff_seconds",
+        lambda _round_no, _hint: 0.0,
+    )
+    _patch_policy(monkeypatch, litellm_invoke_pipeline.LatencyPolicy(60.0, None))
+
+    result = await _chat(executor, stream=True, max_wait_seconds=2)
+
+    body = await _collect(result)
+    assert "eventually" in body
+    assert slow_final.invocations == 2
+
+
+async def test_client_disconnect_during_exempted_ttft_wait_cancels_upstream(monkeypatch) -> None:
+    """Exemption is not cancellation-shielding.
+
+    Once the client-side task is gone while the terminal candidate is still
+    waiting for first token, cancellation must propagate into the upstream
+    iterator and release both that stream and the credential in-flight slot.
+    """
+    never_starts = _NeverStartsAdapter()
+    executor, _recorded = _executor_with_routes([
+        _route(never_starts, endpoint_id="ep-final", credential_id="cred-final"),
+    ])
+    _patch_policy(monkeypatch, litellm_invoke_pipeline.LatencyPolicy(60.0, None))
+
+    task = asyncio.create_task(_chat(executor, stream=True))
+    await asyncio.wait_for(never_starts.waiting.wait(), timeout=0.5)
+    await asyncio.sleep(0.08)
+    assert not task.done(), "terminal candidate must still be waiting past maxTtftMs"
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.wait_for(never_starts.released.wait(), timeout=0.5)
+    assert never_starts.cancelled.is_set()
+    assert key_inflight.in_flight("cred-final") == 0
+
+
 # ── Non-stream integration ───────────────────────────────────────────────────
 
 
@@ -355,6 +562,22 @@ async def test_nonstream_within_budget_no_abort(monkeypatch) -> None:
 
     result = await _chat(executor, stream=False)
     assert result["choices"][0]["message"]["content"] == "fast answer"
+
+
+async def test_nonstream_final_candidate_exceeds_ttft_completes(monkeypatch) -> None:
+    """Non-stream uses total response time as its TTFT approximation; the
+    terminal-candidate exemption covers that same TTFT guard, nothing else."""
+    slow_final = _NonStreamAdapter(delay=0.14, body=_completion_body("late nonstream"))
+    executor, recorded = _executor_with_routes([
+        _route(slow_final, endpoint_id="ep-final", credential_id="cred-final"),
+    ])
+    _patch_policy(monkeypatch, litellm_invoke_pipeline.LatencyPolicy(60.0, None))
+
+    result = await _chat(executor, stream=False)
+
+    assert result["choices"][0]["message"]["content"] == "late nonstream"
+    cred = [r for r in recorded if r.get("credential_id") == "cred-final"]
+    assert any(r.get("error") is None for r in cred)
 
 
 # ── Mid-stream stall ─────────────────────────────────────────────────────────
